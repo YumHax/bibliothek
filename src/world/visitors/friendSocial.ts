@@ -1,6 +1,6 @@
 import type { Game } from '@/catalog/types';
 import type { NoticeActions } from '@/notices';
-import { borrow, borrowedGames, giveBack, lastPostcard, lastSide, postcardSent, sideTaken } from '@/social/friendsLife';
+import { arcadeDate, borrow, borrowedGames, fixArcadeDate, giveBack, lastPostcard, lastSide, postcardSent, sideTaken } from '@/social/friendsLife';
 import { everyone, shortName } from '@/social/people';
 import { has } from '@/social/perks';
 import { isMet, nudge, standing } from '@/social/standing';
@@ -72,7 +72,18 @@ export function friendExtras(plan: FriendPlan, deps: FriendSocialDeps, say: (lin
     });
   }
   if (has(id, 'arcadePartner')) {
-    out.push({ id: `${id}:arcade`, group: 'invite', label: 'Fancy the arcade sometime?', run: () => ({ line: 'Duel, Saturday. Bring coins: I paid last time. Allegedly.' }) });
+    // A day fixed: tomorrow afternoon he is at the arcade (`arcade/guestDays`), player two at PADDLE WARS.
+    const day = deps.day();
+    out.push({
+      id: `${id}:arcade`,
+      group: 'invite',
+      label: 'Fancy the arcade tomorrow?',
+      disabled: () => (arcadeDate() >= day ? (arcadeDate() === day ? 'He’s at the arcade this afternoon' : 'It’s fixed for tomorrow') : null),
+      run: () => {
+        fixArcadeDate(day + 1);
+        return { line: 'Tomorrow afternoon, PADDLE WARS. Bring coins: I paid last time. Allegedly.' };
+      },
+    });
   }
   if (has(id, 'takesSide')) {
     const day = deps.day();

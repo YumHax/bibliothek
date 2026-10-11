@@ -184,14 +184,21 @@ export interface PrizesLike {
 /** The medals per arcade machine: what a score earns that was not earned before (paid once). */
 export interface MedalsLike {
   award(gameId: string, score: number): readonly { tier: string; reward: number }[];
+  /** Gold on every machine: true once (the hall's tour's trophy goes home). */
+  takeTour?(): boolean;
 }
 
-/** The weekly league and the streak: every ticket play counts, the first of a day pays the streak; a finished week is announced once. */
+/**
+ * The weekly league and the regular's card: every ticket play counts, the first of a game day punches the card (gold
+ * tokens, its colour); a finished week is announced once.
+ */
 export interface LeagueLike {
-  record(tickets: number): { days: number; bonus: number };
-  takeWeekResult(): { rank: number; tickets: number; won: boolean } | null;
+  record(tickets: number): { days: number; punched: boolean; tokens: number; tier: string | null };
+  takeWeekResult(): { rank: number; tickets: number; won: boolean; division: number } | null;
   /** Tickets won beside a play's own (the tee's, a tournament round's): they count in the week too. */
   count?(tickets: number): void;
+  /** Spends a gold token on a play (false: none left). */
+  useToken?(): boolean;
 }
 
 /** The balance table (`?payout`): each real play's score, tickets and time. */
@@ -202,6 +209,8 @@ export interface PayoutStatsLike {
 /** What changes at the arcade day by day: the challenge, the change machine. */
 export interface ArcadeDailyLike {
   challenge(): { gameId: string; target: number; reward: number; done: boolean };
+  /** A play counts towards the challenge; true when that meets it. */
+  advance(gameId: string, score: number): boolean;
   claimChallenge(): boolean;
   readonly changeMachineWorks: boolean;
   claimChange(): number;

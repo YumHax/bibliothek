@@ -20,6 +20,11 @@ const HELD = new THREE.Vector3(0.12, -0.17, -0.3);
 const EASE = 16;
 const RECOIL = 0.03;
 const CABLE_POINTS = 16;
+/** In the holster: muzzle down, grip up. */
+const REST_QUAT = new THREE.Quaternion().setFromEuler(new THREE.Euler(Math.PI / 2 - 0.25, 0, 0));
+/** Straight ahead of the eye, where the gun points when aimed off the glass; where a regular aims without an aim. */
+const AHEAD = new THREE.Vector3(0, 0, -3);
+const REGULAR_AIM = new THREE.Vector3(0, 1.36, 0.3);
 
 /**
  * The light gun on its cable: a toy pistol that rests in a holster on the cabinet's side, rises into the
@@ -42,6 +47,10 @@ export class LightGun implements CabinetAttachment {
   private readonly look = new THREE.Object3D();
   private readonly scratch = new THREE.Vector3();
   private readonly camQuat = new THREE.Quaternion();
+  private readonly held = new THREE.Vector3();
+  private readonly aimAt = new THREE.Vector3();
+  /** The grip's place the cable was last drawn to (cabinet-local): a gun at rest in its holster does not redraw it. */
+  private readonly cableEnd = new THREE.Vector3(Infinity, 0, 0);
   private kick = 0;
   private holder: AttachmentFrame['who'] = null;
 
@@ -81,6 +90,8 @@ export class LightGun implements CabinetAttachment {
   }
 
   update(dt: number, frame: AttachmentFrame): void {
+    // Back in the holster and still: nothing moves, nothing to work out.
+    if (!frame.who && !this.holder && this.kick === 0 && this.gun.position.equals(this.targetPos) && this.gun.quaternion.equals(this.targetQuat) && this.cableEnd.x !== Infinity) return;
     this.holder = frame.who;
     if (frame.controls.firePressed && frame.who) this.kick = 1;
     this.kick = Math.max(0, this.kick - dt * 10);
@@ -90,6 +101,11 @@ export class LightGun implements CabinetAttachment {
     const t = frame.who === 'player' ? 1 : dampFactor(EASE, dt);
     this.gun.position.lerp(this.targetPos, t);
     this.gun.quaternion.slerp(this.targetQuat, t);
+    // Nearly home in the holster: set down exactly, so the next frames can skip it.
+    if (!frame.who && this.gun.position.distanceToSquared(this.targetPos) < 1e-8) {
+      this.gun.position.copy(this.targetPos);
+      this.gun.quaternion.copy(this.targetQuat);
+    }
     // Recoil: back along the barrel and the muzzle up.
     if (this.kick > 0) {
       this.gun.translateZ(-RECOIL * this.kick);
@@ -107,8 +123,7 @@ export class LightGun implements CabinetAttachment {
 
   private restPose(pos: THREE.Vector3, quat: THREE.Quaternion): void {
     pos.copy(this.holster);
-    // Muzzle down into the holster, grip up.
-    quat.setFromEuler(new THREE.Euler(Math.PI / 2 - 0.25, 0, 0));
+    quat.copy(REST_QUAT);
   }
 
   /** Just below and right of the eye, the muzzle on the aim point (or straight ahead when aimed off the screen). */
@@ -116,16 +131,16 @@ export class LightGun implements CabinetAttachment {
     const cabinet = this.object.parent;
     if (!cabinet) return;
     this.listener.getWorldQuaternion(this.camQuat);
-    const world = this.listener.getWorldPosition(this.scratch).add(HELD.clone().applyQuaternion(this.camQuat));
-    this.targetPos.copy(cabinet.worldToLocal(world.clone()));
-    const target = aim ? aim.clone() : cabinet.worldToLocal(this.listener.getWorldPosition(new THREE.Vector3()).add(new THREE.Vector3(0, 0, -3).applyQuaternion(this.camQuat)));
+    const world = this.listener.getWorldPosition(this.scratch).add(this.held.copy(HELD).applyQuaternion(this.camQuat));
+    this.targetPos.copy(cabinet.worldToLocal(world));
+    const target = aim ? this.aimAt.copy(aim) : cabinet.worldToLocal(this.listener.getWorldPosition(this.aimAt).add(this.held.copy(AHEAD).applyQuaternion(this.camQuat)));
     this.aimFrom(this.targetPos, target);
   }
 
   /** In a regular's hand, pointing at the glass. */
   private regularPose(aim: THREE.Vector3 | null): void {
     this.targetPos.copy(this.regularHand);
-    this.aimFrom(this.targetPos, aim ?? new THREE.Vector3(0, 1.36, 0.3));
+    this.aimFrom(this.targetPos, aim ?? REGULAR_AIM);
   }
 
   /** Orientation (cabinet-local) with the barrel (+z) from `from` towards `to`. */
@@ -138,8 +153,9 @@ export class LightGun implements CabinetAttachment {
 
   /** The cable: from the panel to the grip, sagging in between. */
   private updateCable(): void {
-    const end = this.grip.getWorldPosition(new THREE.Vector3());
-    this.object.worldToLocal(end);
+    const end = this.object.worldToLocal(this.grip.getWorldPosition(this.scratch));
+    if (end.distanceToSquared(this.cableEnd) < 1e-8) return;
+    this.cableEnd.copy(end);
     const positions = this.cable.geometry.attributes.position as THREE.BufferAttribute;
     const length = this.anchor.distanceTo(end);
     for (let i = 0; i < CABLE_POINTS; i++) {

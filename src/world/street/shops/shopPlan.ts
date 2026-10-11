@@ -1,6 +1,7 @@
 import { COFFEE_PRICE, SCRATCH, STREET_TREATS } from '@/economy/pricing';
 import type { ShopKind, ShopSpec } from '../streetPlan';
 import type { PersonId } from '@/social/types';
+import type { Weekday } from '@/time/wakefulness';
 import { capitalise } from '@/text/strings';
 
 /** Something a shop sells over the counter: the coffee, a croissant, a scratch card, a drink, a scrap for the stray. */
@@ -112,6 +113,26 @@ function titleCase(text: string): string {
     .map((word, i) => (i > 0 && ['of', 'the', 'and', '&'].includes(word) ? word : capitalise(word)))
     .join(' ');
 }
+
+/**
+ * A shop's own line for a day of the street's week (Monday 0 .. Sunday 6, `shopHours.streetWeekday`), said first on a
+ * look in that day: the market mornings (Wednesday, Saturday), the launderette's Monday, the bakery's Friday, Saturday's
+ * butcher. The week's hours are `shopHours`' `WEEK` (a shop shut that day says so at its door instead).
+ */
+export const WEEKDAY_LOOKS: Readonly<Partial<Record<ShopKind, Partial<Record<Weekday, string>>>>> = {
+  grocer: {
+    2: 'Market morning: crates out on the pavement, the radio up, “three for two on the lemons!”',
+    5: 'Saturday market morning: a queue to the door and the grocer shouting prices.',
+    6: 'Sunday: the shutter half down by one. “Quick, love, I’m off to my mother’s.”',
+  },
+  laundry: { 0: 'Monday: every machine taken, a queue of laundry bags along the wall. Machine 4 is still out of order.' },
+  bakery: {
+    4: 'Friday: the window is full of fruit tarts. A sign: THE FRIDAY SPECIAL.',
+    6: 'Sunday morning: a queue for the bread out of the door. Shut at one.',
+  },
+  butcher: { 5: 'Saturday: a queue for the Sunday roasts. The butcher has a pencil behind each ear.' },
+  books: { 0: 'Monday: the bookseller opens after lunch, sandwich in hand.' },
+};
 
 /** What the bar's regulars go on about, over a lemonade. */
 export const BAR_GOSSIP: readonly string[] = [

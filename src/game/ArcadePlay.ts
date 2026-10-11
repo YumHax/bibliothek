@@ -10,6 +10,7 @@ import type { ArcadeDailyLike, CoreParts, LeagueLike, MedalsLike, PayoutStatsLik
 import { isAction } from '@/input/actions';
 import { actionKeyLabel } from '@/ui/keys';
 import { Arming } from '@/ui/confirmTwice';
+import { afterReveal, holdReveal } from '@/ui/revealHold';
 import type { KeyRoute, SessionHost } from './SessionHost';
 import { formatNumber } from '@/text/count';
 import { formatCoins, formatTickets } from '@/text/money';
@@ -47,6 +48,8 @@ export interface TournamentLike {
   /** The next round and the score to beat, while the player is in. */
   readonly next?: { round: number; name: string; score: number } | null;
   play(score: number): TournamentOutcome | null;
+  /** A past Saturday's run left before it ended: its tickets, once (the next ticket play pays them). */
+  takeUnfinished(): { wins: number; tickets: number } | null;
 }
 
 /** What a finished play came to: the arcade's settlement, the tee's tickets on top, the tournament round it was. */
@@ -138,6 +141,9 @@ export class ArcadePlay implements KeyRoute {
     } else if (onTheHouse) {
       if (this.housePlays++ === 0) this.host.slip({ title: 'On the house', detail: 'This play is free: win some tickets.' });
       else this.host.react('On the house again.');
+    } else if (this.parts.league?.useToken?.()) {
+      // A gold token from the regular's card goes in the slot before any coin.
+      this.host.react('A gold token in the slot: this one is on the house.');
     } else if (!this.pay(wallet, machine)) return null;
     return !onTheHouse && !machine.freePlay && !home;
   }
@@ -147,8 +153,11 @@ export class ArcadePlay implements KeyRoute {
     this.host.putBack();
     this.host.stand();
     const { position, yaw } = machine.eyePose();
-    player.sit(position, yaw); // parks the camera and freezes walking, like an armchair
-    player.lookAt(machine.screenCentre());
+    // Parks the camera and freezes walking, like an armchair; the eased move ends looking down at the screen (a
+    // `lookAt` after it would be overwritten by the move, and taken from where the player stood).
+    const to = machine.screenCentre();
+    const pitch = Math.atan2(to.y - position.y, Math.hypot(to.x - position.x, to.z - position.z));
+    player.sit(position, yaw, false, pitch);
     this.machine = machine;
   }
 
@@ -259,10 +268,14 @@ export class ArcadePlay implements KeyRoute {
     this.host.reward({ title: 'Lucky day!', detail: 'The change machine coughs up some coins.', coins });
   }
 
-  /** At a machine every key is the game's, except E to walk away and, on the end card (once counted up, fire let go), fire to replay. */
+  /**
+   * At a machine every key is the game's, except E to walk away, on the end card (once counted up, fire let go) fire to
+   * replay, and X, which no machine uses: it goes on to `NoticeDismiss` (the win's banner closed right there).
+   */
   onKey(code: string): boolean {
     const machine = this.machine;
     if (!machine) return false;
+    if (isAction(code, 'dismissNotice')) return false;
     if (isAction(code, 'walkAway')) this.walkAway(machine);
     else if (!machine.isPlaying && machine.canReplay !== false && isAction(code, 'fire')) this.play(machine);
     return true;
@@ -286,6 +299,9 @@ export class ArcadePlay implements KeyRoute {
       return;
     }
     const settled = this.settle(machine, result);
+    // Banked now (walking away mid-count loses nothing), shown once the machine has counted it out: the wallet chip
+    // rolls and the banner comes after the end card's last ticket, not over the initials.
+    holdReveal(() => this.machine !== machine || !machine.counting);
     this.bank(machine, result, settled);
     this.announceEnd(machine, result, settled);
     this.endTip(machine);
@@ -302,7 +318,7 @@ export class ArcadePlay implements KeyRoute {
   private settle(machine: ArcadeMachineLike, result: ArcadeResult): Settled {
     const { arcadeDaily, medals, league, tournament, perks } = this.parts;
     const beginner = this.habits.plays(machine.game.id) <= BEGINNER.plays;
-    const payout = arcadePayout(machine, { ...result, beginner, paid: this.paid }, { daily: arcadeDaily, medals, league });
+    const payout = arcadePayout(machine, { ...result, beginner, paid: this.paid }, { daily: arcadeDaily, medals, league, ...(tournament ? { tournament } : {}) });
     // The arcade tee: the regulars nod the player through, a few tickets on top of a ticket play's own (not the claw's coin back).
     const tee = payout.tickets && machine.freeWhenBroke ? perks?.arcadeBonus(payout.tickets.paid) ?? 0 : 0;
     if (tee) payout.lines.push(`Arcade tee: +${formatTickets(tee)}`);
@@ -335,11 +351,13 @@ export class ArcadePlay implements KeyRoute {
     const [headline, ...extras] = payout.lines;
     const tickets = (payout.tickets?.paid ?? 0) + tee + (round?.tickets ?? 0);
     const prizesWon = payout.prizes.length > 0 || Boolean(round?.prize);
-    // The big banner (rays, fanfare) is for a prize won; a personal best is a normal reward: the cabinet plays its own
-    // NEW BEST sting, and a beginner beats their own score every other play (docs/notices.md: "big only for a milestone").
-    if (payout.notable || round || prizesWon || result.best) this.host.reward({ title: headline ?? 'Well played!', detail: extras.join('\n') || undefined, tickets: tickets || undefined, big: prizesWon });
-    // A reaction is one line under the crosshair: its parts side by side.
-    else if (!machine.freeWhenBroke || result.first) this.host.react([headline, ...extras].filter(Boolean).join(' · '));
+    afterReveal(() => {
+      // The big banner (rays, fanfare) is for a prize won; a personal best is a normal reward: the cabinet plays its own
+      // NEW BEST sting, and a beginner beats their own score every other play (docs/notices.md: "big only for a milestone").
+      if (payout.notable || round || prizesWon || result.best) this.host.reward({ title: headline ?? 'Well played!', detail: extras.join('\n') || undefined, tickets: tickets || undefined, big: prizesWon });
+      // A reaction is one line under the crosshair: its parts side by side.
+      else if (!machine.freeWhenBroke || result.first) this.host.react([headline, ...extras].filter(Boolean).join(' · '));
+    });
   }
 
   /** What the keys do next: the initials (a score that makes the table goes there first), or another go (the machine's first few plays). */

@@ -26,6 +26,10 @@ const SIZE = { width: 2.2, height: 2.35, depth: 1.5 };
 const ROOF = { wider: 0.5, deeper: 0.6, thick: 0.12, forward: 0.1 };
 /** The kiosk's roof as a box round its origin (width along its x, depth along z, top): what keeps the rain off (`Precipitation`). */
 export const NEWSSTAND_ROOF = { width: SIZE.width + ROOF.wider, depth: SIZE.depth + ROOF.deeper, height: SIZE.height + ROOF.thick } as const;
+/** The hatch in the kiosk's front: from and to (m up), and the posts either side of it (wide, with the hitbox's margin). */
+const HATCH = { from: 1.0, to: 1.9, post: 0.3 };
+/** Where the newsagent stands behind the hatch, kiosk-local (on the pavement's level: the shell hides the legs). */
+export const NEWSAGENT_AT = { x: 0, z: 0.5 } as const;
 /** The kiosk's edges, rounded. */
 const EDGE = 0.012;
 
@@ -69,9 +73,15 @@ export class Newsstand extends THREE.Group implements Furniture, Interactable {
     board.position.set(0, height / 2, depth / 2 + WALL.sign.lift);
     this.add(board);
 
-    const hitbox = invisibleHitbox(width + 0.2, height, depth + 0.4, { y: height / 2, z: 0.1 });
-    this.hitboxes = [hitbox];
-    this.add(hitbox);
+    // The papers round the hatch read the paper; the hatch itself is left to the newsagent behind it (`KioskVendor`).
+    const deep = depth + 0.4;
+    this.hitboxes = [
+      invisibleHitbox(width + 0.2, HATCH.from, deep, { y: HATCH.from / 2, z: 0.1 }),
+      invisibleHitbox(width + 0.2, height - HATCH.to, deep, { y: (height + HATCH.to) / 2, z: 0.1 }),
+      invisibleHitbox(HATCH.post, HATCH.to - HATCH.from, deep, { x: -(width + 0.2 - HATCH.post) / 2, y: (HATCH.from + HATCH.to) / 2, z: 0.1 }),
+      invisibleHitbox(HATCH.post, HATCH.to - HATCH.from, deep, { x: (width + 0.2 - HATCH.post) / 2, y: (HATCH.from + HATCH.to) / 2, z: 0.1 }),
+    ];
+    for (const hitbox of this.hitboxes) this.add(hitbox);
   }
 
   get footprint(): THREE.Box3 {

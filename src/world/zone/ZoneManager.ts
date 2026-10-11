@@ -17,6 +17,11 @@ interface ZoneManagerOptions<Id extends string = string> {
    * `unloadAfterSeconds`. Default 2: the street and the shop last visited.
    */
   keepRecent?: number;
+  /**
+   * Which zone a point outside every zone's box still belongs to, if any (the street claims its park's gardens and
+   * the stretch its works opened, past its box): that zone becomes, or stays, current there. Default: none.
+   */
+  claim?: (point: THREE.Vector3) => Id | null;
 }
 
 /**
@@ -41,6 +46,7 @@ export class ZoneManager<Id extends string = string> implements Updatable {
   private readonly requested = new Set<Zone<Id>>();
   /** Dormant zones kept loaded however long, while something needs them ready (`hold`). */
   private readonly held = new Set<Zone<Id>>();
+  private readonly claim: ((point: THREE.Vector3) => Id | null) | undefined;
 
   constructor(
     private readonly zones: readonly Zone<Id>[],
@@ -53,6 +59,7 @@ export class ZoneManager<Id extends string = string> implements Updatable {
     this.hysteresis = options.hysteresis ?? 0.4;
     this.unloadAfter = options.unloadAfterSeconds ?? 30;
     this.keepRecent = options.keepRecent ?? 2;
+    this.claim = options.claim;
     this._current = start;
     this.apply();
   }
@@ -75,7 +82,7 @@ export class ZoneManager<Id extends string = string> implements Updatable {
     const p = this.player.position;
     if (!this._current.contains(p, this.hysteresis)) {
       // Prefer a neighbour (the player walked through a doorway), else anyone containing the point.
-      const next = this.neighboursOf(this._current).find((z) => z.contains(p)) ?? this.zones.find((z) => z.contains(p));
+      const next = this.neighboursOf(this._current).find((z) => z.contains(p)) ?? this.zones.find((z) => z.contains(p)) ?? this.claimed(p);
       if (next && next !== this._current && this.ready(next)) {
         const previous = this._current;
         this._current = next;
@@ -106,6 +113,12 @@ export class ZoneManager<Id extends string = string> implements Updatable {
     if (!zone) return;
     if (held) this.held.add(zone);
     else if (this.held.delete(zone)) this.dormantFor.delete(zone);
+  }
+
+  /** The zone that claims `point` beyond every box (`claim`), if any. */
+  private claimed(point: THREE.Vector3): Zone<Id> | undefined {
+    const id = this.claim?.(point);
+    return id ? this.zone(id) : undefined;
   }
 
   /** The `keepRecent` travel zones left most recently that are dormant now. */

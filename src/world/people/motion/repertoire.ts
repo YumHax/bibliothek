@@ -27,12 +27,26 @@ export interface Context {
 export function idleFidget(ctx: Context, random: () => number): GestureName | null {
   if (ctx.holding) return random() < 0.5 ? 'lookAround' : null;
   if (ctx.handsBusy) return random() < 0.4 ? 'rollShoulders' : null;
-  if (ctx.seated) return pick(random, ['lookAround', 'rollShoulders', 'stretch']);
-  if (ctx.pose !== 'stand') return pick(random, ['lookAround', 'rollShoulders', 'lookAround']);
-  const options: GestureName[] = ['scratchHead', 'rubNeck', 'checkWatch', 'rollShoulders', 'lookAround', 'lookAround', 'wipeHands'];
+  if (ctx.seated) return pick(random, ['lookAround', 'rollShoulders', 'stretch', 'rubNose', 'chinRest', 'touchCheek']);
+  if (ctx.pose !== 'stand') return pick(random, ['lookAround', 'rollShoulders', 'lookAround', 'rubNose']);
+  const options: GestureName[] = ['scratchHead', 'rubNeck', 'checkWatch', 'rollShoulders', 'lookAround', 'lookAround', 'wipeHands', 'rubNose', 'scratchNape', 'touchCheek'];
+  // The reserved keep their hands to themselves (joined, in a pocket); the expressive touch their face.
+  if (ctx.expressive < 0.5) options.push('claspHands', 'pocketHand');
+  else options.push('chinRest', 'rubNose');
   if (ctx.glasses) options.push('adjustGlasses', 'adjustGlasses');
   if (random() < 0.12) return 'stretch';
   return pick(random, options);
+}
+
+/**
+ * A fidget for someone listening (a conversation, while the other talks), or null: the small
+ * moves of attention and waiting, never a stretch or a look away round the room.
+ */
+export function listenFidget(ctx: Context, random: () => number): GestureName | null {
+  if (ctx.holding || ctx.handsBusy) return random() < 0.5 ? 'listenTilt' : null;
+  if (ctx.seated) return pick(random, ['listenTilt', 'listenTilt', 'chinRest', 'touchCheek', null]);
+  if (ctx.pose !== 'stand') return pick(random, ['listenTilt', 'listenTilt', 'rubNose', null]);
+  return pick(random, ['listenTilt', 'listenTilt', 'chinRest', 'claspHands', 'touchCheek', 'rubNose', ctx.expressive < 0.5 ? 'pocketHand' : 'chinRest', null]);
 }
 
 interface Response {
@@ -49,22 +63,22 @@ export function respond(reaction: Reaction, ctx: Context, random: () => number):
   const body = random() < ctx.expressive;
   switch (reaction) {
     case 'good':
-      return { gesture: null, face: { smile: 0.55 }, seconds: 0.9, nod: random() < 0.5 };
+      return { gesture: null, face: { smile: 0.4, smirk: 0.35 }, seconds: 0.9, nod: random() < 0.5 };
     case 'great':
       if (!body) return { gesture: null, face: { smile: 1, browsUp: 0.4 }, seconds: 1.6, nod: true };
       return { gesture: ctx.handsBusy || random() < 0.6 ? 'fistPump' : 'clap', face: { smile: 1, browsUp: 0.3 }, seconds: 1.8 };
     case 'record':
-      return { gesture: body || random() < 0.5 ? 'cheerHop' : 'fistPump', face: { smile: 1, browsUp: 0.8, jaw: 0.4 }, seconds: 2.6 };
+      return { gesture: body || random() < 0.5 ? 'cheerHop' : 'fistPump', face: { smile: 1, browsUp: 0.8, jaw: 0.4, wide: 0.5 }, seconds: 2.6 };
     case 'fail':
-      if (ctx.handsBusy) return { gesture: random() < 0.6 ? 'wince' : 'headShake', face: { frown: 0.8, squint: 0.4 }, seconds: 1.4 };
-      return { gesture: body ? pick(random, ['headShake', 'facepalm', 'slapPanel']) : 'wince', face: { frown: 0.9, squint: 0.3 }, seconds: 1.8 };
+      if (ctx.handsBusy) return { gesture: random() < 0.6 ? 'wince' : 'headShake', face: { frown: 0.7, squint: 0.4, press: 0.6 }, seconds: 1.4 };
+      return { gesture: body ? pick(random, ['headShake', 'facepalm', 'slapPanel']) : 'wince', face: { frown: 0.7, squint: 0.3, sneer: 0.4, press: 0.3 }, seconds: 1.8 };
     case 'near':
-      if (!body) return { gesture: 'headShake', face: { browsUp: 0.9, jaw: 0.3, frown: 0.2 }, seconds: 1.6 };
-      return { gesture: random() < 0.65 ? 'handsOnHead' : 'coverMouth', face: { browsUp: 1, jaw: 0.35 }, seconds: 1.8 };
+      if (!body) return { gesture: 'headShake', face: { browsUp: 0.9, jaw: 0.3, frown: 0.2, wide: 0.7 }, seconds: 1.6 };
+      return { gesture: random() < 0.65 ? 'handsOnHead' : 'coverMouth', face: { browsUp: 1, jaw: 0.35, wide: 1 }, seconds: 1.8 };
     case 'over':
-      return { gesture: pick(random, ['sigh', 'sigh', 'rubNeck', 'stretch', 'headShake']), face: { frown: 0.3 }, seconds: 1.5 };
+      return { gesture: pick(random, ['sigh', 'sigh', 'rubNeck', 'stretch', 'headShake']), face: { sad: 0.55, puff: 0.35 }, seconds: 1.5 };
     case 'ready':
-      return { gesture: ctx.handsBusy && random() < 0.5 ? null : 'rubHands', face: { smile: 0.5 }, seconds: 1.2 };
+      return { gesture: ctx.handsBusy && random() < 0.5 ? null : 'rubHands', face: { smile: 0.35, smirk: 0.4 }, seconds: 1.2 };
   }
 }
 

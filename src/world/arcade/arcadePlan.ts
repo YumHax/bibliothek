@@ -4,7 +4,8 @@ import type { DecorEntry } from '../props/decor';
 import type { TiledWainscotOptions } from '../props/TiledWainscot';
 import type { ArcadeGameId } from './games';
 import type { MachineKind, MachineOptionsOf } from './machineKinds';
-import type { HangoutSpot, NavNode } from './ArcadeCrowd';
+import type { NavNode } from './crowdNav';
+import type { HangoutSpot } from './HallKid';
 
 /*
  * THE ARCADE PLAN: a dim hall reached by teleport from its door on Front Street (see `worldPlan.ts`,
@@ -221,14 +222,26 @@ export const ARCADE_PLAN = {
     board: { wall: 'back', along: 4.2, y: 1.65 } as Placement,
     width: 1.1,
     height: 0.85,
-    games: ['breakout', 'invaders', 'stacker', 'frog', 'snake', 'comets'] as ArcadeGameId[],
+    games: ['breakout', 'invaders', 'stacker', 'frog', 'snake', 'comets', 'pinball', 'hoops'] as (ArcadeGameId | MachineKind)[],
     spectators: [[-0.75, 1.55], [0, 1.85], [0.75, 1.55]] as [x: number, z: number][],
     /** What the watchers say when the player wins a round, and when they go out. */
     cheers: ['YES!', 'Through to the next round!', 'Did you see that?', 'Clean!'],
     groans: ['Ohhh...', 'So close.', 'Unlucky.', 'Next Saturday, then.'],
     /** The TOURNAMENT sign on the cabinet's roof (cabinet-local y). */
     topperY: 1.92,
+    /**
+     * The physical machines that may host it: where the watchers stand (machine-local, behind the player: the pinball's
+     * player at z 0.9, the hoops' at z 1.15, its cage against the left wall so the watchers keep to the hall's side) and
+     * the sign (machine-local: on the pinball's backbox, on the hoops' front top rail).
+     */
+    hosts: {
+      pinball: { spectators: [[-0.6, 1.5], [0, 1.7], [0.6, 1.5]], topper: [0, 1.785, -0.53] },
+      hoops: { spectators: [[-0.05, 1.85], [0.55, 2.05], [1.1, 2.2]], topper: [0, 2.565, 0.95] },
+    } as Partial<Record<MachineKind, { spectators: [x: number, z: number][]; topper: [number, number, number] }>>,
   },
+
+  /** The hall's tour on the back wall left of the cabinets, under the PLAYER ONE panel: every machine's medals. */
+  hallTour: { at: { wall: 'back', along: -3.6, y: 1.5 } as Placement, width: 0.9, height: 0.78 },
 
   /** The change machine on the left wall by the way in (it works, some days). */
   changeMachine: { wall: 'left', along: 2.9, y: 0, offset: 0.26 } as Placement,
@@ -240,6 +253,9 @@ export const ARCADE_PLAN = {
     startStation: 0,
     pool: { color: 0xff7ad9, width: 1.3, depth: 1.1, z: 0.75, level: 0.5 },
   },
+
+  /** Where the mirror ball's spots sweep the carpet when the hall celebrates (under the ball, zone-local x, z), and out to how far (m). */
+  celebration: { centre: [0, 0] as [number, number], reach: 3.4 },
 
   /** The people: the attendant behind the counter, regulars coming and going, a kid who watches. */
   crowd: {
@@ -259,22 +275,80 @@ export const ARCADE_PLAN = {
         'Come back every day. The streak pays. I do not make the rules. I do, actually.',
         'Medals on every machine. Bronze, silver, gold. Collect them all, apparently.',
       ],
+      /** His usual lines instead, as he gets on with the player (`social/tiers`): a cold shoulder, a friend's word. */
+      curt: ['Tickets or coins. Pick one.', 'Counter’s open. That’s all I’ve got.', 'Mm.'],
+      warm: [
+        'There you are. The regulars were asking.',
+        'Coffee’s on behind the counter. Don’t tell the regulars.',
+        'You play like someone who used to come here as a kid.',
+        'If the claw gives you trouble, I know where it tickles.',
+        'Your initials look good up there. I polish the board, you know.',
+      ],
     },
-    /** Regulars: how many there are, their initials on the board, and how many may be in at once by the hour of the day. */
+    /**
+     * The regulars (`economy/hallRegulars`: who they are, their hours, machines and words): how many may be in at once
+     * by the hour of the day.
+     */
     regulars: {
-      count: 4,
-      seeds: [7, 12, 19, 31],
-      names: ['VIC', 'JIN', 'ROX', 'ZED'],
       /** From this hour on, at most this many regulars inside: quiet mornings, a full house in the evening. */
       byHour: [[0, 1], [9, 1], [13, 2], [17, 3], [23, 2]] as [hour: number, max: number][],
     },
-    /** Things a regular says when clicked. */
-    regularLines: ["Don't talk to me mid-run.", 'I come here every Thursday. Is it Thursday?', 'Watch the fourth wave. It speeds up.', 'The pinball left flipper is soft. Everyone knows.', 'My initials are on three boards. Four by tonight.', 'The hoop moves after ten. Nobody tells you that.'],
-    /** What a regular says when their score lands on the hall of fame. */
+    /** What the hall's own line is when a score lands on the hall of fame (the regulars say their own). */
     boardLines: ['On the board!', 'Top five, baby!', 'Write that down.', 'Still got it.'],
     kid: {
       seed: 23,
-      lines: ["I'm watching. Don't mind me.", 'My mum works here. Kind of.', 'Sky Stack is my favourite. I never get past row nine.', "Beat the ACE on the board and I'll tell everyone.", 'Paddle Wars? I am player two. Always.'],
+      lines: ["I'm watching. Don't mind me.", 'My mum works here. Kind of.', 'Sky Stack is my favourite. I never get past row nine.', "Beat the ACE on the board and I'll tell everyone.", 'Paddle Wars? I am player two. Always.', 'NIC. That’s me on the board. Well. Soon.'],
+      /**
+       * His own game when nobody needs him: SKY STACK, the odds he goes and plays it when he looks for something to do,
+       * for how long, and how well: a little better every game week (`start` + `perWeek` a week, to `max`).
+       */
+      game: { gameId: 'stacker', initials: 'NIC', odds: 0.3, seconds: [40, 90] as [number, number], skill: { start: 0.36, perWeek: 0.02, max: 0.6 } },
+    },
+    /**
+     * People the player knows who come to the arcade on their own days (docs/social.md "Front Street and the arcade"):
+     * where they stand between two games (facing `yaw`, eyes on `look`), their hours, their machine and their skill.
+     * Marco comes the day fixed with him (`arcadePartner`), takes player two at PADDLE WARS and plays it himself; Hugo
+     * comes on Wednesday mornings (no school; the courtyard after lunch), plays NEON SNAKE, a little better every week
+     * and every tip the player gives him.
+     */
+    guests: {
+      marco: {
+        spot: { at: [2.95, -2.45], yaw: Math.PI, look: [2.25, 1.4, -3.5] } as HangoutSpot,
+        hours: [14, 21] as [number, number],
+        game: 'duel' as ArcadeGameId,
+        initials: 'MAR',
+        skill: 0.7,
+        seconds: [50, 100] as [number, number],
+        rest: [15, 35] as [number, number],
+        lines: {
+          clicked: ['Told you I’d come. Duel?', 'I held this record. HELD. Past tense. For now.', 'Coins in. Blue stick’s mine.'],
+          partner: ['Blue stick! Mine!', 'Move over, I’m player two.', 'Ready to lose?'],
+          partnerResult: { won: ['Okay, okay. Best of three?', 'The blue stick is sticky. I swear.'], lost: ['HA! Still got it!', 'Write it down: Marco wins.'], drawn: ['A draw. Coward’s result. Again.'] },
+          watched: { best: ['Whoa. Okay. Respect.'], plain: ['Not bad. Not my record, but not bad.'] },
+          playing: ['Come on...', 'Yes!', 'Argh, the angle!'],
+          board: ['MAR on the board! Take a photo.', 'Told you. Record man.'],
+        },
+      },
+      hugo: {
+        spot: { at: [0.95, 2.2], yaw: Math.PI, look: [0, 1.4, 0.8] } as HangoutSpot,
+        /** Wednesday (Monday 0), game hours. */
+        weekday: 2,
+        hours: [10, 12.5] as [number, number],
+        game: 'snake' as ArcadeGameId,
+        initials: 'HUG',
+        height: 1.5,
+        skill: { start: 0.4, perWeek: 0.015, perTip: 0.04, max: 0.7 },
+        seconds: [45, 90] as [number, number],
+        rest: [10, 25] as [number, number],
+        lines: {
+          clicked: ['No school on Wednesdays! Mum says I can come if Gus keeps an eye.', 'HUG. Three letters. Top of Snake, one day.', 'It gets really fast after the fifty.'],
+          partner: [],
+          partnerResult: { won: [], lost: [], drawn: [] },
+          watched: { best: ['WHOA. Teach me that!', 'That’s the top! You’re the top!'], plain: ['Nice one!', 'I would have turned left there.'] },
+          playing: ['Fast fast fast...', 'Nooo!', 'Come on, HUG!'],
+          board: ['HUG IS ON THE BOARD! HUG!', 'Mum’s going to frame that.'],
+        },
+      },
     },
     /** The hall's walkable graph: straight, clear lines between these points. */
     nav: [
@@ -336,7 +410,6 @@ export const ARCADE_PLAN = {
     { kind: 'flyer', at: { wall: 'right', along: -0.9, y: 1.8 }, options: { title: 'PLEASE', lines: ['do not rock', 'the machines', '(they rock back)'], accent: 0x2f6b8f, seed: 23 } },
     { kind: 'flyer', at: { wall: 'right', along: 0.1, y: 1.75 }, options: { title: 'HIGH SCORE?', lines: ['sign the board', 'with your initials'], accent: 0xe6a83a, ink: 0x3a2a10, seed: 24 } },
     { kind: 'flyer', at: { wall: 'front', along: -1.6, y: 2.3 }, options: { title: 'DAILY', lines: ['one challenge a day', 'see the board', 'beat it, bank it'], accent: 0x8a2f6f, seed: 21 } },
-    { kind: 'flyer', at: { wall: 'back', along: -3.6, y: 1.6 }, options: { title: 'MEDALS', lines: ['bronze · silver · gold', 'on every machine', 'tickets for each'], accent: 0xe0995a, seed: 25 } },
     { kind: 'flyer', at: { wall: 'back', along: 3.2, y: 1.6 }, options: { title: 'LEAGUE', lines: ['most tickets this week', 'wins the pennant', 'see the board'], accent: 0x33e0ff, seed: 26 } },
 
     // The hall's own games on its walls: one-sheets in black frames, and the airbrushed panel over the back-left corner

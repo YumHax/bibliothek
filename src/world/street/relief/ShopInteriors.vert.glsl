@@ -6,6 +6,7 @@ attribute vec2 aTile;
 attribute vec3 aLight;
 attribute vec3 aWall;
 attribute float aOpen;
+attribute float aAcross;
 attribute vec4 aPerson;
 attribute vec3 aCloth;
 attribute vec3 aSkin;
@@ -19,6 +20,7 @@ varying vec2 vTile;
 varying vec3 vLight;
 varying vec3 vWall;
 varying float vOpen;
+varying float vAcross;
 #include <fog_pars_vertex>
 void main() {
   vec4 world = modelMatrix * vec4(position, 1.0);
@@ -32,6 +34,7 @@ void main() {
   vLight = aLight;
   vWall = aWall;
   vOpen = aOpen;
+  vAcross = aAcross;
   vPerson = aPerson;
   vCloth = aCloth;
   vSkin = aSkin;

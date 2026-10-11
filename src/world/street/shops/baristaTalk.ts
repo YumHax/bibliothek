@@ -9,6 +9,9 @@ import { onceToday, usedToday } from '@/social/street/streetPerks';
 import type { TalkSession } from '@/social/talk';
 import type { PersonId } from '@/social/types';
 import { voiceBody } from '../../people/socialHook';
+import { errandOf, type ErrandId } from '@/errands/errands';
+import { pocket } from '@/errands/pocket';
+import { payEspresso, victorOwesEspresso } from '@/social/street/wager';
 import type { ShopServices } from './ShopEntrance';
 
 /*
@@ -70,19 +73,37 @@ export function baristaTalk(options: BaristaTalkOptions, session: SessionActions
   const coffee = (): { line: string } => {
     const { market, purse } = services;
     if (market.hadCoffee) return { line: 'Another one? You’ll be haggling in your sleep.' };
-    const onTheHouse = free();
-    if (onTheHouse) onceToday(id, 'freeCoffee', day());
+    // Victor lost his wager (`social/street/wager`): his espresso waits behind the counter.
+    const onVictor = victorOwesEspresso();
+    const onTheHouse = onVictor || free();
+    if (onVictor) payEspresso();
+    else if (onTheHouse) onceToday(id, 'freeCoffee', day());
     else if (!purse.spend(price)) {
       session.refuse(`A coffee is ${formatCoins(price)} and you have ${purse.coins}.`);
       return { line: 'Pay me next time? No. Sorry, love, rules.' };
     }
     market.drinkCoffee();
-    session.slip({ title: onTheHouse ? 'A coffee, on the house' : 'A coffee', detail: 'The stallholders go easier on you today.', coins: onTheHouse ? 0 : -price });
+    session.slip({ title: onVictor ? 'An espresso, on Victor' : onTheHouse ? 'A coffee, on the house' : 'A coffee', detail: 'The stallholders go easier on you today.', coins: onTheHouse ? 0 : -price });
     // A cold barista keeps the market to themself; a friendly one has two things to say.
     const tips = options.tips();
     const count = effect(id, 'noTip') ? 0 : effect(id, 'twoTips') ? 2 : 1;
     for (let i = 0; i < count; i++) giveTip(session, id, day(), tips);
+    if (onVictor) return { line: 'Mr Crane left this for you. He said, and I quote, “Don’t make a song of it.” And listen…' };
     return { line: count === 0 ? 'There. Anything else?' : onTheHouse ? 'On the house. And listen…' : 'There you go. And listen…' };
+  };
+  // To take away, for somebody else (a gift, a favour at the Mansions): into the pocket.
+  const toGo = (item: Extract<ErrandId, 'coffee' | 'cake'>): { line: string } => {
+    const errand = errandOf(item, 'spring');
+    if (pocket.boughtToday(item) >= errand.perDay) return { line: item === 'cake' ? 'That was the last slice, sorry.' : 'I’m out of cups to go. Drink it here?' };
+    if (pocket.count(item) >= errand.max) return { line: 'Your hands are full already, love.' };
+    if (!services.purse.spend(errand.price)) {
+      session.refuse(`That is ${formatCoins(errand.price)} and you have ${services.purse.coins}.`);
+      return { line: 'Next time, then.' };
+    }
+    pocket.recordBuy(item);
+    pocket.add(item, errand.portions, errand.max);
+    session.slip({ title: item === 'cake' ? 'A slice of cake, to take away' : 'A coffee, to take away', detail: errand.bought, coins: -errand.price });
+    return { line: item === 'cake' ? 'Boxed and tied. Someone’s lucky.' : 'Lid on, sleeve on. Mind, it’s hot.' };
   };
   return {
     person: id,
@@ -92,9 +113,21 @@ export function baristaTalk(options: BaristaTalkOptions, session: SessionActions
       {
         id: 'coffee',
         group: 'trade',
-        label: free() ? 'A coffee (on the house)' : `A coffee (${formatCoins(price)})`,
+        label: victorOwesEspresso() ? 'An espresso (on Victor)' : free() ? 'A coffee (on the house)' : `A coffee (${formatCoins(price)})`,
         disabled: () => (services.market.hadCoffee ? 'One coffee a day is plenty' : null),
         run: coffee,
+      },
+      {
+        id: 'coffeeToGo',
+        group: 'trade',
+        label: `A coffee to take away (${formatCoins(errandOf('coffee', 'spring').price)})`,
+        run: () => toGo('coffee'),
+      },
+      {
+        id: 'cakeToGo',
+        group: 'trade',
+        label: `A slice of cake to take away (${formatCoins(errandOf('cake', 'spring').price)})`,
+        run: () => toGo('cake'),
       },
       {
         id: 'moreTips',

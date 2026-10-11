@@ -5,6 +5,7 @@ import type { Views } from './Fame';
 import { isGrail } from './grails';
 import { drawCondition } from './stockDraws';
 import { drawSealedLot, type SealedLot } from './boxLots';
+import { felixCopy, felixLotOn } from './felixLots';
 import { describeVariant, dressCopy } from './copyTraits';
 import { AUCTION, marketPrice } from './pricing';
 import { frozenRng } from '@/random';
@@ -89,6 +90,9 @@ function dress(game: Game, rng: () => number, star: boolean, seed: string): { ga
   return { game: copy, condition, edition };
 }
 
+/** The auctioneer on one of Félix's copies come back (`felixLots`). */
+const FELIX_BLURB = 'From a private collection: a little round sticker on the back, F.A. It has been through this room before, I believe.';
+
 /** The sale days' lots and results. */
 export class AuctionHouse {
   private state: AuctionFile;
@@ -133,6 +137,10 @@ export class AuctionHouse {
     // number) however the collection changes; a lot the player has already is refused at the bid.
     const pool = await this.deps.randomGames(`auction:${day}:lots`, games * 3).catch(() => [] as Game[]);
     const ordinary = pool.slice(0, games - 1);
+    // Some sale days, one of Félix's copies comes back through the room it left by (`felixLots`): the last ordinary lot.
+    const felix = felixLotOn(day, 'saleroom', () => false);
+    const felixGame = felix && felixCopy(felix);
+    if (felixGame && ordinary.length) ordinary[ordinary.length - 1] = felixGame;
     const famous = SEED_GAMES.filter((g) => g.externalIds?.libretroName && !isGrail(g.id));
     const starGame = famous[Math.floor(rng() * famous.length)];
     const priced = async (game: Game, star: boolean): Promise<AuctionLot> => {
@@ -140,7 +148,8 @@ export class AuctionHouse {
       const { game: copy, condition, edition } = dress(game, rng, star, `auction:${day}:copy:${game.id}`);
       const factor = AUCTION.estimate[0] + rng() * (AUCTION.estimate[1] - AUCTION.estimate[0]);
       const lines = BLURBS[condition];
-      const line = lines[Math.floor(rng() * lines.length)]!;
+      const drawn = lines[Math.floor(rng() * lines.length)]!;
+      const line = copy.felixLot !== undefined ? FELIX_BLURB : drawn;
       const views = await this.deps.fame.lookup(copy);
       const estimate = marketPrice(copy, views, condition, factor, edition);
       const reserve = marketPrice(copy, views, condition, AUCTION.reserve, edition);

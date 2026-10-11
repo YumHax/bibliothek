@@ -63,8 +63,8 @@ const MASTER = 0.55;
  * The player's own footsteps, everywhere (and the room's air, `setRoomAir`, from what is underfoot): watches the camera's horizontal movement (the
  * controller is not touched) and plays a step every stride, heel then toe, a little to the left
  * then to the right, sprinting harder and crouching softer. The sound is synthesised from what is
- * underfoot (`surfaceAt`: parquet, carpet, tiles, concrete, paving, asphalt, grass); outdoors a wet
- * ground adds a splash and snow a crunch. Silent while seated, frozen, out of the room (menu open)
+ * underfoot (`surfaceAt`: parquet, carpet, tiles, concrete, paving, asphalt, grass, gravel, a playground's
+ * rubber, autumn leaves, a puddle); outdoors a wet ground adds a splash and snow a crunch. Silent while seated, frozen, out of the room (menu open)
  * or `suspended` (travelling), and before the page's first gesture started the audio.
  */
 export class Footsteps implements Updatable {

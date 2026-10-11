@@ -32,11 +32,11 @@ const ACTED: Record<SocialReaction, { gesture?: GestureName; face: FaceKey; nod?
   pleased: { face: { smile: 0.9, browsUp: 0.3 }, nod: true },
   laugh: { gesture: 'coverMouth', face: { smile: 1, squint: 0.6 } },
   thanks: { face: { smile: 1, browsUp: 0.5 }, nod: true },
-  nod: { face: { smile: 0.4 }, nod: true },
-  shrug: { gesture: 'shrug', face: { browsUp: 0.4 } },
-  annoyed: { gesture: 'headShake', face: { frown: 0.9 } },
-  hurt: { gesture: 'facepalm', face: { frown: 1, squint: 0.4 } },
-  restless: { gesture: 'checkWatch', face: { browsUp: 0.3 } },
+  nod: { face: { smile: 0.3, smirk: 0.25 }, nod: true },
+  shrug: { gesture: 'shrug', face: { browsUp: 0.4, smirk: 0.5 } },
+  annoyed: { gesture: 'headShake', face: { frown: 0.8, press: 0.6 } },
+  hurt: { gesture: 'facepalm', face: { frown: 0.4, sad: 0.9, squint: 0.3 } },
+  restless: { gesture: 'checkWatch', face: { browsUp: 0.3, press: 0.4 } },
   bye: { gesture: 'wave', face: { smile: 0.6 } },
 };
 

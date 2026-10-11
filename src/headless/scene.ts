@@ -5,6 +5,7 @@
 export { zfightSubjects } from '@/world/surface/zfightCatalogue';
 export { lintLights } from '@/world/lint/lights';
 export { lintPlacement } from '@/world/lint/placement';
+export { lintGround } from '@/world/lint/ground';
 export { lintReach } from '@/world/lint/reach';
 export { lintDisposal } from '@/world/lint/disposal';
 export { SharingLedger } from '@/world/lint/sharing';

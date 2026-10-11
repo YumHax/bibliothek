@@ -38,6 +38,14 @@ export class SkyDome extends THREE.Mesh implements Furniture, Updatable, Occupan
   private readonly skyline = new SkylineSilhouette();
   /** The strikes seen so far (a new one reseeds the bolt). */
   private strikes = -1;
+  /** The facades' material when they are reflected (`reflectRows`): its night glow is the reflected windows'. */
+  private rowsLit: THREE.MeshStandardMaterial | null = null;
+  private readonly wallLight = new THREE.Color();
+  private readonly sunPart = new THREE.Color();
+  /** Seconds to the next airliner over the street, and how long the one up there takes to cross. */
+  private planeWait = 40 + random() * 80;
+  private planeTime = 0;
+  private planeLength = 0;
   /** This sky, prefiltered: what the street's glass, paint and puddles reflect while the player is out here. */
   private readonly reflection: SkyReflection;
 
@@ -77,6 +85,11 @@ export class SkyDome extends THREE.Mesh implements Furniture, Updatable, Occupan
       boltReach: { value: 0 },
       blocks: { value: backdropTexture() },
       blockEye: { value: new THREE.Vector3() },
+      planeFrom: { value: new THREE.Vector3(1, 0.5, 0).normalize() },
+      planeTo: { value: new THREE.Vector3(-1, 0.5, 0).normalize() },
+      planeT: { value: -1 },
+      planeTrail: { value: 0 },
+      planeBlink: { value: 0 },
       blockWalls: { value: BACKDROP_WALLS.map((hex) => new THREE.Color(hex)) },
     };
     super(
@@ -108,9 +121,19 @@ export class SkyDome extends THREE.Mesh implements Furniture, Updatable, Occupan
     return new THREE.Box3();
   }
 
+  /**
+   * The street's facades (`Buildings`) in what the street reflects (`SkyReflection.withRows`): taken again each time
+   * the eye has walked `moveEvery` metres.
+   */
+  reflectRows(buildings: THREE.Mesh, moveEvery: number): void {
+    this.reflection.withRows(buildings, moveEvery);
+    this.rowsLit = (buildings.material as THREE.MeshStandardMaterial);
+  }
+
   update(dt: number): void {
     // Centred on the eye: the zone's group only translates, so local = world - its origin.
     this.camera.getWorldPosition(this.eye);
+    if (this.rowsLit) this.lightRows();
     if (this.parent) this.parent.worldToLocal(this.eye);
     this.position.copy(this.eye);
     this.skyline.update(this.eye);
@@ -150,6 +173,7 @@ export class SkyDome extends THREE.Mesh implements Furniture, Updatable, Occupan
     u.nightness!.value = nightness;
     u.wakefulness!.value = wakefulnessAt(s.hours);
     u.beaconTime!.value = (u.beaconTime!.value + dt) % 1000;
+    this.fly(dt);
     // Lightning: the window panes' bolt (a random bearing each strike; only the nearer ones show theirs).
     u.lightning!.value = s.lightning;
     if (s.strikes !== this.strikes) {
@@ -158,6 +182,48 @@ export class SkyDome extends THREE.Mesh implements Furniture, Updatable, Occupan
       u.boltSeed!.value = random() * 100;
       u.boltReach!.value = 1 - THREE.MathUtils.smoothstep(s.strikeDistance, 1200, 3500);
     }
+  }
+
+  /**
+   * How the reflected rows are lit: what a white wall gives back under the street's rig (`StreetLighting`: the sky's
+   * hemisphere and the sun at a slant, over pi), and the windows as bright as the facades' own night glow.
+   */
+  private lightRows(): void {
+    const s = this.dayNight.state;
+    const sky = 0.14 + 1.05 * s.daylight;
+    this.sunPart.copy(s.lightColor).multiplyScalar(0.75 * s.lightIntensity * 0.45);
+    this.wallLight.copy(s.ambient).multiplyScalar(sky).add(this.sunPart).multiplyScalar(1 / Math.PI);
+    this.reflection.light(this.eye, this.wallLight, this.rowsLit?.emissiveIntensity ?? 0);
+  }
+
+  /**
+   * Now and then an airliner crosses high over the street: from a bearing to about the opposite one, 25 to 60
+   * degrees up, in a minute and a half; its contrail lasts longer in humid air (more cloud about) and none forms in
+   * rain, fog or at night (its lights blink instead). A new one every two to six minutes.
+   */
+  private fly(dt: number): void {
+    const u = this.uniforms;
+    const s = this.dayNight.state;
+    if (this.planeLength > 0) {
+      this.planeTime += dt;
+      u.planeT!.value = this.planeTime / this.planeLength;
+      u.planeBlink!.value = (this.planeTime % 1.3) < 0.08 ? 1 : 0;
+      if (this.planeTime < this.planeLength * 1.6) return;
+      // Its trail has gone too: the next one later.
+      this.planeLength = 0;
+      u.planeT!.value = -1;
+      this.planeWait = 120 + random() * 240;
+      return;
+    }
+    this.planeWait -= dt;
+    if (this.planeWait > 0) return;
+    const az = random() * Math.PI * 2;
+    skyDirection(0.45 + random() * 0.35, az, u.planeFrom!.value as THREE.Vector3);
+    skyDirection(0.45 + random() * 0.6, az + Math.PI + (random() - 0.5) * 0.9, u.planeTo!.value as THREE.Vector3);
+    this.planeLength = 80 + random() * 40;
+    this.planeTime = 0;
+    const humid = THREE.MathUtils.clamp(0.25 + s.cloudCover * 0.9, 0, 1) * (1 - Math.max(s.rain, s.snow, s.fog));
+    u.planeTrail!.value = humid > 0.2 ? 0.15 + 0.7 * humid : 0;
   }
 
   dispose(): void {

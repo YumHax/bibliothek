@@ -62,12 +62,14 @@ export const BUILDING_PERKS = {
   catSitter: { awayHours: 5, below: 0.4, note: { title: 'FROM THE 4TH FLOOR', lines: ['We fed {cat} at {time}.', 'Kibble and a little ham. Don’t tell.', 'C. & P. Moreau'], accent: 0x4f6a5a } },
   /** Girard's race up the stairs: he starts with the player at least `minStoreys` below our landing. */
   race: { minStoreys: 2, perStorey: 6.2, spread: [0.9, 1.1] as [number, number], limit: 120, coins: 10, warmth: 4, start: 'Last one to the top buys the croissants! Go!', won: 'You beat me! Here, I owe you. Cardio, my friend.', lost: 'Ha! Too slow! Train on the stairs, like me.' },
-  /** Rossi's coaching at Comets: real advice, one a game day. */
+  /** Rossi's coaching at COMET DASH: real advice, one a game day. */
   rossiTips: [
-    'Comets: never sit still in the middle. Drift, turn, shoot. The middle is where they meet.',
-    'Comets: the little rocks are worth more and kill you more. Clear them first.',
-    'Comets: thrust in short taps. Full thrust and you wrap round into trouble.',
+    'Comets: the stars come in threes. Sit under the first and the other two fall into your lap.',
+    'Comets: a clock is worth more than a star. Go out of your way for it, never for a star.',
+    'Comets: after a rock you have a second of shield. Use it: walk straight through the next one.',
   ],
+  /** A lesson pays on the player's next COMET DASH game: these tickets on top, "a better first strip" (`arcade/guestDays`). */
+  rossiCoaching: 20,
   /** The postman's word at Friend: when the next round comes. */
   postmanRounds: 'I come round twice a day. Give the lift a shout, I’ll bring it to your door myself.',
   /** Pascal and the furniture (no weight to carry in the flat: a line). */

@@ -25,6 +25,7 @@ import type { ZoneManager } from '@/world/zone';
 import type { ZoneId } from '@/world/zoneIds';
 import { surfaceUnderfoot } from '@/world/zoneHandle';
 import type { Late } from './late';
+import { EPILOGUE_PRINT } from '@/grandma/albumPrints';
 import type { Services } from './services';
 import type { GameWorld } from './world';
 import type { FlatPanels } from './worldContext';
@@ -167,8 +168,12 @@ export function wireVisitors(services: Services, engine: Engine, world: GameWorl
     doorTaken: () => building.doorstep.waiting !== null,
     // `?visit`: a friend rings as soon as the player is home (testing).
     force: params.has('visit'),
-    // A cake on the kitchen table: a slice, a longer stay, a thank-you (docs/household.md).
-    hosting: { cakeOut: () => services.household.cakeOut, eatCake: () => services.household.eatCake() },
+    // A cake on the kitchen table, or a dish of Mémé's recipes on the worktop: a slice, a longer stay, a thank-you
+    // (docs/household.md, docs/grandma.md "Sunday lunch, recipes and favours").
+    hosting: {
+      cakeOut: () => services.household.cakeOut || services.grandmaRituals.dishOut !== null,
+      eatCake: () => (services.household.cakeOut ? services.household.eatCake() : services.grandmaRituals.eatDish()),
+    },
     // A click on a friend opens a conversation (docs/social.md "Friends").
     social: flat.social,
     // The lost prototype's trail: a friend chatted to may know where the grey cart is (src/story).
@@ -205,6 +210,17 @@ export function wireGatherings(services: Services, world: GameWorld, parts: { vi
     // `?gamesnight`, `?openhouse`, `?clubvisit`: that gathering as soon as the player is home (testing).
     force: params.has('gamesnight') ? 'night' : params.has('openhouse') ? 'house' : params.has('clubvisit') ? 'club' : undefined,
     book: services.gatheringBook,
+    // Mémé's visits to the flat: her Saturday, Félix's boxes, her photo for the album's last page (docs/grandma.md).
+    meme: {
+      family: services.family,
+      isHis: (id) => services.felix.isHis(id),
+      prints: services.albumPrints,
+      printId: EPILOGUE_PRINT,
+      frame: () => {
+        services.engine.renderFrame();
+        return services.engine.renderer.domElement;
+      },
+    },
   });
   flat.phone.setEvents({ list: () => gatherings.phoneRows(), call: (id) => gatherings.call(id as 'gamesNight' | 'openHouse') });
   // The bedroom's phone asks a friend round (`visitors/phoneInvite`: once a market day, if nobody came yet).

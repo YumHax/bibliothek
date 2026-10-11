@@ -18,7 +18,7 @@ import { PAD_LABELS, type PadButton } from './padButtons';
  * - `KeyK`: `padA` (at a program on the TV) > `labelShelf` (at home, the label maker bought);
  * - `KeyG`: `gridSnap` (furniture carried); `KeyU`: `handBack` (market copy in hand) > `undoMove` (hands free);
  * - `KeyO`: `lookInside` (a market copy: finds out a fake, lets the key go on) then `openBox`;
- * - `KeyX`: `storePiece` (furniture carried) > `swap` (a market copy in hand) > `dismissNotice` (anywhere else in a room);
+ * - `KeyX`: `storePiece` (furniture carried) > `swap` (a market copy in hand) > `dismissNotice` (anywhere else in a room, at an arcade machine or a program on the TV too);
  * - `KeyR`: `holdCopy` (a market copy in hand) > `turnBox` (a box in hand) > `randomPick` (Browse skips it while holding);
  * - `KeyH`: `haggle` (a market copy in hand) > `keysCard` (held in the room, read as a held key by `ui/KeysCard`);
  * - `Space` / `Enter`: `fire` (the arcade replays on its end card) > `pickUpFound` (Browse);

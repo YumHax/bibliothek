@@ -52,7 +52,7 @@ await build({
   outfile: out,
   logLevel: 'error',
 });
-const { ARCADE_GAMES, pointsPerTicket, TICKET_FLOOR, rivalTable, HoopSim, AlleySim, PinballSim, REPLAY_STEP, THREE } = await import(pathToFileURL(out).href);
+const { ARCADE_GAMES, pointsPerTicket, ticketsAt, TICKET_FLOOR, rivalTable, HoopSim, AlleySim, PinballSim, REPLAY_STEP, THREE } = await import(pathToFileURL(out).href);
 /** The machines' own fixed step (`world/arcade/replay/Replay`): the live play and this script step alike. */
 const STEP = REPLAY_STEP;
 fs.rmSync(out, { force: true });
@@ -62,13 +62,13 @@ fs.rmSync(out, { force: true });
 /**
  * `skill` feeds the game's own autopilot (what it reads of the board), `react` is how late the hands follow the eyes
  * (s), `sigma` the spread of a timed press (s), `lapse` the odds of missing a beat altogether; the physical machines
- * add `aim` (m of spread at the hoop, the alley's lane).
+ * add `aim` (m of spread at the hoop, the alley's lane); the pinball has hands of its own (`PINBALL_HANDS`).
  */
 const PROFILES = {
-  novice: { skill: 0.3, react: 0.3, sigma: 0.075, lapse: 0.08, aim: 0.12, flip: 0.12 },
-  ordinary: { skill: 0.55, react: 0.23, sigma: 0.05, lapse: 0.04, aim: 0.07, flip: 0.08 },
-  good: { skill: 0.8, react: 0.18, sigma: 0.035, lapse: 0.02, aim: 0.04, flip: 0.05 },
-  regular: { skill: 0.9, react: 0, sigma: 0, lapse: 0, aim: 0.02, flip: 0 },
+  novice: { skill: 0.3, react: 0.3, sigma: 0.075, lapse: 0.08, aim: 0.12 },
+  ordinary: { skill: 0.55, react: 0.23, sigma: 0.05, lapse: 0.04, aim: 0.07 },
+  good: { skill: 0.8, react: 0.18, sigma: 0.035, lapse: 0.02, aim: 0.04 },
+  regular: { skill: 0.9, react: 0, sigma: 0, lapse: 0, aim: 0.02 },
 };
 
 const NONE = () => ({ left: false, right: false, up: false, down: false, fire: false, firePressed: false });
@@ -80,22 +80,22 @@ const gauss = () => {
   return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * v);
 };
 
-/** Presses scheduled at chosen times, each held 50 ms. */
+/** Presses scheduled at chosen times, each held 50 ms (or `hold` seconds: a dance pad's held arrow). */
 function presser() {
   const queue = [];
   return {
-    at(t, key) {
-      queue.push({ t, key });
+    at(t, key, hold = 0.05) {
+      queue.push({ t, key, hold });
     },
     pending: (key) => queue.some((e) => e.key === key),
     controls(now) {
       const c = NONE();
       for (const e of queue) {
-        if (now < e.t || now >= e.t + 0.05) continue;
+        if (now < e.t || now >= e.t + e.hold) continue;
         c[e.key] = true;
         if (e.key === 'fire' && now < e.t + STEP) c.firePressed = true;
       }
-      for (let i = queue.length - 1; i >= 0; i--) if (now >= queue[i].t + 0.05) queue.splice(i, 1);
+      for (let i = queue.length - 1; i >= 0; i--) if (now >= queue[i].t + queue[i].hold) queue.splice(i, 1);
       return c;
     },
   };
@@ -124,7 +124,10 @@ function jittered(game, p) {
   };
 }
 
-/** STEP BEAT: every arrow stepped on at its beat, off by `sigma` (a lapse skips it); the chart shows ahead. */
+/**
+ * STEP BEAT: every arrow stepped on at its beat, off by `sigma` (a lapse skips it); the chart shows ahead. A held
+ * arrow is kept down to its tail's end, let go a little off it (early by more than the slack, now and then, drops it).
+ */
 function dancer(game, p) {
   const keys = presser();
   const seen = new Set();
@@ -133,16 +136,27 @@ function dancer(game, p) {
       if (seen.has(n)) continue;
       seen.add(n);
       if (Math.random() < p.lapse) continue;
-      for (const lane of n.lanes) keys.at(n.at + gauss() * p.sigma, lane);
+      const at = n.at + gauss() * p.sigma;
+      const hold = n.until === undefined ? 0.05 : Math.max(0.05, n.until - at + Math.abs(gauss()) * p.sigma - (Math.random() < p.lapse * 2 ? 0.25 : 0));
+      for (const lane of n.lanes) keys.at(at, lane, hold);
     }
     return keys.controls(game.songTime);
   };
 }
 
-/** SKY STACK: aims at the middle of the first square pass it can react to, off by `sigma` (more up the tower). */
-function stacker(game, p) {
+/**
+ * SKY STACK: aims at the middle of the first square pass it can react to, off by `sigma` (more up the tower). At the
+ * minor prize it takes the prize or plays on as its nerve says (`takes`: a shaky hand banks it), stick then fire.
+ */
+function stacker(game, p, name) {
   const COLS = 7;
-  const widthFor = (row) => (row < 4 ? 3 : row < 10 ? 2 : 1);
+  // `Stacker.widthFor`: each tower after the first narrows sooner.
+  const widthFor = (row, tower) => {
+    const shift = Math.min(2, tower);
+    return row < 4 - shift ? 3 : row < 10 - shift * 2 ? 2 : 1;
+  };
+  const takes = { novice: 0.6, ordinary: 0.4, good: 0.15 }[name] ?? 0.3;
+  let choiceAt = null;
   const bits = (m) => {
     let n = 0;
     for (; m; m &= m - 1) n++;
@@ -153,13 +167,23 @@ function stacker(game, p) {
   return () => {
     clock += STEP;
     const out = NONE();
+    if (game.choice) {
+      choiceAt ??= { at: clock + p.react * 2 + Math.random() * 0.6, want: Math.random() < takes ? 0 : 1, pressed: 0 };
+      if (clock < choiceAt.at) return out;
+      // One press at a time, released between (the game reads the edges).
+      if ((clock - choiceAt.at) % 0.2 > 0.05) return out;
+      if (game.choice.pick !== choiceAt.want) out[choiceAt.want === 0 ? 'left' : 'right'] = true;
+      else out.fire = out.firePressed = true;
+      return out;
+    }
+    choiceAt = null;
     if (game.settle > 0 || !game.live) {
       plan = null;
       return out;
     }
     const turn = game.tower * 100 + game.row;
     if (!plan || plan.turn !== turn) {
-      const w = widthFor(game.row);
+      const w = widthFor(game.row, game.tower);
       const below = game.row === 0 ? (1 << COLS) - 1 : game.rows[game.row - 1];
       const square = (pos) => {
         let m = 0;
@@ -193,7 +217,10 @@ function stacker(game, p) {
   };
 }
 
-/** PADDLE WARS: works out where the ball meets the paddle (walls folded), off by more the faster and the more bounces, aims an edge when good. */
+/**
+ * PADDLE WARS: works out where the ball meets the paddle (walls folded), off by more the faster and the more bounces,
+ * aims an edge when good, and tries a smash (fire just before the ball lands) as often as it dares, timed off by `sigma`.
+ */
 function ponger(game, p, name) {
   const spread = { novice: 12, ordinary: 8, good: 5 }[name] ?? 6;
   const edge = { novice: 0, ordinary: 6, good: 11 }[name] ?? 8;
@@ -202,6 +229,8 @@ function ponger(game, p, name) {
   let lastSign = 0;
   let since = 0;
   let target = 131;
+  const smashes = { novice: 0.15, ordinary: 0.45, good: 0.75 }[name] ?? 0.4;
+  let smashAt = null;
   return () => {
     const b = game.ball;
     const out = NONE();
@@ -211,6 +240,7 @@ function ponger(game, p, name) {
       lastSign = sign;
       since = 0;
       target = 131;
+      smashAt = null;
       if (sign < 0) {
         const span = BOTTOM - TOP;
         const t = (b.x - 21.5) / -b.vx;
@@ -222,6 +252,12 @@ function ponger(game, p, name) {
       }
     }
     if (game.serveIn > 0 && game.server === 1 && since > p.react && Math.random() < 0.05) out.fire = out.firePressed = true;
+    // The smash: a press just before the ball lands (the game's window is 0.2 s), tried as often as the player dares.
+    if (sign < 0 && since >= STEP && since < 2 * STEP) {
+      const arrive = (b.x - 21.5) / -b.vx;
+      smashAt = Math.random() < smashes ? since + arrive - 0.1 + gauss() * p.sigma * 1.5 : null;
+    }
+    if (smashAt !== null && since >= smashAt && since < smashAt + 0.05) out.fire = out.firePressed = true;
     if (since < p.react) return out;
     const diff = target - game.p1;
     out.up = diff < -2;
@@ -230,7 +266,72 @@ function ponger(game, p, name) {
   };
 }
 
-const DRIVERS = { stepbeat: dancer, stacker, snake: jittered, frog: jittered, duel: ponger };
+/**
+ * STAR RAID: the ship steered as the autopilot's eyes say, `react` late, but the trigger is the person's: a tap when
+ * an alien looks lined up over the gun (judged off by `misjudge` pixels), and now and then a hopeful shot at nothing
+ * (`spray` a second), which breaks the chain and the clean wave.
+ */
+function gunner(game, p, name) {
+  const steer = delayed(game, p);
+  const misjudge = { novice: 9, ordinary: 5, good: 2.5 }[name] ?? 4;
+  const spray = { novice: 0.9, ordinary: 0.35, good: 0.1 }[name] ?? 0.3;
+  let next = 0;
+  let holdUntil = -1;
+  let clock = 0;
+  return () => {
+    clock += STEP;
+    const c = { ...steer(), fire: false, firePressed: false };
+    if (clock >= next) {
+      next = clock + 0.12 + Math.random() * 0.08;
+      const off = gauss() * misjudge;
+      const lined = game.aliens.some((a) => a.alive && Math.abs(game.alienPos(a).x + 8 - game.shipX + off) < 8) || (game.saucer && Math.abs(game.saucer.x + game.saucer.dir * 30 - game.shipX + off) < 8);
+      if (lined ? Math.random() < 0.9 : Math.random() < spray * 0.15) holdUntil = clock + 0.05;
+    }
+    if (clock < holdUntil) c.fire = true;
+    return c;
+  };
+}
+
+/**
+ * BRICK STORM: a person reads where the lowest falling ball comes down (walls folded) once it starts down, off by
+ * `misread` pixels (more for a fast ball), and slides the paddle there `react` late; with no ball close it goes for a
+ * capsule. No aiming at the bricks: that is the autopilot's own trick.
+ */
+function breaker(game, p, name) {
+  const misread = { novice: 45, ordinary: 30, good: 14 }[name] ?? 12;
+  const W = 320;
+  const PADDLE_Y = 226;
+  let read = null;
+  let clock = 0;
+  return () => {
+    clock += STEP;
+    const out = NONE();
+    const falling = game.balls.filter((b) => b.vy > 0);
+    const ball = falling.reduce((low, b) => (!low || b.y > low.y ? b : low), null);
+    if (!ball) read = null;
+    else if (!read || read.ball !== ball || read.vx !== Math.sign(ball.vx)) {
+      const t = (PADDLE_Y - ball.y) / ball.vy;
+      const span = W - 6;
+      const m = (((ball.x - 3 + ball.vx * t) % (2 * span)) + 2 * span) % (2 * span);
+      const x = 3 + (m > span ? 2 * span - m : m);
+      const speed = Math.hypot(ball.vx, ball.vy) / 200;
+      read = { ball, vx: Math.sign(ball.vx), x: x + gauss() * misread * speed, at: clock + p.react * (Math.random() < p.lapse * 3 ? 2 : 1) };
+    }
+    let target = null;
+    if (read && clock >= read.at) target = read.x;
+    else if (!ball || ball.y < PADDLE_Y - 110) {
+      const capsule = game.capsules.reduce((low, c) => (!low || c.y > low.y ? c : low), null);
+      if (capsule && capsule.y > PADDLE_Y - 80) target = capsule.x;
+    }
+    if (target === null) return out;
+    const diff = target - game.paddleX;
+    out.left = diff < -3;
+    out.right = diff > 3;
+    return out;
+  };
+}
+
+const DRIVERS = { stepbeat: dancer, stacker, snake: jittered, frog: jittered, duel: ponger, invaders: gunner, breakout: breaker };
 
 // --- The plays -------------------------------------------------------------------------------------
 
@@ -305,29 +406,84 @@ function alleyPlay(name) {
   return { score: sim.points, seconds: t };
 }
 
-/** The pinball: the machine's own flipper timing, `flip` seconds late, and a plunger pulled a different way each ball. */
+/** A copy of a pinball table mid-play (the sim is plain data plus its fixed step): what a player's eye works out ahead. */
+function cloneTable(sim) {
+  const copy = structuredClone(sim);
+  Object.setPrototypeOf(copy, Object.getPrototypeOf(sim));
+  Object.setPrototypeOf(copy.steps, Object.getPrototypeOf(sim.steps));
+  return copy;
+}
+
+/** What a flip on `side` after `delay` seconds earns over the next moment and a half (a ball lost costs dearly). */
+function flipWorth(sim, side, delay) {
+  const table = cloneTable(sim);
+  const start = table.score;
+  const ball = table.ballNumber;
+  for (let t = 0; t < 1.4; t += STEP) {
+    const flip = t >= delay && t < delay + 0.18;
+    table.update(STEP, { left: flip && side === 0, right: flip && side === 1, launch: false });
+    table.takeEvents();
+    if (table.ballNumber !== ball || table.over) return table.score - start - 30000;
+  }
+  return table.score - start;
+}
+
+/**
+ * The pinball, played by a person: as the ball comes down onto a flipper they flip (or miss it: `react`), aiming the
+ * shot (the moment along the flipper that sends it up the ramp or into the targets, worked out ahead) as often as
+ * `aim` says, else a hurried flip; either way off by `sigma` (s), and timing is everything on a flipper. A regular plays
+ * the machine's own autopilot. The plunger is pulled a different way each ball.
+ */
+const PINBALL_HANDS = {
+  novice: { aim: 0.2, sigma: 0.04, react: 0.72 },
+  ordinary: { aim: 0.6, sigma: 0.015, react: 0.88 },
+  good: { aim: 0.85, sigma: 0.008, react: 0.95 },
+};
 function pinballPlay(name) {
-  const p = PROFILES[name];
+  const hands = PINBALL_HANDS[name];
   const sim = new PinballSim();
   sim.reset();
-  const buffer = [];
-  const lag = Math.round(p.flip * 60);
   let pull = 0;
   let pullFor = 0.3 + Math.random() * 0.5;
+  let plan = null;
+  let seen = false;
   let t = 0;
-  for (; t < 600 && !sim.over; t += 1 / 60) {
+  for (; t < 600 && !sim.over; t += STEP) {
     let launching = false;
     if (sim.waitingToLaunch) {
-      pull += 1 / 60;
+      pull += STEP;
       launching = pull < pullFor;
     } else if (pull > 0) {
       pull = 0;
       pullFor = 0.3 + Math.random() * 0.5;
     }
-    const c = sim.autopilot(Math.min(0.9, p.skill), launching);
-    buffer.push(c);
-    const hands = buffer.length > lag ? buffer.shift() : c;
-    sim.update(1 / 60, { left: hands.left, right: hands.right, launch: c.launch });
+    const auto = sim.autopilot(0.9, launching, STEP);
+    let input = auto;
+    if (hands) {
+      let ball = sim.ball;
+      for (const b of sim.balls) if (b.ramp === null && b.y > ball.y) ball = b;
+      const near = ball.ramp === null && ball.y > sim.length - 0.45 && ball.y < sim.length - 0.2 && ball.vy > -0.3;
+      if (!near) seen = false;
+      if (near && !seen && !plan) {
+        seen = true;
+        if (Math.random() < hands.react) {
+          const side = ball.x < 0.45 ? 0 : 1;
+          let delay = 0.04 + Math.random() * 0.1;
+          if (Math.random() < hands.aim) {
+            let best = -Infinity;
+            for (let d = 0; d <= 0.2; d += 0.02) {
+              const worth = flipWorth(sim, side, d);
+              if (worth > best) [best, delay] = [worth, d];
+            }
+          }
+          plan = { side, at: t + Math.max(0, delay + gauss() * hands.sigma) };
+        }
+      }
+      const flip = plan !== null && t >= plan.at;
+      input = { left: flip && plan.side === 0, right: flip && plan.side === 1, launch: auto.launch };
+      if (plan && t >= plan.at + 0.18) plan = null;
+    }
+    sim.update(STEP, input);
     sim.takeEvents();
   }
   return { score: sim.score, seconds: t };
@@ -342,16 +498,16 @@ const machines = [
   { id: 'pinball', play: (name) => pinballPlay(name), runs: Math.max(10, Math.round(RUNS / 3)) },
 ].filter((m) => !ONLY || ONLY.includes(m.id));
 
-/** Average tickets a play pays at `rate`, the floor counted (a score under `TICKET_FLOOR` pays it). */
-const paidAt = (scores, rate) => scores.reduce((s, x) => s + Math.max(TICKET_FLOOR, Math.floor(x / rate)), 0) / scores.length;
-/** The rate (points per ticket) at which these plays net `NET` tickets a minute, the floor counted. */
-function rateFor(s) {
+/** Average tickets a play on `id` pays at `rate`, the floor and the machine's taper counted (a score under `TICKET_FLOOR` pays it). */
+const paidAt = (id, scores, rate) => scores.reduce((s, x) => s + Math.max(TICKET_FLOOR, ticketsAt(id, x, rate)), 0) / scores.length;
+/** The rate (points per ticket) at which these plays on `id` net `NET` tickets a minute, the floor counted. */
+function rateFor(id, s) {
   const want = (NET * (s.seconds + OVERHEAD)) / 60 + 10;
   let lo = 0.01;
   let hi = 1e6;
   for (let i = 0; i < 80; i++) {
     const mid = Math.sqrt(lo * hi);
-    if (paidAt(s.scores, mid) > want) lo = mid;
+    if (paidAt(id, s.scores, mid) > want) lo = mid;
     else hi = mid;
   }
   return Math.round(lo);
@@ -367,8 +523,8 @@ for (const machine of machines) {
     const scores = plays.map((x) => x.score).sort((a, b) => a - b);
     const seconds = plays.reduce((s, x) => s + x.seconds, 0) / runs;
     const avg = scores.reduce((s, x) => s + x, 0) / runs;
-    const under = scores.filter((x) => Math.floor(x / rate) < TICKET_FLOOR).length / runs;
-    stats[name] = { avg, seconds, scores, tickets: paidAt(scores, rate), under, median: scores[runs >> 1], p90: scores[Math.floor(runs * 0.9)] };
+    const under = scores.filter((x) => ticketsAt(machine.id, x, rate) < TICKET_FLOOR).length / runs;
+    stats[name] = { avg, seconds, scores, tickets: paidAt(machine.id, scores, rate), under, median: scores[runs >> 1], p90: scores[Math.floor(runs * 0.9)], p95: scores[Math.floor(runs * 0.95)] };
   }
   const o = stats.ordinary;
   const cell = (s) => {
@@ -382,9 +538,9 @@ for (const machine of machines) {
     ordinary: cell(o),
     good: cell(stats.good),
     regular: cell(stats.regular),
-    'rate for net': rateFor(o),
+    'rate for net': rateFor(machine.id, o),
     'table 5th..1st': rivalTable(machine.id).map((e) => e.score).reverse().join(' '),
-    'ord. med / ord. p90 / good med / good p90': `${o.median} / ${o.p90} / ${stats.good.median} / ${stats.good.p90}`,
+    'ord. med / ord. p90 / good med / good p90 / good p95': `${o.median} / ${o.p90} / ${stats.good.median} / ${stats.good.p90} / ${stats.good.p95}`,
   });
 }
 console.log(`Average per play: points, seconds, tickets at today's rate (the floor counted), net tickets a minute (the coin paid, ${OVERHEAD} s between plays), plays whose score paid under the floor. ${RUNS} plays a profile; 'rate for net' nets ${NET} a minute for the ordinary player.`);

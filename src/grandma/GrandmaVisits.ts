@@ -12,7 +12,7 @@ import { MEMORIES, type Memory, type MemoryFacts } from './memories';
 export type GrandmaGift = 'cake' | 'flowers' | 'game';
 
 /** What happens at hers, for whoever listens (the social layer: docs/social.md). */
-export type GrandmaEvent = { kind: 'visit'; sunday: boolean } | { kind: 'gift'; gift: GrandmaGift } | { kind: 'memory'; id: string };
+export type GrandmaEvent = { kind: 'visit'; sunday: boolean } | { kind: 'gift'; gift: GrandmaGift; /** The game shown (a `game` gift). */ game?: string } | { kind: 'memory'; id: string };
 
 /** What she has heard of: the news she may bring up, most telling first (`GRANDMA_TALK.news`). */
 type GrandmaNews = 'prototype' | 'trail' | 'crane' | 'roomFull' | 'manyGames' | 'notebook' | 'medal' | 'games' | 'fewGames';
@@ -76,6 +76,8 @@ export class GrandmaVisits {
   private readonly store: PersistedStore<GrandmaState>;
   private readonly listeners = new Set<(event: GrandmaEvent) => void>();
   private filmed: (id: string) => boolean = (id) => FILMED_FIRST.has(id);
+  /** Whether the Sunday envelope waits for the end of lunch (docs/grandma.md "Sunday lunch, recipes and favours"). */
+  private envelopeHeld: () => boolean = () => false;
 
   constructor(private readonly world: GrandmaWorld | null = null, storage: Storage | null = safeStorage()) {
     this.store = new PersistedStore<GrandmaState>({ key: KEYS.grandma, version: 1, storage, defaults: fresh, read: readState });
@@ -92,10 +94,22 @@ export class GrandmaVisits {
   arrive(day: number): Arrival {
     const first = this.state.visits === 0;
     const isSunday = weekdayOf(day) === SUNDAY_WEEKDAY;
-    const envelope = isSunday && this.state.envelope !== day;
+    const envelope = isSunday && this.state.envelope !== day && !this.envelopeHeld();
     this.commit({ ...this.state, visits: this.state.visits + 1, envelope: envelope ? day : this.state.envelope });
     this.emit({ kind: 'visit', sunday: isSunday });
     return { first, envelope: envelope ? GRANDMA.sundayCoins : 0 };
+  }
+
+  /** Sunday lunch: while `held` says so on the way in, the envelope is not given at the door but after lunch (`takeEnvelope`). */
+  holdEnvelope(held: () => boolean): void {
+    this.envelopeHeld = held;
+  }
+
+  /** The Sunday envelope of game day `day` given now (after lunch, or slipped in the coat): its coins, 0 if not a Sunday or given already. */
+  takeEnvelope(day: number): number {
+    if (weekdayOf(day) !== SUNDAY_WEEKDAY || this.state.envelope === day) return 0;
+    this.commit({ ...this.state, envelope: day });
+    return GRANDMA.sundayCoins;
   }
 
   /** Which memories have a film (the album's reels): only those are ever due. */
@@ -205,13 +219,15 @@ export class GrandmaVisits {
       this.commit({ ...this.state, cake: day });
     }
     let title = '';
+    let game: string | undefined;
     if (gift === 'game') {
       const find = world.latestFind();
       if (!find) return null;
       this.commit({ ...this.state, shown: find.id });
       title = find.title;
+      game = find.id;
     }
-    this.emit({ kind: 'gift', gift });
+    this.emit(game ? { kind: 'gift', gift, game } : { kind: 'gift', gift });
     return title;
   }
 
@@ -219,6 +235,13 @@ export class GrandmaVisits {
   scarfKnitted(close: boolean): boolean {
     if (close && !this.state.scarf) this.commit({ ...this.state, scarf: true });
     return this.state.scarf;
+  }
+
+  /** The scarf finished by the wool held for her (`grandma/pastimes`), whatever the standing: false if it was already. */
+  knitScarf(): boolean {
+    if (this.state.scarf) return false;
+    this.commit({ ...this.state, scarf: true });
+    return true;
   }
 
   // --- `?debug` (the debug panel's Now) --------------------------------------------------------------

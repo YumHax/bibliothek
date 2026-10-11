@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { createCanvas, toTexture } from '@/graphics/canvas';
+import { fitFontSize } from '@/covers/generated/canvasUtils';
 import { repaintWhenFontLoads } from '@/graphics/fontReady';
 import { boxMesh, cylinderMesh } from '../meshUtils';
 import { paint, METAL } from '../materials/palette';
@@ -28,10 +29,9 @@ export function stencilMaterial(text: string, card: number): THREE.MeshStandardM
   ctx.fillStyle = 'rgba(28,24,20,0.78)';
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
-  let size = 54;
-  ctx.font = `900 ${size}px Impact, "Arial Narrow Bold", sans-serif`;
-  while (ctx.measureText(text).width > 220 && size > 18) ctx.font = `900 ${--size}px Impact, "Arial Narrow Bold", sans-serif`;
-  ctx.fillText(text.toUpperCase(), 0, 0);
+  const stencil = text.toUpperCase();
+  fitFontSize(ctx, stencil, 220, 54, 18, 'Impact, "Arial Narrow Bold", sans-serif', '900');
+  ctx.fillText(stencil, 0, 0);
   ctx.restore();
   // The stencil's bridges: thin gaps across the letters, as a cut card stencil leaves them.
   ctx.fillStyle = base;
@@ -54,12 +54,9 @@ export function pinnedCard(random: () => number): THREE.Group {
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     const size = lines.length > 1 ? 50 : 64;
-    ctx.font = `${size}px ${MARKER}`;
     lines.forEach((line, i) => {
-      let fit = size;
-      while (ctx.measureText(line).width > 216 && fit > 20) ctx.font = `${--fit}px ${MARKER}`;
+      fitFontSize(ctx, line, 216, size, 20, MARKER, 'normal');
       ctx.fillText(line, 120, 80 + (i - (lines.length - 1) / 2) * 58);
-      ctx.font = `${size}px ${MARKER}`;
     });
     // The drawing pin.
     ctx.fillStyle = '#2a6ac8';

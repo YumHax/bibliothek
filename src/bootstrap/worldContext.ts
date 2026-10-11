@@ -103,6 +103,14 @@ export function makeBuildContext(services: Services, parts: ContextParts): Build
       onSelectPlatform: (id) => session.get().focusPlatform(id),
       // The feather wand (an arcade prize) calls the cat over; the cat exists by the time anyone can click it.
       callCat: () => (cat.get().adopted ? callCat(cat.get(), 'feathers') : 'The feathers swish. No cat lives here yet: the pet shop on Front Street has some to adopt.'),
+      // Félix's cat, the street's stray, comes home trusted all the way: adopted, under the name the street gave him.
+      strayHome: {
+        catHome: () => upgrades.has('cat'),
+        bring: () => {
+          services.catSettings.update({ name: 'Mistigri', coat: 'ginger' });
+          upgrades.add('cat');
+        },
+      },
       collector: { book: flat.collectorBook, milestones, watch: collectorWatch, honours: services.honours },
       firstDay,
       journalPanel: flat.journalPanel,
@@ -135,5 +143,15 @@ export function makeBuildContext(services: Services, parts: ContextParts): Build
     // Mémé's across town (docs/story.md "Mémé"): the visits, and her album's memories played as films.
     memories,
     grandma: services.grandma,
+    grandmaRituals: services.grandmaRituals,
+    keepsakes: services.keepsakes,
+    family: services.family,
+    albumFinds: services.albumFinds,
+    albumPrints: services.albumPrints,
+    photoRoll: services.photoRoll,
+    grandmaHints: services.grandmaHints,
+    grandmaPresence: services.grandmaPresence,
+    grandmaBread: services.grandmaBread,
+    sharedRide: services.sharedRide,
   };
 }

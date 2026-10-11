@@ -9,6 +9,7 @@ import { gaspardLook, memeLook } from './familyLooks';
 import { SALE_MEMORY_PLAN as PLAN } from './saleMemoryPlan';
 import { GRANDMA_FLAT_PLAN } from './grandmaFlatPlan';
 import { presentPeople } from './presentPeople';
+import { backInTheRoom } from './memoryStage';
 import type { Present } from './albumWiring';
 
 /**
@@ -93,9 +94,7 @@ export function saleReel(present: Present): MemoryReel {
       },
     ],
     after: { zone: 'grandmaFlat', at: [bx, bz], yaw: Math.atan2(-(mx - bx), -(mz - bz)) },
-    returned: () => {
-      present.reseat();
-      present.meme.speak(present.afterLine);
-    },
+    // Back at hers she is shaken before she speaks (the papers she signed).
+    returned: () => backInTheRoom(present, 'hard'),
   };
 }

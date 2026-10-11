@@ -24,8 +24,9 @@ export const KEYS_MEMORY_PLAN = {
   hands: { y: 1.02, ahead: 0.3, apart: 0.07 },
   /** She gets up in the black of the cut to the third shot. */
   standAt: 16.5,
-  /** Her face on the keys, then up at the player. */
+  /** Her face on the keys, then up at the player; the film waits on the player to take them (the cue). */
   lookUpAt: 19.2,
+  takeAt: 20.4,
   shots: {
     flat: [
       // The room from the landing door: her at the table, the afternoon in the window, the keys before her.

@@ -1,14 +1,16 @@
 import * as THREE from 'three';
 import type { SessionActions } from '@/game/SessionActions';
 import type { GrandmaVisits } from '@/grandma/GrandmaVisits';
+import type { AlbumFinds } from '@/grandma/AlbumFinds';
+import type { AlbumPrints } from '@/grandma/albumPrints';
 import { MEMORIES, type Memory } from '@/grandma/memories';
 import type { MemoryProjector } from '@/memories/MemoryFilm';
 import type { MemoryReel } from '@/memories/memoryReel';
-import type { AlbumSlot } from '@/ui/memories/AlbumPanel';
 import type { Zone } from '../zone/Zone';
 import type { Walker } from '../people/Walker';
 import { placeWith } from '../zone/attach';
 import { PhotoAlbum } from './PhotoAlbum';
+import { albumSlots } from './albumSpreads';
 import { christmasReel } from './christmasMemory';
 import { arcadeReel } from './arcadeMemory';
 import { saleReel } from './saleMemory';
@@ -25,6 +27,8 @@ export interface Present {
   reseat(): void;
   /** What she says then (`GrandmaVisits.afterLine`: a first time, or again). */
   afterLine: string;
+  /** Runs `fn` in `seconds` on her flat's clock (her beats once the film is over: `memoryStage.moved`). */
+  after(seconds: number, fn: () => void): void;
 }
 
 /**
@@ -54,7 +58,7 @@ interface AlbumSpot {
  * out, empty corners for the rest) and a print clicked plays its memory. The cover opens while it is looked at or a
  * memory plays. Returns the album (out of the picture while a memory is filmed in her flat: it is of today).
  */
-export function placeAlbum(zone: Zone, spot: AlbumSpot, deps: { memories: MemoryProjector; visits: GrandmaVisits; meme: Walker; reseat(): void }): PhotoAlbum {
+export function placeAlbum(zone: Zone, spot: AlbumSpot, deps: { memories: MemoryProjector; visits: GrandmaVisits; meme: Walker; reseat(): void; finds?: AlbumFinds | null; prints?: AlbumPrints | null }): PhotoAlbum {
   const { memories, visits, meme, reseat } = deps;
   visits.setFilmed((id) => id in REELS);
   let filming = false;
@@ -63,7 +67,7 @@ export function placeAlbum(zone: Zone, spot: AlbumSpot, deps: { memories: Memory
   const play = (session: SessionActions, memory: Memory): void => {
     const make = REELS[memory.id];
     if (!make) return;
-    const film = memories.film(make({ meme, reseat, afterLine: visits.afterLine(memory) }), () => visits.markSeen(memory.id));
+    const film = memories.film(make({ meme, reseat, afterLine: visits.afterLine(memory), after: (seconds, fn) => zone.after(seconds, fn) }), () => visits.markSeen(memory.id));
     film.addOpenListener?.((open) => {
       filming = open;
       if (!open) album.setOpen(false);
@@ -72,20 +76,12 @@ export function placeAlbum(zone: Zone, spot: AlbumSpot, deps: { memories: Memory
     session.openPanel(film);
   };
 
-  /** The pages: every memory in order, a print if seen, the one she has ready slipping out, corners for the rest. */
-  const pages = (): AlbumSlot[] => {
-    const seen = new Set(visits.seen.map((memory) => memory.id));
-    const due = visits.due?.id;
-    return MEMORIES.map((memory) => ({
-      id: memory.id,
-      title: memory.title,
-      state: seen.has(memory.id) ? 'seen' : memory.id === due ? 'new' : 'empty',
-      still: memories.still(memory.id),
-    }));
-  };
+  // The pages (`albumSpreads`): Félix's years, the memories and her other photos among them, then the player's prints.
+  const { finds = null, prints = null } = deps;
+  const fresh = (): boolean => !!visits.due || !!finds?.anyFresh;
 
   const album = new PhotoAlbum({
-    label: () => (visits.due ? 'Mémé’s photo album · look' : visits.seen.length ? 'Mémé’s photo album · look again' : null),
+    label: () => (fresh() ? 'Mémé’s photo album · look' : visits.seen.length ? 'Mémé’s photo album · look again' : null),
     use: (session) => {
       const due = visits.due;
       // The very first: straight to the film (an album of one new print says nothing more).
@@ -94,10 +90,14 @@ export function placeAlbum(zone: Zone, spot: AlbumSpot, deps: { memories: Memory
         return;
       }
       if (!due && !visits.seen.length) return;
+      finds?.look();
       const panel = memories.album;
-      panel.setPages(pages(), (id) => {
-        const memory = MEMORIES.find((m) => m.id === id);
-        if (memory) play(session, memory);
+      panel.setPages(albumSlots({ visits, finds, prints, still: (id) => memories.still(id) }), {
+        play: (id) => {
+          const memory = MEMORIES.find((m) => m.id === id);
+          if (memory) play(session, memory);
+        },
+        looked: (id) => finds?.looked(id),
       });
       album.setOpen(true);
       session.openPanel(panel);

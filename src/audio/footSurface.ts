@@ -3,9 +3,13 @@
  * `ZoneHandle.surfaceAt`, else its room's floor finish decides. The outdoor ones (`OUTDOOR_SURFACES`)
  * splash when the ground is wet and crunch under snow.
  */
-export type FootSurface = 'wood' | 'carpet' | 'tiles' | 'concrete' | 'stone' | 'asphalt' | 'grass';
+export type FootSurface = 'wood' | 'carpet' | 'tiles' | 'concrete' | 'stone' | 'asphalt' | 'grass' | 'gravel' | 'rubber' | 'leaves' | 'puddle';
 
-export const OUTDOOR_SURFACES: ReadonlySet<FootSurface> = new Set<FootSurface>(['stone', 'asphalt', 'grass']);
+/**
+ * The open air's: paving, asphalt, grass, a park's gravel path and a playground's rubber, autumn leaves lying on the
+ * pavement, a puddle (on dry ground, the paving under it).
+ */
+export const OUTDOOR_SURFACES: ReadonlySet<FootSurface> = new Set<FootSurface>(['stone', 'asphalt', 'grass', 'gravel', 'rubber', 'leaves', 'puddle']);
 
 /** A room's floor finish (`RoomFinish.floor`) as a surface to walk on; parquet when it names none. */
 export function surfaceOfFloor(floor: 'parquet' | 'concrete' | 'carpet' | 'tiles' | undefined): FootSurface {

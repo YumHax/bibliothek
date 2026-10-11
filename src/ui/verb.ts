@@ -32,11 +32,6 @@ export function grabVerbCap(): string {
   return capitalise(grabVerb());
 }
 
-/** "Space or click" on the keyboard (a key that also does it), else the device's own verb: "press A", "tap". */
-export function keyOrUse(key: string): string {
-  return lastDevice() === 'keyboard' ? `${key} or click` : useVerb();
-}
-
 /** The device's "use" as a key cap for a prompt line: `[Click]`, `[A]`, `[Tap]`. */
 export function useCap(): string {
   const device = lastDevice();

@@ -144,6 +144,7 @@ export function buildWorld(services: Services, parts: WorldParts): BuiltWorld {
       };
     },
     dream: () => dreamOfFelix(world),
+    initials: services.initials,
     frame: () => {
       engine.renderFrame();
       return engine.renderer.domElement;

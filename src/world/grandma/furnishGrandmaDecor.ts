@@ -17,7 +17,8 @@ import { Prop } from '../props/Prop';
 import { LightPool } from '../lighting/LightPool';
 import { DistantAvenue } from '@/audio/grandmaSounds';
 import { inHours } from '@/time/clock';
-import { streetBusyAt, SUNDAY_WEEKDAY, weekdayOf } from '@/time/wakefulness';
+import { streetBusyAt, weekdayOf } from '@/time/wakefulness';
+import { lunchOf } from '@/grandma/lunch';
 import { Doily, DOILY_THICKNESS } from './Doily';
 import { TableCloth } from './TableCloth';
 import { SundayTable } from './SundayTable';
@@ -49,7 +50,7 @@ const ARMCHAIR_BACK = { y: 1.05, z: -0.27, edge: 0.17 };
 type DecorContext = Pick<BuildContext, 'sky' | 'listener' | 'acoustics' | 'today' | 'memories'>;
 
 /** What the rest of the flat's wiring may want of her things. */
-interface GrandmaDressing {
+export interface GrandmaDressing {
   /** The room's 2020s things (the smoke detector, the calendar, the sockets): a memory puts them aside while it plays. */
   modern: THREE.Object3D[];
   /** The cloth over the dining table: what stands on the table stands on it (`topHeight`, riding the table). */
@@ -58,6 +59,10 @@ interface GrandmaDressing {
   kettle: WhistlingKettle;
   /** Her set (`setOn`, `isOn`): on by itself in her afternoon and evening hours. */
   tv: OldTelevision;
+  /** The window on the avenue: its curtains (`setCurtainsDrawn`), drawn by her at dusk. */
+  window: RoomWindow;
+  /** The tea on the side table: the cups steam when she has made a pot. */
+  tray: TeaTray;
 }
 
 /**
@@ -175,12 +180,13 @@ export function furnishGrandmaDecor(zone: Zone, ctx: DecorContext, { room, armch
     new OnArrival(() => {
       // The camera coming back from a memory filmed elsewhere is no visit.
       if (ctx.memories?.filming) return;
-      lunch.setSunday(weekdayOf(ctx.today.gameDay) === SUNDAY_WEEKDAY);
+      // A Sunday's lunch, or Christmas's (docs/grandma.md "Sunday lunch, recipes and favours").
+      lunch.setSunday(lunchOf(ctx.today.gameDay, ctx.today.realDate()) !== null);
       if (inHours(hours(), d.kettleHours)) zone.after(KETTLE_AFTER, () => kettle.whistle());
     }),
     new THREE.Vector3(),
   );
-  return { modern, table: cloth, kettle, tv };
+  return { modern, table: cloth, kettle, tv, window: pane, tray };
 }
 
 /** Hears the player come in (the zone occupied), once a visit. */

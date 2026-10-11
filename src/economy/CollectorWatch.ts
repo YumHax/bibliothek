@@ -2,7 +2,7 @@ import type { Game } from '@/catalog/types';
 import type { Views } from './Fame';
 import type { Milestones } from './Milestones';
 import type { ValueHistory } from './ValueHistory';
-import type { CollectorFacts, Milestone } from './milestoneList';
+import type { ArcadeFacts, CollectorFacts, Milestone } from './milestoneList';
 import { collectionValue, mostValuable, valuedGames } from './collectionValue';
 
 /** Something that changes and says so. */
@@ -17,6 +17,8 @@ interface CollectorWatchDeps {
   medals?: Watched & { readonly total: number };
   standing?: Watched & { deedCount(deed: 'deal' | 'sell' | 'wanted'): number };
   league?: Watched & { readonly pennants: number };
+  /** The arcade's other feats (cups, golds, the jackpot, a plush, a table topped), and the stores they come from. */
+  arcade?: { facts(): ArcadeFacts; sources: readonly Watched[] };
   milestones: Milestones;
   history: ValueHistory;
 }
@@ -43,7 +45,7 @@ export class CollectorWatch {
   private timer: ReturnType<typeof setTimeout> | null = null;
 
   constructor(private readonly deps: CollectorWatchDeps) {
-    for (const source of [deps.collection, deps.medals, deps.standing, deps.league]) source?.subscribe(() => this.soon());
+    for (const source of [deps.collection, deps.medals, deps.standing, deps.league, ...(deps.arcade?.sources ?? [])]) source?.subscribe(() => this.soon());
     this.soon();
   }
 
@@ -62,13 +64,14 @@ export class CollectorWatch {
 
   /** The facts the milestones are judged on, now. */
   facts(): CollectorFacts {
-    const { collection, medals, standing, league } = this.deps;
+    const { collection, medals, standing, league, arcade } = this.deps;
     return {
       games: valuedGames(collection.games),
       medals: medals?.total ?? 0,
       deals: standing?.deedCount('deal') ?? 0,
       sales: (standing?.deedCount('sell') ?? 0) + (standing?.deedCount('wanted') ?? 0),
       pennants: league?.pennants ?? 0,
+      ...(arcade ? { arcade: arcade.facts() } : {}),
       value: this.value().market,
     };
   }

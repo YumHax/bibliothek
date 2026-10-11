@@ -26,9 +26,17 @@ const SET_SECONDS = 2;
 const OPPONENT = { speed: 105, speedPerSet: 10, error: 30 };
 /** Player two only goes for the ball once it has crossed this far (a fraction of the court), else drifts back to the middle. */
 const OPPONENT_REACTS = 0.5;
-/** A return with fire held: a smash, faster and worth a little more. */
+/** Fire pressed this close before the ball meets the paddle: a smash, faster and worth more. */
+const SMASH_WINDOW = 0.2;
 const SMASH_SPEED = 1.35;
-const SMASH_POINTS = 10;
+const SMASH_POINTS = 25;
+/** Player two smashes now and then on a quick rally: this often at the machine's level, at most. */
+const P2_SMASH_ODDS = 0.18;
+const P2_SMASH_SPEED = 1.25;
+/** Each return in a row this point pays this much more than the last (to `RALLY_CAP` returns), and a goal pays this much a return of its rally. */
+const RALLY_STEP = 5;
+const RALLY_CAP = 8;
+const RALLY_GOAL = 30;
 const SERVE_DELAY = 0.8;
 
 interface Ball {
@@ -41,17 +49,19 @@ interface Ball {
 /**
  * PADDLE WARS: table tennis on a screen against whoever holds the second stick (the machine, or
  * the kid when they come over; they play the same, only the name on the screen changes, so a run
- * replays exactly). Twenty seconds; every return chains the combo, a goal pays points and three
- * seconds, one conceded costs a second and a half and the combo. Every three goals is a set: faster ball, sharper
- * opponent, two more seconds. W / S move; the ball comes back off the paddle at an angle that
- * depends on where it hits (the edges send it steep, which player two struggles to follow), and
- * holding Space as it comes back smashes it.
+ * replays exactly). Twenty seconds; every return chains the combo and pays more than the last one
+ * of the point (a long rally is worth having), a goal pays points, its rally's length and three
+ * seconds, one conceded costs a second and a half and the combo. Every three goals is a set: faster
+ * ball, sharper opponent, two more seconds. W / S move; the ball comes back off the paddle at an
+ * angle that depends on where it hits (the edges send it steep, which player two struggles to
+ * follow); fire pressed just before it lands smashes it (too early, a plain return), and player
+ * two smashes back now and then.
  */
 export class Duel extends BaseGame {
   readonly id = 'duel';
   readonly title = 'PADDLE WARS';
   get hint(): string {
-    return arcadeHint('{upDown} move the paddle · hold {fire} to smash · beat player two');
+    return arcadeHint('{upDown} move the paddle · {fire} just before the ball lands smashes it');
   }
   readonly summary = '20 SEC · 2 PLAYERS · RETURNS CHAIN · GOALS +3S';
 
@@ -70,6 +80,10 @@ export class Duel extends BaseGame {
   private aimError = 0;
   /** How well player two plays, 0..1: 0.7 is the machine's own level (`OPPONENT` as written), a friend joining plays at theirs. */
   private opponentSkill = 0.7;
+  /** A smash readied by a press, for this many seconds more. */
+  private smashArm = 0;
+  /** The player's returns this point. */
+  private returns = 0;
 
   constructor() {
     super(ROUND_SECONDS);
@@ -102,6 +116,8 @@ export class Duel extends BaseGame {
     this.rally = 1;
     this.server = 1;
     this.aimError = 0;
+    this.smashArm = 0;
+    this.returns = 0;
     this.newServe();
   }
 
@@ -109,15 +125,18 @@ export class Duel extends BaseGame {
     const dir = (controls.down ? 1 : 0) - (controls.up ? 1 : 0);
     this.p1 = clamp(this.p1 + dir * PADDLE_SPEED * dt, PLAY_TOP + PADDLE_H / 2, SCREEN_H - PADDLE_H / 2);
     this.moveOpponent(dt);
+    const press = this.keys.pressed(controls, 'fire');
+    this.smashArm = Math.max(0, this.smashArm - dt);
 
     if (this.serveIn > 0) {
       this.serveIn -= dt;
       const b = this.ball;
       b.y = this.server === 1 ? this.p1 : this.p2;
       b.x = this.server === 1 ? PADDLE_X + PADDLE_W + BALL : SCREEN_W - PADDLE_X - PADDLE_W - BALL;
-      if (this.serveIn <= 0 || (this.server === 1 && controls.firePressed)) this.serve();
+      if (this.serveIn <= 0 || (this.server === 1 && press)) this.serve();
       return;
     }
+    if (press && this.ball.vx < 0) this.smashArm = SMASH_WINDOW;
 
     const b = this.ball;
     b.x += b.vx * dt;
@@ -133,13 +152,23 @@ export class Duel extends BaseGame {
     }
     // The paddles.
     if (b.vx < 0 && b.x - BALL / 2 <= PADDLE_X + PADDLE_W && b.x > PADDLE_X - 4 && Math.abs(b.y - this.p1) <= PADDLE_H / 2 + BALL / 2) {
-      const smash = controls.fire;
+      const smash = this.smashArm > 0;
+      this.smashArm = 0;
       this.bounce(this.p1, 1, smash ? SMASH_SPEED : 1);
       this.bumpCombo(3);
-      this.addScore(RETURN_POINTS + (smash ? SMASH_POINTS : 0), PADDLE_X + 20, b.y);
-      if (smash) this.fx.pop('SMASH', PADDLE_X + 30, b.y - 14, '#ffe066', 7);
+      this.returns += 1;
+      const rally = RALLY_STEP * (Math.min(this.returns, RALLY_CAP) - 1);
+      this.addScore(RETURN_POINTS + rally + (smash ? SMASH_POINTS : 0), PADDLE_X + 20, b.y);
+      if (smash) {
+        this.fx.pop('SMASH', PADDLE_X + 30, b.y - 14, '#ffe066', 7);
+        this.fx.burst(PADDLE_X + PADDLE_W, b.y, '#ffe066', 10, 90, 1);
+        this.sound('bonus');
+      }
     } else if (b.vx > 0 && b.x + BALL / 2 >= SCREEN_W - PADDLE_X - PADDLE_W && b.x < SCREEN_W - PADDLE_X + 4 && Math.abs(b.y - this.p2) <= PADDLE_H / 2 + BALL / 2) {
-      this.bounce(this.p2, -1);
+      // Player two smashes back now and then once the rally has some pace.
+      const smash = this.rally > 1.1 && this.rand() < P2_SMASH_ODDS * (0.4 + this.opponentSkill);
+      this.bounce(this.p2, -1, smash ? P2_SMASH_SPEED : 1);
+      if (smash) this.fx.pop('SMASH', SCREEN_W - PADDLE_X - 30, b.y - 14, '#63b3ff', 7);
       this.aimError = (this.rand() - 0.5) * 2 * OPPONENT.error * (1.7 - this.opponentSkill);
     }
     // A goal either way.
@@ -153,7 +182,8 @@ export class Duel extends BaseGame {
     } else if (b.x > SCREEN_W + BALL) {
       this.you += 1;
       this.goals += 1;
-      this.addScore(GOAL_POINTS, SCREEN_W - 50, b.y, '#7ee787');
+      this.addScore(GOAL_POINTS + RALLY_GOAL * Math.min(this.returns, RALLY_CAP), SCREEN_W - 50, b.y, '#7ee787');
+      if (this.returns >= 3) this.fx.pop(`RALLY OF ${this.returns}`, SCREEN_W / 2, PLAY_TOP + 44, '#ffe066', 8);
       this.fx.flash('#7ee787', 0.08);
       this.fx.burst(SCREEN_W - 4, b.y, '#7ee787', 22, 120, 2);
       this.addTime(GOAL_SECONDS, SCREEN_W / 2, PLAY_TOP + 60);
@@ -182,7 +212,12 @@ export class Duel extends BaseGame {
     ctx.fillRect(SCREEN_W - PADDLE_X - PADDLE_W, this.p2 - PADDLE_H / 2, PADDLE_W, PADDLE_H);
     ctx.fillStyle = '#ffffff';
     ctx.fillRect(this.ball.x - BALL / 2, this.ball.y - BALL / 2, BALL, BALL);
-    if (this.serveIn > 0 && this.server === 1) drawText(ctx, 'SPACE TO SERVE', SCREEN_W / 2, SCREEN_H - 14, 7, 'rgba(255,255,255,0.6)');
+    if (this.serveIn > 0 && this.server === 1) drawText(ctx, arcadeHint('{fire} TO SERVE').toUpperCase(), SCREEN_W / 2, SCREEN_H - 14, 7, 'rgba(255,255,255,0.6)');
+    // A smash readied: the paddle's edge lights.
+    if (this.smashArm > 0) {
+      ctx.fillStyle = '#ffe066';
+      ctx.fillRect(PADDLE_X + PADDLE_W, this.p1 - PADDLE_H / 2, 1, PADDLE_H);
+    }
   }
 
   /** Follows the ball when it comes this way, meeting it off-centre to angle the return (a lesser player a little behind), smashes now and then. */
@@ -192,8 +227,11 @@ export class Duel extends BaseGame {
     const target = b.vx < 0 || this.serveIn > 0 ? b.y - edge * PADDLE_H * 0.3 * skill + (1 - skill) * 14 * Math.sin(b.x * 0.05) : (PLAY_TOP + SCREEN_H) / 2;
     const diff = target - this.p1;
     const dead = 3 + (1 - skill) * 6;
-    const smash = b.vx < 0 && b.x < PADDLE_X + 30 && skill > 0.5 && this.rally < 1.3;
-    return { ...NO_CONTROLS, up: diff < -dead, down: diff > dead, fire: this.serveIn > 0 || smash, firePressed: this.serveIn > 0 && random() < 0.1 };
+    // A press timed for the ball's arrival (a good hand mostly gets it right); a tap now and then to serve.
+    const arrival = b.vx < 0 ? (b.x - (PADDLE_X + PADDLE_W)) / -b.vx : Infinity;
+    const smash = this.serveIn <= 0 && arrival < SMASH_WINDOW * 0.8 && arrival > 0.02 && !this.keys.isHeld('fire') && random() < skill * 0.15;
+    const serve = this.serveIn > 0 && this.server === 1 && !this.keys.isHeld('fire') && random() < 0.05;
+    return { ...NO_CONTROLS, up: diff < -dead, down: diff > dead, fire: smash || serve, firePressed: smash || serve };
   }
 
   private get set(): number {
@@ -232,6 +270,8 @@ export class Duel extends BaseGame {
   private newServe(): void {
     this.serveIn = SERVE_DELAY + (this.server === 1 ? 1.2 : 0);
     this.rally = 1;
+    this.returns = 0;
+    this.smashArm = 0;
     this.ball.vx = 0;
     this.ball.vy = 0;
   }
@@ -242,7 +282,7 @@ export class Duel extends BaseGame {
     const dir = this.server === 1 ? 1 : -1;
     this.ball.vx = Math.cos(angle) * this.serveSpeed * dir;
     this.ball.vy = Math.sin(angle) * this.serveSpeed;
-    this.aimError = (this.rand() - 0.5) * 2 * OPPONENT.error;
+    this.aimError = (this.rand() - 0.5) * 2 * OPPONENT.error * (1.7 - this.opponentSkill);
     this.sound('shoot');
   }
 }

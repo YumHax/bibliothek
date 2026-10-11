@@ -24,7 +24,7 @@ export const KID_PEOPLE: readonly PersonCard[] = [
     short: 'Hugo',
     role: 'the Moreaus’ son, 4th floor',
     group: 'building',
-    whereabouts: 'In the courtyard after school with his handheld, on the bench',
+    whereabouts: 'In the courtyard after school with his handheld, on the bench; at the arcade on Wednesday mornings',
     intro: 'I’m Hugo. Fourth floor. You’re the one with ALL the games. Mum told me. Can I come and see?',
     traits: ['competitive', 'collector', 'chatty'],
     tastes: { platforms: ['gb', 'nes'], genres: ['action', 'platform'] },
@@ -42,7 +42,7 @@ export const KID_PEOPLE: readonly PersonCard[] = [
     lines: {
       ...KID_LINES,
       hello: ['Hey!', 'Oh, hi!', 'Shh, last level.'],
-      chat: ['Snake gets really fast after the fifty. Like REALLY fast.', 'Mum says I can’t go to the arcade alone. I’m twelve!', 'Did you know Tetris was invented by a Russian guy? True story.'],
+      chat: ['Snake gets really fast after the fifty. Like REALLY fast.', 'Mum lets me go to the arcade on Wednesday mornings. Gus keeps an eye. I’m twelve!', 'Did you know Tetris was invented by a Russian guy? True story.'],
     },
   },
   {

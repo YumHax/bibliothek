@@ -32,6 +32,8 @@ interface TournamentSource {
     wins: number;
     out: boolean;
     next: { round: number; name: string; score: number } | null;
+    /** The cup played for (it grows with the titles won) and the titles won so far. */
+    cup: { name: string; titles: number };
   };
   /** Signs today's sheet; false when it cannot be signed. */
   enter(): boolean;
@@ -59,6 +61,8 @@ const FRAME = paint(0x14100a, 0.45);
 const CLIPBOARD = paint(0x8a5a2e, 0.7);
 const CLIP = standard({ color: 0xb9bcc0, metalness: 1, roughness: 0.35 });
 const ROUND_TITLES = ['QUARTERS', 'SEMIS', 'FINAL'];
+/** The cup's colour on the board, by its name (`TOURNAMENT.cups`). */
+const CUP_COLOURS: Readonly<Record<string, string>> = { 'SATURDAY CUP': '#c9d2dc', 'SILVER CUP': '#e6ecf4', 'GOLD CUP': '#ffd23a' };
 
 /**
  * THE SATURDAY TOURNAMENT on the wall: the eight-entrant bracket (the player's run in green, each
@@ -129,7 +133,7 @@ export class TournamentBoard extends Prop implements Updatable, Interactable {
     if (!v.on) return 'SATURDAY TOURNAMENT · every Saturday';
     if (!v.entered) return `Saturday tournament · sign up (${formatCoins(this.options.entry)})`;
     if (v.next) return `Next: ${v.next.name} on ${this.options.titleOf(v.gameId)} · beat ${formatNumber(v.next.score)}`;
-    return v.out ? 'Knocked out. Next Saturday, then.' : 'Champion! The cup is on the prize shelf at home.';
+    return v.out ? 'Knocked out. Next Saturday, then.' : `Champion! The ${v.cup.name.toLowerCase()} goes home with you.`;
   }
 
   activate(session: SessionActions): void {
@@ -185,13 +189,12 @@ export class TournamentBoard extends Prop implements Updatable, Interactable {
     ctx.strokeRect(10, 10, W - 20, H - 20);
     drawText(ctx, 'SATURDAY TOURNAMENT', W / 2, H * 0.08, Math.round(H * 0.065), '#ffd23a');
     const game = this.options.titleOf(v.gameId);
-    const sub = v.on ? `TODAY ON ${game.toUpperCase()} · ENTRY ${this.options.entry} COINS · BEAT YOUR OPPONENT'S SCORE` : 'EVERY SATURDAY · THREE ROUNDS · ONE CABINET · THE CUP';
-    drawText(ctx, sub, W / 2, H * 0.155, Math.round(H * 0.028), '#c9c4ff');
+    const sub = v.on ? `TODAY ON ${game.toUpperCase()} · ${v.cup.name}` : v.cup.name;
+    drawText(ctx, sub, W / 2, H * 0.155, Math.round(H * 0.028), CUP_COLOURS[v.cup.name] ?? '#c9c4ff');
     if (v.on) this.paintBracket(v);
     else {
       drawText(ctx, 'NEXT ONE ON SATURDAY', W / 2, H * 0.48, Math.round(H * 0.07), '#ff8a80');
-      drawText(ctx, 'SIGN THE SHEET · THREE COINS', W / 2, H * 0.6, Math.round(H * 0.04), '#8a86b0');
-      drawText(ctx, 'WIN THREE ROUNDS · TAKE THE CUP HOME', W / 2, H * 0.68, Math.round(H * 0.04), '#8a86b0');
+      this.paintTitles(v.cup.titles);
     }
     this.texture.needsUpdate = true;
     this.paintSheet(v.on ? v.entrants : [], v.entered);
@@ -250,13 +253,36 @@ export class TournamentBoard extends Prop implements Updatable, Interactable {
     const champion = final?.winner ?? null;
     slot(colX[3]!, centres[3]![0]!, champion ?? '???', null, champion ? 'won' : 'open', champion === 'YOU');
     const foot = !v.entered
-      ? 'SIGN UP HERE · EACH ROUND IS ONE PLAY ON THE CABINET'
+      ? 'SIGN UP HERE'
       : v.next
         ? `YOUR ${ROUND_TITLES[v.next.round]}: BEAT ${v.next.name} · ${formatNumber(v.next.score)}`
         : v.out
           ? 'KNOCKED OUT · SEE YOU NEXT SATURDAY'
           : 'CHAMPION! THE CUP GOES HOME WITH YOU';
     drawText(ctx, foot, W / 2, H * 0.95, Math.round(H * 0.03), v.entered && !v.out ? '#7ee787' : '#ff8a80');
+  }
+
+  /** A little cup per title won, under the date of the next one (none before the first). */
+  private paintTitles(titles: number): void {
+    const { ctx, W, H } = this;
+    const shown = Math.min(titles, 12);
+    const step = H * 0.06;
+    const x0 = W / 2 - ((shown - 1) * step) / 2;
+    const y = H * 0.66;
+    for (let i = 0; i < shown; i++) {
+      const x = x0 + i * step;
+      ctx.fillStyle = '#ffd23a';
+      ctx.beginPath();
+      ctx.moveTo(x - step * 0.3, y - H * 0.04);
+      ctx.lineTo(x + step * 0.3, y - H * 0.04);
+      ctx.lineTo(x + step * 0.12, y);
+      ctx.lineTo(x - step * 0.12, y);
+      ctx.closePath();
+      ctx.fill();
+      ctx.fillRect(x - step * 0.05, y, step * 0.1, H * 0.02);
+      ctx.fillRect(x - step * 0.2, y + H * 0.02, step * 0.4, H * 0.012);
+    }
+    if (titles > shown) drawText(ctx, `+${titles - shown}`, x0 + shown * step, y, Math.round(H * 0.03), '#ffd23a', 'left');
   }
 
   /** The clipboard: the regulars' initials in their own hands, and the player's line (signed, or waiting). */

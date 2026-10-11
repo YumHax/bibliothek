@@ -11,6 +11,11 @@ import { FacadeFrame } from './facadeFrame';
 import { WALK_IN_ROOM_WALLS, WALK_IN_WALLS } from './walkInInteriors';
 import { FACADE, onSurface } from '../../surface/layers';
 import { hashInts, lcg, pick } from '@/random';
+import { FRONT } from '@/world/measures/street';
+import { nightnessOf } from '../streetAir';
+
+/** The row across the street's stone, as its glass gives it back (multiplied by the sky's ambient). */
+const ROW_STONE = new THREE.Color(0.95, 0.88, 0.76);
 import VERTEX from './ShopInteriors.vert.glsl?raw';
 import shopInteriorsFrag from './ShopInteriors.frag.glsl?raw';
 import { assemble } from '@/graphics/glslAssemble';
@@ -69,6 +74,8 @@ export class ShopInteriors extends THREE.Mesh implements Furniture, Updatable {
       tileSize: { value: new THREE.Vector2(1 / COLUMNS, 1 / ROWS) },
       daylight: { value: 1 },
       sky: { value: new THREE.Color(0.6, 0.7, 0.8) },
+      rowColor: { value: new THREE.Color(0.5, 0.47, 0.42) },
+      nightness: { value: 0 },
       depth: { value: ROOM.depth },
       tileMetres: { value: ROOM.tile },
       displayDepth: { value: ROOM.display },
@@ -102,6 +109,9 @@ export class ShopInteriors extends THREE.Mesh implements Furniture, Updatable {
     this.uniforms.daylight!.value = s.daylight;
     this.uniforms.time!.value = ((this.uniforms.time!.value as number) + dt) % 3600;
     (this.uniforms.sky!.value as THREE.Color).copy(s.horizon).lerp(s.zenith, 0.35).multiplyScalar(0.25 + 0.75 * s.daylight);
+    // The row across the street as the glass gives it back: pale stone in the day's light, dark at night.
+    (this.uniforms.rowColor!.value as THREE.Color).copy(ROW_STONE).multiply(s.ambient).multiplyScalar(0.35 + 0.9 * s.daylight).addScalar(0.02);
+    this.uniforms.nightness!.value = nightnessOf(s);
     this.clock += dt;
     if (this.clock < CHECK_EVERY) return;
     this.clock = 0;
@@ -131,6 +141,7 @@ function paneGeometry(fronts: readonly PaintedFront[]): { geometry: THREE.Buffer
   const light: number[] = [];
   const wall: number[] = [];
   const open: number[] = [];
+  const across: number[] = [];
   const index: number[] = [];
   const panes: Pane[] = [];
   const p = new THREE.Vector3();
@@ -140,6 +151,9 @@ function paneGeometry(fronts: readonly PaintedFront[]): { geometry: THREE.Buffer
   const skinColor = new THREE.Color();
   for (const front of fronts) {
     const frame = new FacadeFrame(front.spec);
+    // Across Front Street a row stands facing the glass (its building lines 24 m apart); elsewhere the park or a side street.
+    const onFront = [front.spec.from[1], front.spec.to[1]].every((z) => z === FRONT.ourLine) || [front.spec.from[1], front.spec.to[1]].every((z) => z === FRONT.farLine);
+    const acrossStreet = onFront ? FRONT.farLine - FRONT.ourLine : 0;
     const random = lcg(front.spec.seed * 977 + 3);
     for (const w of front.features.windows) {
       if (w.kind === 'shut') continue;
@@ -175,6 +189,7 @@ function paneGeometry(fronts: readonly PaintedFront[]): { geometry: THREE.Buffer
         light.push(lightColor.r, lightColor.g, lightColor.b);
         wall.push(wallColor.r, wallColor.g, wallColor.b);
         open.push(0);
+        across.push(acrossStreet);
       }
       index.push(first, first + 1, first + 2, first, first + 2, first + 3);
       panes.push({ kind, first, open: false });
@@ -195,6 +210,7 @@ function paneGeometry(fronts: readonly PaintedFront[]): { geometry: THREE.Buffer
   const openAttribute = new THREE.Float32BufferAttribute(open, 1);
   openAttribute.setUsage(THREE.DynamicDrawUsage);
   g.setAttribute('aOpen', openAttribute);
+  g.setAttribute('aAcross', new THREE.Float32BufferAttribute(across, 1));
   g.setIndex(index);
   g.computeBoundingBox();
   g.computeBoundingSphere();

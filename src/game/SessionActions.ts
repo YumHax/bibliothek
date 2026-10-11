@@ -65,6 +65,8 @@ export interface ArcadeMachineLike {
   abort(): void;
   /** The end card is done counting and fire was let go since: a press or a click now plays again. Absent: always. */
   readonly canReplay?: boolean;
+  /** The player's initials or the end card's count-up are still under way: the wallet chip and the banner wait for it. Absent: never. */
+  readonly counting?: boolean;
   /** Holds the play still (the pointer was unlocked) or lets it go on. */
   pause?(paused: boolean): void;
   /**

@@ -10,12 +10,23 @@ export interface ArcadeControls extends GameControls {
   look?: THREE.Vector3 | null;
 }
 
+/** A score a play can reach for: the player's own best, a medal not won yet. */
+export interface ScoreGoal {
+  /** One word on the glass: BEST, BRONZE, SILVER, GOLD... */
+  readonly label: string;
+  readonly score: number;
+}
+
 /** What a play starts with: the score to beat and the payout rate, so the game can show both live. */
 export interface RunContext {
   best: number;
   pointsPerTicket: number;
   /** Seeds every random draw that shapes the board, so a play replays exactly from its seed and inputs; default a random one. */
   seed?: number;
+  /** What to reach for, shown dim under the HUD (the next one not passed yet) and on the end card; none in demos. */
+  goals?: readonly ScoreGoal[];
+  /** The fewest tickets the play pays whatever the score (a paid play's floor), so the live count never shows less. */
+  ticketFloor?: number;
 }
 
 /** Logical screen of every cabinet game, in pixels (4:3); the cabinet scales it onto the glass. */
@@ -64,6 +75,8 @@ export interface ArcadeGame {
   setOpponent?(name: string, skill: number): void;
   /** What the second player's hands are doing this frame (the cabinet's second stick follows it). */
   opponentControls?(): ArcadeControls;
+  /** A two-player game's goals so far, the player's and player two's: who won, for whoever held the second stick. */
+  readonly tally?: { readonly you: number; readonly them: number };
 }
 
 /** No keys down. */

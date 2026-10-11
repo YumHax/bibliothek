@@ -1,6 +1,7 @@
 import { KEYS, PersistedStore, safeStorage } from '@/persistence';
 import { TABLE_SIZE, rivalTable, scoreRules, type ScoreEntry } from './rivals';
 import { byScore, makesTable, rankOf, withEntry } from './scoreTable';
+import { between, chance, pick, seededRng } from '@/random';
 
 const ARCADE_SCORES_KEY = KEYS.arcadeScores;
 /** The first version kept only the player's best per game; it is read once and folded in. */
@@ -19,7 +20,28 @@ interface ScoresFile {
   initials: string;
   /** Per game, the rules its best and entries were made under (`SCORE_RULES`; absent: 1). */
   rules: Record<string, number>;
+  /** Per game the player tops, the game day the hall first saw them on top (`settleDay`). */
+  held: Record<string, number>;
+  /** The last game day `settleDay` ran (-1: never). */
+  day: number;
+  /** Records the regulars took off the player while they were away, not yet told (`takenNews`). */
+  taken: TakenRecord[];
 }
+
+/** A record a regular took from the player while they were out: the game, their initials, their score, the game day. */
+interface TakenRecord {
+  gameId: string;
+  name: string;
+  score: number;
+  day: number;
+}
+
+/**
+ * The regulars playing while the player is away: each game day missed (counted back `catchUp` days at most) one of
+ * the player's records may fall, with these odds, once it has stood `heldDays`; the new top beats it by a few per cent
+ * (`over`), rounded to `round`, so it stays within reach. A medal or anything paid is never taken back.
+ */
+const AWAY = { odds: 0.12, heldDays: 3, catchUp: 7, over: [1.02, 1.08] as const, round: 10 };
 
 /** What `submit` reports: a new personal best, and where the score landed on the table (null: off it). */
 interface SubmitResult {
@@ -39,6 +61,8 @@ export class ArcadeScores {
   private state: ScoresFile;
   private readonly listeners = new Set<Listener>();
   private readonly store: PersistedStore<ScoresFile>;
+  /** Per game, the entries of the past (`setPast`). */
+  private readonly past = new Map<string, readonly ScoreEntry[]>();
 
   constructor(
     private readonly storage: Storage | null = safeStorage(),
@@ -49,7 +73,7 @@ export class ArcadeScores {
       key,
       version: 2,
       storage,
-      defaults: () => ({ best: {}, tables: {}, initials: 'YOU', rules: {} }),
+      defaults: emptyFile,
       read: readScores,
       migrate: { 1: dropStartingRivals },
     });
@@ -64,7 +88,7 @@ export class ArcadeScores {
 
   /** The table for `gameId`, best first (a copy): the starting rivals and the entries made since. */
   table(gameId: string): ScoreEntry[] {
-    return merged(gameId, this.state.tables[gameId] ?? []).map((e) => ({ ...e }));
+    return merged(gameId, [...this.pastOf(gameId), ...(this.state.tables[gameId] ?? [])]).map((e) => ({ ...e }));
   }
 
   /** The top score on the table, whoever holds it. */
@@ -93,7 +117,7 @@ export class ArcadeScores {
     if (this.qualifies(gameId, score)) {
       const entry: ScoreEntry = { name, score, you: true };
       tables = this.enter(gameId, entry);
-      rank = rankOf(merged(gameId, tables[gameId]!), entry);
+      rank = rankOf(merged(gameId, [...this.pastOf(gameId), ...tables[gameId]!]), entry);
     }
     if (!best && rank === null) return { best, rank };
     this.state = {
@@ -102,6 +126,8 @@ export class ArcadeScores {
       tables,
       initials: rank !== null ? name : this.state.initials,
       rules: { ...this.state.rules, [gameId]: scoreRules(gameId) },
+      // A record taken (back) today stands from today; one bettered keeps its day.
+      held: rank === 0 && this.state.day >= 0 ? { ...this.state.held, [gameId]: this.state.held[gameId] ?? this.state.day } : this.state.held,
     };
     this.commit();
     return { best, rank };
@@ -118,7 +144,79 @@ export class ArcadeScores {
     const tables = this.enter(gameId, entry);
     this.state = { ...this.state, tables, rules: { ...this.state.rules, [gameId]: scoreRules(gameId) } };
     this.commit();
-    return rankOf(merged(gameId, tables[gameId]!), entry);
+    return rankOf(merged(gameId, [...this.pastOf(gameId), ...tables[gameId]!]), entry);
+  }
+
+  /**
+   * A game day's first look at the hall: the records the regulars took off the player meanwhile (any game day missed
+   * may see one fall, `AWAY`; `takerOf` names who takes a game's), then the day each record of the player's was first
+   * seen standing. Once a game day; the first ever only starts the count.
+   */
+  settleDay(day: number, takerOf: (gameId: string) => string): void {
+    const last = this.state.day;
+    if (day <= last) return;
+    let tables = this.state.tables;
+    const held = { ...this.state.held };
+    const taken = [...this.state.taken];
+    const topOf = (id: string): ScoreEntry => merged(id, [...this.pastOf(id), ...(tables[id] ?? [])])[0]!;
+    for (let d = last < 0 ? day + 1 : Math.max(last + 1, day - AWAY.catchUp + 1); d <= day; d++) {
+      const rng = seededRng(`arcade-away:${d}`);
+      if (!chance(rng, AWAY.odds)) continue;
+      const standing = Object.keys(held)
+        .filter((id) => d - held[id]! >= AWAY.heldDays && topOf(id).you)
+        .sort();
+      if (!standing.length) continue;
+      const id = pick(rng, standing);
+      const score = Math.ceil((topOf(id).score * between(rng, ...AWAY.over)) / AWAY.round) * AWAY.round;
+      const name = sanitise(takerOf(id));
+      tables = { ...tables, [id]: withEntry(tables[id] ?? [], { name, score }, TABLE_SIZE) };
+      delete held[id];
+      taken.push({ gameId: id, name, score, day: d });
+    }
+    const ids = new Set([...Object.keys(tables), ...this.past.keys()]);
+    for (const id of ids) {
+      if (!topOf(id).you) delete held[id];
+      else held[id] ??= day;
+    }
+    this.state = { ...this.state, tables, held, day, taken: taken.slice(-TABLE_SIZE) };
+    this.commit();
+  }
+
+  /** How many game days the player's record on `gameId` has stood (0: since today), or null when they do not hold it. */
+  heldDays(gameId: string): number | null {
+    const since = this.state.held[gameId];
+    return since === undefined || !this.topOf(gameId).you ? null : Math.max(0, this.state.day - since);
+  }
+
+  /** The records taken off the player while they were away, not yet told; `told` clears them. */
+  get takenNews(): readonly TakenRecord[] {
+    return this.state.taken;
+  }
+
+  told(): void {
+    if (!this.state.taken.length) return;
+    this.state = { ...this.state, taken: [] };
+    this.commit();
+  }
+
+  /**
+   * Entries from before the game began, read live like the starting rivals and never saved here: the record the
+   * player beat at fourteen in Mémé's memory "Three letters", under the initials typed in it (`memories/playerInitials`).
+   */
+  setPast(gameId: string, entries: readonly ScoreEntry[]): void {
+    this.past.set(gameId, entries);
+    for (const cb of this.listeners) cb();
+  }
+
+  /** Initials typed elsewhere (that memory's): the initials screens start from them while none were ever signed. */
+  offerInitials(initials: string): void {
+    if (this.state.initials !== 'YOU') return;
+    this.state = { ...this.state, initials: sanitise(initials) };
+    this.commit();
+  }
+
+  private pastOf(gameId: string): readonly ScoreEntry[] {
+    return this.past.get(gameId) ?? [];
   }
 
   subscribe(cb: Listener): () => void {
@@ -139,7 +237,7 @@ export class ArcadeScores {
 
   /** Version 1 of the scores (another key): bests only. They go on the tables under YOU. */
   private legacy(): ScoresFile {
-    const state: ScoresFile = { best: {}, tables: {}, initials: 'YOU', rules: {} };
+    const state = emptyFile();
     try {
       state.best = numbers(JSON.parse(this.storage?.getItem(LEGACY_KEY) ?? 'null'));
     } catch {
@@ -162,12 +260,18 @@ function underTodaysRules(file: ScoresFile): ScoresFile {
   const best = { ...file.best };
   const tables = { ...file.tables };
   const rules = { ...file.rules };
+  const held = { ...file.held };
   for (const id of stale) {
     delete best[id];
     delete tables[id];
+    delete held[id];
     rules[id] = scoreRules(id);
   }
-  return { ...file, best, tables, rules };
+  return { ...file, best, tables, rules, held };
+}
+
+function emptyFile(): ScoresFile {
+  return { best: {}, tables: {}, initials: 'YOU', rules: {}, held: {}, day: -1, taken: [] };
 }
 
 /** The starting rivals and `entries`, best first (a rival keeps a tie: a score must beat one to pass it), a table's worth. */
@@ -183,7 +287,20 @@ function readScores(data: unknown): ScoresFile | null {
     tables: tables(parsed.tables),
     initials: typeof parsed.initials === 'string' ? sanitise(parsed.initials) : 'YOU',
     rules: numbers(parsed.rules),
+    held: days(parsed.held),
+    day: typeof parsed.day === 'number' ? parsed.day : -1,
+    taken: Array.isArray(parsed.taken)
+      ? parsed.taken.filter((t): t is TakenRecord => typeof t === 'object' && t !== null && typeof t.gameId === 'string' && typeof t.name === 'string' && typeof t.score === 'number' && typeof t.day === 'number')
+      : [],
   };
+}
+
+/** Game days by game (day 0 counts, unlike a score). */
+function days(value: unknown): Record<string, number> {
+  const out: Record<string, number> = {};
+  if (typeof value !== 'object' || value === null) return out;
+  for (const [k, v] of Object.entries(value)) if (typeof v === 'number' && v >= 0) out[k] = v;
+  return out;
 }
 
 /**

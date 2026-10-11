@@ -38,6 +38,9 @@ export const KEYS = {
   deliveries: save('deliveries.v1'),
   wallet: save('wallet.v1'),
   prizes: save('prizes.v1'),
+  /** The prize pinned as the player's goal (its picture fills by the wallet chip), and the prize sets already paid for. */
+  prizeGoal: save('prizeGoal.v1'),
+  prizeSets: save('prizeSets.v1'),
   home: save('home.v1'),
   market: save('market.v1'),
   standing: save('standing.v1'),
@@ -52,6 +55,8 @@ export const KEYS = {
   arcadeTournament: save('arcadeTournament.v1'),
   arcadeReplays: save('arcadeReplays.v1'),
   arcadeHabits: save('arcadeHabits.v1'),
+  /** What the player had won at the arcade when their last visit began, for Gus to remark on (`economy/arcadeVisits`). */
+  arcadeVisits: save('arcadeVisits.v1'),
   /** The home cabinet's own hall of fame, game by game (`world/homeArcade/HomeScores`): nothing to do with the arcade's. */
   homeArcade: save('homeArcade.v1'),
   /** The turntable: the record last put on (`vinyl/`). */
@@ -66,10 +71,22 @@ export const KEYS = {
   giveaway: save('giveaway.v1'),
   garageSale: save('garageSale.v1'),
   trader: save('trader.v1'),
+  /** Front Street's counters (`streetShops/`): manuals ordered, guides read, the bars' nights, the paper's cards and subscription, Karim's swaps, the pop-up's sales. */
+  streetShops: save('streetShops.v1'),
   /** What the player carries from Front Street's shops (`errands/`): the scrap, the treats, the bunch, the croissant; and today's buys. */
   pocket: save('pocket.v1'),
   /** The stray cat: how far he trusts the player, the last real day he was fed and brought a find (`street/life/StrayCat`). */
   strayCat: save('strayCat.v1'),
+  /** Front Street's moments for the collector's book and the story: the stray come home, a secret found, a find (`social/street/streetMarks`). */
+  streetMarks: save('streetMarks.v1'),
+  /** Victor's wager: made on a day, won or lost on his next hunt, the espresso owed (`social/street/wager`). */
+  rivalWager: save('rivalWager.v1'),
+  /** The passers-by's leads already given, by id (`social/street/leads`; the day's one is `oncePerDay`'s). */
+  streetLeads: save('streetLeads.v1'),
+  /** The claw's plush given away as gifts, by prize id (`social/street/plushGifts`). */
+  plushGiven: save('plushGiven.v1'),
+  /** Park Corner Mansions' bells: favours asked and done, finds left on the step (`social/street/mansionDoors`). */
+  mansionBells: save('mansionBells.v1'),
   /** The coin dropped each game day on Front Street, once picked (`street/shops/DroppedCoins`). */
   gameDayFinds: save('gameDayFinds.v1'),
   /** The rival collector: who beat whom, today's hunt at the flea market, what he still has in his suitcase (`economy/rivalCollector`). */
@@ -126,8 +143,34 @@ export const KEYS = {
   prototypeStory: save('prototypeStory.v1'),
   /** Uncle Félix's notebook: when it was found, his games bought back since (`story/FelixNotebook`). */
   felixNotebook: save('felixNotebook.v1'),
+  /** The end of the family's story: Gaspard at Mémé's, the Christmas Game Boy, her visits to the flat (`family/FamilyStory`). */
+  familyStory: save('familyStory.v1'),
   /** Mémé's: the visits, the last Sunday envelope, the memories of her album seen (`grandma/GrandmaVisits`). */
   grandma: save('grandma.v1'),
+  /** Mémé's ways: the lunches at her table, her recipes and the dish cooked, her favours, the occasions kept (`grandma/GrandmaRituals`). */
+  grandmaRituals: save('grandmaRituals.v1'),
+  /** What Mémé gave the player to take home after the memories, and the lots of Félix's she was told are home (`grandma/Keepsakes`). */
+  keepsakes: save('keepsakes.v1'),
+  /** Mémé's hints toward the next memory: the visits it has stood for, what she said, her rings and letters (`grandma/GrandmaHints`). */
+  grandmaHints: save('grandmaHints.v1'),
+  /** Mémé's own memory of the player: her stories told, the news heard, Gaspard's last ring, the last visit, what she asked after (`grandma/GrandmaPresence`). */
+  grandmaPresence: save('grandmaPresence.v1'),
+  /** The initials the player typed in Mémé's memory "Three letters", kept for the arcade (`memories/playerInitials`). */
+  playerInitials: save('initials.v1'),
+  /** The snapshots Mémé found for her album, those looked at, the games and gifts that brought them back (`grandma/AlbumFinds`). */
+  albumFinds: save('albumFinds.v1'),
+  /** The player's photos glued in Mémé's album after Félix's pages, small JPEGs (`grandma/albumPrints`). */
+  albumPrints: save('albumPrints.v1'),
+  /** The photo mode's last shots kept small, to give Mémé (`photo/photoRoll`). */
+  photoRoll: save('photoRoll.v1'),
+  /** What the player did with Mémé: the day of the last quiz, crossword and wool, the wool's sessions, the cards' tally (`grandma/pastimes`). */
+  grandmaPastimes: save('grandmaPastimes.v1'),
+  /** Mémé's bread: when she last asked for a baguette, the one carried from Lebrun's, the last brought her (`grandma/breadErrand`). */
+  grandmaBread: save('grandmaBread.v1'),
+  /** The mornings Mémé was on the 38 with the player, and whether she has walked home yet (`grandma/sharedRide`). */
+  sharedRide: save('sharedRide.v1'),
+  /** The dépôt-vente on Linden Avenue: the week its trestle was laid for, the games bought off it (`world/linden/DepotTable`). */
+  lindenDepot: save('lindenDepot.v1'),
   /** The building's keys the player was given (the cellar's, `building/keys`). */
   buildingKeys: save('buildingKeys.v1'),
   /** The game day the building last had a power cut (`building/blackout`): one storm's evening a day at most. */
@@ -168,6 +211,16 @@ export const KEYS = {
   friendsLife: save('friendsLife.v1'),
   /** `?debug` only: the progressions its panel switched off, which the debug save then never unlocks again (`cheats/progress`). */
   debugProgress: save('debugProgress.v1'),
+  /** The park's gardens: the ducks fed, the wishes made in the pond, the token found (`park/parkVisits`). */
+  parkVisits: save('parkVisits.v1'),
+  /** The Grand Flea Fair's raffle on Front Street: the tickets bought on the Fair's day, the prize taken (`fair/raffle`). */
+  fairRaffle: save('fairRaffle.v1'),
+  /** Halloween on Front Street: the doors knocked at this year (`holidays/trickOrTreat`). */
+  trickOrTreat: save('trickOrTreat.v1'),
+  /** The games wrapped at the Christmas stall, waiting to be given (`holidays/giftWrap`). */
+  giftWrap: save('giftWrap.v1'),
+  /** The cards posted in Front Street's pillar box: to whom, which game week (`post/cards`). */
+  postCards: save('postCards.v1'),
   // Caches.
   longplayCache: `${CACHE_PREFIX}longplay.v1`,
   fameCache: `${CACHE_PREFIX}fame.v1`,

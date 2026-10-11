@@ -5,13 +5,15 @@ import { Cushion } from '../props/Cushion';
 import { childNineLook, felixLook } from './familyLooks';
 import { stageFelixFlat } from './felixFlat';
 import { WEDNESDAYS_MEMORY_PLAN as PLAN } from './wednesdaysMemoryPlan';
+import { backInTheRoom, beats } from './memoryStage';
 import type { Present } from './albumWiring';
 
 /**
  * WEDNESDAYS AT FÉLIX'S (`MEMORIES` wednesdays, docs/story.md "Mémé"): his flat about 1998, every shelf full, the
  * curtains drawn against the glare and the lamps on; the child at nine on a cushion before the set, blowing into a
  * cartridge, then playing; Félix in his armchair reading the manual out loud, then pointing the way. One scene in
- * the collection room as the opening dreams it; back at Mémé's the player stands by her table, turned to her.
+ * the collection room as the opening dreams it, waiting on the player to blow into the cartridge twice (its cue); back
+ * at Mémé's the player stands by her table, turned to her.
  */
 export function wednesdaysReel(present: Present): MemoryReel {
   const [cx, cz] = PLAN.child.at;
@@ -19,18 +21,15 @@ export function wednesdaysReel(present: Present): MemoryReel {
   const [bx, bz] = PLAN.after.at;
   const { x: mx, z: mz } = present.meme.position;
 
-  let fired = new Set<string>();
+  const beat = beats();
   let cast: { felix: Walker; child: Walker } | null = null;
   let today: { hold(): void; release(): void } | null = null;
   /** World points the eyes go to, set at the staging. */
   let childHead = new THREE.Vector3();
   let felixHead = new THREE.Vector3();
-  /** Once, the first frame the clock passes `at`. */
-  const once = (t: number, at: number, key: string, run: () => void): void => {
-    if (t < at || fired.has(key)) return;
-    fired.add(key);
-    run();
-  };
+  const once = beat.at;
+  /** A blow into the cartridge: the first, then the second (by the player's presses, or on the clock). */
+  const blow = (key: 'blow' | 'blowAgain'): void => beat.now(key, () => cast?.child.gesture('coverMouth'));
 
   return {
     id: 'wednesdays',
@@ -45,7 +44,7 @@ export function wednesdaysReel(present: Present): MemoryReel {
         shots: PLAN.shots,
         light: { curtains: 'drawn', lamps: 'on' },
         stage: (set) => {
-          fired = new Set();
+          beat.reset();
           today = stageFelixFlat(set);
           const screen = set.world(...PLAN.screen);
           childHead = set.world(cx, PLAN.childHead, cz);
@@ -58,12 +57,24 @@ export function wednesdaysReel(present: Present): MemoryReel {
           felix.hold('book');
           cast = { felix, child };
         },
+        cues: [
+          {
+            at: PLAN.blowCueAt,
+            prompt: 'Blow into the cartridge',
+            input: { presses: 2 },
+            press: () => blow('blow'),
+            done: () => {
+              blow('blow');
+              blow('blowAgain');
+            },
+          },
+        ],
         beat: (t) => {
           today?.hold();
           if (!cast) return;
           const { felix, child } = cast;
-          once(t, PLAN.blowAt, 'blow', () => child.gesture('coverMouth'));
-          once(t, PLAN.blowAgainAt, 'blowAgain', () => child.gesture('coverMouth'));
+          if (t >= PLAN.blowAt) blow('blow');
+          if (t >= PLAN.blowAgainAt) blow('blowAgain');
           once(t, PLAN.playFrom, 'play', () => child.setPose('play'));
           once(t, PLAN.felixGlassesAt, 'glasses', () => felix.gesture('adjustGlasses'));
           once(t, PLAN.felixLooksUpAt, 'looksUp', () => {
@@ -85,10 +96,6 @@ export function wednesdaysReel(present: Present): MemoryReel {
       },
     ],
     after: { zone: 'grandmaFlat', at: [bx, bz], yaw: Math.atan2(-(mx - bx), -(mz - bz)) },
-    returned: () => {
-      present.meme.setPresent(true);
-      present.reseat();
-      present.meme.speak(present.afterLine);
-    },
+    returned: () => backInTheRoom(present),
   };
 }

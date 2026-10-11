@@ -17,9 +17,10 @@ const INTONATION = { syllable: 0.12, rise: 0.22, fall: 0.14 };
  * Someone talking, heard but not understood: a few syllables of noise through a speech-band pair of
  * filters, each with its own little rise and fall, over as long as `text` would take to say (capped),
  * placed by `spatial` (a friend in the room, a neighbour on the stairs). `level` 0..1 at the mouth,
- * already attenuated by the caller for distance. The words themselves are in the bubble.
+ * already attenuated by the caller for distance. The words themselves are in the bubble. `into` a bus of
+ * the caller's (the street's, with its echo), the world's by default.
  */
-export function playMurmur(text: string, level: number, spatial?: Spatial, pitch = 0.5): void {
+export function playMurmur(text: string, level: number, spatial?: Spatial, pitch = 0.5, into?: AudioNode): void {
   if (level < 0.002) return;
   const ctx = startedAudioContext();
   if (!ctx) return;
@@ -27,7 +28,7 @@ export function playMurmur(text: string, level: number, spatial?: Spatial, pitch
     const seconds = Math.min(LONGEST_S, Math.max(0.25, text.length * PER_CHAR));
     const out = ctx.createGain();
     out.gain.value = level;
-    out.connect(spatialInput(ctx, audioBus(ctx, 'world'), spatial, seconds + 0.5));
+    out.connect(spatialInput(ctx, into ?? audioBus(ctx, 'world'), spatial, seconds + 0.5));
     const centre = BAND.low + (BAND.high - BAND.low) * Math.max(0, Math.min(1, pitch));
     const band = ctx.createBiquadFilter();
     band.type = 'bandpass';

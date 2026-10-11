@@ -2,9 +2,10 @@ import { PLATFORMS } from '@/catalog/platforms';
 import { KEYS, PersistedStore, batch, safeStorage } from '@/persistence';
 import { FAULTS, resaleOf, type BrokenConsole, type FaultId } from './consoles';
 
-/** A console at home: bought broken, mended or not yet. */
+/** A console at home: bought broken, mended or not yet; or left on Karim's bench at TV REPAIR (`atShop`: the game day). */
 export interface HomeConsole extends BrokenConsole {
   fixed: boolean;
+  atShop?: number;
 }
 
 interface WorkshopState {
@@ -43,14 +44,35 @@ export class Workshop {
     return this.state.consoles;
   }
 
-  /** The next console to open up: the first broken one. */
+  /** The next console to open up: the first broken one at home. */
   get nextBroken(): HomeConsole | null {
-    return this.state.consoles.find((c) => !c.fixed) ?? null;
+    return this.state.consoles.find((c) => !c.fixed && c.atShop === undefined) ?? null;
   }
 
-  /** Mended consoles waiting to be sold. */
+  /** Mended consoles at home, waiting to be sold. */
   get working(): readonly HomeConsole[] {
-    return this.state.consoles.filter((c) => c.fixed);
+    return this.state.consoles.filter((c) => c.fixed && c.atShop === undefined);
+  }
+
+  /** The consoles on Karim's bench at TV REPAIR. */
+  get onBench(): readonly HomeConsole[] {
+    return this.state.consoles.filter((c) => c.atShop !== undefined);
+  }
+
+  /** The broken console `id` left with Karim on game `day` (`streetShops/karim`'s fee paid): it leaves the kitchen chair. */
+  leaveAtShop(id: string, day: number): boolean {
+    const item = this.state.consoles.find((c) => c.id === id && !c.fixed && c.atShop === undefined);
+    if (!item) return false;
+    this.commit({ consoles: this.state.consoles.map((c) => (c === item ? { ...c, atShop: day } : c)) });
+    return true;
+  }
+
+  /** The consoles Karim has mended by `day` (left at least `days` before), handed back working: the ones collected. */
+  collectFromShop(day: number, days: number): HomeConsole[] {
+    const ready = this.state.consoles.filter((c) => c.atShop !== undefined && day - c.atShop >= days);
+    if (!ready.length) return [];
+    this.commit({ consoles: this.state.consoles.map((c) => (ready.includes(c) ? { ...c, fixed: true, atShop: undefined } : c)) });
+    return ready;
   }
 
   get repaired(): number {
@@ -119,6 +141,6 @@ function isConsole(v: unknown): v is HomeConsole {
   if (!v || typeof v !== 'object') return false;
   const c = v as Partial<HomeConsole>;
   return typeof c.id === 'string' && typeof c.platform === 'string' && c.platform in PLATFORMS && typeof c.fault === 'string' && (c.fault as FaultId) in FAULTS
-    && typeof c.paid === 'number' && typeof c.from === 'string' && typeof c.fixed === 'boolean';
+    && typeof c.paid === 'number' && typeof c.from === 'string' && typeof c.fixed === 'boolean' && (c.atShop === undefined || typeof c.atShop === 'number');
 }
 

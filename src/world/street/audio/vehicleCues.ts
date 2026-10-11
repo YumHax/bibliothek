@@ -96,6 +96,69 @@ export function splash(g: SoundGraph, out: AudioNode, level: number): void {
   g.shaped(filtered(g, out, 'bandpass', 1800 + random() * 1200, 0.7), g.now + 0.02, [[0.05, 0.25 * level], [0.35, 0.06 * level], [0.6, 0]]);
 }
 
+/** Brakes squealing as a car pulls up hard: a thin, wavering whistle (an old car's drums, the bus's discs), fading as it stops. */
+export function brakeSqueal(g: SoundGraph, out: AudioNode, level: number, heavy: boolean): void {
+  const t = g.now + 0.02;
+  const length = 0.35 + random() * 0.5;
+  const f = (heavy ? 1900 : 3100) + random() * 900;
+  const osc = g.ctx.createOscillator();
+  osc.frequency.setValueAtTime(f, t);
+  osc.frequency.linearRampToValueAtTime(f * (0.9 + random() * 0.06), t + length);
+  const wobble = g.ctx.createOscillator();
+  wobble.frequency.value = 9 + random() * 14;
+  const depth = g.gain(f * 0.012);
+  wobble.connect(depth).connect(osc.frequency);
+  const env = g.gain();
+  env.gain.setValueAtTime(0, t);
+  env.gain.linearRampToValueAtTime(0.035 * level, t + 0.06);
+  env.gain.setValueAtTime(0.035 * level, t + length * 0.6);
+  env.gain.linearRampToValueAtTime(0, t + length);
+  osc.connect(env).connect(out);
+  for (const node of [osc, wobble]) {
+    node.start(t);
+    node.stop(t + length + 0.05);
+  }
+}
+
+/** Tyres skidding on a sudden stop: a harsh band of noise, scraped and falling (rain mutes it to a hiss). */
+export function tyreScreech(g: SoundGraph, out: AudioNode, level: number, wet: number): void {
+  const t = g.now + 0.02;
+  const band = filtered(g, out, 'bandpass', wet > 0.4 ? 2400 : 1500, wet > 0.4 ? 0.8 : 4);
+  band.frequency.setValueAtTime(band.frequency.value, t);
+  band.frequency.linearRampToValueAtTime(band.frequency.value * 0.75, t + 0.8);
+  g.shaped(band, t, [[0.03, 0.5 * level], [0.5, 0.35 * level], [0.85, 0]]);
+}
+
+/** A car door: the handle's click, the door swung shut with a padded thump (a van's sliding door rolls and clanks). */
+export function carDoor(g: SoundGraph, out: AudioNode, level: number, van: boolean): void {
+  const t = g.now + 0.02;
+  g.burst(filtered(g, out, 'bandpass', 2800, 4), t, 0.02, 0.08 * level);
+  if (van) {
+    g.shaped(filtered(g, out, 'bandpass', 600, 1.2), t + 0.1, [[0.05, 0.12 * level], [0.45, 0.1 * level], [0.5, 0]]);
+    g.burst(filtered(g, out, 'lowpass', 300), t + 0.55, 0.18, 0.45 * level);
+    return;
+  }
+  g.burst(filtered(g, out, 'lowpass', 180), t + 0.18, 0.14, 0.5 * level);
+  g.burst(filtered(g, out, 'bandpass', 1200, 2), t + 0.18, 0.04, 0.12 * level);
+}
+
+/** A reversing lorry's or van's beeper: one pip (call it every second while it backs). */
+export function reverseBeep(g: SoundGraph, out: AudioNode, level: number): void {
+  const t = g.now + 0.02;
+  const osc = g.ctx.createOscillator();
+  osc.type = 'square';
+  osc.frequency.value = 1040;
+  const env = g.gain();
+  env.gain.setValueAtTime(0, t);
+  env.gain.linearRampToValueAtTime(0.025 * level, t + 0.01);
+  env.gain.setValueAtTime(0.025 * level, t + 0.42);
+  env.gain.linearRampToValueAtTime(0, t + 0.45);
+  osc.connect(filtered(g, env, 'lowpass', 2600));
+  env.connect(out);
+  osc.start(t);
+  osc.stop(t + 0.47);
+}
+
 /** A filter into `out`, for a burst to play through. */
 function filtered(g: SoundGraph, out: AudioNode, type: BiquadFilterType, frequency: number, q = 1): BiquadFilterNode {
   const f = g.filter(type, frequency, q);

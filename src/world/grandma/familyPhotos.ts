@@ -13,10 +13,10 @@ import type { MotifPainter } from '../props/PictureFrame';
 export type FamilyPhoto = 'wedding' | 'felixBoy' | 'seaside' | 'felixYoung' | 'school' | 'felixAndMeme' | 'christmas95';
 
 /** How the print has aged: a sepia toning, a grey silver print, a 70s colour print gone warm and magenta, a newer one. */
-type Toning = 'sepia' | 'mono' | 'faded' | 'colour';
+export type Toning = 'sepia' | 'mono' | 'faded' | 'colour';
 
 /** One person in a print: their colours and what they wear. */
-interface Figure {
+export interface Figure {
   skin: number;
   hair: number;
   top: number;
@@ -31,16 +31,16 @@ interface Figure {
 
 /** The family's colours (`familyLooks`): the same people in every print. */
 const SKIN = 0xe0b49a;
-const MEME_YOUNG: Figure = { skin: SKIN, hair: 0x6a5240, top: 0xf2efe8, bottom: 0xf2efe8, dress: true, hairStyle: 'bun' };
-const GRANDPA: Figure = { skin: SKIN, hair: 0x2a2018, top: 0x22242a, bottom: 0x22242a, hairStyle: 'short' };
-const FELIX_BOY: Figure = { skin: SKIN, hair: 0x3a2a1c, top: 0xd8d2c4, bottom: 0x4a4a52, shorts: true, hairStyle: 'short' };
-const FELIX: Figure = { skin: SKIN, hair: 0x2a1d14, top: 0x8f3b3b, bottom: 0x2b3a5a, hairStyle: 'short', glasses: true };
-const FELIX_GREY: Figure = { ...FELIX, hair: 0x8a8278, top: 0x5a6a4a };
+export const MEME_YOUNG: Figure = { skin: SKIN, hair: 0x6a5240, top: 0xf2efe8, bottom: 0xf2efe8, dress: true, hairStyle: 'bun' };
+export const GRANDPA: Figure = { skin: SKIN, hair: 0x2a2018, top: 0x22242a, bottom: 0x22242a, hairStyle: 'short' };
+export const FELIX_BOY: Figure = { skin: SKIN, hair: 0x3a2a1c, top: 0xd8d2c4, bottom: 0x4a4a52, shorts: true, hairStyle: 'short' };
+export const FELIX: Figure = { skin: SKIN, hair: 0x2a1d14, top: 0x8f3b3b, bottom: 0x2b3a5a, hairStyle: 'short', glasses: true };
+export const FELIX_GREY: Figure = { ...FELIX, hair: 0x8a8278, top: 0x5a6a4a };
 const MEME_NOW: Figure = { skin: SKIN, hair: 0xd9d3c8, top: 0x8a5a6a, bottom: 0x3a3a52, dress: true, hairStyle: 'bun', glasses: true };
-const CHILD: Figure = { skin: SKIN, hair: 0x4a3222, top: 0x2f6b8f, bottom: 0x3a4a6a, hairStyle: 'short' };
+export const CHILD: Figure = { skin: SKIN, hair: 0x4a3222, top: 0x2f6b8f, bottom: 0x3a4a6a, hairStyle: 'short' };
 
 /** The toning applied to a colour: what the years left of it. */
-function toned(color: number, toning: Toning, shade = 1): string {
+export function toned(color: number, toning: Toning, shade = 1): string {
   let r = ((color >> 16) & 255) / 255;
   let g = ((color >> 8) & 255) / 255;
   let b = (color & 255) / 255;
@@ -60,7 +60,7 @@ function toned(color: number, toning: Toning, shade = 1): string {
  * Someone standing, their feet at (`x`, `foot`), `height` px tall, facing the camera: legs (or a skirt), a body, arms
  * down, a head with its hair. Simple shapes, as a figure reads at a frame's size across a room.
  */
-function drawFigure(ctx: CanvasRenderingContext2D, f: Figure, toning: Toning, x: number, foot: number, height: number): void {
+export function drawFigure(ctx: CanvasRenderingContext2D, f: Figure, toning: Toning, x: number, foot: number, height: number): void {
   const head = height * 0.14;
   const shoulders = height * 0.27;
   const waist = foot - height * 0.47;
@@ -138,13 +138,13 @@ function drawFigure(ctx: CanvasRenderingContext2D, f: Figure, toning: Toning, x:
 }
 
 /** A filled rectangle in a toned colour. */
-function block(ctx: CanvasRenderingContext2D, color: number, toning: Toning, x: number, y: number, w: number, h: number, shade = 1): void {
+export function block(ctx: CanvasRenderingContext2D, color: number, toning: Toning, x: number, y: number, w: number, h: number, shade = 1): void {
   ctx.fillStyle = toned(color, toning, shade);
   ctx.fillRect(x, y, w, h);
 }
 
 /** A vertical gradient between two toned colours. */
-function gradient(ctx: CanvasRenderingContext2D, top: number, bottom: number, toning: Toning, y0: number, y1: number, w: number): void {
+export function gradient(ctx: CanvasRenderingContext2D, top: number, bottom: number, toning: Toning, y0: number, y1: number, w: number): void {
   const g = ctx.createLinearGradient(0, y0, 0, y1);
   g.addColorStop(0, toned(top, toning));
   g.addColorStop(1, toned(bottom, toning));
@@ -156,7 +156,7 @@ function gradient(ctx: CanvasRenderingContext2D, top: number, bottom: number, to
  * The print round the scene: a white border (yellowed with its age), the corners' wear, a darkening at the edges and
  * the grain of the paper; `scene` paints inside the border.
  */
-function print(toning: Toning, scene: (ctx: CanvasRenderingContext2D, w: number, h: number, random: () => number) => void): MotifPainter {
+export function print(toning: Toning, scene: (ctx: CanvasRenderingContext2D, w: number, h: number, random: () => number) => void): MotifPainter {
   return (ctx, w, h, random) => {
     const border = Math.round(Math.min(w, h) * (toning === 'colour' ? 0.03 : 0.06));
     ctx.fillStyle = toning === 'colour' ? '#f4f1ea' : toning === 'faded' ? '#efe6d6' : '#e8dcc2';

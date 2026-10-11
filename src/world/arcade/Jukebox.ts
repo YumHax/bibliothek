@@ -10,6 +10,7 @@ import { layMesh, WALL } from '../surface/layers';
 import { METAL, paint } from '../materials/palette';
 import { drawText } from './games/ArcadeGame';
 import { loudness } from '@/audio/hearing';
+import { easeDuck } from './hallDuck';
 
 interface JukeboxOptions {
   /** Whose distance sets the volume: the camera. */
@@ -36,7 +37,8 @@ const CHROME = METAL.chrome();
  * plays generated music (`JukeboxTune`: synthwave, chiptune, funk, italo disco), louder as the
  * player comes near; a click moves to the next station, and after the last one it goes quiet.
  * Starts playing when the hall is entered (once a gesture has started the page's audio), silent
- * when the player is elsewhere (`setOccupied`). Origin on the floor, +z its front. Collides.
+ * when the player is elsewhere (`setOccupied`), lower while they play a machine (`hallDuck`).
+ * Origin on the floor, +z its front. Collides.
  */
 export class Jukebox extends THREE.Group implements Furniture, Updatable, Interactable, OccupancyAware {
   readonly hitboxes: THREE.Object3D[];
@@ -52,6 +54,8 @@ export class Jukebox extends THREE.Group implements Furniture, Updatable, Intera
   private playing = false;
   private clock = 0;
   private shownTitle = '';
+  /** The level the hall's duck has it at (1: full). */
+  private duck = 1;
 
   constructor(options: JukeboxOptions) {
     super();
@@ -121,7 +125,9 @@ export class Jukebox extends THREE.Group implements Furniture, Updatable, Intera
       this.getWorldPosition(this.here);
       this.listener.getWorldPosition(this.ear);
       const t = loudness(this.here.distanceTo(this.ear), { shape: 'ramp', referenceDistance: NEAR, maxDistance: FAR });
-      this.tune.setVolume(0.25 + t * t * 0.75);
+      // Lower while the player is at a machine (`hallDuck`).
+      this.duck = easeDuck(this.duck, dt);
+      this.tune.setVolume((0.25 + t * t * 0.75) * this.duck);
       this.tune.update();
       if (this.tune.title !== this.shownTitle) this.paintCard();
     }

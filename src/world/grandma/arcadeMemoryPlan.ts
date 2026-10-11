@@ -31,6 +31,8 @@ export const ARCADE_MEMORY_PLAN = {
   felixClapAt: 17.1,
   watcherClapAt: 17.5,
   felixPumpAt: 18.6,
+  /** The film waits on the player's own three letters here (the cue), then the teen types them in. */
+  initialsCueAt: 19.2,
   initialsFrom: 19.4,
   felixPointAt: 21.2,
   neighbourLookAt: 17.3,

@@ -1,8 +1,8 @@
 import * as THREE from 'three';
 import { CAR_SIZES, type CarModelId } from '../carModel';
 import type { Vec2 } from '../streetPlan';
-import { Horn, type DriverView, type Route } from './driving';
-import type { RoadVehicle } from './StreetTraffic';
+import { Horn, type DriverView, type HeldBy, type Route } from './driving';
+import type { RoadObstacle, RoadVehicle } from './StreetTraffic';
 import type { VoiceSlot } from './carVoices';
 
 /*
@@ -15,11 +15,19 @@ export type VehicleKind = 'car' | 'bus' | 'van' | 'lorry' | 'bike' | 'scooter' |
 
 type Mode = 'away' | 'drive' | 'standing' | 'reverse' | 'parked';
 
-/** A driver's errand: parking in a bay, pulling out of one, pulling in at a taxi stand (`StreetCars` reads it as `Car['job']`). */
+/**
+ * A driver's errand (`StreetCars` reads it as `Car['job']`): parking in a bay, pulling out of one (once its driver has
+ * walked up and got in), pulling in at a taxi stand for a passer-by's fare or the player's (`player`: hailed at the
+ * rank, waiting for them), pulled over by the police (`flagged`: to the kerb, standing till let go).
+ */
 type Job =
   | { kind: 'park'; bay: number; stopAt: number; waited: number }
-  | { kind: 'pullOut'; clock: number; route: number }
-  | { kind: 'fare'; stop: number; stopAt: number; aside: number; pickUp: boolean; phase: 'approach' | 'opening' | 'walking' | 'leaving'; clock: number };
+  | { kind: 'pullOut'; clock: number; route: number; boarding: boolean }
+  | { kind: 'fare'; stop: number; stopAt: number; aside: number; pickUp: boolean; phase: 'approach' | 'opening' | 'walking' | 'leaving'; clock: number; player?: boolean }
+  | { kind: 'flagged'; stopAt: number; released: boolean };
+
+/** What a car swings out round: an obstacle standing in the lane (`span` long), or a slow vehicle. */
+export type PassTarget = { readonly obstacle: RoadObstacle } | { readonly vehicle: RoadVehicle };
 
 /** A parking bay: where, its heading, who stands in it, the route that passes it (and where along), whether the cat's car is in it. */
 export interface Bay {
@@ -32,6 +40,8 @@ export interface Bay {
   /** Zone-local, and in the world once placed (null: not added to the collisions). */
   box: THREE.Box3;
   world: THREE.Box3 | null;
+  /** Its driver is on the way to it (the car pulls out once they are in). */
+  claimed?: boolean;
 }
 
 /** One of the cars on the street, parked or driving: its slot in its shape's instanced meshes. */
@@ -63,6 +73,28 @@ export class Car implements RoadVehicle, DriverView {
   job: Job | null = null;
   voice: VoiceSlot | null = null;
   doors = 0;
+  /** What held it up this frame (for the horns behind it). */
+  holdUp: HeldBy = null;
+  /** A taxi with someone in the back (its sign dark), and how many sit beside or behind the driver. */
+  hired = false;
+  passengers = 0;
+  /** How worn and dirty this car is, 0..1 (its paint dulled, the grime up its sides). */
+  wear = 0;
+  /** The front wheels' angle (radians, left positive), the body's pitch (nose down, braking) and roll (into the bend). */
+  steer = 0;
+  pitch = 0;
+  roll = 0;
+  /** A parking ticket under its wiper (the warden's): gone when it drives off. */
+  ticketed = false;
+  /** Seconds left of a stamp on the brakes (a fright): tyres skidding, for the sound. */
+  skid = 0;
+  /** Swinging out round something standing or slow in the lane (or none). */
+  passing: PassTarget | null = null;
+  /** Seconds left of a swerve away from someone who stepped out in front of it. */
+  swerve = 0;
+  /** The speed and heading last frame (for the body's pitch and roll). */
+  lastSpeed = 0;
+  lastYaw = 0;
 
   constructor(
     readonly model: CarModelId,

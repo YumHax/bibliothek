@@ -684,8 +684,8 @@
   /* Put down (or turned) by a click or a tap too (`closeOnPress`); the stage itself lets clicks through. */
   .reading { pointer-events: auto; cursor: pointer; }
   .reading--out { pointer-events: none; }
-  /* The pill at the foot, hanging off the edge: "Put down" or "Turn over" with the key in hand (`dismissHint`). */
-  .reading__foot {
+  /* The pill at the foot of a card or a reward banner, hanging off the edge: "Put down", "Turn over" or "Close" with the key in hand (`dismissHint`). */
+  .notice-foot {
     position: absolute;
     left: 0;
     right: 0;
@@ -753,6 +753,10 @@
     animation: reward-in var(--dur-longer) var(--ui-ease-pop);
     transition: opacity var(--dur-fall) ease, translate var(--dur-fall) ease;
   }
+  /* Closed by a click or a tap too, like a card (`closeOnPress`); the rays around it let clicks through. */
+  .reward { pointer-events: auto; cursor: pointer; }
+  .reward--out,
+  .reward__rays { pointer-events: none; }
   .reward__title {
     position: relative;
     font-family: var(--ui-font-display);

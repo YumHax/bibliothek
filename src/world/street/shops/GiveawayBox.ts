@@ -4,10 +4,10 @@ import type { Interactable } from '@/interaction/Interactable';
 import type { SessionActions } from '@/game/SessionActions';
 import type { BoxArtLoader } from '@/covers/BoxArtLoader';
 import { createCanvas, toTexture } from '@/covers/generated/canvasUtils';
-import { dayKey } from '@/economy/calendar';
 import { KEYS, PersistedStore } from '@/persistence';
 import { StockItem } from '@/economy/StockItem';
-import { dailyRandom } from '@/time/daily';
+import { gameDayRandom } from '@/time/daily';
+import { streetDay, streetDayMark } from '@/time/streetDay';
 import { GIVEAWAY } from '../events/streetSchedules';
 import { paint, standard } from '../../materials/palette';
 import { invisibleHitbox } from '../../meshUtils';
@@ -29,20 +29,20 @@ interface GiveawayBoxOptions {
 }
 
 /**
- * Whether today (the real date) somebody leaves a box out: about one day in the plan's `oneDayIn`, as the box's
+ * Whether on game `day` somebody leaves a box out: about one day in the plan's `oneDayIn`, as the box's
  * schedule says (`events/streetSchedules`, the one rule the paper and the pavement share; the builder passes the
  * plan's number, read there).
  */
-export function isGiveawayDay(_oneDayIn: number, date = new Date()): boolean {
-  return GIVEAWAY.isDay(date);
+export function isGiveawayDay(_oneDayIn: number, day: number): boolean {
+  return GIVEAWAY.isDay(day);
 }
 
-/** Where the box stands on the real day `date`: the spot for its day of the month. */
-export function giveawaySpot<S>(spots: readonly S[], date: Date): S {
-  return spots[date.getDate() % spots.length]!;
+/** Where the box stands on game `day`: one spot after the other. */
+export function giveawaySpot<S>(spots: readonly S[], day: number): S {
+  return spots[Math.abs(day) % spots.length]!;
 }
 
-/** The day (`dayKey`) the box's game was taken: a reload that day finds only junk, not another game. */
+/** The day (`time/streetDay`'s mark) the box's game was taken: a reload that day finds only junk, not another game. */
 const taken = new PersistedStore<{ day: string }>({
   key: KEYS.giveaway,
   version: 1,
@@ -142,11 +142,11 @@ export class GiveawayBox extends THREE.Group implements Furniture, Updatable, In
   /** One worn game out of today's bin (seeded by the date), none the player owns, lying on the magazines. */
   private fill(stock: readonly StockItem[]): void {
     this.filled = true;
-    if (taken.load().day === dayKey()) return; // today's game is gone already
+    if (taken.load().day === streetDayMark()) return; // today's game is gone already
     const { owns, covers, wallet, isWanted, host } = this.options;
     const pool = stock.filter((item) => item.source === 'bin' && !owns(item.game.id));
     if (!pool.length) return;
-    const random = dailyRandom('giveaway-game');
+    const random = gameDayRandom('giveaway-game', streetDay() ?? 0);
     const item = pool[Math.floor(random() * pool.length)]!;
     const gift = new StockItem(item.game, 'worn', 'bin', { list: 0, final: true });
     const box = new ForSaleBox(gift, covers, {
@@ -162,7 +162,7 @@ export class GiveawayBox extends THREE.Group implements Furniture, Updatable, In
     box.onSold = () => {
       host.remove(box);
       this.game = null;
-      taken.save({ day: dayKey() });
+      taken.save({ day: streetDayMark() });
     };
     host.place(box, at, this.rotation.y + 0.4);
     this.game = box;

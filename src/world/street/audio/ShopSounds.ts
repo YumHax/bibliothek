@@ -10,6 +10,7 @@ import { STREET_PLAN, type ShopDoor, type ShopKind, type Vec2 } from '../streetP
 import { WALKABLE } from '@/world/measures/street';
 import { shopDoors } from '@/world/city/facades';
 import { BarMusic } from './BarMusic';
+import { INTERIORS, type Interior } from './shopInteriors';
 import { SoundGraph } from './soundGraph';
 import { StreetEar } from './streetEar';
 import { random } from '@/random';
@@ -34,11 +35,22 @@ const NO_BELL: ReadonlySet<ShopKind> = new Set(['arcade', 'shut']);
 /** The bars' music: from this hour (game) till they close; how much of it comes through the door. */
 const MUSIC_FROM = 18;
 const MUSIC_LEVEL = 0.5;
+/** Through the bars' door the music is all lows (Hz). */
+const BAR_MUSIC_CUTOFF = 520;
+/** A door stands open this long (s) after someone went through (`ring`), then swings to over `DOOR_CLOSE` s. */
+const DOOR_OPEN = 2.2;
+const DOOR_CLOSE = 0.8;
+/** The glass and the shut door take the highs: this many walls of `SpatialOut`'s low-pass. */
+const GLASS_WALLS = 0.8;
+/** How much of each kind comes through its shut door (the arcade's swings, the cafés' are often ajar). */
+const GLASS: Record<'arcade' | 'chatter' | 'laundry', number> = { arcade: 0.7, chatter: 0.5, laundry: 0.4 };
 
-type SourceKind = 'arcade' | 'chatter' | 'laundry';
+type SourceKind = 'arcade' | 'chatter' | 'laundry' | 'interior';
 
 interface Voice {
   gain: GainNode;
+  /** How loud it talks at most (0..1). */
+  peak: number;
   talking: boolean;
   phrase: number;
   syllable: number;
@@ -53,9 +65,20 @@ interface Source {
   /** Loudness at 1 m and how far it carries (the distance at which it has halved). */
   loudness: number;
   reach: number;
-  /** A bar's jukebox, heard through its door in the evening. */
+  /** A bar's jukebox, heard through its door in the evening (or a shop's tune: RETRO GAMES' demo cart). */
   music: BarMusic | null;
   musicLevel: () => number;
+  /** The music's low-pass through the door (Hz). */
+  musicCutoff: number;
+  /** The shop's door (zone-local floor point), when it has one: open, the inside is heard in full. */
+  door: Vec2 | null;
+  /** The share heard through the shut door and glass. */
+  glass: number;
+  /** Seconds the door stays open still (`ring`), and how open it is now (0 shut .. 1). */
+  openFor: number;
+  open: number;
+  /** What a shop of `INTERIORS` sounds like inside. */
+  interior: Interior | null;
   gain?: GainNode;
   musicGain?: GainNode;
   leg?: SpatialOut;
@@ -67,7 +90,11 @@ interface Source {
 
 /**
  * What comes out of the shops onto the pavement (synthesised, positional: louder near, to the side
- * it is on, duller behind): the arcade's cabinets bleeping and its crowd murmuring through the
+ * it is on, duller behind; through the shut door and its glass only a share of it, dull, and in full
+ * for a moment while the door stands open after someone went through, `ring`): every other open shop
+ * as `shopInteriors` hears it (the bakery's till and paper bags, the newsagent's printer, TV REPAIR's
+ * wall of snow, the pet shop's budgies, RETRO GAMES' demo cart, the butcher's cleaver, the grocer's
+ * football on the radio...); the arcade's cabinets bleeping and its crowd murmuring through the
  * door at every hour; the chatter and the clink of cups and glasses from the cafés and bars while
  * they are open (`isShopOpen`), from their terraces too while their tables are out (the same rule
  * as the tables, `life/terraceWeather`, and as many voices as sit there), the bars livelier in the
@@ -89,26 +116,38 @@ export class ShopSounds extends THREE.Group implements Furniture, Updatable, Occ
   constructor(private readonly dayNight: DayNight, private readonly options: ShopSoundsOptions) {
     super();
     this.name = 'ShopSounds';
-    this.ear = new StreetEar(options.listener);
+    this.ear = new StreetEar(options.listener, this);
     this.doors = shopDoors();
     const hours = (): number => this.dayNight.state.hours;
     const out = (at: Vec2, yaw: number, by = 0.6): THREE.Vector3 => new THREE.Vector3(at[0] + Math.sin(yaw) * by, 1.4, at[1] + Math.cos(yaw) * by);
     for (const [i, door] of this.doors.entries()) {
       if (door.at[0] > WALKABLE.maxX + HEARD_BEYOND || door.at[0] < WALKABLE.minX - HEARD_BEYOND) continue;
       const kind: ShopKind = door.shop.kind;
+      const shopOpen = (): boolean => isShopOpen(kind, hours());
       if (kind === 'arcade') {
-        this.sources.push(source('arcade', out(door.at, door.yaw, 0.3), () => 1, 0.5, 5));
+        this.sources.push(atDoor(source('arcade', out(door.at, door.yaw, 0.3), () => 1, 0.5, 5), door.at, GLASS.arcade));
       } else if (kind === 'cafe' || kind === 'bar') {
         const bar = kind === 'bar';
-        const open = (): boolean => isShopOpen(kind, hours());
-        const s = source('chatter', out(door.at, door.yaw), () => (open() ? liveliness(bar, hours()) : 0), 0.35, 3.5);
+        const s = atDoor(source('chatter', out(door.at, door.yaw), () => (shopOpen() ? liveliness(bar, hours()) : 0), 0.35, 3.5), door.at, GLASS.chatter);
         if (bar) {
           s.music = new BarMusic(1000 + i * 37);
-          s.musicLevel = () => (open() && (hours() >= MUSIC_FROM || hours() < 6) ? MUSIC_LEVEL : 0);
+          s.musicLevel = () => (shopOpen() && (hours() >= MUSIC_FROM || hours() < 6) ? MUSIC_LEVEL : 0);
         }
         this.sources.push(s);
       } else if (kind === 'laundry') {
-        this.sources.push(source('laundry', out(door.at, door.yaw, 0.3), () => (isShopOpen(kind, hours()) ? 1 : 0), 0.25, 3));
+        this.sources.push(atDoor(source('laundry', out(door.at, door.yaw, 0.3), () => (shopOpen() ? 1 : 0), 0.25, 3), door.at, GLASS.laundry));
+      } else {
+        const interior = INTERIORS[kind];
+        if (!interior) continue;
+        const s = atDoor(source('interior', out(door.at, door.yaw, 0.3), () => (shopOpen() ? 1 : 0), interior.loudness, interior.reach), door.at, interior.glass);
+        s.interior = interior;
+        if (interior.tune) {
+          const tune = interior.tune;
+          s.music = new BarMusic(2000 + i * 41, { full: true, styles: tune.styles });
+          s.musicLevel = () => (shopOpen() ? tune.level : 0);
+          s.musicCutoff = tune.cutoff;
+        }
+        this.sources.push(s);
       }
     }
     // The terraces: as many voices as customers sit there.
@@ -152,6 +191,8 @@ export class ShopSounds extends THREE.Group implements Furniture, Updatable, Occ
     const out = g.shot(this.ear.spatial(this.spot), 1.5);
     const t = g.now + 0.01;
     const door = this.doorAt(at);
+    // The door stands open a moment: what is inside comes out in full.
+    if (door) for (const s of this.sources) if (s.door && s.door[0] === door.at[0] && s.door[1] === door.at[1]) s.openFor = DOOR_OPEN;
     if (!door || NO_BELL.has(door.shop.kind)) {
       // A house door: the latch, then the door pulled to.
       g.burst(latch(g, out), t, 0.03, gain * 0.25);
@@ -186,12 +227,16 @@ export class ShopSounds extends THREE.Group implements Furniture, Updatable, Occ
       this.localToWorld(this.spot.copy(s.at));
       const d = this.ear.distance(this.spot);
       const near = loudness(d, { shape: 'inverseSquare', referenceDistance: s.reach, maxDistance: s.reach * 8 });
-      s.now = s.loudness * near * level;
+      // The door: open a moment after someone went through, then swinging to.
+      s.openFor = Math.max(0, s.openFor - dt);
+      s.open = s.openFor > 0 ? Math.min(1, s.open + dt / 0.15) : Math.max(0, s.open - dt / DOOR_CLOSE);
+      const through = s.glass + (1 - s.glass) * s.open;
+      s.now = s.loudness * near * level * through;
       s.gain.gain.setTargetAtTime(s.now, now, 0.3);
       const side = this.ear.spatial(this.spot);
-      s.leg.set(side.pan * 1.05, 0, false, side.rear ?? 0);
+      s.leg.set(side.pan * 1.05, side.walls + GLASS_WALLS * (1 - through), false, side.rear ?? 0);
       if (s.music && s.musicGain) {
-        const music = s.musicLevel() * near;
+        const music = s.musicLevel() * near * (s.interior ? through : 1);
         s.musicGain.gain.setTargetAtTime(music, now, 0.5);
         s.music.update(dt, g, s.musicGain, music);
       }
@@ -205,7 +250,11 @@ export class ShopSounds extends THREE.Group implements Furniture, Updatable, Occ
       } else if (s.kind === 'arcade') {
         s.next = 0.12 + random() * 0.6;
         this.bleep(g, s);
-      }
+      } else if (s.interior?.tick && s.interior.every) {
+        const [a, b] = s.interior.every;
+        s.next = a + random() * (b - a);
+        s.interior.tick(g, s.gain);
+      } else s.next = 5;
     }
   }
 
@@ -245,17 +294,26 @@ export class ShopSounds extends THREE.Group implements Furniture, Updatable, Occ
       if (s.music) {
         // Through the door and the glass: the lows come through, the rest is a murmur.
         s.musicGain = g.gain();
-        s.musicGain.connect(g.filter('lowpass', 520, 0.7)).connect(s.leg.input);
+        s.musicGain.connect(g.filter('lowpass', s.musicCutoff, 0.7)).connect(s.leg.input);
       }
       if (s.kind === 'laundry') this.hum(g, s.gain);
-      else {
+      else if (s.interior) {
+        const { voices, bed } = s.interior;
+        bed?.(g, s.gain);
+        for (let i = 0; i < (voices?.count ?? 0); i++) {
+          const band = g.filter('bandpass', voices!.formants[Math.floor(random() * voices!.formants.length)]! * (0.9 + random() * 0.2), voices!.q);
+          const gain = g.gain();
+          g.loop().connect(band).connect(gain).connect(s.gain);
+          s.voices.push({ gain, peak: voices!.level, talking: false, phrase: random() * 2, syllable: 0 });
+        }
+      } else {
         // Voices talking over each other (the arcade's crowd is fewer and further in).
         const count = s.kind === 'arcade' ? 2 : 3;
         for (let i = 0; i < count; i++) {
           const band = g.filter('bandpass', FORMANTS[Math.floor(random() * FORMANTS.length)]! * (0.9 + random() * 0.2), 3);
           const gain = g.gain();
           g.loop().connect(band).connect(gain).connect(s.gain);
-          s.voices.push({ gain, talking: false, phrase: random() * 2, syllable: 0 });
+          s.voices.push({ gain, peak: 1, talking: false, phrase: random() * 2, syllable: 0 });
         }
         // A low bed of room noise under the voices.
         g.loop().connect(g.filter('lowpass', 300)).connect(g.gain(0.25)).connect(s.gain);
@@ -277,7 +335,7 @@ export class ShopSounds extends THREE.Group implements Furniture, Updatable, Occ
       voice.syllable -= dt;
       if (voice.syllable <= 0) {
         voice.syllable = 0.09 + random() * 0.15;
-        voice.gain.gain.setTargetAtTime(0.3 + random() * 0.7, g.now, 0.03);
+        voice.gain.gain.setTargetAtTime((0.3 + random() * 0.7) * voice.peak, g.now, 0.03);
       }
     }
   }
@@ -332,7 +390,14 @@ export class ShopSounds extends THREE.Group implements Furniture, Updatable, Occ
 }
 
 function source(kind: SourceKind, at: THREE.Vector3, level: () => number, loudness: number, reach: number): Source {
-  return { kind, at, level, loudness, reach, music: null, musicLevel: () => 0, voices: [], next: random() * 2, now: 0 };
+  return { kind, at, level, loudness, reach, music: null, musicLevel: () => 0, musicCutoff: BAR_MUSIC_CUTOFF, door: null, glass: 1, openFor: 0, open: 0, interior: null, voices: [], next: random() * 2, now: 0 };
+}
+
+/** `s` heard through the door at `door`, `glass` of it while the door is shut. */
+function atDoor(s: Source, door: Vec2, glass: number): Source {
+  s.door = door;
+  s.glass = glass;
+  return s;
 }
 
 /** A door latch's click: a bright, short band. */

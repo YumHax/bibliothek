@@ -111,22 +111,35 @@ whose fame is unknown (offline), and asked again next time. A price is `BASE_PRI
 fameFactor(views) x jitter(id)`: no real price source exists key-less, so fame stands in for value (see below).
 Calibration: `PAYOUT` sets each machine's points per ticket so that an ordinary player nets about the same there,
 the coin each play costs paid: some 60 tickets (6 coins) a minute whatever the machine (a short play of 10-20 s about
-25-35 tickets, a 30-second one 45-50); a first-timer nets 20-55 a minute (NEON SNAKE, SKY STACK, STEP BEAT and NEON
-SHERIFF are the skill machines, 20-25; `TICKET_FLOOR` means a flop never loses), a good player 8-10 coins a minute
-(NEON SNAKE and SKY STACK pay skill most), more on a challenge or a medal. The plays are measured by **`npm run balance`** (`scripts/arcade-balance.mjs`): every cabinet game, the hoops,
+25-35 tickets, a 30-second one 45-50); a first-timer nets 25-60 a minute (NEON SNAKE, SKY STACK, STEP BEAT, NEON
+SHERIFF and the hoops are the skill machines, 23-30; `TICKET_FLOOR` means a flop never loses), a good player 65-105
+(8-10 coins), at least 1.6 times a first-timer everywhere but STAR RAID and LEAP FROG, more on a challenge or a medal.
+NEON SNAKE's long runs are tapered (`TICKET_TAPER` in `pricing.ts`, through `ticketsAt`, which every count of a play's
+tickets uses: past 45 tickets a play each further ticket costs twice the points), so its good player no longer
+nets twice the hall's. The plays are measured by **`npm run balance`** (`scripts/arcade-balance.mjs`): every cabinet game, the hoops,
 the alley and the pinball played headless at the machines' own step by simulated people (a novice, an ordinary
-player, a good one: reaction time, the spread of a timed press, slips; on the pinball the machine's flipper timing
-made late, the plunger pulled a different way each ball) and by a regular's autopilot, printing per profile the
-points, seconds, tickets (the floor counted) and net tickets a minute, the share of plays whose score paid under
-the floor, and the rate that would net `--net` (60) a minute for the ordinary player. The people are models: compare the machines with each other, then check real plays with `?payout`
-(`PayoutStats`, `PayoutOverlay`; `simulatePayouts()` in the console runs the cabinets' autopilots in the browser).
-`rivals.ts` holds each game's starting table, set from the same runs (the fifth an ordinary player's usual play, the
-fourth their good one, the third a good player's usual, the second a good player's best in ten, the first beyond),
-and the daily challenge aims between its fourth and second (`CHALLENGE_BAND`). When a game's scoring changes, rerun
+player, a good one: reaction time, the spread of a timed press, slips) and by a regular's autopilot. Where the
+autopilot played late is not how a person plays, the person has a driver of their own: the steering games press the
+autopilot's turns off-beat, PADDLE WARS and BRICK STORM read where the ball comes down (off by more for a lesser
+player) and PADDLE WARS tries smashes, STAR RAID's trigger taps when an alien looks lined up (and sprays a little),
+SKY STACK takes or stakes the minor prize as the player's nerve says, STEP BEAT holds its held arrows, and the pinball
+flips as the ball comes onto a flipper, aiming the shot (the moment along the flipper that sends it up the ramp,
+worked out on a copy of the table) as often as the player can, timed off by a few hundredths (`PINBALL_HANDS`: timing
+is what separates players on a flipper). It prints per profile the points, seconds, tickets (the floor counted) and
+net tickets a minute, the share of plays whose score paid under the floor, and the rate that would net `--net` (60) a minute for the ordinary player. The people are models: compare the machines with each other, then check real plays with `?payout`
+(`PayoutStats`, `PayoutOverlay`; `simulatePayouts()` in the console runs the cabinets' autopilots in the browser);
+the heavy-tailed machines (the pinball, BRICK STORM) move 10-15% from one run to the next, so read them over
+`--runs 200` or more. `rivals.ts` holds each game's starting table, set from the same runs (the fifth an ordinary
+player's usual play: bronze; the third a good player's usual: silver; the first a good player's best in twenty: gold,
+a mastery goal every machine keeps within reach), and the daily challenge aims between its fourth and second (`CHALLENGE_BAND`). When a game's scoring changes, rerun
 the balance, move its rate and table, and bump its `SCORE_RULES` (`rivals.ts`): `ArcadeScores` then drops that game's
 saved best and table entries once (a best made under easier rules would wall the table off; medals paid stay paid,
 replays that no longer end on their score are dropped anyway; a game made easier needs no bump: its old bests
-are lower, they wall nothing off). The October 2026 pass (the arcade had to feel rewarding, not hard) raised the
+are lower, they wall nothing off). The 11 October 2026 pass (every machine's rules reworked: capsules, bombs, the
+CASH OUT, turtles, dash and grazes, smashes and rallies, held arrows, the pinball's ramp, multiball and objectives, the
+alley's lit pocket) gave the people drivers of their own (above), retuned every rate and table, and tapered NEON
+SNAKE: before it the good player netted 6 times the novice on NEON SNAKE and the same on STAR RAID, and the pinball's
+novice out-earned its good player (its flips were the machine's own, made late). The October 2026 pass (the arcade had to feel rewarding, not hard) raised the
 target from 50 to 60, added `COIN_BACK`, doubled `BEGINNER`, raised `MEDAL_REWARD` and softened seven cabinets
 (cheaper crashes and misses, wider STEP BEAT windows and FEVER at 16, a slower first SKY STACK row, slower bandits,
 a sloppier PADDLE WARS opponent, LEAP FROG's verge checkpoint): first-timers had lost the coin on a third of their
@@ -371,10 +384,13 @@ reload the same real day starts the clock where it was left, a new real date in 
 `bibliothek.wallet.v1` (coins + tickets), `bibliothek.arcade.v2` (the player's bests, the entries made since the
 starting rivals, the last initials; the rivals of `rivals.ts` are merged in on read, so retuning them reaches saves;
 data v2 dropped the saved rival rows; `v1`, bests only, is folded in once; regulars' live entries go in it too),
-`bibliothek.arcadeDaily.v1` (local day the challenge and the change machine were last claimed; data v2, v1 was UTC),
-`bibliothek.arcadeMedals.v1`, `bibliothek.arcadeLeague.v1` (this week's tickets, the streak, a finished week not yet
-announced, pennants), `bibliothek.arcadeJackpot.v1`, `bibliothek.arcadeReplays.v1`, `bibliothek.arcadeTournament.v1`
-(the Saturday's sign-up and rounds), `bibliothek.arcadeHabits.v1` (plays per machine for the HUD's tips, the claw's
+`bibliothek.arcadeDaily.v1` (the game day the challenge and the change machine were last claimed, the day's drawn
+challenge and its progress; data v3, v2 kept local dates, v1 UTC), `bibliothek.arcadeMedals.v1` (per machine its
+tiers, platinum score and platinum, the tour's trophy taken; data v2, v1 the tiers alone), `bibliothek.arcadeLeague.v1`
+(this game week's tickets, the streak, a finished week not yet announced, pennants per division, the division, the
+card's punches and gold tokens; data v2, v1 on the real calendar), `bibliothek.arcadeJackpot.v1` (the pot and the
+player's hits; data v2, v1 the pot), `bibliothek.arcadeReplays.v1`, `bibliothek.arcadeTournament.v1` (the Saturday's
+sign-up and rounds, the titles, the cup signed for, an unfinished run owed; data v2), `bibliothek.arcadeHabits.v1` (plays per machine for the HUD's tips, the claw's
 misses in a row), `bibliothek.payoutStats.v1`,
 `bibliothek.moodLamp.v1`, `bibliothek.prizes.v1`, `bibliothek.calendar.v1` (the market day and the local date; data
 v2, v1 was UTC), `bibliothek.market.v1` (the day's haggles, soured stalls, rival sales, holds with their copy (data v2),
@@ -422,26 +438,39 @@ its level following what the screen does; only the six original cabinets keep a 
 - **Cabinets** (`ArcadeCabinet`): six along the back wall (LEXIPUNK, the four classics, PADDLE WARS), two back to
   back in the middle, NEON SHERIFF and STEP BEAT either side facing the way in. The glass is a canvas under
   `crtScreenMaterial` (bulge, scan lines, grille, vignette). The joystick leans and the buttons go down with the
-  keys; a `TicketStrip` feeds out of the slot as the end card counts the tickets; the end card and the label say
-  what a replay costs (or FREE PLAY). Idle, a cabinet loops an **attract sequence**: its title card (the table's
+  keys; a `TicketStrip` feeds out of the slot as the end card counts the tickets, swaying as it comes; past the floor
+  the tickets fold onto a pile in front of the machine that grows with the win, and taking them (the next coin, walking
+  away) pulls strip and pile up towards the hand. The end card and the label say what a replay costs (or FREE PLAY).
+  **The reveal waits for the machine** (`ui/revealHold`): a play's tickets are banked the moment it ends (walking away
+  mid-count loses nothing), but the wallet chip's roll and float and the reward banner wait until the initials are in
+  and the end card has counted everything out (`ArcadeMachineLike.counting`); the card's last tick closes on a sound
+  as big as the verdict (the strip's clunk, a jingle for a place or a best, the win sting for the top). Sitting down,
+  the eased move ends looking at the glass (`sit`'s pitch). Paused (the pointer let go), the glass says PAUSED over
+  the frozen game; the initials and an end card done counting only redraw for their blinks, over the game's last frame
+  kept once (`CabinetScreens.drawFrozen`). Idle, a cabinet loops an **attract sequence**: its title card (the table's
   top score, the player's best, the next medal, today's challenge when it is on this game, and at its foot the price
-  of a play right now: "1 COIN PER PLAY" or "FREE PLAY"; the title is a logo on a band of the cabinet's glow; the glass's canvas is mipmapped, nearest up close),
+  of a play right now: "1 COIN PER PLAY" or "FREE PLAY", no rate or reward on the glass; the top score says YOU when it
+  is the player's; the title is a logo on a band of the cabinet's glow; the glass's canvas is mipmapped, nearest up close),
   its **hall of fame** (the table's top five in rank colours that walk down the lines, `CabinetScreens.drawScores`), then the game playing
-  itself (DEMO, on its autopilot, silent) or, every other time round, **the player's best run replayed** (`replay/`:
+  itself (DEMO, on its autopilot, heard very low when it is one of the two showing nearest the camera, `demoBed`, else
+  silent) or, every other time round, **the player's best run replayed** (`replay/`:
   the game is stepped at a fixed `REPLAY_STEP` live, in demos and in replays, every board-shaping draw goes through
   the run's seeded `rand()`, and a new best (or the first score there) keeps its seed and run-length-encoded controls, `ReplayStore`; a replay
   that no longer ends on its score was recorded under older rules and is dropped). Farther than `DEMO_RANGE` from
-  the camera it only shows its title card. It sings a jingle now and then. Each carries its **medal lamps**
-  (`MedalRow`) under the marquee, a printed **instruction card** on the panel (`InstructionCard`, from the game's
-  hint; the HUD spells a machine's controls out only on its first play ever) and its **wear** (`wear`: stickers, some peeling, on the side art; cigarette burns and scratches on the
+  the camera it only shows its title card, and the title card, the hall of fame page and a dead tube's snow (one
+  sheet painted for every cabinet, shown at a random offset) only repaint while the glass faces the camera. It sings a jingle now and then. Each carries its **medal lamps**
+  (`MedalRow`) under the marquee (a medal won there and then blinks white in a swelling halo and the cabinet plays its
+  win sting), a printed **instruction card** on the panel (`InstructionCard`, from the game's
+  hint, printed again when the keys are rebound; the HUD spells a machine's controls out only on its first play ever) and its **wear** (`wear`: stickers, some peeling, on the side art; cigarette burns and scratches on the
   panel; scuffs on the base). A two-player game (`setOpponent`) gets a second stick and a `partner` spot; an
   `attachment` changes how it is played: the `LightGun` (a toy pistol on a cable in a holster on the side, held low
   and right of the eye while playing, pointing at the aim, kicking back on each shot; the cabinet aims the game
   where the camera looks, `controls.aim`, and a click on the glass is the trigger) and the `DancePad` (a steel
   stage in front with four arrow panels that sink and light with the keys and glow with the beat, side bars to hold;
-  the player's eye stands over it). **Out of order**: about one day in three (`ArcadeDaily.outOfOrder(BREAKABLE)`, never
-  the challenge's game) one machine, a cabinet or a physical one, carries a taped note (a cabinet's glass shows snow
-  behind it), says so and cannot be played; regulars walk past it (`MachineRun.outOfOrder`).
+  the player's eye stands over it). **Out of order**: about one game day in three (`ArcadeDaily.outOfOrder(BREAKABLE)`, never
+  the challenge's game nor the tournament's) one machine, a cabinet or a physical one, carries a taped note (a cabinet's
+  glass shows snow behind it), says so and cannot be played; regulars walk past it (`MachineRun.outOfOrder`).
+  `ArcadeHall.broken` works it out again when the game day turns, so a hall that stands through midnight follows.
 - **How the machines look** (the arcade pass of 2026-10-10): every screen, marquee, bezel, card and poster is lettered in
   the shipped pixel face, Press Start 2P (`ui/fonts.css`; canvases painted once repaint when it lands,
   `graphics/fontReady`, and `loadCanvasFaces` fetches the canvas faces at start). `drawText` steps a line down a size
@@ -464,54 +493,107 @@ its level following what the screen does; only the six original cabinets keep a 
   play is over when the page says so or the frame is shut, and pays the last score reported; a play that reported
   nothing gives the coin back (`ArcadeGame.unreported` -> `ArcadeResult.refund`), since **the site has to send these
   messages** and does not yet. The frame taking the mouse holds the cabinet's play (the pointer unlock) until it shuts. No demo, replay or regular (`demoable: false`), no daily challenge.
-- **Pinball** (`Pinball` over `pinball/PinballSim`, a pure 2D simulation at 480 Hz): three balls, a spring
-  plunger (hold Space, let go), two flippers (A / D), three pop bumpers, two slingshots, three top lanes (all lit:
-  +5 000 and the multiplier up to x5), a bank of three targets (+10 000), outlanes, a 4 s ball save. The playfield
-  canvas is painted from the sim's own walls; a steel ball and the flippers are 3D, the backglass shows the game.
-- **Alley** (`AlleyRoller`, the wiring; `alley/AlleySim` the rolls and scoring, `alley/alleyModel` the lane, "ALLEY ROLL"): nine wooden balls rolled up an inclined lane into rings (10 to 50, 100 in
-  the corner pockets). A / D aim; hold Space and the power meter on the backboard swings up and down, let go to
-  roll (too soft rolls back). Pays from a `TicketStrip` at the front.
+- **Pinball** (`Pinball` over `pinball/PinballSim`, a pure 2D simulation at 480 Hz inside the machines' fixed
+  `REPLAY_STEP`; a `TicketMachine` like the alley): three balls, a spring plunger (hold fire, let go), two flippers
+  (A / D), three pop bumpers, two slingshots, three top lanes, a bank of three targets, a wire ramp, outlanes, a 4 s
+  ball save. The shots pay, the rattle hardly does (`POINTS`: bumper 100, sling 50; a lane 2 500, all three 10 000 and
+  the multiplier up to x5, a flip moves the lit lanes along; a target 3 000, the bank 25 000 and it lights multiball
+  at the ramp's insert; a ramp 10 000, chained x2 / x3 within 5 s). **Skill shot**: a top lane blinks while the ball
+  waits on the plunger; the first lane the launched ball rolls through pays 25 000 if it is that one. **Multiball**:
+  the ramp shot with multiball lit fires a second ball from the plunger; everything scores double while both are in,
+  and every ramp is a 50 000 jackpot. Each ball ends with a **bonus** (2 000 per lane, target and ramp it made, times
+  the multiplier). **Nudge** (up): the balls jump a little; a third shove within a few seconds tilts the ball (DANGER
+  at the second): dead flippers, no scoring, no bonus until it drains. A ball stuck still for 3 s is kicked free (BALL
+  SEARCH; a third time, or a ball that ever leaves the table, goes back to the plunger, nothing lost). The playfield
+  canvas is painted from the sim's own walls and the ramp's gate; the steel balls, the flippers and the ramp's chrome
+  rails (along the sim's `rampPath`, as high as the ball rides) are 3D; the backglass's art is painted once and the
+  game drawn over it, the big moments (multiball, jackpot, skill shot, bonus, tilt) in rays across the art. Pays from
+  a `TicketStrip` under the coin door; the table shakes on a nudge.
+- **Alley** (`AlleyRoller`, the wiring; `alley/AlleySim` the rolls and scoring, `alley/alleyModel` the lane, "ALLEY ROLL"): nine wooden balls rolled up an inclined lane onto the
+  ring board; a ball lands, rolls down into the hole at the bottom of its ring (`HOLES`; a 10 into the gutter along the
+  front edge) and drops (10 to 50, 100 in the corner pockets). A / D aim; hold fire and the power meter on the
+  backboard swings up and down, let go to roll (too soft rolls back); a white mark on the meter stays where the last
+  ball was let go. The skill is paid: one pocket is lit for each ball (its lamp ring blinks; 200), balls in a row
+  into the 40 or better make a hot streak (each after the second +30), and the last ball counts double. The attract
+  card shows the top score and the player's own best, no rule text. Pays from a `TicketStrip` at the front.
 - **Hoops** (`HoopShot`; `hoop/HoopSim` the balls and baskets, `hoop/hoopModel` the cage; "HOOP FEVER", along the left wall): a basketball cage, three balls rolling back down the
-  ramp to the gutter. Aim where you look, hold Space (the meter on the scoreboard swings), let go to throw: the ball
-  leaves with a lift above the line of sight. Thirty seconds; a basket pays 20 (30 in the last ten), baskets in a
-  row multiply up to x3, after ten baskets the hoop slides, after twenty faster. The balls are simulated (gravity,
-  the rim as a tube, the backboard, the nets, the ramp), so a ball rattles out; the roof net gives and drags
-  (`ROOF_DRAG`), so a throw too hard drops short: looking at the hoop, the power that scores is about a fifth of the
-  meter (0.34-0.55). Keeps a table.
-- **Ticket wheel** (`TicketWheel`, on the front wall): pure luck. A coin, then fire or a click spins a wheel of
-  sixteen slices as wide as their odds (`WHEEL_SLICES`), slowed by friction and the pegs under the flapper; it pays
-  the slice it stops on (score = tickets, `luck`: no medal, no challenge, no table). One thin gold slice is the
-  progressive **jackpot** (`economy/Jackpot`): every spin anyone takes feeds it, a hit empties it. Regulars spin too.
+  ramp to the gutter. Aim where you look, hold fire (the meter on the scoreboard swings: blue soft, green the throws
+  that carry, yellow and red too hard), let go to throw: the ball leaves with a lift above the line of sight. Thirty
+  seconds; a basket pays 20 (30 in the last ten), baskets in a row multiply up to x3, after ten baskets the hoop
+  slides, after twenty faster. The balls are simulated (gravity, the rim as a tube, the backboard, the nets, the ramp,
+  each other), so a ball rattles out (SO CLOSE! on the scoreboard; a run it ends, STREAK OVER); the roof net gives
+  and drags (`ROOF_DRAG`), so a throw too hard drops short: looking at the hoop, the power that scores is about a fifth
+  of the meter (0.34-0.55). The end card gives the verdict and the replay line, the attract card the top score. A
+  regular throws the same aimed arc with or without a body, off by `throwError` of their skill. Keeps a table.
+- **Ticket wheel** (`TicketWheel`, on the front wall): pure luck. A coin, then fire held winds it up (the button
+  sinks, the bulbs race, a bar fills) and let go flings it (a click shoves it); sixteen slices as wide as their odds
+  (`WHEEL_SLICES`), slowed by friction and the pegs under the flapper. However hard it is wound it turns many times
+  over, so the wind is feel, not odds. While it spins the display reads the slice under the flapper, the bulbs slow
+  with the wheel and the ticks ring higher over the big slices; it pays the slice it stops on the moment it stops
+  (score = tickets, `luck`: no medal, no challenge, no table; walking off then loses nothing). One thin gold slice is
+  the progressive **jackpot** (`economy/Jackpot`): every spin anyone takes feeds it, a hit empties it. Regulars spin too.
+  Past `JACKPOT.news` (1 000) it is the talk of the street: Gus, the Morris column's bills (`whatsOn`, WHEEL JACKPOT),
+  the paper (`streetNews`) and the journal mention it; the player's hits are counted for the collector's book.
 - **Claw** (`ClawMachine`; `claw/ClawSim` the claw, grip and heap, `claw/clawModel` the cabinet): one coin, never free; a miss pays the coin back in tickets (`CLAW_MISS_TICKETS`, 10: only the plush is a gamble), a win pays the plush. Fifteen seconds to steer (WASD, a countdown on
-  the panel), Space drops; the grip depends on how close the claw came down to a plush (`GRIP`), a third of grabs
-  slip out on the way home, six misses in a row buy one honest grip (the count is kept across visits:
-  `ArcadeHabits.clawMisses`). A plush down the chute is its prize
-  (`clawPrizeFor(color)`); a new one takes its place on the heap.
+  the panel; a red spot on the heap marks where the claw would come down), fire drops; the claw comes down onto the
+  plush under it (it stops on the heap, not through it) and closes on the one on top; the grip depends on how close
+  it came down to it (`GRIP`). A third of grabs slip out on the way home, decided once as it lifts, the prongs giving
+  a little before it drops; six misses in a row buy one honest grip that never slips (the count is kept across
+  visits: `ArcadeHabits.clawMisses`). Every plush rests on what is under it (`restingY`); one left with nothing
+  under it settles. A plush down the chute is its prize (`clawPrizeFor(color)`); a new one takes its place on top of
+  the heap. A miss's tickets count up on the display and feed out of a `TicketStrip` on the front. Regulars win one
+  now and then (`REGULAR_GRIP` of the player's odds), and cheer.
 - Every machine holds a `MachineRun` (the coin, the keys from `arcadeKeys`, the initials, the end card's count-up
-  with its ticks and the strip, the labels from `machineLines`, a regular's results, out-of-order days); the alley,
-  hoops and wheel get it through `TicketMachine`, so each is only its play, its display and where people stand.
+  with its ticks and the strip, the labels from `machineLines`, a regular's results, out-of-order days); the pinball,
+  alley, hoops and wheel get it through `TicketMachine` (stepped at `REPLAY_STEP`, a regular's skill from `occupy`),
+  so each is only its play, its display and where people stand; the claw holds its own (it pays prizes).
   The physical machines are `ARCADE_PLAN.machines` entries built by `MACHINE_KINDS` (`machineKinds.ts`); an entry
   gives the `InstructionCard`, the medal lamps (with `table`), a glow pool, the watch spot, a regular at the start.
-- **Change machine**: out of order most days; `ArcadeDaily` makes it work about one day in four
+- **Change machine**: out of order most days; `ArcadeDaily` makes it work about one game day in four
   (`CHANGE_MACHINE`): then its note is gone and a click pays a few coins once (`Session.collectChange`: the flap's
-  clunk and the coins' rattle), after which its caption reads "empty today" (`ArcadeDaily.changeWaiting`).
+  clunk and the coins' rattle), after which its caption reads "empty today" (`ArcadeDaily.changeWaiting`). It looks at
+  the day again every few seconds (`working` is a function), so the note comes and goes at midnight.
 - **Hall of fame** (`ScoreBoard`): the top five of every machine that keeps a table (`ArcadeScores.table`, rivals
-  from `rivals.ts` until beaten), four games a page, the player's entries in green. A score that beats the fifth
+  from `rivals.ts` until beaten), four games a page, the player's entries in green with YOU beside them. A score that beats the fifth
   asks for initials on the machine's own screen (`InitialsEntry`: up / down letter, left / right move, fire next;
   starts from the last initials used). **Regulars sign it too**: a regular's finished game (`onRegularResult`) goes on
   the table under their initials (`ArcadeScores.submitRival`) when it makes it, capped at 1.1 x the best starting
   rival (their hands are autopilots, steadier than people: capped, they shuffle the board without walling it off),
-  and they cheer about it.
+  and they cheer about it; so do Nico (NIC), Marco (MAR) and Hugo (HUG). The oldest machines' tops (STAR RAID, BRICK
+  STORM, the pinball) are HAB's from the start (`rivals.ts` `OLD_RECORDS`: Hana, the story's composer, "top of the old
+  tables"). **Records taken while away** (`ArcadeScores.settleDay`, run when the hall is built): each game day missed
+  (seven back at most) may see one of the player's records that has stood three days fall to a regular (`AWAY`: 12 %
+  a day, a few per cent above it, rounded; the regular is the game's own, `hallRegulars.regularFor`), never a medal
+  or anything paid; Gus tells it (`gusLines`), and the board shows how long the player's top has stood ("YOU 5
+  DAYS", `heldDays`).
+- **The arcade's days are the game's** (`Today.gameDay`, ten real minutes a day, like the market and the tournament):
+  the challenge, the change machine, the broken machine (`ArcadeDaily`, keyed `g12`), the league's week and the
+  regular's card (`ArcadeLeague`, on `Today.clock`). Saves from the real-calendar days migrate without loss: a claim
+  made today stays claimed, this real week's tickets carry over, a streak alive today or yesterday goes on.
 - **Medals** (`economy/ArcadeMedals`): bronze, silver and gold per machine for matching the fifth, third and first
   score of its starting table; each pays `MEDAL_REWARD` once. Lamps on the machine, the next one on the attract screen.
-- **Daily challenge** (`ArcadeDaily.challenge()`, seeded by the real date): a game, a target in its `CHALLENGE_BAND`, `CHALLENGE_REWARD`
-  tickets on top of the play's, paid once a day by the Session. On the `ChallengeBoard` by the way in and on that
-  cabinet's attract screen; the attendant mentions it.
-- **Weekly league and streak** (`economy/ArcadeLeague`, the `LeagueBoard` by the way in): every ticket won this ISO
-  week counts against five regulars whose totals grow through the week from a base drawn per week (`LEAGUE`, 1 500 to
-  6 000 tickets: a few evenings' play, not one); first
-  on Sunday night wins the **league pennant** (announced after the next play, on the prize shelf). Days in a row with
-  a ticket play make a streak: the day's first play pays `STREAK.perDay` per day of it (to `maxDays`).
+  Then **platinum**: the score that won the gold beaten by a fifth (`PLATINUM.over`, frozen when the gold is won:
+  `platinumTarget`; an older save's gold takes it from the player's best), 300 tickets. Gold on every machine that keeps
+  a table is **the hall's tour** (`tourDone`, `takeTour` once): its trophy (`hallTour`) goes home with a banner line.
+  The `HallTourPlaque` on the back wall (under the PLAYER ONE panel, where the MEDALS flyer was) lists every such
+  machine with its four medal dots lit as they are won, and turns gold with the player's initials once the tour is done.
+- **Daily challenge** (`ArcadeDaily.challenge()`, drawn once a game day and kept with its progress): a game, a kind
+  (`CHALLENGE_KINDS`: `score` one play reaching the target, `twice` two plays each reaching a lower one, `total` the
+  day's plays on it adding up), a target in its `CHALLENGE_BAND` (or, once the player holds that machine's gold, a
+  `score` set from their own best: `personal`), `CHALLENGE_REWARD` tickets on top, paid once by the Session
+  (`advance` counts each play, `claimChallenge` pays). Its `line` ("SCORE 3,000 TWICE") is what the `ChallengeBoard`
+  (two lamps for a twice, a filling bar for a total), the attract screen, the street's bills and paper and the journal
+  say; the attendant tells it in words.
+- **Weekly league and the regular's card** (`economy/ArcadeLeague`, the `LeagueBoard` by the way in): every ticket won
+  in the game's week counts against five regulars (the hall's own four, `hallRegulars`, then one from the hall of fame)
+  whose totals grow through the week from a base drawn per week (`LEAGUE.rivalWeek`, 400 to 2 200 tickets, times the
+  division's factor); first on Sunday night wins that **division's pennant** (`LEAGUE.pennants`: bronze, silver, gold;
+  announced after the next play) and moves the player up a division, never down (`division`, `pennantsWon` for the
+  trophy wall). Every game day with a ticket play punches the **regular's card** (`ARCADE_CARD`; a day missed costs
+  nothing): every third punch drops a **gold token** (a play on the house on any machine: `ArcadePlay` spends one before
+  a coin, `useToken`), and the card changes colour at 5, 15, 30 and 60 punches (REGULAR, SILVER CARD, GOLD CARD, HALL
+  LEGEND) with more tokens; the banner, the board (the card, its holes, the tokens as coins), Gus and the journal say
+  so. No ticket bonus for days in a row any more (`streakDays` is only a word).
 - **Saturday tournament** (`economy/ArcadeTournament`, the game's week: `gameDay`, Saturday of `weekdayOf`; `?tournament` makes any day a Saturday): one
   cabinet a Saturday (seeded by the day among `ARCADE_PLAN.tournament.games`, never the one out of order; a lit
   `TournamentTopper` on its roof) hosts an eight-entrant knock-out: the player against the hall's four regulars and
@@ -520,25 +602,52 @@ its level following what the screen does; only the six original cabinets keep a 
   play the player finishes on that cabinet is their next round, won by beating the opponent's score (drawn per regular,
   round and date between the table's fifth/fourth score in the quarters and its second/first in the final). Going
   out after n wins pays `TOURNAMENT.reward[n]` tickets (0, 60, 180, 450), the champion also the **Saturday cup** (`saturdayCup`, a pewter
-  trophy on the prize shelf). One `ArcadeTournament` is made at boot (`bootstrap/services`) and handed to the hall
+  trophy on the prize shelf). The cup grows with the titles (`TOURNAMENT.cups`: after two the SILVER CUP, after five
+  the GOLD CUP; the regulars' scores times `strength`, the tickets times `pay`, its own trophy), fixed for the day once
+  the sheet is signed (`cupAt`). A run left before it ended (rounds won, then home or asleep) is paid as if the player
+  had gone out then, on the next ticket play (`takeUnfinished`, a TOURNAMENT line on the end card). Physical machines
+  host it too (`ARCADE_PLAN.tournament.hosts`: the pinball and the hoops, with their own watchers' spots and the
+  sign on the backbox or the cage's top rail). One `ArcadeTournament` is made at boot (`bootstrap/services`) and handed to the hall
   (`BuildContext.arcade.tournament`) and the Session: `game/ArcadePlay` settles the round with the play (its tickets
   and the cup in the same `batch`, its line in the end-of-play reward banner), and the hall hears it (`tournament.onRound`) to
   make the watchers react. That day the regulars leave the cabinet to the player (`ArcadeCrowd` `reserved`) and gather
   round it to watch (`gathering`: `ARCADE_PLAN.tournament.spectators`), cheering or groaning each round
   (`spectatorsReact`); the attendant mentions it.
 - **Prizes** (`economy/Prizes.ts`: the catalogue and the `PrizeStore`): the counter's glass case shows them
-  (`prizes/prizeModel`), its panel (`ui/PrizePanel`) sells them for tickets and swaps tickets for coins. What is
-  taken home stands on the `PrizeShelf` on the bedroom's right wall (the newest when it is full, a card counts the
-  rest), except the prizes that **do something at home** (`Prize.home`; hidden until won, `prizes/ownedPrize`): the
-  `ArcadePoster` framed on the bedroom wall, the `MoodLamp` on the dresser's books (click: next colour, a rainbow,
-  off; a small shadowless light), the `FeatherWand` on the living room's projector rug (click: it swishes and calls
-  the cat, `BuildContext.home.callCat`). The **mystery game** (`Prize.game`) is a random seed game the collection lacks,
-  never a grail and never one whose shop price is over `MYSTERY_GAME_MAX_PRICE` (320: no fallback, an empty box says
-  so), added to it with a receipt (`PRIZE_WHERE`, 0 coins) so it waits in the parcel at home; the WE BUY desk, a
-  swap and a wanted card never count it for more than its tickets' worth (`MYSTERY_GAME_VALUE`, 90: `receiptCap`). The counter says where a prize goes, and what it
-  still needs at home: the mood lamp the dresser, the feather wand a cat (`PrizeHomeSource`, `HomeUpgrades`; `?debug`
-  has both). Taking a prize, the attendant hands it over with a word (a subtitle, `notices.say`), the prize is a
-  reward banner, and the panel's slip says where it goes.
+  (`prizes/prizeModel`), its panel (`ui/PrizePanel`) sells them for tickets and swaps tickets for coins. Every prize
+  has a **place at home** (`Prize.home`; hidden until won, `prizes/ownedPrize`; docs/household.md "Playing at home"),
+  so each is sold once (`soldOnce`: the counter says "At home"): the `ArcadePoster` on the bedroom wall, the
+  `MoodLamp` on the dresser, the `FeatherWand` on the projector rug (it calls the cat, `BuildContext.home.callCat`),
+  the duck on the bath's rim (`BathDuck`), the bouncy ball on the living-room floor (`BouncyBall`, thrown for the cat),
+  the plush bear and cat and the claw's bunnies on the bed (`BedPlushes`, on the mattress till the bed is bought), the
+  rocket as a mobile over it (`RocketMobile`), the yo-yo and the keyring hung under the prize shelf (`HangingToy`), and
+  the **trophy row**: the `PrizeShelf` on the bedroom's right wall holds one of each cup, the counter's trophy, the mini
+  cabinet and the limited editions (brass studs under one for every time it was won again, so no pile of duplicates),
+  the league's pennants pinned flat on the wall above, the `LavaLampPrize` lighting them at the bottom board's end
+  (baked glows, no light). **Sets** (`PRIZE_SETS`, `PrizeSets`): every claw bunny, the whole glass case, every limited
+  edition, each pays `PRIZE_SET_TICKETS` once, the moment it is complete (`bootstrap/uiPanels` `wireHud`). The
+  **mystery game** (`Prize.game`) is a random seed game the collection lacks, never a grail and never one whose shop
+  price is over `MYSTERY_GAME_MAX_PRICE` (320: no fallback, an empty box says so), added to it with a receipt
+  (`PRIZE_WHERE`, 0 coins) so it waits in the parcel at home; the WE BUY desk, a swap and a wanted card never count it
+  for more than its tickets' worth (`MYSTERY_GAME_VALUE`, 90: `receiptCap`). The counter says where a prize goes, and
+  what it still needs at home: the mood lamp the dresser, the feather wand a cat (`PrizeHomeSource`, `HomeUpgrades`;
+  `?debug` has both). Taking a prize, the attendant hands it over with a word (a subtitle, `notices.say`) and sets it
+  on the counter top (`PrizeCounter`), the prize is a reward banner, and the panel's slip says where it goes; its spot
+  in the glass case stays empty till the next game day (`OwnedPrize.day`, `PrizeStore.takenOn`), and the pegboard's
+  tags light up over what the pocket covers. **The goal**: any prize can be pinned in the panel (`economy/PrizeGoal`);
+  its photo rides the wallet chip after the tickets (`ui/PrizeGoalChip`, `WalletHud.addItem`), greyed and filling with
+  colour from the bottom as the tickets come in, glowing "Ready" once they cover it; no numbers. Taking it unpins it.
+- **The back room** (the panel's last shelf, `Prize.special`; not in the case nor on the pegboard): what keeps the
+  tickets worth earning once the flat is done, at `PRIZE_TICKETS` (half an hour to an hour and a half of play each).
+  **This week's limited edition** (`limitedOnOffer(gameDay)`: the golden token, the snow globe, the gold joystick, the
+  marquee light box, the jukebox tape, the pixel pal, one a week in turn, each sold once, for the trophy row). **The
+  rare cartridge** (`rareGame`): a game the collection lacks priced over the mystery game's ceiling and at most
+  `RARE_GAME.maxPrice` (900), never a grail; its receipt (`RARE_PRIZE_WHERE`) caps what a desk pays at its tickets'
+  worth (`RARE_GAME.value`). **The sponsor's plate** (`sponsor`): the player picks a hall cabinet (`hallCabinets`) and
+  a brass plate with their initials goes on its base (`SponsorPlate`, `OwnedPrize.game`), one per cabinet. **The
+  retired cabinet** (`hallCabinet`): the hall retires one of `RETIRED_CABINETS` a week (`retiredOnOffer`); bought, that
+  very upright stands in the living room's front-left corner running its one game for fun (`homeArcade/placeRetiredCabinet`,
+  `atHome`, the home table; not movable).
 - **Jukebox** (`Jukebox` + `audio/JukeboxTune`): a bubbler by the front wall playing generated music on four
   stations (synthwave, chiptune, funk, italo disco; a made-up song title every sixteen bars on its card), louder up
   close; a click moves to the next station, then silence. Plays while the player is in the hall.
@@ -546,24 +655,39 @@ its level following what the screen does; only the six original cabinets keep a 
   games queue `Sfx` events (`BaseGame.sound`: score, combo, time, penalty, READY / GO, over, NEW BEST, plus each
   game's own: the dance cabinet's drums, the gun's bang and reload, the wheel's pegs, the hoops' swish and rim, LEAP
   FROG's hop climbing up the rows, its chimes at the verge and the far bank and its buzz, COMETS' rock crunch, shield hum and stage sting), a
-  machine a regular plays is quieter, a demo on an idle cabinet silent. `ArcadeAmbience` adds a crowd murmur that
-  follows how many regulars are in, and mains hum, while the player is in the hall. Nothing sounds before the page's
+  machine a regular plays is quieter, a demo on an idle cabinet heard very low only when it is one of the two nearest
+  (`demoBed`). `ArcadeAmbience` adds a crowd murmur that follows how many regulars are in, and mains hum, while the
+  player is in the hall; the murmur and the `Jukebox` drop about 6 dB while the player stands at a machine
+  (`hallDuck`, told by each `MachineRun`). **The hall goes off** (`HallCelebration`) when the wheel's jackpot falls or
+  the player takes the top of a table: the `MirrorBall` spins up, spots sweep the carpet round it (additive glows, no
+  light, `ARCADE_PLAN.celebration`) and the `NeonTube`s blink (`setLit`, two shared looks swapped), for a few seconds;
+  the crowd cheers on its own. Nothing sounds before the page's
   first click or key (`unlockAudioOnFirstGesture`).
-- **People** (`ArcadeCrowd`, the walkers are `people/Walker`): the attendant (`Vendor`) behind the counter says
-  the day's news first (the challenge, the change machine, the broken machine, the streak, the league, the jackpot,
-  a record of the player's, tickets enough for a prize), then the usual lines. Regulars (four, with initials) walk
-  in through the door (only while the player looks elsewhere), **more of them in the evening** (`crowd.regulars.byHour`
-  against the sky's clock: one in the morning, three after five), take a free machine (`Station.occupy`: it plays
-  itself on its autopilot) and stand at it as a player would: close in, leaning over it (`Station.lean`), hands on
-  its live controls (`Station.handsAt()`: the joystick's knob as it moves, the flipper buttons pushed in as they
-  flip, the ball in hand at the alley, the gun, the dance pad's bars), eyes on the screen. They play a minute or two
-  with the odd word in a `SpeechBubble`, try another or leave (the hall empties towards the night). A machine a
-  regular is on says so and cannot be played. The kid hangs about the board, the counter, the claw and the league
-  board, watches regulars now and then, and walks over to watch whenever the player starts a play, cheering a
-  record and groaning at a flop; at PADDLE WARS the kid **takes player two** (`Station.partner`: stands at the second
-  stick, which then follows player two; the screen says KID, who plays exactly as the machine would, so a run still
-  replays). Paths follow the plan's nav graph (`crowd.nav`): keep its links straight and clear of machines when the
-  layout moves.
+- **People** (`ArcadeCrowd` directs them; `crowdNav` the routes and spots, `crowdReactions` who reacts when, `HallKid`
+  Nico, `HallGuest` the friends; the walkers are `people/Walker`): the attendant (`Vendor`) behind the counter says
+  his people news first (`gusLines`: a record taken while the player was away, a friend expected today, the best of
+  what the last visit won, `economy/arcadeVisits`), then the day's news (the challenge, the change machine, the broken
+  machine, the streak, the league, the jackpot, a record of the player's, tickets enough for a prize), then his usual
+  lines, curt when he is cold with the player and warmer for a friend (`crowd.attendant.curt` / `warm`).
+  **The regulars** are four people (`economy/hallRegulars`: Vicky VIC at the pinball in the evening, Jin JIN at the
+  dance pad in headphones in the afternoon, Roxane ROX at STAR RAID after her night shift, Zédé ZED at COMET DASH late,
+  a sore loser), the same in the weekly league and the tournament's bracket. Each walks in through the door at their
+  hours (only while the player looks elsewhere), **more of them in the evening** (`crowd.regulars.byHour` against the
+  sky's clock: one in the morning, three after five), goes to their favourite machine when it is free (else another:
+  `Station.occupy(performer, skill)`, it plays itself on its autopilot at their skill, better on the games they are
+  strong at) and stands at it as a player would: close in, leaning over it (`Station.lean`), hands on its live
+  controls (`Station.handsAt()`: the joystick's knob as it moves, the flipper buttons pushed in as they flip, the ball
+  in hand at the alley, the gun, the dance pad's bars), eyes on the screen. They play a minute or two with their own
+  words in a `SpeechBubble` (as often as their quirk has it), try another or leave (the hall empties towards the
+  night). A machine a regular is on says so and cannot be played. **Nico** hangs about the board, the counter, the
+  claw and the league board, watches regulars now and then, walks over to watch whenever the player starts a play,
+  cheering a record and groaning at a flop, and at PADDLE WARS **takes player two** (`Station.partner`: stands at the
+  second stick, which then follows player two; the screen says NIC, who plays exactly as the machine would, so a run
+  still replays; who won is the game's goals, `PartnerSpot.tally`). When nobody needs him he plays SKY STACK himself
+  (`crowd.kid.game`), a little better every game week, and signs NIC. **Friends on their days** (`guestDays`,
+  `crowd.guests`): Marco the afternoon fixed with him (`arcadePartner`), player two at PADDLE WARS instead of Nico and
+  MAR on its table; Hugo on Wednesday mornings at NEON SNAKE, better every week and every tip, signing HUG. Paths
+  follow the plan's nav graph (`crowd.nav`): keep its links straight and clear of machines when the layout moves.
 
 ## The cabinet games
 
@@ -571,31 +695,40 @@ Nine games that run on the glass, one per cabinet (plus LexiPunk, which runs in 
 readable and greedy for a replay. They share `BaseGame`
 (`games/BaseGame.ts`): a READY / GO countdown, an optional clock with a time bar that games can add seconds to
 (seconds banked over the limit show as a green bar over the blue),
-a combo multiplier (x1 to x5, lower where every step chains: SKY STACK x3, NEON SNAKE x4) that decays, score pops (`Fx`: pops, shake, flash), a live `TIX` counter at the
-payout rate, a NEW BEST banner the moment the record falls, and a held TIME UP / GAME OVER card before `over`.
+a combo multiplier (x1 to x5, lower where every step chains: SKY STACK x3, NEON SNAKE x4) that decays (a little gauge
+under it empties over the chain's hold), score pops (`Fx`: pops, shake, flash), a live `TIX` counter at the payout rate
+(never under the paid play's floor, `RunContext.ticketFloor`), a NEW BEST banner the moment the record falls, a pip a
+second over the clock's last five, and a held TIME UP / GAME OVER card before `over` (the score and how far short of
+the next goal it fell: the machine's own end card counts the tickets). A play on a hall cabinet reaches for its
+**goals** (`RunContext.goals`, built by `games/runGoals` `playExtras`: the player's best and each medal not won yet,
+whatever tiers the book keeps): the next one dim under the clock, a word and a chime as a medal's score is passed.
 Nothing costs the play except the clock or the game's own single rule; mistakes cost seconds and the combo.
 
 | Game | Clock | Earning time | Losing time | Harder every stage |
 | --- | --- | --- | --- | --- |
-| `Breakout` BRICK STORM | 30 s | clock bricks +3 s, wall clear +5 s (and +300) | last ball lost -3 s (any ball lost breaks the chain) | per wall: ball +10%, paddle -5 px (to 52), a row more every 2 walls (to 6), a clock brick fewer every 2 walls (to 1) |
-| `Invaders` STAR RAID | 15 s | saucer +3 s (and 100), wave clear +5 s (and +200) | a diver getting past -1 s (two shots in the air; one that hits nothing breaks the chain) | per wave: march faster, a row more every 3 waves (to 5), divers quicker, saucer +15% speed and 0.5 s rarer |
-| `Stacker` SKY STACK | 12 s | every landed row +1.5 s, a clean one +1 s more, minor prize (row 10) +5 s, jackpot (row 15) +10 s | a landing that lost cells +1 s less (net +0.5 s) | per row: faster block (4 cells/s on row 1, +0.6 a row), narrower (3 / 2 / 1 cells); each tower after a jackpot +25% speed; a miss ends it |
-| `LeapFrog` LEAP FROG | 15 s | each crossing +5 s, 0.6 s less each crossing after (to 2) | run over, drowned or carried off the screen -1.5 s (and the combo), back on the kerb (on the verge once past it) | per crossing: traffic and logs +14% |
-| `Snake` NEON SNAKE | 15 s | every pellet +0.4 s, gold pellet +2 s (every 5th, for 4 s), every 6 pellets a stage +2 s | a wall or your own tail -2 s (and the combo), the snake starts again short | per stage: +0.9 cells/s (from 7.5, to 17) |
-| `Comets` COMET DASH | 15 s | clocks +2 s (one faller in 9), every 12 stars a stage +2 s | a rock -1.5 s (and the combo), then 1 s of shield | per stage: rocks faster, spawns denser |
-| `Duel` PADDLE WARS | 20 s | a goal +3 s (and 150), every 3 goals a set +2 s | a goal conceded -1.5 s (and the combo) | per set: ball +12%, player two faster (it reacts once the ball crosses half the court, aims up to 30 px off, 105 px/s and +10 a set) |
-| `StepBeat` STEP BEAT | 20 s | FEVER (16 clean steps) +2 s and x2 for 4 s, every 20 steps a stage +2 s | a late arrow or a step on nothing -0.6 s | per stage: +8 BPM (to 176), denser charts, jumps from stage 2 |
-| `NeonSheriff` NEON SHERIFF | 15 s | the sheriff's star +3 s, every 8 bandits a stage +2 s (a quarter less each stage after, to 0.5) | a bandit who draws first (1.8 s at first) -1 s, shooting townsfolk -2 s (and the combo) | per stage: faster draws, more at once (to 5) |
+| `Breakout` BRICK STORM | 30 s | clock bricks +3 s, wall clear +5 s (a second less each wall after, to 2; and +300) | last ball lost -3 s (any ball lost breaks the chain) | per wall: ball +10%, paddle -5 px (to 52), a row more every 2 walls (to 6), a clock brick fewer every 2 walls (to 1), a tough (two-hit) brick more from wall 2 (to 6), steel (never breaks, not needed to clear) from wall 3 (to 3); walls after the first take a shape (`breakoutWalls`) |
+| `Invaders` STAR RAID | 15 s | saucer +3 s (and 100; either way across, its height varies), wave clear +5 s (and +200) | a diver getting past -1 s (it flies back into the fleet from the top), a bomb on the ship -1 s and a moment's shield (two shots in the air; one that hits nothing breaks the chain) | per wave: march faster, a row more every 3 waves (to 5), divers and bombs quicker, saucer +15% speed and 0.5 s rarer |
+| `Stacker` SKY STACK | 12 s | every landed row +1.5 s, a clean one +1 s more, playing on at the minor prize (row 10) +5 s, jackpot (row 15) +10 s; the clock stops while the minor prize's choice is up (6 s, then it plays on) | a landing that lost cells +1 s less (net +0.5 s); the play's first miss -2 s and the row again (the SAVE) | per row: faster block (4 cells/s on row 1, +0.6 a row), narrower (3 / 2 / 1 cells, a band sooner each tower after the first, to two); each tower after a jackpot +25% speed, the block blinking from the third; a second miss or the prize taken ends it |
+| `LeapFrog` LEAP FROG | 15 s | each crossing +5 s, 0.6 s less each crossing after (to 2) | run over, drowned (the turtles of row 8 dive for 1.2 s every 4.2 s, going pale 0.5 s before) or carried off the screen -1.5 s (and the combo), back on the kerb (on the verge once past it) | per crossing: traffic, logs and turtles +14% |
+| `Snake` NEON SNAKE | 15 s | every pellet +0.4 s, gold pellet +2 s (every 5th, for 4 s), every 6 pellets a stage +2 s | a wall, a block or your own tail -2 s (and the combo), the snake starts again short | per stage: +0.9 cells/s (from 7.5, to 17); from stage 3 a two-cell block dropped on the board (to 9, never on the start row's left part) |
+| `Comets` COMET DASH | 15 s | clocks +2 s (one faller in 9), every 12 stars a stage +2 s | a rock -1.5 s (and the combo), then 1 s of shield; fire dashes 56 px sideways through anything (1.6 s to recover) | per stage: rocks faster, spawns denser (never dropped in a falling trail) |
+| `Duel` PADDLE WARS | 20 s | a goal +3 s (and 150 + 30 a return of its rally), every 3 goals a set +2 s | a goal conceded -1.5 s (and the combo) | per set: ball +12%, player two faster (it reacts once the ball crosses half the court, aims up to 30 px off, 105 px/s and +10 a set, smashes back now and then once a rally has pace) |
+| `StepBeat` STEP BEAT | 20 s | FEVER (16 clean steps) +2 s and x2 for 4 s, every 20 steps a stage +2 s | a late arrow or a step on nothing -0.6 s; a hold let go early is dropped (the chain, no seconds) | per stage: +8 BPM (to 176), denser charts, jumps from stage 2, holds from stage 3 |
+| `NeonSheriff` NEON SHERIFF | 15 s | the sheriff's star +3 s, every 8 bandits a stage +2 s (a quarter less each stage after, to 0.5) | a bandit who draws first (1.8 s at first) -1 s, shooting townsfolk -2 s (and the combo) | per stage: faster draws, more at once (to 5); every two stages the next street (`sheriffScenes`: saloon, bank, station, gold mine) |
 
-Scoring: bricks 30-100 (chain within 1.2 s, broken by a ball lost), aliens 5-25, divers 100 and the saucer 100
-(chain within 1.5 s, broken by a shot that hits nothing), stack row *n* pays 25*n* (+40 and chain when clean, +300
-minor, +1500 jackpot), a hop onto a row not reached yet this crossing 10 and the far bank 100 (chain within 1.4 s,
-broken by dying), pellets 20 and gold 100 (two pellets on the board; chain within 2.5 s), stars 30 (some in a trail of
-three; caught 5 px wider than drawn; chain within 2 s), returns 10 (+10 smashed with Space held; chain within 3 s) and
-goals 150, steps MARVELOUS 30 / GREAT 20 / GOOD 10 per panel (within 50 / 100 / 160 ms)
-(every step chains), bandits 50, quick ones 80 (+20 before they reach for the gun; chain within 1.6 s), bottles 30. Every
-game is unbounded in theory: the seconds it hands out are enough to keep going at the pace a very good player
-sets, and the difficulty ramp is what ends the run.
+Scoring: bricks 30-100 (a tough one half as much again; chain within 1.2 s, broken by a ball lost; a broken brick drops
+a capsule one time in eight: WIDE PADDLE, FIREBALL through bricks, SLOW BALL), aliens 5-25, divers 100, the saucer 100,
+a bomb shot down 15 (chain within 1.5 s, broken by a shot that hits nothing), a wave cleared clean (no wasted shot, no
+bomb taken, no diver past) PERFECT WAVE 400 + 100 a wave; stack row *n* pays 25*n* (+40 and chain when clean), the
+minor prize 300 taken (the play ends) or staked on the top (paid with the jackpot's 1500, lost with a miss); a hop onto
+a row not reached yet this crossing 10 and the far bank 100 (chain within 1.4 s, broken by dying), a bay 50 (all five
+500, then they empty), the fly in a bay 200; pellets 20 and gold 100 (two pellets on the board; chain within 2.5 s);
+stars 30 (some in a trail of three; caught 5 px wider than drawn; chain within 2 s), a golden comet 120 flat (one faller in 23), a rock grazed (passed within 6 px while a chain is going) 10 and a step on the chain; returns 10 + 5 a return in a row this point (to 8),
++25 smashed (fire pressed within 0.2 s before the ball lands; chain within 3 s), goals 150 + 30 a return of the rally;
+steps MARVELOUS 30 / GREAT 20 / GOOD 10 per panel (within 50 / 100 / 160 ms; every step chains), a hold 15 an eighth
+held; bandits 50, quick ones 80 (+20 before they reach for the gun; chain within 1.6 s), bottles 30. Every game is
+unbounded in theory: the seconds it hands out are enough to keep going at the pace a very good player sets, and the
+difficulty ramp is what ends the run.
 
 ## Adding a cabinet game
 
@@ -628,6 +761,40 @@ sizes from `MARKET_PLAN`, then `warm()` keeps its draw), so everything below tha
 visited. Closing time in a walk-in shop or the flea market (`shop/ClosingTime`, wired in `bootstrap/world.ts`): the
 clerk or the stallholders say so, and 25 s later the player is out on Front Street in front of the door; a reload into
 one shut since lands there too (`PositionMemory`'s `instead`, `outsideIfShut`).
+- **One clock, a week** (`time/streetDay`, wired in `bootstrap/services`): everything on the street follows the game
+  day (the garage sale, the free box, the busker, the coins, the scratch cards' and the busker's tallies, the bars'
+  nights), so a night's sleep moves them together. The shops keep a week (`shopHours` `WEEK`, `hoursOn`, `opensAgain`):
+  Sunday is a short morning for the food shops and a day off for the bookshops and the chemist, the butcher shuts on
+  Mondays and the bookshops open after lunch; a day may have its own line at the door (`shopPlan.WEEKDAY_LOOKS`: the
+  market mornings, Wednesday and Saturday, when the greengrocer's basket is cheaper; the launderette's Monday; the
+  bakery's Friday).
+- **The counters** (`src/streetShops/`: numbers in `rules.ts` `STREET_SHOPS`, memory in `store.ts`,
+  `bibliothek.streetShops.v1`; the doors' side in `shops/counters.ts` `StreetCounters`, the panels in `ui/streetShops/`):
+  what a door does beyond its plain offer, its click (or its entry in the shopkeeper's conversation).
+  - **CORNER BOOKS**: a box of loose manuals (`bookshop.manualsInBox`, by game week): one for a copy on the shelves
+    without its manual turns up now and then (6 coins, a disc's insert 4, Agnès' discount or markup on it); bought,
+    the copy is complete (`HomeLife.completeWithManual`). One not in the box is ordered (2 more, in two game days,
+    handed over at the next visit). **COMICS & MANGA**: three strategy guides a week for the player's platforms (5),
+    read on the spot: a manual's worth of the platform's know-how (`HomeLife.readGuide`, the reading chair's count).
+  - **The greengrocer**: a baking basket (3, 2 on market mornings; the `basket` errand): the next cake baked at home
+    is a lemon drizzle and keeps a day longer (`Household.bake(longer)`). **The bakery** on Fridays: a fruit tart (4,
+    carried as the pocket's `cake`, a gift).
+  - **The launderette**: the cork board (`laundryBoard`): one game day in three a private seller's card, read, joins
+    the small ads (`Classifieds.inject` + `markSeen`: rung from the phone like the paper's); else the board's other cards.
+  - **THE ANCHOR and THE LOCAL** (`bars.ts`: each its own lines): THE ANCHOR's gig, Lou's band on Thursdays 20:30 to
+    23:30 (3 at the door, a 75-minute beat through `Pastimes`, Lou's warmth); THE LOCAL's quiz on Tuesdays 19:30 to
+    22:30 (2 a head, six questions from `quizBank` in `PubQuizPanel`; beating THE USUAL SUSPECTS pays 6, 12 or 20 by
+    the answers right) and its dartboard every evening outside the quiz (1 for three darts in `DartsPanel`, three goes a
+    night; beating tonight's chalked best, `boardBest`, pays 6 once). Both nights are schedules (`ANCHOR_GIG`,
+    `LOCAL_QUIZ`) the news and the bills can read.
+  - **CONTINUE?** (`popUp.ts`): from market day 21 the empty shop by the butcher (facade `n5`) is a pop-up, 11:00 to
+    20:00, not Mondays, its A-board out (`PopUpBoard`): four complete copies a week, some first prints, now and then one
+    sealed, at the full shop price by edition and variant (`shopPrice`; never a bargain to sell back), bought through
+    `Transactions.winAuctionLot` into the parcel.
+  - **The newsagent** at the kiosk's hatch (`shops/Newsagent`, a walker; the papers round the hatch are still read free):
+    today's GAMING WEEKLY to keep (1), every other issue with a cover card (`COVER_CARDS`, twelve; the full set handed in
+    pays `SET_PRIZE` once), and a subscription (10 for 14 mornings) that puts the paper and its card on the doormat
+    (`newsagent.subscriptionMail`, read by `hallway/mail`).
 - **Things carried** (`src/errands/`: `errands.ts` what and how much, `pocket.ts` what is carried and today's buys,
   `bibliothek.pocket.v1`; prices `STREET_TREATS`, daily limits `STREET_TREATS_PER_DAY`, by game day: `pocket.followGameDay`): the bakery's croissant, the
   butcher's scrap, the pet shop's pouch of treats (three portions, on its counter: `CounterErrand`, `ShopPlan.errands`),
@@ -637,7 +804,7 @@ one shut since lands there too (`PositionMemory`'s `instead`, `outsideIfShut`).
   the stallholders go easier on the haggle), with the barista's tip: a wishlisted game on a stall today, a gem in the
   bin, or the day's theme. Had already, the barista still talks. At the two named cafés the counter is a conversation
   with the barista: their standing gives a second tip, a free coffee, or none (docs/social.md "Front Street and the arcade").
-- **The newsagent** (kind `tabac`): PIXEL SCRATCH cards (`scratchCard.ts`, the numbers `SCRATCH` in pricing.ts), 2 coins, five a real day (`bibliothek.scratch.v1`):
+- **The tabac** (kind `tabac`): PIXEL SCRATCH cards (`scratchCard.ts`, the numbers `SCRATCH` in pricing.ts), 2 coins, five a game day (`bibliothek.scratch.v1`):
   three alike of six cells win 2, 3, 5, 10 or 25 coins; drawn outcome first, 38 % win, 1.35 coins paid out on average
   (the house wins). Scratched in `ui/ScratchCardPanel`; walking off scratches the rest and pays.
 - **The florist** is walked into (see "The bare flat"): the houseplants for every room and the balcony's pots
@@ -646,13 +813,13 @@ one shut since lands there too (`PositionMemory`'s `instead`, `outsideIfShut`).
   collector's day, a garage sale or the free box today or tomorrow, the arcade's challenge and tournament, what the rain
   does), now and then their old lines. THE GAMING WEEKLY prints the most pressing of it too. Each shop's lines go on
   one after the other across the street's rebuilds.
-- **Dropped coins** (`DroppedCoins`): three a real day at spots drawn from the date, and one more each market day on a
+- **Dropped coins** (`DroppedCoins`): three a game day at spots drawn from the day, and one more each market day on a
   spot of its own (`bibliothek.gameDayFinds.v1`), glinting when the player is near, one coin each, picked ones
   remembered (`bibliothek.finds.v1`).
 - **The stray cat** (`life/StrayCat`, `bibliothek.strayCat.v1`): fed a scrap or a treat once a game day, he trusts the
   player a step more (0 to 6): he lets them nearer before slinking off (`WARY` by trust), from 3 is stroked (a purr,
   `CatVoice`), from 5 brings a coin from the gutter once a day. A stranger right on top of him gets a hiss.
-- **FREE TO TAKE** (`GiveawayBox`): one real day in four a box of cast-offs by a front door; once the market's stock is
+- **FREE TO TAKE** (`GiveawayBox`): one game day in four a box of cast-offs by a front door; once the market's stock is
   drawn, one worn bin game lies in it, free (a `free` `ForSaleBox`: B takes it, no price, the market never hears of it).
 - **The collector** (`Trader`): one game day in three (`rivalOnFrontStreet(day)`), 10:00 to 18:00, outside RETRO GAMES with three copies he took off
   the flea market's stalls once the stock is drawn (`market.soldToRival`: gone from there; one from the wishlist if the
@@ -661,9 +828,13 @@ one shut since lands there too (`PositionMemory`'s `instead`, `outsideIfShut`).
   He is the rival collector, Victor Crane (see "The saleroom, sealed cartons, the rival collector"): what he won at the
   flea market or the saleroom lately comes first in his suitcase, at the same markup and firm (`StockTraits.firm`: no haggle, since a copy won at an opening bid haggled off ×1.25 could sell back for more); his first word says how things stand.
 - **The busker**: a click is a word (free); clicked again while they wait, a coin buys a request (the next tune of
-  their book), a few a real day; a croissant or a bunch buys one too. Hands off the keys between songs. With the social
+  their book), a few a game day; a croissant or a bunch buys one too. Hands off the keys between songs. With the social
   layer a click is a conversation with Django, the requests its entries (free for a friend; docs/social.md).
-- **The garage sale**: its table answers a click (unpacking, the price, or picked clean). RETRO GAMES' queue grows with
+- **The garage sale**: a loft's own games (never the flea market's stalls: `MarketStock.randomGames`, by the day), a
+  few complete, most without their manual, some worn, all at the bin's flat price; the neighbour selling answers a
+  click (unpacking, a word, or picked clean). Bought off it: a moment for the collector's book (`streetMarks`).
+- **The Mansions' favours**: a resident's favour done pays 3 to 7 coins; a cupboard's games on the step are free
+  (docs/zones.md "The street"). RETRO GAMES' queue grows with
   the market's day (`MarketDayTheme.crowd`, a grail on a stall) and stays all day on a big one.
 - **The neighbours' party** in the courtyard (`building/neighboursParty`, docs/zones.md "The courtyard"): the residents'
   table buys games off the player at what the WE BUY desk pays a legend of the market (`PARTY.saleBonus`, the top
@@ -700,6 +871,8 @@ one shut since lands there too (`PositionMemory`'s `instead`, `outsideIfShut`).
   600 coins for the prize, 300 for the chest.
 
 ## The saleroom, sealed cartons, the rival collector
+
+Félix's own copies (`Game.felixLot`, his sticker: a stall's band, a saleroom lot, Crane's suitcase, a small ad; never sold back) are `economy/felixLots.ts`, told in docs/grandma.md "What the memories leave behind".
 
 Numbers: `AUCTION`, `SEALED_LOT`, `RIVAL` in pricing.ts. Stores: `services.lots` (`AuctionHouse`, `SealedLots`,
 `RivalCollector`, the shared `Transactions`), handed to the builders as `ctx.market.lots` (`LotServices`).
@@ -875,7 +1048,7 @@ bought, and stands at home the moment it is paid for:
   it is reached. Pointing at a stamp (or focusing it) writes its caption on the page's foot (fixed height).
 - **Milestones** (`MILESTONES`): the collection's size (10, 25, 50, 75, 100, 150, 250), one console's depth (10, 25),
   five consoles, the small moments along the way (a game complete in box, a sealed copy, five of one genre, eight of
-  one publisher, three decades), the collectors' club's sets (1, 3), arcade medals (1, 10), a league won, a haggled
+  one publisher, three decades), the collectors' club's sets (1, 3), arcade medals (1, 10), a league won, the arcade's other feats (`ArcadeFacts` from `CollectorWatch`'s `arcade`: a table topped, a plush, the jackpot, a Saturday cup, five golds, the hall's tour), a haggled
   deal, a sale, the collection's value (1,000, 5,000 coins), a grail. `Milestones` (`bibliothek.milestones.v1`) keeps
   the day each was first reached (it stays reached) and which rewards were claimed; the coins or tickets
   (`MILESTONE_REWARD` in `pricing.ts`) are paid on the spot with the banner (`bootstrap/uiPanels`, `claim` in one
@@ -919,12 +1092,15 @@ bought, and stands at home the moment it is paid for:
   in). Its `PAYOUT` and table are guesses until its scores are seen.
 - **Tuning by play**: `PAYOUT` and the rival tables come from simulated people (`npm run balance`), the claw's `GRIP`
   odds, the wheel's slices and the league's rivals are first estimates; `?payout` collects the real spreads to check
-  them against.
+  them against. Two machines pay skill too little in the simulation: STAR RAID (a good player nets about 1.1 times a
+  first-timer: nobody clears the first wave of 32 in fifteen seconds, so the PERFECT WAVE never comes and holding fire
+  and sweeping is as good as aiming; a smaller first wave or a longer clock would open it) and LEAP FROG (about 1.5).
 - The arcade never closes: an empty hall late at night was considered, a shutter was not (it would dead-end the loop).
 - **Front Street's shops**: their prices, the flat's (`HOME_GOOD_PRICES`) and the scratch card's odds are first guesses.
   The walk-in shops' layouts (`SHOP_PLANS`) were placed from the pieces' sizes, not yet walked: check nothing overlaps
   and every tag faces the aisle (the counter errands and the home arcade at TV REPAIR are new). The stray's trust steps
   and the errands' limits are guesses.
-- The bookshop does not sell loose manuals yet, nor the greengrocer baking things; the bunches have no use in the flat.
+- The bunches have no use in the flat. The counters' numbers (`STREET_SHOPS`: manuals, guides, the basket, the bars'
+  fees and prizes, the pop-up's day, the paper) are first guesses.
 - **Front Street's pace**: the works moving on at market day `WORKS_LIFT.afterGameDay` (14), the bus fare to
   Mémé's (`busRide.fare`, 2) and her Sunday envelope (`GRANDMA.sundayCoins`, 10), the park's hours and the extra coin a game day are first guesses.

@@ -2,12 +2,16 @@ import { addExtras } from '../extras';
 import { has } from '../perks';
 import type { TalkExtra } from '../talk';
 import { BUILDING_PERKS } from './buildingPerksPlan';
-import { doneOn, markDay } from './perkState';
+import { doneOn, markDay, setStep } from './perkState';
+
+/** The step a lesson of Sofia's sets (1: it pays on the next COMET DASH game, then back to 0). */
+export const ROSSI_COACHING = 'rossi-coaching';
 
 /*
  * The building's word-of-mouth perks (docs/social.md "The building's perks"): what Sofia Rossi knows of the post and
- * of Comets, the postman's offer, Pascal's strong arms and the Nguyens' spare pad. Lines only where the game has no
- * mechanism to change (the flat's furniture weighs nothing to carry; a games night has no pad limit).
+ * of Comets (a lesson pays on the next COMET DASH game), the postman's offer, Pascal's strong arms and the Nguyens'
+ * spare pad. Lines only where the game has no mechanism to change (the flat's furniture weighs nothing to carry; a
+ * games night has no pad limit).
  */
 
 /** The post as Sofia sees it from the sorting office (`collection/MailPost`). */
@@ -40,7 +44,9 @@ export function wireSmallPerks(post: PostView | undefined): void {
         disabled: () => (doneOn('rossi-comets', day) ? 'One lesson a day' : null),
         run: () => {
           markDay('rossi-comets', day);
-          return { line: P.rossiTips[day % P.rossiTips.length]! };
+          // The lesson pays on the next COMET DASH game (`arcade/guestDays` `coachedPlay`).
+          setStep(ROSSI_COACHING, 1);
+          return { line: `${P.rossiTips[day % P.rossiTips.length]!} Try it on your next game. You’ll see.` };
         },
       });
     }

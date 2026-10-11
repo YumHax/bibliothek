@@ -37,6 +37,8 @@ export interface ScriptedExtras {
   clue?: { title: string; text: string };
   /** What the seller says on the player's arrival, instead of their kind's greeting. */
   greeting?: string;
+  /** The lot's games are Félix's copies, his sticker on the back (`economy/felixLots`). */
+  felix?: boolean;
 }
 
 /** An ad another feature puts in the paper (`Classifieds.inject`): the fields a draw would give, the extras, and its days. */
@@ -55,6 +57,7 @@ export interface ScriptedAd {
   games?: readonly string[];
   clue?: { title: string; text: string };
   greeting?: string;
+  felix?: boolean;
 }
 
 /** The building the sellers live in: the mansion block over PARK FRUIT & VEG on Front Street, by Park Street's corner. */
@@ -136,7 +139,7 @@ export function scriptedAd(spec: ScriptedAd): Ad {
     text: spec.text,
     hours,
     seed,
-    scripted: { games: spec.games, clue: spec.clue, greeting: spec.greeting },
+    scripted: { games: spec.games, clue: spec.clue, greeting: spec.greeting, ...(spec.felix ? { felix: true } : {}) },
   };
 }
 

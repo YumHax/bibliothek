@@ -47,6 +47,9 @@ export class OldTelevision extends Prop implements Interactable, Updatable {
   private readonly glow = new PooledLight(0xa8c0ff, 0, 3, 2);
   private readonly glint: HoverGlint;
   private on = false;
+  /** Held on the game show for the quiz, and whether it was on before. */
+  private quiz = false;
+  private wasOn = false;
   private scene: Scene = 'gameShow';
   private sceneLeft = 0;
   private frameIn = 0;
@@ -130,11 +133,25 @@ export class OldTelevision extends Prop implements Interactable, Updatable {
     }
   }
 
+  /**
+   * The afternoon's quiz watched with the player (`visit/pastimes`): the set on and held on the game show while
+   * `watching`; let go, it is as it was (on or off) and back to her programmes.
+   */
+  showQuiz(watching: boolean): void {
+    if (watching === this.quiz) return;
+    this.quiz = watching;
+    if (watching) {
+      this.wasOn = this.on;
+      this.setOn(true);
+      this.scene = 'gameShow';
+    } else this.setOn(this.wasOn);
+  }
+
   update(dt: number): void {
     if (!this.on) return;
     this.time += dt;
     this.sceneLeft -= dt;
-    if (this.sceneLeft <= 0) {
+    if (this.sceneLeft <= 0 && !this.quiz) {
       this.sceneLeft = SCENE_SECONDS[0] + random() * (SCENE_SECONDS[1] - SCENE_SECONDS[0]);
       this.scene = SCENES[Math.floor(random() * SCENES.length)]!;
     }

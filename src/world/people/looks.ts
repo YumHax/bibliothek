@@ -1,4 +1,7 @@
 import { chance, lcg, pick, pickWeighted } from '@/random';
+import { skinTone } from './skinTone';
+import { clamp } from '@/math/scalar';
+import { seedOfLook } from './motion/temperament';
 
 /*
  * What a person looks like and wears. Colours are hex numbers; everything else picks a variant
@@ -32,6 +35,8 @@ export interface PersonLook {
   nose: number;
   /** A dusting of freckles over the nose and cheeks. */
   freckles: boolean;
+  /** The face's own lines and asymmetries (`faceTraitsOf`); a look written by hand without them gets them from its seed. */
+  face?: FaceTraits;
 
   top: TopKind;
   topColor: number;
@@ -57,7 +62,7 @@ export interface PersonLook {
 
   /** A scarf round the neck (in the cold), in this colour. */
   scarf?: number;
-  /** A child or someone old; an adult when absent (`Dress.age`). */
+  /** A child, a teenager or someone old; an adult when absent (`Dress.age`). */
   age?: Age;
   /** The head's size against the body's (a child's head is big for its body). Default 1. */
   headScale?: number;
@@ -67,6 +72,37 @@ export interface PersonLook {
   /** Width of the body, 0.85 (slight) to 1.2 (broad). */
   build: number;
   figure: Figure;
+  /** The body's own proportions (`BodyLines`); everyone's the same when absent. */
+  lines?: BodyLines;
+}
+
+/**
+ * Proportions that are the person's own, whatever the height and the build: legs a little longer
+ * or shorter for the height (0.96 .. 1.04), the neck (0.85 .. 1.15), the shoulders' width
+ * (0.94 .. 1.07) and their slope (-1 sloping .. 1 square).
+ */
+interface BodyLines {
+  legs: number;
+  neck: number;
+  shoulders: number;
+  slope: number;
+}
+
+/**
+ * What makes a face its own beyond jaw and nose: nobody's two halves match (each asymmetry -1..1,
+ * a millimetre or two at most: the +x eye sits higher, the nose's tip leans to +x, the +x corner of
+ * the mouth sits lower, the +x side of the jaw is fuller), and the brow ridge, the cheekbones and
+ * the lips' fullness (0.6 .. 1.4) and the face's length below the eyes (0.95 .. 1.06) vary.
+ */
+export interface FaceTraits {
+  eye: number;
+  noseTilt: number;
+  corner: number;
+  jawSide: number;
+  brow: number;
+  cheek: number;
+  lips: number;
+  length: number;
 }
 
 const SKINS = [0xf3d6c1, 0xe8b894, 0xd9a279, 0xc68e6a, 0x9c6a4a, 0x7a4f36, 0x6b4630, 0x4a2f22];
@@ -85,7 +121,7 @@ const HAIR_STYLES: Record<Figure, HairStyle[]> = {
 };
 const TOP_KINDS: TopKind[] = ['tee', 'tee', 'stripes', 'flannel', 'hoodie', 'jacket', 'shirt'];
 
-export type Age = 'child' | 'adult' | 'elder';
+export type Age = 'child' | 'teen' | 'adult' | 'elder';
 
 /** What a look is drawn for, beyond the person: the season they dress for, and how old they are. */
 export interface Dress {
@@ -105,7 +141,26 @@ const TIGHTS = [0x1c1a1c, 0x2a2426, 0x3a2e2a, 0x5a4a44];
  */
 export function randomLook(seed: number, role: 'vendor' | 'shopper' = 'shopper', dress?: Dress): PersonLook {
   const look = baseLook(seed, role);
-  return lowerHalf(dress ? dressed(look, seed, dress) : { ...look }, seed, dress?.season);
+  const out = lowerHalf(dress ? dressed(look, seed, dress) : { ...look }, seed, dress?.season);
+  out.lines = bodyLines(seed, out);
+  return out;
+}
+
+/**
+ * The body's proportions, from a stream of their own (every other draw stays the seed's). A child's
+ * legs are shorter for their height and their neck is short; the straight figure's shoulders run a
+ * little wider than the curvy's.
+ */
+function bodyLines(seed: number, look: PersonLook): BodyLines {
+  const random = lcg(seed * 2654435761 + 41);
+  const child = look.age === 'child';
+  const spread = (k: number): number => (random() + random() - 1) * k;
+  return {
+    legs: (child ? 0.96 : 1) + spread(0.04),
+    neck: (child ? 0.88 : 1) + spread(0.15),
+    shoulders: 1 + spread(0.06) + (look.figure === 'straight' ? 0.01 : -0.02),
+    slope: clamp(spread(1.4), -1, 1),
+  };
 }
 
 /**
@@ -194,7 +249,7 @@ function halfSeason(out: PersonLook, random: Stream): void {
   if (out.shorts && chance(random, 0.7)) out.shorts = false;
 }
 
-/** How old they are: a child's body and school things, an elder's grey hair, glasses and loafers. An adult changes nothing. */
+/** How old they are: a child's body and school things, a teenager's hoodie and backpack, an elder's grey hair, glasses and loafers. An adult changes nothing. */
 const AGE_DRESS: Record<Age, Recipe> = {
   adult: () => {},
   child: (out, random) => {
@@ -212,6 +267,26 @@ const AGE_DRESS: Record<Age, Recipe> = {
     out.freckles = out.freckles || chance(random, 0.2);
     out.jaw = 0.85 + random() * 0.08;
     out.smile = chance(random, 0.7);
+  },
+  teen: (out, random) => {
+    out.age = 'teen';
+    // Nearly grown: a little short of an adult, a touch big in the head, slight; hoodies, sneakers, a backpack.
+    out.height = 1.5 + random() * 0.28;
+    out.headScale = 1.05;
+    out.build = 0.86 + random() * 0.14;
+    out.beard = undefined;
+    out.glasses = out.glasses && chance(random, 0.5) ? out.glasses : undefined;
+    if (out.top === 'shirt' || out.top === 'flannel') out.top = chance(random, 0.6) ? 'hoodie' : 'tee';
+    out.bag = chance(random, 0.55) ? 'backpack' : out.bag;
+    out.bagColor = out.bagColor ?? pick(random, SCARVES);
+    if (!out.hat && chance(random, 0.2)) {
+      out.hat = 'cap';
+      out.hatColor = pick(random, SCARVES);
+    }
+    out.shoes = 'sneaker';
+    out.apron = undefined;
+    out.coat = undefined;
+    out.jaw = Math.min(out.jaw, 0.95 + random() * 0.08);
   },
   elder: (out, random) => {
     out.age = 'elder';
@@ -256,10 +331,12 @@ function baseLook(seed: number, role: 'vendor' | 'shopper'): PersonLook {
   const shoes: ShoeKind = chance(random, 0.6) ? 'sneaker' : chance(random, 0.5) ? 'boot' : 'loafer';
   const bagRoll = random();
 
-  const face = drawFace(random, { figure, skin, hairStyle, hatRoll });
+  // The face's own lines from a stream of their own (every other draw stays the seed's).
+  const face = drawFace(random, { figure, skin, hairStyle, hatRoll }, lcg(seed * 3812015801 + 29));
   const clothes = drawClothes(random, { role, top, shoes, bagRoll });
   return {
-    skin,
+    // The palette's tone, varied for this person from a stream of its own (every other draw stays the seed's).
+    skin: skinTone(skin, seed),
     hair,
     hairStyle,
     ...face,
@@ -275,9 +352,14 @@ function baseLook(seed: number, role: 'vendor' | 'shopper'): PersonLook {
   };
 }
 
-/** The head: hat, eyes, brows, beard, glasses, mouth, jaw, nose, freckles, drawn in that order. */
-function drawFace(random: Stream, { figure, skin, hairStyle, hatRoll }: { figure: Figure; skin: number; hairStyle: HairStyle; hatRoll: number }): Pick<PersonLook, 'hat' | 'hatColor' | 'eyes' | 'brows' | 'beard' | 'glasses' | 'smile' | 'jaw' | 'nose' | 'freckles'> {
+/**
+ * The head: hat, eyes, brows, beard, glasses, mouth, jaw, nose, freckles, drawn in that order; the
+ * face's lines and asymmetries (`face`) from `lines`. `smile` is a temper, not a painted mouth: a
+ * smiley person's face rests with a little smile (`motion/face`).
+ */
+function drawFace(random: Stream, { figure, skin, hairStyle, hatRoll }: { figure: Figure; skin: number; hairStyle: HairStyle; hatRoll: number }, lines: Stream): Pick<PersonLook, 'hat' | 'hatColor' | 'eyes' | 'brows' | 'beard' | 'glasses' | 'smile' | 'jaw' | 'nose' | 'freckles' | 'face'> {
   return {
+    face: drawFaceTraits(lines),
     hat: hatRoll < 0.22 ? 'cap' : hatRoll < 0.34 ? 'beanie' : undefined,
     hatColor: pick(random, HATS),
     eyes: pick(random, EYES),
@@ -289,6 +371,26 @@ function drawFace(random: Stream, { figure, skin, hairStyle, hatRoll }: { figure
     nose: 0.8 + random() * 0.45,
     freckles: skin >= 0xd9a279 && chance(random, 0.25),
   };
+}
+
+/** A face's lines and asymmetries (`FaceTraits`): small asymmetries are the rule, a marked one now and then. */
+function drawFaceTraits(random: Stream): FaceTraits {
+  const lean = (): number => (random() + random() - 1) * (random() < 0.15 ? 1 : 0.6);
+  return {
+    eye: lean(),
+    noseTilt: lean(),
+    corner: lean(),
+    jawSide: lean(),
+    brow: 0.6 + random() * 0.8,
+    cheek: 0.6 + random() * 0.8,
+    lips: 0.6 + random() * 0.8,
+    length: 0.95 + random() * 0.11,
+  };
+}
+
+/** The face's traits of `look`: its own, or (a look written by hand) drawn from its seed, the same every time. */
+export function faceTraitsOf(look: PersonLook): FaceTraits {
+  return look.face ?? drawFaceTraits(lcg(seedOfLook(look) * 3812015801 + 29));
 }
 
 /** The clothes' remaining draws: sleeves, the stallholder's apron, trousers, the shoes' colour, the shopper's bag. */

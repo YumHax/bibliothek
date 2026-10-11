@@ -3,6 +3,7 @@ import { playBusRide, type RideSound } from '@/audio/busRideSounds';
 import { clamp, ramp, smooth } from '@/math/scalar';
 import { actionKeyLabel } from '@/ui/keys';
 import { BusRideScene } from './busRideScene';
+import type { Rider } from './busRiders';
 
 /*
  * THE BUS RIDE (docs/story.md "Mémé"): the trip on line 38 between Front Street and Mémé's, played while the travel
@@ -30,6 +31,8 @@ interface RideOptions {
   hours: number;
   /** A seed for the town drawn past the window (a ride there and back are not the same street). */
   seed: number;
+  /** Who rides along: the line's regulars at this hour, Mémé some mornings (`busRiders.ridersFor`). */
+  riders?: readonly Rider[];
 }
 
 /** Plays a ride in `container`, over everything; resolves once it has ended in black (played out or skipped). */
@@ -78,7 +81,7 @@ class BusRide {
     skip.append('Skip ', key);
     this.root.append(this.canvas, skip);
     container.appendChild(this.root);
-    this.scene = new BusRideScene(options.seed);
+    this.scene = new BusRideScene(options.seed, options.riders);
     this.sound = playBusRide({ seconds: RIDE.seconds, speed: speedAt, bellAt: RIDE.bellAt, doorsAt: RIDE.doorsAt });
     // In the capture phase, ahead of the game's own keys and clicks: nothing else acts while the ride plays.
     window.addEventListener('keydown', this.onKey, { capture: true }); // convention-ok: not a panel (the ride plays over the travel curtain, ahead of the game's keys)

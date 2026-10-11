@@ -14,8 +14,8 @@ const WHITE = paint(0xf4f1ea, 0.5);
 /**
  * A prize as a small model, standing on its base at local y = 0, facing +z: the keyring, the
  * bouncy ball, the yo-yo, the duck, the plush bear and cat, the tin rocket, the lava lamp (its
- * wax glows), the trophy, the mini cabinet (its screen glows) and the claw's bunnies. A few
- * dozen triangles each; nothing casts a shadow but the bigger ones.
+ * wax glows), the trophy, the mini cabinet (its screen glows), the claw's bunnies and the back room's limited
+ * editions, cartridge, plate and cabinet. A few dozen triangles each; nothing casts a shadow but the bigger ones.
  */
 export function prizeModel(kind: PrizeKind, color: number): THREE.Group {
   const g = new THREE.Group();
@@ -205,7 +205,104 @@ const PRIZE_MODELS: Record<PrizeKind, PrizeBuilder> = {
     stick.position.set(-0.015, 0.09, 0.025);
     g.add(stick);
   },
+  // The back room's.
+  token: (g, { color }) => {
+    // A gilded token on a little easel of black card.
+    const gold = standard({ color, metalness: 1, roughness: 0.22 });
+    const coin = cylinderMesh(0.03, 0.005, gold, { y: 0.034 }, { segments: 24 });
+    coin.rotation.x = Math.PI / 2 - 0.2;
+    const card = 0.004; // the easel's black card
+    g.add(coin, boxMesh(0.03, card, 0.03, DARK, { y: card / 2 }), boxMesh(card, 0.03, card, DARK, { y: card + 0.015, z: -0.012 }));
+  },
+  snowGlobe: (g, { color }) => {
+    g.add(cylinderMesh(0.034, 0.025, paint(0x2a1a3a, 0.4), { y: 0.0125 }, { radiusBottom: 0.04, segments: 20 }));
+    const inside = new THREE.Mesh(new THREE.SphereGeometry(0.03, 14, 10), standard({ color, emissive: color, emissiveIntensity: 0.6, roughness: 0.5 }));
+    inside.scale.y = 0.4;
+    inside.position.y = 0.03;
+    const glass = new THREE.Mesh(new THREE.SphereGeometry(0.04, 20, 14), standard({ color: 0xe8f4ff, roughness: 0.05, transparent: true, opacity: 0.3 }));
+    glass.position.y = 0.06;
+    glass.castShadow = false;
+    g.add(inside, glass);
+  },
+  joystick: (g, { color }) => {
+    const gold = standard({ color, metalness: 1, roughness: 0.25 });
+    g.add(boxMesh(0.08, 0.025, 0.06, paint(0x5a3a22, 0.5), { y: 0.0125 }));
+    g.add(cylinderMesh(0.004, 0.06, gold, { y: 0.055 }, { segments: 8 }));
+    const knob = new THREE.Mesh(new THREE.SphereGeometry(0.014, 14, 10), gold);
+    knob.position.y = 0.09;
+    g.add(knob, cylinderMesh(0.012, 0.004, gold, { y: 0.027 }, { segments: 16 }));
+  },
+  lightBox: (g) => {
+    // A marquee in a black box frame, its face lit from behind.
+    g.add(boxMesh(0.16, 0.06, 0.03, DARK, { y: 0.03 }));
+    const face = new THREE.Mesh(new THREE.PlaneGeometry(0.15, 0.05), basic({ map: marqueeFace(), toneMapped: false }));
+    face.position.set(0, 0.03, 0.015 + WALL.framed.lift);
+    layMesh(face, WALL.framed);
+    g.add(face);
+  },
+  cassette: (g, { coat }) => {
+    const shell = 0.012; // the cassette's thickness: its label and reels stand proud of the face
+    g.add(boxMesh(0.1, 0.064, shell, paint(0x1a1a1f, 0.4), { y: 0.032 }));
+    const label = boxMesh(0.08, 0.03, PROUD, coat, { y: 0.04, z: shell / 2 + PROUD / 2 });
+    g.add(label);
+    for (const x of [-0.022, 0.022]) {
+      const reel = cylinderMesh(0.008, PROUD, WHITE, { x, y: 0.03, z: shell / 2 + PROUD * 1.5 }, { segments: 12 });
+      reel.rotation.x = Math.PI / 2;
+      g.add(reel);
+    }
+  },
+  pixelPlush: (g, { color }) => {
+    // A felt cube of STAR RAID's alien: a body, two eyes, legs.
+    const felt = paint(color, 1);
+    g.add(boxMesh(0.07, 0.05, 0.05, felt, { y: 0.045 }));
+    for (const sx of [-1, 1]) {
+      g.add(boxMesh(0.012, 0.012, 0.004, DARK, { x: sx * 0.016, y: 0.052, z: 0.025 + PROUD }));
+      g.add(boxMesh(0.012, 0.02, 0.02, felt, { x: sx * 0.026, y: 0.01 }));
+      g.add(boxMesh(0.008, 0.02, 0.01, felt, { x: sx * 0.03, y: 0.08 }));
+    }
+  },
+  cart: (g, { color }) => {
+    // A cartridge in a gold-ribboned black box.
+    g.add(boxMesh(0.07, 0.06, 0.05, paint(0x1a1a1f, 0.4), { y: 0.03 }));
+    const ribbon = standard({ color, metalness: 0.8, roughness: 0.3 });
+    g.add(boxMesh(0.072, 0.062, 0.01, ribbon, { y: 0.03 }), boxMesh(0.01, 0.062, 0.052, ribbon, { y: 0.03 }));
+  },
+  plate: (g, { color }) => {
+    const brass = standard({ color, metalness: 1, roughness: 0.3 });
+    const foot = 0.006;
+    const plaque = boxMesh(0.09, 0.03, 0.004, brass, { y: 0.03 });
+    plaque.rotation.x = -0.25;
+    g.add(plaque, boxMesh(0.05, foot, 0.03, DARK, { y: foot / 2 }));
+  },
+  cabinet: (g, { coat }) => {
+    // A cabinet as the counter shows it: a little card model of the upright going home.
+    const w = 0.06;
+    // The upper box set back over the base by its depth's difference, flush at the back.
+    g.add(boxMesh(w, 0.07, 0.05, coat, { y: 0.035 }), boxMesh(w, 0.06, 0.04, coat, { y: 0.1, z: (0.04 - 0.05) / 2 }));
+    const screen = new THREE.Mesh(new THREE.PlaneGeometry(w * 0.75, w * 0.55), basic({ map: miniScreen(), toneMapped: false }));
+    screen.position.set(0, 0.1, 0.015 + WALL.framed.lift);
+    layMesh(screen, WALL.framed);
+    g.add(screen);
+  },
 };
+
+let marquee: THREE.CanvasTexture | null = null;
+function marqueeFace(): THREE.CanvasTexture {
+  if (marquee) return marquee;
+  const [canvas, ctx] = createCanvas(192, 64);
+  const grad = ctx.createLinearGradient(0, 0, 192, 0);
+  grad.addColorStop(0, '#ff2fa0');
+  grad.addColorStop(1, '#33e0ff');
+  ctx.fillStyle = grad;
+  ctx.fillRect(0, 0, 192, 64);
+  ctx.fillStyle = '#1a0f2a';
+  ctx.font = 'bold 22px monospace';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText('INSERT COIN', 96, 33);
+  marquee = markShared(toTexture(canvas, 'facing'));
+  return marquee;
+}
 
 let plate: THREE.CanvasTexture | null = null;
 function plateTexture(): THREE.CanvasTexture {

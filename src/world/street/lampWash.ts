@@ -7,12 +7,15 @@ export const WASH_SLOTS = 12;
 /** The wash's reach: at this distance (m) a lamp gives half its light; and how strong it is at the lamp. */
 const HALF_AT = 5;
 const STRENGTH = 0.9;
+/** How much of the BRDF's highlight the wash adds (a wash spreads the lamp: its highlight is a little softer than a bulb's). */
+const SPECULAR = 0.8;
 
 /**
  * The light of the street lamps that have no real light (`StreetLamps` lends real point lights to the few nearest the
  * player): an analytic term patched into the materials it washes, so the facades, the trees' undersides and the cars
- * all down the street are lit warm by every lamp at night, not only the four nearest. Each slot is a lamp's head
- * (world xyz) and how lit it is (w: 0 off); the owner writes them every frame. No shadow, no texture unit: ALU only.
+ * all down the street are lit warm by every lamp at night, not only the four nearest, with each lamp's highlight on
+ * what is glossy (wet paint, glass, the setts after rain: the material's own GGX). Each slot is a lamp's head (world
+ * xyz) and how lit it is (w: 0 off); the owner writes them every frame. No shadow, no texture unit: ALU only.
  */
 export class LampWash {
   readonly uniforms = {
@@ -46,8 +49,12 @@ export class LampWash {
             if ( lamp.w <= 0.0 ) continue;
             vec3 toLamp = ( viewMatrix * vec4( lamp.xyz, 1.0 ) ).xyz - geometryPosition;
             float d2 = dot( toLamp, toLamp );
-            float facing = max( dot( normal, toLamp * inversesqrt( d2 ) ), 0.0 );
-            reflectedLight.directDiffuse += lampWashColor * diffuseColor.rgb * ( lamp.w * ${STRENGTH.toFixed(2)} * facing / ( 1.0 + d2 / ${(HALF_AT * HALF_AT).toFixed(1)} ) );
+            vec3 lampDir = toLamp * inversesqrt( d2 );
+            float facing = max( dot( normal, lampDir ), 0.0 );
+            vec3 lampIrradiance = lampWashColor * ( lamp.w * ${STRENGTH.toFixed(2)} * facing / ( 1.0 + d2 / ${(HALF_AT * HALF_AT).toFixed(1)} ) );
+            reflectedLight.directDiffuse += lampIrradiance * diffuseColor.rgb;
+            // The lamp's highlight too (the material's own BRDF): wet paint, glass and setts down the street catch it.
+            reflectedLight.directSpecular += lampIrradiance * BRDF_GGX( lampDir, geometryViewDir, normal, material ) * ${SPECULAR.toFixed(2)};
           }
         `);
     });

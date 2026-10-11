@@ -36,6 +36,7 @@ import { addFlatNoise } from '@/building/flatNoise';
 import { regionLockFor } from '@/economy/regionLock';
 import { furnishKitchenRepair } from '../repair/furnishRepair';
 import { rummageIn } from '../build/rummage';
+import { furnishMemeRecipes } from './memeRecipes';
 
 /** The chronicle's card comes up this long after the jingle starts (ms). */
 const CHRONICLE_AFTER_MS = 1500;
@@ -43,7 +44,7 @@ const CHRONICLE_AFTER_MS = 1500;
 const RADIO_NOISE = 0.45;
 
 /** What the kitchen's builder reads of the `BuildContext`. */
-type KitchenBuild = Pick<BuildContext, 'sky' | 'cssLayer' | 'listener' | 'acoustics' | 'home' | 'classifieds' | 'story' | 'today' | 'collection' | 'covers'>;
+type KitchenBuild = Pick<BuildContext, 'sky' | 'cssLayer' | 'listener' | 'acoustics' | 'home' | 'classifieds' | 'story' | 'today' | 'collection' | 'covers' | 'grandmaRituals'>;
 
 /**
  * Builds the kitchen into its zone from `KITCHEN_PLAN`: shell (the hallway hangs the door), the
@@ -134,6 +135,8 @@ export function furnishKitchen(zone: Zone, ctx: KitchenBuild): ZoneHandle {
 
   // 8. What the kitchen is used for (docs/household.md): the cleaning kit, a cake, the cat's treats, the radio's chronicle.
   if (household) furnishKitchenLife(zone, ctx, household, { table, furnished, catThings, radio });
+  // Mémé's recipes, once she has taught one: her tin, the dish cooked (docs/grandma.md).
+  if (household) furnishMemeRecipes(zone, ctx, household);
   // A console bought broken waits on the right-hand chair, to be mended on the table (docs/household.md "Repairing a console").
   if (ctx.classifieds && chairs.length) furnishKitchenRepair(zone, ctx.classifieds, { chair: chairs[chairs.length - 1]!, furnished });
 

@@ -4,7 +4,7 @@ import { KEYS, PersistedStore } from '@/persistence';
  * The friends' side of the social layer (docs/social.md "Friends"), saved under `KEYS.friendsLife`: the games the
  * player borrowed from a friend (`lendsGames`: in the collection, but never sold, swapped or given, and gone back
  * when due), the last postcard, the last word a friend put in for the player with someone (`takesSide`), the last
- * unannounced call (`dropsBy`). A module-level store: `economy/Transactions.isKeepsake` reads `isBorrowed`.
+ * unannounced call (`dropsBy`), the day fixed with Marco at the arcade (`arcadePartner`). A module-level store: `economy/Transactions.isKeepsake` reads `isBorrowed`.
  */
 
 /** A game borrowed from a friend: whose, what, when it goes back. */
@@ -23,9 +23,11 @@ interface FriendsLife {
   sides: Record<string, number>;
   /** The game day of the last unannounced call. */
   dropBy: number;
+  /** The game day Marco is to meet the player at the arcade (`arcadePartner`). */
+  arcadeDate: number;
 }
 
-const fresh = (): FriendsLife => ({ borrowed: [], postcard: -99, sides: {}, dropBy: -99 });
+const fresh = (): FriendsLife => ({ borrowed: [], postcard: -99, sides: {}, dropBy: -99, arcadeDate: -99 });
 
 let store: PersistedStore<FriendsLife> | null = null;
 let state: FriendsLife | null = null;
@@ -49,7 +51,7 @@ function readLife(data: unknown): FriendsLife | null {
   );
   const sides: Record<string, number> = {};
   if (d.sides && typeof d.sides === 'object') for (const [k, v] of Object.entries(d.sides)) if (typeof v === 'number') sides[k] = v;
-  return { borrowed, postcard: typeof d.postcard === 'number' ? d.postcard : -99, sides, dropBy: typeof d.dropBy === 'number' ? d.dropBy : -99 };
+  return { borrowed, postcard: typeof d.postcard === 'number' ? d.postcard : -99, sides, dropBy: typeof d.dropBy === 'number' ? d.dropBy : -99, arcadeDate: typeof d.arcadeDate === 'number' ? d.arcadeDate : -99 };
 }
 
 /** Whether the collection's `gameId` is borrowed from a friend (not the player's to sell, swap or give). */
@@ -100,5 +102,14 @@ export function lastDropBy(): number {
 }
 export function droppedBy(day: number): void {
   loaded().dropBy = day;
+  save();
+}
+
+/** The game day fixed with Marco at the arcade, and fixing one. */
+export function arcadeDate(): number {
+  return loaded().arcadeDate;
+}
+export function fixArcadeDate(day: number): void {
+  loaded().arcadeDate = day;
   save();
 }

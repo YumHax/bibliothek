@@ -10,11 +10,13 @@ import { playCoins } from '@/audio/coins';
 import { invisibleHitbox } from '../../meshUtils';
 import type { Furniture } from '../../Furniture';
 import type { ShopDoor } from '../streetPlan';
-import { SHOP_HOURS, isShopOpen } from './shopHours';
+import { hoursOn, isShopOpen, opensAgain, streetWeekday } from './shopHours';
 import { clockShort } from '@/text/clock';
 import { formatCoins } from '@/text/money';
 import { capitalise } from '@/text/strings';
-import { BARISTAS, BAR_GOSSIP, SHOP_TALK, shopName, type ShopOffer } from './shopPlan';
+import { BARISTAS, BAR_GOSSIP, SHOP_TALK, WEEKDAY_LOOKS, shopName, type ShopOffer } from './shopPlan';
+import { BAR_LOOKS, barOf } from '@/streetShops/bars';
+import type { CounterTurn, StreetCounters } from './counters';
 import { SCRATCH_PER_DAY, cardInProgress, cardsToday, drawCard, keepCardInProgress, recordCard, type CardInProgress } from './scratchCard';
 import { STREET_TREATS_PER_DAY } from '@/economy/pricing';
 import { currentSeason } from '@/time/season';
@@ -27,6 +29,11 @@ import { socialCaption } from '@/social/caption';
 import type { SocialServices } from '@/social/talk';
 import type { PersonId } from '@/social/types';
 import { baristaTalk } from './baristaTalk';
+import { markStreet } from '@/social/street/streetMarks';
+import { shopkeeperOf, shopkeeperTalk } from '../townsfolk/shopkeeperTalk';
+
+/** A scratch-card win this big (the card's top line) is a moment for the collector's book. */
+const SCRATCH_BIG_WIN = 25;
 
 /** What the shops draw on: the clock, the coins, the flea market (the café's tips and coffee), the tabac's card. */
 export interface ShopServices {
@@ -43,10 +50,14 @@ export interface ShopServices {
   social?: SocialServices;
   /** The game day (the barista's free coffee, once a day). */
   day?: () => number;
+  /** What the doors do beyond their plain offers (`counters.ts`: the bookshops, the bars' nights, the pop-up). */
+  counters?: StreetCounters;
 }
 
-/** Which line each shop said last, across the street's rebuilds this page (a look in goes on to the next line). */
-const looked = new Map<ShopKind, number>();
+/** Which line each shop said last (by kind and name), across the street's rebuilds this page (a look in goes on to the next line). */
+const looked = new Map<string, number>();
+/** The weekday each shop last said its day's own line on (`WEEKDAY_LOOKS`), by kind and name. */
+const saidToday = new Map<string, number>();
 
 /**
  * A shop's door on Front Street, as the player meets it: the caption says whose it is and what it
@@ -84,11 +95,16 @@ export class ShopEntrance extends THREE.Group implements Furniture, Interactable
   label(): string {
     const { kind } = this.door.shop;
     const name = capitalise(this.shopName);
-    if (kind === 'shut') return `${name} · shut for good`;
+    if (kind === 'shut') return this.turn()?.caption ?? `${name} · shut for good`;
     if (SHOP_TALK[kind].offer?.id === 'scratch' && cardInProgress()) return `${name} · finish your scratch card`;
-    if (!this.isOpen) return `${name} · closed, opens at ${clockShort(SHOP_HOURS[kind]?.open ?? 8)}`;
+    if (!this.isOpen) return `${name} · closed, ${opensAgain(kind, this.services.hours())}`;
     const till = this.closesAt();
     const offer = SHOP_TALK[kind].offer;
+    // What the door does today beyond its plain offer (the bookshops' counters, the bars' nights: `counters.ts`).
+    const turn = this.turn();
+    const keeper = this.keeper();
+    if (keeper) return `${name} · ${socialCaption(keeper, turn ? `${turn.entry.toLowerCase()} and a chat` : offer ? `${offer.title} and a chat` : 'a chat')}${till}`;
+    if (turn) return `${turn.caption}${till}`;
     if (!offer) return `${name} · look in${till}`;
     const barista = this.barista();
     if (barista) return `${name} · ${socialCaption(barista, 'coffee and a chat')}${till}`;
@@ -98,9 +114,14 @@ export class ShopEntrance extends THREE.Group implements Furniture, Interactable
     return `${name} · buy ${offer.title} (${formatCoins(offer.price)})${till}`;
   }
 
-  /** " · till 19:30": when the shop shuts (nothing for one open past midnight's small hours, or never shut). */
+  /** What the door does today beyond its plain offer (`counters.ts`), or null. */
+  private turn(): CounterTurn | null {
+    return this.services.counters?.at(this.door, this.shopName) ?? null;
+  }
+
+  /** " · till 19:30": when the shop shuts today (nothing for one open past midnight's small hours, or never shut). */
   private closesAt(): string {
-    const hours = SHOP_HOURS[this.door.shop.kind];
+    const hours = hoursOn(this.door.shop.kind);
     if (!hours || hours.close - hours.open >= 24) return '';
     return ` · till ${clockShort(hours.close)}`;
   }
@@ -123,20 +144,50 @@ export class ShopEntrance extends THREE.Group implements Furniture, Interactable
       return;
     }
     if (kind !== 'shut' && !this.isOpen) {
-      session.refuse(`${capitalise(this.shopName)} is closed. ${talk.closed} Opens at ${clockShort(SHOP_HOURS[kind]?.open ?? 8)}.`);
+      session.refuse(`${capitalise(this.shopName)} is closed. ${talk.closed} ${capitalise(opensAgain(kind, this.services.hours()))}.`);
       return;
     }
+    const turn = this.turn();
     const barista = this.barista();
     const { social } = this.services;
     if (barista && social && talk.offer?.id === 'coffee') {
       social.open(session, baristaTalk({ id: barista, price: talk.offer.price, services: this.services, tips: () => this.tips() }, session));
       return;
     }
+    // Someone behind the counter the player can know (`townsfolk/shopkeeperTalk`): the shop's business is their first entry.
+    const keeper = this.keeper();
+    if (keeper && social && kind !== 'shut') {
+      const offer = talk.offer && !this.soldOut(talk.offer) ? talk.offer : null;
+      const counter = turn ? { label: turn.entry, run: () => turn.act(session) } : offer ? { label: `Buy ${offer.title} (${formatCoins(offer.price)})`, run: () => this.counter(session) } : undefined;
+      social.open(session, shopkeeperTalk({ person: keeper, counter, look: () => this.nextLook(kind), day: () => this.services.day?.() ?? 0 }, session));
+      return;
+    }
+    if (turn) {
+      turn.act(session);
+      return;
+    }
+    if (kind === 'shut') {
+      session.react(this.nextLook(kind));
+      return;
+    }
+    this.counter(session);
+  }
+
+  /** The shop's own business, as a click on its door does it: the offer bought, else a look in. */
+  private counter(session: SessionActions): void {
+    const { kind } = this.door.shop;
+    const talk = SHOP_TALK[kind];
     if (talk.offer && !this.soldOut(talk.offer)) {
       this.sell(session, talk.offer);
       return;
     }
     session.react(this.nextLook(kind));
+  }
+
+  /** Who serves at this counter and can be known (the butcher, CORNER BOOKS' bookseller), when the social layer is there. */
+  private keeper(): PersonId | null {
+    if (!this.services.social) return null;
+    return shopkeeperOf(this.door.shop.kind, this.door.shop.name);
   }
 
   /** Who serves at this café's counter (`BARISTAS`), when the social layer is there. */
@@ -145,11 +196,22 @@ export class ShopEntrance extends THREE.Group implements Furniture, Interactable
     return BARISTAS[this.door.shop.name ?? ''] ?? null;
   }
 
-  /** The shop's next line (one after the other, carried across the street's rebuilds). */
+  /**
+   * The shop's next line (one after the other, carried across the street's rebuilds): first the day's own when the week
+   * gives it one (`WEEKDAY_LOOKS`: the market morning, the launderette's Monday), a named bar's its own (`BAR_LOOKS`).
+   */
   private nextLook(kind: ShopKind): string {
-    const lines = SHOP_TALK[kind].looks;
-    const n = looked.get(kind) ?? 0;
-    looked.set(kind, n + 1);
+    const weekday = streetWeekday();
+    const todays = WEEKDAY_LOOKS[kind]?.[weekday];
+    const key = `${kind}:${this.door.shop.name ?? ''}`;
+    if (todays && saidToday.get(key) !== weekday) {
+      saidToday.set(key, weekday);
+      return todays;
+    }
+    const bar = kind === 'bar' ? barOf(this.door.shop.name) : null;
+    const lines = bar ? BAR_LOOKS[bar] : SHOP_TALK[kind].looks;
+    const n = looked.get(key) ?? 0;
+    looked.set(key, n + 1);
     return lines[n % lines.length] ?? '';
   }
 
@@ -208,8 +270,8 @@ export class ShopEntrance extends THREE.Group implements Furniture, Interactable
   /** What the regulars go on about: what is on along the street (the collector, a garage sale, the arcade), else their old lines. */
   private gossip(): string {
     const news = this.services.streetNews();
-    const n = looked.get('bar') ?? 0;
-    looked.set('bar', n + 1);
+    const n = looked.get('bar:gossip') ?? 0;
+    looked.set('bar:gossip', n + 1);
     if (news.length && n % 3 !== 2) return `“${news[n % news.length]}”`;
     return BAR_GOSSIP[n % BAR_GOSSIP.length]!;
   }
@@ -240,6 +302,8 @@ export class ShopEntrance extends THREE.Group implements Furniture, Interactable
         if (!win) return 'Nothing. “Better luck next time.”';
         purse.earnCoins(win.prize);
         playCoins();
+        // The top line of the card (the 7s): a moment of the street's for the collector's book.
+        if (win.prize >= SCRATCH_BIG_WIN) markStreet('scratchBig');
         return `Three ${win.name}! ${formatCoins(win.prize)}, counted out on the counter.`;
       },
       again: () => {

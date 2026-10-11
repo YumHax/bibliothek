@@ -72,6 +72,8 @@ Read this only when changing the cat's look, behaviour or belongings.
   it is adopted at the pet shop on Front Street (`HomeUpgrades` 'cat'), the scratching post and the ball until they are
   bought there (handed over then with `Cat.provide`); `followAdoption` keeps `Cat.adopted`, which C (`CatCare`), the
   feather wand and the visitors check. It gets `seats` as the armchairs that stand (`RoomHandle.armchairs`, live).
+  Or the street's stray comes home (`HomeContext.strayHome`, wired in `bootstrap/worldContext`): the same 'cat'
+  added for nothing, its name and coat set to his (Mistigri, ginger) first (docs/story.md "The cat").
 
 ## Out of the collection room
 

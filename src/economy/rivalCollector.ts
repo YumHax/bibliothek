@@ -5,6 +5,8 @@ import { gameDayRandom } from '@/time/daily';
 import { nudge, tier } from '@/social/standing';
 import { atLeast, tierRank } from '@/social/tiers';
 import { RIVAL } from './pricing';
+import { markStreet } from '@/social/street/streetMarks';
+import { settleWager } from '@/social/street/wager';
 
 /*
  * THE RIVAL COLLECTOR: one man wherever he turns up. Outside RETRO GAMES with his suitcase some real days
@@ -146,6 +148,12 @@ export class RivalCollector {
     this.state = { ...this.state, hunt: { ...hunt, outcome } };
     if (outcome === 'took') this.tookOne(day, taken);
     else this.beatenOnce(day);
+    // A wager taken up in conversation (`social/street/wager`) is settled on his first hunt after it.
+    const bet = settleWager(day, outcome);
+    if (bet === 'won') {
+      markStreet('wagerWon');
+      nudge(RIVAL_PERSON, { trust: 4, why: 'a bet is a bet: he respects that', day, memory: 'you won our wager', memoryWeight: 4 });
+    } else if (bet === 'lost') nudge(RIVAL_PERSON, { warmth: 3, why: 'won his wager', day, memory: 'I won our wager' });
   }
 
   /**
@@ -199,6 +207,8 @@ export class RivalCollector {
     if (mood === 'bitter') return `You. Of course. Don't let me keep you from whatever you're about to snatch.`;
     if (mood === 'stung') return `Ah, it's ${you}. Beat me to it again lately? I'm keeping count, you know.`;
     if (mood === 'smug') return `Hello, ${you}. Early bird, and all that. Try getting up before me some time.`;
+    // The first word, before they have ever spoken: the sale of Félix's flat, gloated over (docs/story.md, act 2).
+    if (!met) return `${RIVAL_COLLECTOR.short} Crane. You're Félix Aubry's family, aren't you? I bought most of his lot at the sale. He had taste. Now I have it.`;
     return `${RIVAL_COLLECTOR.short} Crane. I collect too: we'll be seeing a lot of each other.`;
   }
 

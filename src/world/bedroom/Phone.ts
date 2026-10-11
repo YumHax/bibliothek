@@ -15,6 +15,8 @@ const T = 0.008;
 /** The charge LED after dark (a faint green dot), and the lock screen's faint glow. */
 const LED_NIGHT = 2.2;
 const SCREEN_NIGHT = 0.08;
+/** The lit screen of a call coming in. */
+const SCREEN_CALL = 0.9;
 
 const GLASS = standard({ color: 0x0b0c10, roughness: 0.15, metalness: 0 });
 const CABLE = paint(0xeeeeea, 0.5);
@@ -28,6 +30,9 @@ const CABLE = paint(0xeeeeea, 0.5);
 export class Phone extends Prop {
   private readonly led: THREE.MeshStandardMaterial;
   private readonly screen: THREE.MeshStandardMaterial;
+  /** The dusk's glow and a call's (`setRinging`): the screen shows the brighter. */
+  private darkness = 0;
+  private ringing = 0;
 
   constructor(options: PhoneOptions = {}) {
     super();
@@ -53,8 +58,19 @@ export class Phone extends Prop {
 
   /** 0 by day .. 1 in the dark (`duskDarkness` of the sun's height): the glows come up with the dusk. */
   setDark(darkness: number): void {
+    this.darkness = darkness;
     this.led.emissiveIntensity = darkness * LED_NIGHT;
-    this.screen.emissiveIntensity = darkness * SCREEN_NIGHT;
+    this.showScreen();
+  }
+
+  /** 0 .. 1: the screen lit by a call coming in (the caller pulses it with the ring). */
+  setRinging(level: number): void {
+    this.ringing = level;
+    this.showScreen();
+  }
+
+  private showScreen(): void {
+    this.screen.emissiveIntensity = Math.max(this.darkness * SCREEN_NIGHT, this.ringing * SCREEN_CALL);
   }
 }
 

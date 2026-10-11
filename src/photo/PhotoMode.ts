@@ -42,6 +42,8 @@ interface PhotoModeDeps {
   blocked?: () => string | null;
   /** A line for the HUD (the Toast or the hint), shown once photo mode is left or when it cannot start. */
   say?: (text: string) => void;
+  /** Hears each shot as saved (the roll keeps a small print for Mémé's album, `photo/photoRoll`). */
+  kept?: (shot: HTMLCanvasElement) => void;
 }
 
 /** How far the camera may fly from where photo mode started (m), and how fast (m/s). */
@@ -160,6 +162,7 @@ export class PhotoMode implements Updatable {
     ctx.drawImage(canvas, crop.x, crop.y, crop.w, crop.h, 0, 0, crop.w, crop.h);
     this.hud.flash();
     playShutter();
+    this.deps.kept?.(out);
     savePhoto(out, (result) => {
       if (result.ok) this.hud.setSaved(`Saved ${result.name}`, false);
       else this.hud.setSaved(`Not saved: ${result.reason}`, true);

@@ -3,10 +3,9 @@ import { inHours, type HourPair, type HourSpan } from './clock';
 /*
  * What is on, and when, declared once per feature and read by everyone who tells the player about it (the street's
  * news and bills, the board, the journal) and by the feature itself, so the paper never contradicts the pavement.
- * A `Schedule` says which day it follows (the REAL date for what the street does for everyone that date: the
- * collector, the garage sale, the cast-off box, the tournament; the GAME day for what the game's own calendar runs:
- * the market's fairs, the saleroom's sale), on which of those days it is on, between which hours, and in what
- * weather. `isOn` is the one rule all of them are judged by; `keptAway` the weather's part of it on its own.
+ * A `Schedule` says which day it follows (the GAME day for everything today: the street's sales, the busker, the
+ * collector, the tournament, the market's fairs, the saleroom's sale, the bars' nights; `time/streetDay`), on which of
+ * those days it is on, between which hours, and in what weather. `isOn` is the one rule all of them are judged by; `keptAway` the weather's part of it on its own.
  */
 
 type ClockKind = 'real' | 'game';
@@ -35,11 +34,6 @@ export interface Schedule {
   readonly hours?: HourSpan | HourPair;
   /** Whether the weather lets it happen; absent: any weather. */
   presence?(weather: Weather): boolean;
-}
-
-/** A schedule on the REAL date: `isDay` gets the date. */
-export function realDays(id: string, isDay: (date: Date) => boolean, rest: Pick<Schedule, 'hours' | 'presence'> = {}): Schedule {
-  return { id, clock: 'real', isDay: (day) => isDay(day instanceof Date ? day : new Date()), ...rest };
 }
 
 /** A schedule on the GAME day: `isDay` gets the day count. */

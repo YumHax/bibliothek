@@ -6,14 +6,16 @@ import { Suitcase } from '../props/Suitcase';
 import { felixLaterLook, playerYoungLook } from './familyLooks';
 import { stageFelixFlat } from './felixFlat';
 import { LEAVING_MEMORY_PLAN as PLAN } from './leavingMemoryPlan';
+import { backInTheRoom } from './memoryStage';
 import type { Present } from './albumWiring';
 
 /**
  * THE LAST WEDNESDAY (`MEMORIES` leaving, docs/story.md "Mémé"): Félix's flat about 2007, an evening of rain, the
  * lamps on; the player at eighteen, a backpack on and the suitcase by the door, come to say goodbye before going off
  * to study; Félix at his shelves, boxes pulled out on the floor, turning to them: "half of these are yours". The
- * promise, then a cut: the player gone, Félix alone at the window watching the bus go. One scene in the collection
- * room as the opening dreams it; back at Mémé's the player stands by her table, turned to her.
+ * promise (the film waits on the player to make it: its cue), then a cut: the player gone, Félix alone at the window
+ * watching the bus go. One scene in the collection room as the opening dreams it; back at Mémé's the player stands by
+ * her table, turned to her, and she sighs before she speaks.
  */
 export function leavingReel(present: Present): MemoryReel {
   const [fx, fz] = PLAN.felix.at;
@@ -63,6 +65,8 @@ export function leavingReel(present: Present): MemoryReel {
           player.stand(PLAN.player.yaw, 'pockets', set.world(fx, PLAN.felix.head, fz));
           cast = { felix, player, suitcase };
         },
+        // The film waits on the player's promise (the nod), or gives it for them.
+        cues: [{ at: PLAN.promiseCueAt, prompt: 'Promise to come back', done: () => once(Infinity, 0, 'promise', () => cast?.player.nod()) }],
         beat: (t) => {
           today?.hold();
           if (!cast) return;
@@ -92,10 +96,6 @@ export function leavingReel(present: Present): MemoryReel {
       },
     ],
     after: { zone: 'grandmaFlat', at: [bx, bz], yaw: Math.atan2(-(mx - bx), -(mz - bz)) },
-    returned: () => {
-      present.meme.setPresent(true);
-      present.reseat();
-      present.meme.speak(present.afterLine);
-    },
+    returned: () => backInTheRoom(present, 'soft'),
   };
 }

@@ -3,6 +3,7 @@ import { fadeIn, fadeOut } from './fade';
 import { formatNumber } from '@/text/count';
 import { Roll } from './countUp';
 import { hudSlot } from './hudSlot';
+import { revealHeld } from './revealHold';
 
 /** What the HUD reads: the two balances and a way to hear about changes. */
 interface WalletView {
@@ -72,6 +73,8 @@ export class WalletHud {
   /** The balances as drawn: they roll towards the wallet's (`ui/countUp`). */
   private readonly rolls = { coins: new Roll(COUNT_S), tickets: new Roll(COUNT_S) };
   private last = { coins: 0, tickets: 0 };
+  /** The wallet moved while a reveal was held (an arcade end card still counting): shown once it lets go. */
+  private deferred = false;
 
   constructor(container: HTMLElement, private readonly wallet: WalletView, private readonly options: WalletHudOptions = {}) {
     this.root = document.createElement('div');
@@ -101,6 +104,11 @@ export class WalletHud {
     wallet.subscribe(() => this.onChange());
   }
 
+  /** Something that rides the chip after the tickets (the pinned prize, `PrizeGoalChip`): shown and hidden with it. */
+  addItem(el: HTMLElement): void {
+    this.items.tickets.after(el);
+  }
+
   /** In the room (shown by the rules above), or on the start card (never). */
   setVisible(inRoom: boolean): void {
     if (inRoom && !this.inRoom) this.peekLeft = PEEK_MS;
@@ -116,6 +124,10 @@ export class WalletHud {
 
   update(dt: number): void {
     this.drawClock();
+    if (this.deferred && !revealHeld()) {
+      this.deferred = false;
+      this.onChange();
+    }
     if (this.peekLeft > 0) {
       this.peekLeft -= dt * 1000;
       if (this.peekLeft <= 0) this.refresh();
@@ -146,6 +158,11 @@ export class WalletHud {
   }
 
   private onChange(): void {
+    // The machine is still counting the play's tickets out: the chip rolls (one float for it all) once it is done.
+    if (revealHeld()) {
+      this.deferred = true;
+      return;
+    }
     const coins = this.wallet.coins - this.last.coins;
     const tickets = this.wallet.tickets - this.last.tickets;
     this.last = { coins: this.wallet.coins, tickets: this.wallet.tickets };

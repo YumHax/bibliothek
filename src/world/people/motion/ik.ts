@@ -23,17 +23,18 @@ const Y = new THREE.Vector3(0, 1, 0);
 /**
  * Aims the leg whose hip joint is `hip` (its position the joint, in the pelvis's frame) so the
  * ankle reaches `target` (the pelvis's frame): the thigh's turn, the knee's bend, the knee turned
- * out by `kneeOut` (radians about the leg's line, signed by side). Out of reach, the leg is straight
- * towards it; returns by how much it falls short (0 when it reaches).
+ * out by `kneeOut` (radians about the leg's line, signed by side). `thigh` and `shin` are this
+ * person's (`body.proportionsOf`). Out of reach, the leg is straight towards it; returns by how
+ * much it falls short (0 when it reaches).
  */
-export function solveLeg(hip: THREE.Object3D, knee: THREE.Object3D, target: THREE.Vector3, kneeOut: number): number {
+export function solveLeg(hip: THREE.Object3D, knee: THREE.Object3D, target: THREE.Vector3, kneeOut: number, thigh = THIGH_L, shin = SHIN_L): number {
   const d = V.copy(target).sub(hip.position);
-  const reach = THIGH_L + SHIN_L - 0.002;
+  const reach = thigh + shin - 0.002;
   const length = d.length();
   const D = THREE.MathUtils.clamp(length, 0.15, reach);
   const u = d.normalize();
-  const interior = Math.acos(THREE.MathUtils.clamp((THIGH_L * THIGH_L + SHIN_L * SHIN_L - D * D) / (2 * THIGH_L * SHIN_L), -1, 1));
-  const forward = Math.acos(THREE.MathUtils.clamp((THIGH_L * THIGH_L + D * D - SHIN_L * SHIN_L) / (2 * THIGH_L * D), -1, 1));
+  const interior = Math.acos(THREE.MathUtils.clamp((thigh * thigh + shin * shin - D * D) / (2 * thigh * shin), -1, 1));
+  const forward = Math.acos(THREE.MathUtils.clamp((thigh * thigh + D * D - shin * shin) / (2 * thigh * D), -1, 1));
   // -y onto the leg's line (sideways first, then forward or back), turned out about that line, then the thigh forward of it.
   Q.setFromEuler(E.set(Math.atan2(-u.z, -u.y), 0, Math.asin(THREE.MathUtils.clamp(u.x, -1, 1)), 'XYZ'));
   Q2.setFromAxisAngle(u, kneeOut);

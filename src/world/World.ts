@@ -190,7 +190,9 @@ export class World<Handles extends object = Record<string, unknown>> implements 
     for (const zone of dormant) standIn.add(zone.group);
     standIn.updateMatrixWorld(true);
     try {
-      this.uploadTextures(standIn);
+      // A big texture (a facade atlas) per idle moment when the build is spread, else all at once.
+      if (between) await this.uploadTexturesSpread(standIn, between);
+      else this.uploadTextures(standIn);
       // The counts the loop will draw them with once they are in (the culler's), not all their lights.
       this.lightCuller.apply(standIn);
       await atMost(this.engine.compileScene(standIn), PRIME_WAIT_MS);
@@ -203,14 +205,20 @@ export class World<Handles extends object = Record<string, unknown>> implements 
   /** Uploads every texture `root`'s materials hold (render targets aside: their owner draws them). */
   private uploadTextures(root: THREE.Object3D = this.engine.scene): void {
     const { renderer } = this.engine;
-    root.traverse((obj) => {
-      for (const m of materialsOf(obj)) {
-        for (const value of Object.values(m)) {
-          const texture = value as THREE.Texture | null;
-          if (texture?.isTexture && !texture.isRenderTargetTexture) renderer.initTexture(texture);
-        }
-      }
-    });
+    for (const texture of texturesOf(root)) renderer.initTexture(texture);
+  }
+
+  /**
+   * `uploadTextures` spread over idle moments: an idle moment awaited after each big one (`BIG_TEXTURE` texels, a
+   * facade atlas is 16 M), so a street's atlases, masks and night maps never go up in one frame.
+   */
+  private async uploadTexturesSpread(root: THREE.Object3D, between: () => Promise<void>): Promise<void> {
+    const { renderer } = this.engine;
+    for (const texture of texturesOf(root)) {
+      renderer.initTexture(texture);
+      const image = texture.image as { width?: number; height?: number } | null;
+      if ((image?.width ?? 0) * (image?.height ?? 0) >= BIG_TEXTURE) await between();
+    }
   }
 
   /**
@@ -291,4 +299,21 @@ export class World<Handles extends object = Record<string, unknown>> implements 
     this.occluders.splice(this.occluders.indexOf(object), 1);
     this.occluderRemovedListeners.emit(object);
   }
+}
+
+/** Texels (width x height) past which a texture is uploaded in an idle moment of its own (`uploadTexturesSpread`). */
+const BIG_TEXTURE = 1 << 20;
+
+/** Every texture `root`'s materials hold, once each (render targets aside: their owner draws them). */
+function texturesOf(root: THREE.Object3D): Set<THREE.Texture> {
+  const textures = new Set<THREE.Texture>();
+  root.traverse((obj) => {
+    for (const m of materialsOf(obj)) {
+      for (const value of Object.values(m)) {
+        const texture = value as THREE.Texture | null;
+        if (texture?.isTexture && !texture.isRenderTargetTexture) textures.add(texture);
+      }
+    }
+  });
+  return textures;
 }

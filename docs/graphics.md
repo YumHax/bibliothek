@@ -81,7 +81,8 @@ at 4x the texels while the sun is live (every frame on high); the lamps stay at 
 
 Scene -> multisampled half-float target with a depth texture -> (medium, high) AO from depth at `ssaoScale` of the frame + depth-aware
 blur -> prep copy (the AO applied with a depth-weighted upsample, so no halo at silhouettes and no glow darkened after
-the fact; depth of field while `Inspector.focusDistance` is set: a spiral rotated per pixel, 16 taps, 32 past 6 px) ->
+the fact; depth of field while `Inspector.focusDistance` is set, or softer on a conversation's subject (`graphics/framing`):
+a spiral rotated per pixel, 16 taps, 32 past 6 px) ->
 `UnrealBloomPass` (first level at half the frame, soft knee `smoothWidth` 0.15) blended into the copy -> every 0.25 s
 the light meter: the copy averaged to a quarter then a sixteenth (log luminance, weighted by alpha), a 16 x 16 map read
 back asynchronously -> output shader: FXAA (medium, high: on Karis-compressed HDR, alpha blended too), a
@@ -372,7 +373,8 @@ blur radius (beyond the focus distance only, like the reading eye) and extra sto
 hands them back to the held box and the light meter. On `low` there is no `PostFx`: no lens, the card says so. Grades
 (`photoLooks`) are functions of the zone's look (the haze stays), set with `graphics.setLook(look, true)` and restored
 on exit. A photo: `engine.renderFrame()` then, in the same task, the canvas drawn over black into a 2D canvas cropped
-to the guide (`frames.cropOf`) and saved as a PNG; black under the alpha cut-outs (a playing screen is a hole in the
+to the guide (`frames.cropOf`) and saved as a PNG (and kept small on the photo roll, `photo/photoRoll`, for Mémé's
+album: docs/grandma.md); black under the alpha cut-outs (a playing screen is a hole in the
 canvas onto the CSS layer, which a canvas read cannot see). Keys are the action table's (`input/actions`: `photoMode` P to enter and leave,
 the `photo` context while active); the Session's `PhotoControl` route (right after the arcade's) hands every key to
 `handleKey` while it is on; held ones are read each frame. Made in `bootstrap/input`.

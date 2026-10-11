@@ -26,7 +26,8 @@ export const WEDNESDAYS_MEMORY_PLAN = {
   childHead: 0.72,
   felixHead: 1.12,
 
-  /** The beats: the cartridge blown into (twice), the game on; Félix over the manual, then pointing the way, a clap, a nod. */
+  /** The beats: the cartridge blown into (twice: the film waits on the player's two presses at the cue), the game on; Félix over the manual, then pointing the way, a clap, a nod. */
+  blowCueAt: 10.3,
   blowAt: 10.6,
   blowAgainAt: 12.1,
   playFrom: 13.4,

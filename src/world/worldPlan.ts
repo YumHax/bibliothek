@@ -22,6 +22,9 @@ import { ANNEX_ORIGIN, ANNEX_ROOM, STUDY_ORIGIN, STUDY_ROOM } from './annex/anne
 import { COURTYARD_PLAN, COURTYARD_ROOM, inYard } from './courtyard/courtyardPlan';
 import { SELLER_FLAT_PLAN, SELLER_FLAT_ROOM } from './sellerFlat/sellerFlatPlan';
 import { GRANDMA_FLAT_PLAN, GRANDMA_FLAT_ROOM } from './grandma/grandmaFlatPlan';
+import { REPLAY_PLAN, REPLAY_ROOM } from './replay/replayPlan';
+import { LINDEN_EXTENT, LINDEN_PLAN } from './linden/lindenPlan';
+import { LINDEN_LANDING_PLAN, LINDEN_LANDING_ROOM } from './linden/lindenLandingPlan';
 import { CELLAR_PLAN, CELLAR_ROOM, cellCentre } from './cellar/cellarPlan';
 import { ATTIC_PLAN, ATTIC_ROOM } from './attic/atticPlan';
 import { ROOF_PLAN, ROOF_ROOM } from './roof/roofPlan';
@@ -93,7 +96,7 @@ export const KITCHEN_WING: NearWall = {
 };
 
 /** What a zone is; one builder per kind in `layout.ts`. */
-export type ZoneKind = 'collectionRoom' | 'hallway' | 'bathroom' | 'bedroom' | 'kitchen' | 'balcony' | 'stairwell' | 'arcade' | 'market' | 'street' | 'shop' | 'annex' | 'annexStudy' | 'neighbourFlat' | 'courtyard' | 'saleroom' | 'sellerFlat' | 'grandmaFlat' | 'cellar' | 'attic' | 'roof';
+export type ZoneKind = 'collectionRoom' | 'hallway' | 'bathroom' | 'bedroom' | 'kitchen' | 'balcony' | 'stairwell' | 'arcade' | 'market' | 'street' | 'shop' | 'annex' | 'annexStudy' | 'neighbourFlat' | 'courtyard' | 'saleroom' | 'sellerFlat' | 'grandmaFlat' | 'lindenAvenue' | 'lindenLanding' | 'replayShop' | 'cellar' | 'attic' | 'roof';
 
 /**
  * A zone the player is teleported to (and from) instead of walking: the arcade, the market and the walk-in shops
@@ -325,14 +328,51 @@ const ZONES = {
     neighbours: [],
     travel: { label: 'A seller’s flat', arrival: SELLER_FLAT_PLAN.arrival.at, yaw: SELLER_FLAT_PLAN.arrival.yaw, unlisted: true },
   },
-  // Mémé's flat across town (src/world/grandma/): her living-dining room at the end of bus line 38, reached by the bus
-  // from Front Street's stop and left by its landing door back to the stop; never from the menu.
+  // Mémé's flat across town (src/world/grandma/): her living-dining room at number 14, Linden Avenue, walked into from
+  // her landing (its door is a real doorway); never from the menu.
   grandmaFlat: {
     kind: 'grandmaFlat',
     origin: [560, 0, 0],
     extent: GRANDMA_FLAT_ROOM,
-    neighbours: [],
+    neighbours: ['lindenLanding'],
     travel: { label: 'Mémé’s', arrival: GRANDMA_FLAT_PLAN.arrival.at, yaw: GRANDMA_FLAT_PLAN.arrival.yaw, unlisted: true },
+  },
+  // Her landing (src/world/linden/), behind her flat's back wall (`WALL_GAP` between the two): her door walked through,
+  // the stairs down a travel door to the avenue.
+  lindenLanding: {
+    kind: 'lindenLanding',
+    // Her door at x -2.0 in her flat (origin x 560), at -0.6 on this side.
+    origin: [560 - 2.0 + 0.6, 0, -GRANDMA_FLAT_ROOM.depth / 2 - WALL_GAP - LINDEN_LANDING_ROOM.depth / 2],
+    extent: LINDEN_LANDING_ROOM,
+    neighbours: ['grandmaFlat'],
+    travel: { label: 'Mémé’s landing', arrival: LINDEN_LANDING_PLAN.arrival.at, yaw: LINDEN_LANDING_PLAN.arrival.yaw, unlisted: true },
+  },
+  // Linden Avenue outside her building (src/world/linden/), where line 38 lets the player off: walked between the
+  // works' fences, its stop the bus back to Front Street, number 14's door up to her landing. Far along +x.
+  lindenAvenue: {
+    kind: 'lindenAvenue',
+    origin: [700, 0, 0],
+    extent: LINDEN_EXTENT,
+    neighbours: [],
+    travel: {
+      label: 'Linden Avenue',
+      arrival: LINDEN_PLAN.arrival.at,
+      yaw: LINDEN_PLAN.arrival.yaw,
+      // Down from her landing: out of number 14's door.
+      arrivals: { lindenLanding: LINDEN_PLAN.fromLanding },
+      unlisted: true,
+    },
+    look: 'street',
+  },
+  // REPLAY on Canal Street across town (src/world/replay/): a second-hand games shop at line 38's other stop, reached
+  // by the bus from Front Street in its hours and left by its door back to the stop; never from the menu.
+  replayShop: {
+    kind: 'replayShop',
+    origin: [820, 0, 0],
+    extent: REPLAY_ROOM,
+    neighbours: [],
+    travel: { label: 'REPLAY', arrival: REPLAY_PLAN.arrival.at, yaw: REPLAY_PLAN.arrival.yaw, unlisted: true },
+    look: 'shop',
   },
   // The building's cellars (src/world/cellar/): a vaulted maze under the entrance hall, through its cellar door once
   // the concierge has given the key, and back up its stairs; reached by travel only, never from the menu.

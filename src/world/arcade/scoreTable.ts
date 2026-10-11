@@ -32,6 +32,13 @@ export interface TodaysChallenge {
   readonly target: number;
   readonly reward: number;
   readonly done: boolean;
+  /** The ask in a few words ("SCORE 4,000", "SCORE 3,000 TWICE", "12,000 IN ALL TODAY"). */
+  readonly line?: string;
+  /** How far along (plays that reached it, or points added up), and where that has to get to. */
+  readonly progress?: number;
+  readonly need?: number;
+  /** Set on the player's own best (they hold the machine's gold). */
+  readonly personal?: boolean;
 }
 
 /** A machine's medals, earned by passing a score on it once: bronze, silver, gold. */

@@ -8,7 +8,9 @@ import { smooth, smoother } from '@/math/scalar';
  * (toes up), rolls flat, peels off the ball of the foot (heel up) and swings with the toes clear.
  * The pelvis turns with the swinging leg, drops on its side and sways over the standing foot; the
  * arms swing against the legs. The steps' length and rate follow the speed the way people's do: a
- * stroll takes shorter, not slower, steps.
+ * stroll takes shorter, not slower, steps. Quicker than a brisk walk it becomes a run (`RUN`): each foot
+ * is down for less than half the cycle (both off the floor between), lands flatter, kicks up higher
+ * behind, and the arms pump bent at the elbows.
  */
 
 /** Steps per second at a walking speed (m/s): `CADENCE[0] + CADENCE[1] * speed`, never longer steps than `SHORTEST_STEP` below that pace. */
@@ -21,6 +23,8 @@ const AHEAD = -0.04;
 const WIDTH = 0.085;
 /** The feet turn out a little (radians). */
 const TOE_OUT = 0.07;
+/** From a walk into a run between these speeds (reference m/s); a run's share of the cycle on the floor and its steps per second. */
+const RUN = { from: 1.9, to: 2.7, duty: 0.36, cadence: [2.35, 0.2] as const };
 
 interface FootFrame {
   /** Where the ankle is with the foot flat (the root's frame, y the ankle's height on the floor, lift included). */
@@ -48,34 +52,45 @@ export class Gait {
   readonly arms: [number, number] = [0, 0];
   /** The walk's amount (0 slow shuffle .. about 1 at a brisk walk), for whatever scales with it. */
   amount = 0;
+  /** How much of a run it is (0 a walk .. 1 running): the body leans into it and the arms bend (`PersonModel`). */
+  run = 0;
 
   /** Moves the cycle on by `dt` at `speed` (m/s, 0 standing) and lays out both feet for a body `build` wide. */
   update(dt: number, speed: number, build: number): void {
-    const steps = Math.max(0.01, Math.min(CADENCE[0] + CADENCE[1] * speed, speed / SHORTEST_STEP));
+    const run = THREE.MathUtils.smoothstep(speed, RUN.from, RUN.to);
+    this.run = run;
+    const walkSteps = Math.max(0.01, Math.min(CADENCE[0] + CADENCE[1] * speed, speed / SHORTEST_STEP));
+    const steps = THREE.MathUtils.lerp(walkSteps, RUN.cadence[0] + RUN.cadence[1] * speed, run);
     const cycle = steps / 2;
     const stride = speed / cycle;
     this.phase = (this.phase + dt * cycle) % 1;
     const a = THREE.MathUtils.clamp(speed / 1.2, 0.25, 1.15);
     this.amount = a;
-    const reach = DUTY * stride;
-    const clearance = 0.03 + 0.045 * Math.min(1, speed / 1.4);
+    const duty = THREE.MathUtils.lerp(DUTY, RUN.duty, run);
+    const reach = duty * stride;
+    // Running, the swinging foot kicks up behind (the heel towards the seat) before it comes through.
+    const clearance = 0.03 + 0.045 * Math.min(1, speed / 1.4) + 0.12 * run;
     const swing = [0, 0];
     for (const [i, foot] of this.feet.entries()) {
       const side = i ? 1 : -1;
       const p = (this.phase + i * 0.5) % 1;
       let z: number;
       let lift = 0;
-      if (p < DUTY) {
-        const s = p / DUTY;
+      if (p < duty) {
+        const s = p / duty;
         z = AHEAD + reach * (0.5 - s);
-        // Heel strike rolling flat, flat, then the heel peeling up off the ball of the foot.
-        foot.pitch = s < 0.14 ? -0.22 * a * (1 - smooth(s / 0.14)) : s > 0.58 ? 0.5 * a * ((s - 0.58) / 0.42) ** 1.6 : 0;
+        // Heel strike rolling flat, flat, then the heel peeling up off the ball of the foot (a runner lands flatter).
+        foot.pitch = s < 0.14 ? -0.22 * a * (1 - 0.7 * run) * (1 - smooth(s / 0.14)) : s > 0.58 ? 0.5 * a * ((s - 0.58) / 0.42) ** 1.6 : 0;
         foot.stance = 1 - smooth((s - 0.9) / 0.1) * 0.5;
         foot.swing = 0;
       } else {
-        const q = (p - DUTY) / (1 - DUTY);
+        const q = (p - duty) / (1 - duty);
+        // The swing covers the ground the body made while this foot was down and the flight's too.
         z = AHEAD + reach * (smoother(q) - 0.5);
-        lift = clearance * Math.sin(Math.PI * Math.min(1, q * 1.1)) ** 1.2;
+        // A walk's lift peaks mid-swing; a run's early, the heel up behind, then the knee drives it through.
+        const peak = THREE.MathUtils.lerp(0.5, 0.35, run);
+        const u = q < peak ? (q / peak) * 0.5 : 0.5 + ((q - peak) / (1 - peak)) * 0.5;
+        lift = clearance * Math.sin(Math.PI * Math.min(1, u * 1.1)) ** 1.2;
         // From the push-off, through the toes clearing the floor, to the toes up for the next strike.
         foot.pitch = q < 0.5 ? THREE.MathUtils.lerp(0.5 * a, -0.08, smooth(q / 0.5)) : THREE.MathUtils.lerp(-0.08, -0.22 * a, smooth((q - 0.5) / 0.5));
         foot.stance = smooth((q - 0.9) / 0.1) * 0.5;

@@ -4,9 +4,9 @@ import type { Furniture } from '../../Furniture';
 import type { CarVoice, VehicleKind } from '../StreetCars';
 import type { VehicleSize } from '../carModel';
 import type { Vec2 } from '../streetPlan';
-import { Horn, allowedSpeed, approach, corneringSpeed, distanceNearest, headingAt, placeOnRoute, sampleRoute, type Route } from './driving';
+import { Horn, allowedSpeed, approach, corneringSpeed, curvatureAt, distanceNearest, headingAt, oncomingClear, placeOnRoute, sampleRoute, type HeldBy, type Route } from './driving';
 import type { LampMaterial } from './lampMaterial';
-import { rollAngle, type WheelMaterial } from './wheelSpin';
+import { rollAngle, steerAngle, type WheelMaterial } from './wheelSpin';
 import type { RoadObstacle, RoadVehicle, StreetTraffic } from './StreetTraffic';
 import { angleTo } from '@/math/angles';
 
@@ -34,6 +34,12 @@ interface ScriptedVehicleOptions {
   collisions?: CollisionSet;
   /** Pulls away more gently than a car (m/s²). */
   accel?: number;
+  /**
+   * Its axles along its length (body x of the front and rear pair): the route is then the front axle's line and the
+   * rear axle follows it a wheelbase behind, the body pointing from one to the other, so the back cuts the corners
+   * the way a long vehicle's does instead of the whole body pivoting on its middle (the bus, into and out of its stop).
+   */
+  axles?: { front: number; rear: number };
 }
 
 type State = 'away' | 'driving' | 'stopped';
@@ -73,9 +79,15 @@ export abstract class ScriptedVehicle extends THREE.Group implements Furniture, 
   isBraking = false;
   /** Its indicator: -1 left, 1 right, 0 off (on through the bends ahead, and pulling in or out). */
   signalling: -1 | 0 | 1 = 0;
-  /** Its lamps and wheels, when the subclass builds them with `LampMaterial` and `WheelMaterial`: driven here. */
+  /** Its lamps and wheels, when the subclass builds them with `LampMaterial` and `WheelMaterial`: driven here (`base`: the wheelbase the front wheels steer by). */
   protected lampFace: LampMaterial | null = null;
-  protected wheelFace: { material: WheelMaterial; radius: number } | null = null;
+  protected wheelFace: { material: WheelMaterial; radius: number; base?: number } | null = null;
+  /** The subclass's say on the indicator (pulling out of a stop, the hazards at a call), over the bends' (null: the bends'). */
+  protected signalOverride: -1 | 0 | 1 | 'hazards' | null = null;
+  /** What holds it up this frame (for the horns behind it). */
+  holdUp: HeldBy = null;
+  /** Seconds left of a stamp on the brakes (someone stepped out under its nose). */
+  private skid = 0;
   private signalClock = 0;
   private rolled = 0;
   protected state: State = 'away';
@@ -86,6 +98,8 @@ export abstract class ScriptedVehicle extends THREE.Group implements Furniture, 
   private nextStop = 0;
   private readonly horn = new Horn();
   private readonly eye = new THREE.Vector3();
+  /** Where the rear axle is on the route (`axles`). */
+  private readonly rearAxle = new THREE.Vector3();
   private readonly standing: RoadObstacle[] = [];
   /** Its own standing obstacles (it never stops for those). */
   readonly own = new Set<RoadObstacle>();
@@ -101,8 +115,11 @@ export abstract class ScriptedVehicle extends THREE.Group implements Furniture, 
     this.routes = [this.route, ...(options.alternatives ?? []).map((points) => sampleRoute(points))];
     this.firstStops = (options.stops ?? []).map((s) => distanceNearest(this.route, s.at));
     this.stopDistances = this.firstStops;
-    // Standing, it is three obstacles along its length (drivers stop 1.5 m short of it).
-    for (let i = 0; i < 3; i++) this.standing.push({ position: new THREE.Vector3(), radius: Math.min(this.width / 2 + 0.2, this.length / 6), active: false, gap: 1.5 });
+    // Standing, it is three obstacles along its length (drivers stop 1.5 m short of it, and may go round: `span` is from each to its front).
+    for (let i = 0; i < 3; i++) {
+      const span = this.length / 2 - ((i - 1) * this.length) / 3 + 0.5;
+      this.standing.push({ position: new THREE.Vector3(), radius: Math.min(this.width / 2 + 0.2, this.length / 6), active: false, gap: 1.5, passable: true, span });
+    }
     for (const o of this.standing) this.own.add(o);
     this.visible = false;
   }
@@ -122,6 +139,11 @@ export abstract class ScriptedVehicle extends THREE.Group implements Furniture, 
   /** Its brake lights are on (for the street's sound: `CarVoice.braking`). */
   get braking(): boolean {
     return this.isBraking;
+  }
+
+  /** Stamping on the brakes (for the street's sound: `CarVoice.skidding`). */
+  get skidding(): boolean {
+    return this.skid > 0;
   }
 
   dispose(): void {
@@ -177,6 +199,12 @@ export abstract class ScriptedVehicle extends THREE.Group implements Furniture, 
     this.place();
   }
 
+  /** Where it pulls up on the way this time (from where it is now on): the stops given, for the current route. */
+  protected setStops(stops: readonly { at: Vec2; dwell: number }[]): void {
+    this.stopDistances = stops.map((s) => distanceNearest(this.route, s.at)).filter((d) => d > this.distance + 1);
+    this.nextStop = 0;
+  }
+
   /** Distance still to go to the next stop, or Infinity. */
   protected get toNextStop(): number {
     const d = this.stopDistances[this.nextStop];
@@ -189,6 +217,7 @@ export abstract class ScriptedVehicle extends THREE.Group implements Furniture, 
     if (this.state === 'stopped') {
       this.stoodFor += dt;
       this.isBraking = true;
+      this.holdUp = null;
       if (!this.keepWaiting(this.stopIndex)) {
         this.leaving(this.stopIndex);
         this.setSolid(false);
@@ -206,12 +235,18 @@ export abstract class ScriptedVehicle extends THREE.Group implements Furniture, 
     const toStop = this.toNextStop;
     // Ease into the stop at 1.5 m/s² (a bus does not slam on).
     if (toStop < Infinity) cap = Math.min(cap, toStop <= 0 ? 0 : Math.sqrt(2 * 1.5 * toStop) + 0.2);
-    const { target, heldBy, pullOver } = allowedSpeed(traffic, this, cap, this.eye, stopFor);
+    cap *= this.emergency ? 1 : traffic.pace;
+    const allowed = allowedSpeed(traffic, this, cap, this.eye, stopFor);
+    const { target, heldBy, pullOver } = allowed;
     const before = this.speed;
     this.speed = approach(this.speed, target, dt, this.options.accel ?? 1.6, traffic.grip);
-    this.isBraking = (before - this.speed) / Math.max(dt, 1e-3) > BRAKING_AT || (this.speed < 0.3 && heldBy !== null);
-    this.horn.update(dt, this.speed, heldBy, traffic.carsGreen);
-    this.laneOffsetTo = pullOver ? PULL_OVER : this.emergency ? this.overtaking : 0;
+    this.skid = allowed.startled ? 0.9 : Math.max(0, this.skid - dt);
+    this.isBraking = (before - this.speed) / Math.max(dt, 1e-3) > BRAKING_AT || (this.speed < 0.3 && heldBy !== null) || this.skid > 0;
+    this.holdUp = heldBy;
+    this.horn.update(dt, this.speed, allowed);
+    // On a call it keeps left of its line, past those pulled over, but only with nothing coming the other way.
+    const overtake = this.emergency && oncomingClear(traffic, this, 25, 4) ? this.overtaking : 0;
+    this.laneOffsetTo = pullOver ? PULL_OVER : overtake;
     this.laneOffset += THREE.MathUtils.clamp(this.laneOffsetTo - this.laneOffset, -SIDEWAYS * dt, SIDEWAYS * dt);
     this.distance += this.speed * dt;
     this.rolled += this.speed * dt;
@@ -254,14 +289,35 @@ export abstract class ScriptedVehicle extends THREE.Group implements Furniture, 
       const toStop = this.toNextStop;
       this.signalling = Math.abs(turn) > SIGNAL.turn ? (turn > 0 ? -1 : 1) : toStop < 30 ? 1 : 0;
     } else this.signalling = 0;
+    const override = this.signalOverride;
+    if (override !== null && override !== 'hazards') this.signalling = override;
     this.signalClock = (this.signalClock + dt * SIGNAL.hz) % 1;
     const blink = this.signalClock < 0.5;
-    this.lampFace?.setState({ lit: true, brake: this.isBraking, left: blink && this.signalling < 0, right: blink && this.signalling > 0, reverse: false });
-    if (this.wheelFace) this.wheelFace.material.angle = rollAngle(this.rolled, this.wheelFace.radius);
+    const hazards = override === 'hazards';
+    this.lampFace?.setState({ lit: true, brake: this.isBraking, left: blink && (hazards || this.signalling < 0), right: blink && (hazards || this.signalling > 0), reverse: false });
+    if (this.wheelFace) {
+      const face = this.wheelFace;
+      face.material.angle = rollAngle(this.rolled, face.radius);
+      face.material.steer = this.state === 'driving' ? steerAngle(curvatureAt(this.route, this.distance + 2), face.base ?? this.length * 0.6) : 0;
+    }
   }
 
   private place(): void {
     this.yaw = placeOnRoute(this.route, this.distance, this.position);
+    const axles = this.options.axles;
+    if (axles) {
+      // The front axle on the route, the rear one a wheelbase behind on it too; the body along the two.
+      placeOnRoute(this.route, this.distance - (axles.front - axles.rear), this.rearAxle);
+      const dx = this.position.x - this.rearAxle.x;
+      const dz = this.position.z - this.rearAxle.z;
+      const apart = Math.hypot(dx, dz);
+      // (Under half a metre: just set off from the route's first point, its own heading.)
+      if (apart > 0.5) {
+        this.yaw = Math.atan2(-dz, dx);
+        this.position.x = this.rearAxle.x - (axles.rear * dx) / apart;
+        this.position.z = this.rearAxle.z - (axles.rear * dz) / apart;
+      }
+    }
     // Right of the heading is (sin yaw, cos yaw).
     this.position.x += Math.sin(this.yaw) * this.laneOffset;
     this.position.z += Math.cos(this.yaw) * this.laneOffset;

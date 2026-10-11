@@ -26,6 +26,7 @@
  * a roadworker turns them back. Everything else is scenery.
  */
 
+import { REPLAY_PLAN } from '../replay/replayPlan';
 import type { DecorEntry } from '../props/decor';
 import { SAS } from '../airlock/airlockPlan';
 import type { ZoneId } from '../zoneIds';
@@ -33,6 +34,10 @@ import type { ShopZoneId } from '../shop/shopPlan';
 import type { SpillSpot } from './shopfronts/ShopSpill';
 import type { AttractionSpec, CrowdRoute } from './life/crowdTrips';
 import type { LoiterSpec } from './life/Loiterers';
+import type { SitterSpot } from './life/StandingPeople';
+import type { RoundsSpec } from './life/StreetRounds';
+import type { RendezvousSpec } from './life/Rendezvous';
+import type { SchoolWalk } from './life/SchoolRun';
 import { SEASON_FLOWERS } from '@/errands/errands';
 import { seasonOf } from '@/time/season';
 import { COURTYARD, FRONT, PARK_STREET, STREET_ENDS, type Vec2 } from '../measures/street';
@@ -124,8 +129,10 @@ export const STREET_PLAN = {
     market: { at: [3, 10.7], yaw: 0 } as ArrivalSpec,
     // Back down from a small ad's seller (`world/sellerFlat`): out of Park Corner Mansions' door (facade fA, at 8 along).
     sellerFlat: { at: [-37, 10.7], yaw: 0 } as ArrivalSpec,
-    // Off the bus back from Mémé's (`world/grandma`): on the pavement by the stop's pole, facing the road.
-    grandmaFlat: { at: [31.8, 9.8], yaw: 0 } as ArrivalSpec,
+    // Off the bus back from Mémé's on Linden Avenue (`world/linden`): on the pavement by the stop's pole, facing the road.
+    lindenAvenue: { at: [31.8, 9.8], yaw: 0 } as ArrivalSpec,
+    // Off the bus back from REPLAY on Canal Street (`world/replay`): by the pole too.
+    replayShop: { at: [31.4, 9.75], yaw: 0 } as ArrivalSpec,
     ...shopArrivals(),
   },
   /**
@@ -144,10 +151,11 @@ export const STREET_PLAN = {
    * columns with a lantern on a crook, the corner at its mouth a post-top lantern.
    */
   lamps: [
-    { at: [-12, -8.7], yaw: 0 }, { at: [3, -8.7], yaw: 0 }, { at: [18, -8.7], yaw: 0 }, { at: [33, -8.7], yaw: 0 },
-    { at: [48, -8.7], yaw: 0 }, { at: [63, -8.7], yaw: 0 }, { at: [78, -8.7], yaw: 0 }, { at: [93, -8.7], yaw: 0 }, { at: [108, -8.7], yaw: 0 },
+    // Not quite every 15 m: the council put each where the pavement let it.
+    { at: [-12, -8.7], yaw: 0 }, { at: [3, -8.7], yaw: 0 }, { at: [18.6, -8.7], yaw: 0 }, { at: [33, -8.7], yaw: 0 },
+    { at: [47.1, -8.7], yaw: 0 }, { at: [64.2, -8.7], yaw: 0 }, { at: [77.4, -8.7], yaw: 0 }, { at: [94.1, -8.7], yaw: 0 }, { at: [107.3, -8.7], yaw: 0 },
     { at: [-27, 8.7], yaw: Math.PI, design: 'post' }, { at: [-5, 8.7], yaw: Math.PI }, { at: [10, 8.7], yaw: Math.PI }, { at: [25, 8.7], yaw: Math.PI },
-    { at: [40, 8.7], yaw: Math.PI }, { at: [55, 8.7], yaw: Math.PI }, { at: [70, 8.7], yaw: Math.PI }, { at: [85, 8.7], yaw: Math.PI }, { at: [100, 8.7], yaw: Math.PI },
+    { at: [40.8, 8.7], yaw: Math.PI }, { at: [54.2, 8.7], yaw: Math.PI }, { at: [70.9, 8.7], yaw: Math.PI }, { at: [84.3, 8.7], yaw: Math.PI }, { at: [100.6, 8.7], yaw: Math.PI },
     { at: [-22.6, -28], yaw: -Math.PI / 2, design: 'crook' }, { at: [-22.6, -52], yaw: -Math.PI / 2, design: 'crook' }, { at: [-22.6, -76], yaw: -Math.PI / 2, design: 'crook' },
     { at: [-36.7, -38], yaw: Math.PI / 2, design: 'crook' }, { at: [-36.7, -62], yaw: Math.PI / 2, design: 'crook' },
   ] as { at: Vec2; yaw: number; design?: LampDesign }[],
@@ -169,8 +177,10 @@ export const STREET_PLAN = {
     // Westbound on our side (nose to -x), eastbound across (nose to +x): right-hand traffic.
     { at: [-13, -7], yaw: Math.PI }, { at: [-8.2, -7], yaw: Math.PI }, { at: [11, -7], yaw: Math.PI }, { at: [15.8, -7], yaw: Math.PI }, { at: [21, -7], yaw: Math.PI }, { at: [30.5, -7], yaw: Math.PI },
     { at: [44, -7], yaw: Math.PI }, { at: [52, -7], yaw: Math.PI }, { at: [67, -7], yaw: Math.PI }, { at: [83, -7], yaw: Math.PI },
-    { at: [-13.5, 7], yaw: 0 }, { at: [-8.5, 7], yaw: 0 }, { at: [13, 7], yaw: 0 }, { at: [17.8, 7], yaw: 0 },
-    { at: [41, 7], yaw: 0 }, { at: [58, 7], yaw: 0 }, { at: [63, 7], yaw: 0 }, { at: [88, 7], yaw: 0 },
+    // Nothing past x 15.5 up to the works: the bus's room to pull in to its stop and out again (`bus`).
+    { at: [-13.5, 7], yaw: 0 }, { at: [-8.5, 7], yaw: 0 }, { at: [13, 7], yaw: 0 },
+    // The first past the works (x 38.4): a van's tail (2.5 m) clear of their barrier across the parking lane.
+    { at: [41.8, 7], yaw: 0 }, { at: [58, 7], yaw: 0 }, { at: [63, 7], yaw: 0 }, { at: [88, 7], yaw: 0 },
     { at: [-34.6, -30], yaw: -Math.PI / 2 }, { at: [-34.6, -41], yaw: -Math.PI / 2 }, { at: [-24.6, -64], yaw: Math.PI / 2 },
   ] as { at: Vec2; yaw: number }[],
   /**
@@ -188,8 +198,9 @@ export const STREET_PLAN = {
   roadPatches: [[-5, -4.8, -2.2, -2.9], [14, 2.5, 17.5, 4.2], [40, -3.5, 44.5, -1.9], [60, 0.4, 62.5, 2.2], [-30.5, -30, -28.6, -26.2], [26, -1.2, 27.6, 0.9]] as [number, number, number, number][],
   /** The bus shelter on the far pavement (centre, faces the road), the benches and bins. */
   shelter: { at: [28, 10] as Vec2, yaw: Math.PI, length: 4 },
-  benches: [{ at: [-10.5, -11.4], yaw: 0 }, { at: [-8, 11.4], yaw: Math.PI }] as { at: Vec2; yaw: number }[],
-  bins: [[4.6, -8.55], [19.4, -8.55], [8.6, 8.55], [21.2, 8.55]] as Vec2[],
+  benches: [{ at: [-10.5, -11.4], yaw: 0 }, { at: [-8, 11.4], yaw: Math.PI }, { at: [68.5, 11.4], yaw: Math.PI }] as { at: Vec2; yaw: number }[],
+  // (Past x 40, the stretch the works open up later: dressed all the same.)
+  bins: [[4.6, -8.55], [19.4, -8.55], [8.6, 8.55], [21.2, 8.55], [50.5, -8.55], [96.5, -8.55], [44.2, 8.55], [74.2, 8.55]] as Vec2[],
   /** The park's hedge and railings along x = hedge, from z to z (they stop where the block across Front Street begins). */
   hedge: { x: -40.4, from: STREET_ENDS.south, to: FRONT.farLine, height: 1.5, depth: 0.9 },
   railings: { x: -39.75, from: STREET_ENDS.south, to: FRONT.farLine, height: 1.15 },
@@ -224,18 +235,33 @@ export const STREET_PLAN = {
   /**
    * The street's small print (`details/StreetDetails`), clear of the passers-by's routes (z about ±10.1..10.6 on the
    * pavements), the crossings and the signal posts: manhole covers, fire hydrants, the bollards either side of the
-   * crossing and at Park Street's corners, the Morris column at the mouth of Park Street on the far pavement.
+   * crossing and at Park Street's corners, the Morris column at the mouth of Park Street on the far pavement; and the
+   * street's fixtures (`details/StreetFixtures`): telecom cabinets, parking pay stations, the bottle banks in the opened
+   * stretch, road signs on their posts (facing the drivers they speak to), a drinking fountain by the park.
    */
   details: {
     manholes: [[-10, -4.5], [6.8, 3.2], [22, -2.8], [33, 4.4], [52, -3], [80, 2.8], [-28, -22], [-28, -58], [-7.6, -9.1], [14.2, 9.2], [29.2, -9.4], [-33, 9.3]] as Vec2[],
-    hydrants: [[-15.4, -8.5], [24.6, 8.5], [35.6, -8.5], [-36.6, -24]] as Vec2[],
+    hydrants: [[-15.4, -8.5], [24.6, 8.5], [35.6, -8.5], [-36.6, -24], [58.8, -8.5], [92.6, 8.5]] as Vec2[],
     bollards: [
       [-0.6, -8.35], [-1.3, -8.35], [5.6, -8.35], [6.3, -8.35],
       [-0.6, 8.35], [0.3, 8.35], [6.6, 8.35], [7.3, 8.35],
       [-23, -9.3], [-23, -10.3], [-23, -11.3],
       [-34.5, 8.35], [-32.5, 8.35], [-30.5, 8.35], [-22.5, 8.35],
+      [62.8, 8.35], [68, 8.35],
     ] as Vec2[],
     column: { at: [-24.5, 9.05] as Vec2, radius: 0.6, height: 3.1 },
+    cabinets: [{ at: [44.6, -8.95], yaw: 0 }, { at: [-14.4, 8.95], yaw: Math.PI }, { at: [86.5, 8.95], yaw: Math.PI }] as { at: Vec2; yaw: number }[],
+    payStations: [{ at: [9.2, -8.75], yaw: 0 }, { at: [13, 8.75], yaw: Math.PI }, { at: [69.2, -8.75], yaw: 0 }] as { at: Vec2; yaw: number }[],
+    bottleBanks: [{ at: [64.6, 9.05], yaw: Math.PI, colour: '#2f6a3a' }, { at: [66.25, 9.05], yaw: Math.PI, colour: '#3a5a8a' }] as { at: Vec2; yaw: number; colour: string }[],
+    /** `sign`: a speed limit, a pedestrian crossing, no stopping (`yaw`: the way it faces, towards the drivers it speaks to). */
+    signs: [
+      { at: [37.3, -8.6], yaw: Math.PI / 2, sign: 'limit30' },
+      { at: [7.2, -8.6], yaw: Math.PI / 2, sign: 'crossing' },
+      { at: [-1.4, 8.6], yaw: -Math.PI / 2, sign: 'crossing' },
+      { at: [16.1, 8.65], yaw: -Math.PI / 2, sign: 'noStopping' },
+      { at: [-23.0, -44.2], yaw: 0, sign: 'limit30' },
+    ] as { at: Vec2; yaw: number; sign: 'limit30' | 'crossing' | 'noStopping' }[],
+    fountain: { at: [-37, 9.4] as Vec2 },
   },
 
   // --- Traffic -------------------------------------------------------------------------------
@@ -250,12 +276,20 @@ export const STREET_PLAN = {
     speed: 8.5,
     gap: [5, 16] as [number, number],
     /** How many cars can drive at once, by quality (the window view runs up to 14 across its two streets). */
-    cars: 3,
     carsByQuality: { low: 4, medium: 6, high: 8 },
     /** A car stops for anyone standing this close ahead of it. */
     stopFor: 4,
     /** Now and then a parked car pulls out of its bay, or a driver parks in a free one: real seconds between two. */
     manoeuvres: [30, 80] as [number, number],
+    /**
+     * Where drivers give way (`traffic/driving`): coming up to `line` heading `yaw`, a driver holds there while anything
+     * heading another way is in, or coming into, the circle round `conflict`. Out of Park Street, left into Front Street;
+     * left off Front Street across the westbound lane into the side street.
+     */
+    giveWay: [
+      { line: [-31, -12], yaw: -Math.PI / 2, conflict: [-26, -2.5], radius: 14 },
+      { line: [104, 1.6], yaw: 0, conflict: [113, -2], radius: 16 },
+    ] as { line: Vec2; yaw: number; conflict: Vec2; radius: number }[],
   },
   /**
    * A taxi pulling in to the kerb now and then (`StreetCars`): where it stands (its middle, heading), the kerb its fare
@@ -269,6 +303,12 @@ export const STREET_PLAN = {
       { at: [35.4, 3.6], yaw: 0, kerb: [35.6, 9], door: [32.5, 12] },
     ] as { at: Vec2; yaw: number; kerb: Vec2; door: Vec2 }[],
     every: [70, 170] as [number, number],
+    /**
+     * The rank by the first stand, where the player hails a taxi (`traffic/TaxiRank`): its sign's foot and facing; the
+     * fare (coins) to wherever the bus goes (`busRide.destinations`), at any hour the place is open.
+     */
+    rank: { stop: 0, at: [23.3, -8.45] as Vec2, yaw: 0 },
+    fare: 6,
   },
   /** Scooters, motorbikes and couriers (a scooter with a box) in the car lanes: how many at once by quality, seconds between two, shares. */
   twoWheelers: { ridersByQuality: { low: 1, medium: 2, high: 3 }, gap: [12, 34] as [number, number], courier: 0.35, moto: 0.35 },
@@ -285,9 +325,11 @@ export const STREET_PLAN = {
    * The bus: it comes up Park Street on the first route's line, pulls in at the shelter (the stop on
    * the far kerb), waits, and goes on; one every `every` game minutes by day (about a minute and a
    * half real at the ten-minute day), `nightEvery` at night; `StreetBus` never runs them closer than
-   * its own real-time floor, whatever the day's length.
+   * its own real-time floor, whatever the day's length. `stop.at` is the bus's middle standing there: its front
+   * door by the pole (`busRide.pole`), its side 0.75 m off the kerb, in the bay between the last parked car
+   * (x 15.5) and the works (x 38.4) that its pull-in and pull-out are worked out for (`StreetBus` `PULL`).
    */
-  bus: { stop: { at: [30, 6.6] as Vec2, dwell: 14 }, every: 200, nightEvery: 420, line: '38' },
+  bus: { stop: { at: [25.6, 6] as Vec2, dwell: 14 }, every: 200, nightEvery: 420, line: '38' },
   /**
    * Riding the bus (`StreetBus`, boarded while its doors stand open at the stop): the fare (coins, the way back
    * included), and where line 38 takes the player, the first that is on (`hours` absent: always; else when, and the
@@ -297,36 +339,52 @@ export const STREET_PLAN = {
   busRide: {
     fare: 2,
     destinations: [
-      { to: 'grandmaFlat', label: 'Mémé’s on Linden Avenue', board: 'LINDEN AVENUE', hours: [8, 21], shut: 'Mémé’s in bed by now' },
-    ] as { to: ZoneId; label: string; board: string; hours?: [number, number]; shut?: string }[],
+      { to: 'lindenAvenue', label: 'Mémé’s on Linden Avenue', board: 'LINDEN AVENUE', hours: [8, 21], shut: 'Mémé’s in bed by now' },
+      // Line 38's other stop: REPLAY, a second-hand games shop on Canal Street, in its hours (`world/replay`).
+      { to: 'replayShop', label: 'REPLAY on Canal Street', board: 'CANAL STREET', hours: REPLAY_PLAN.hours, shut: 'REPLAY is shut', detail: 'A second-hand games shop across town: its own stock, new every week.' },
+    ] as { to: ZoneId; label: string; board: string; hours?: [number, number]; shut?: string; detail?: string }[],
     pole: { at: [30.6, 8.9] as Vec2, yaw: 0 },
   },
   /** Cyclists on the road's outer lanes, and the bike racks on the pavements (with a few bikes locked to them). */
-  bikes: { riders: 2, ridersByQuality: { low: 1, medium: 2, high: 3 }, racks: [{ at: [-2.6, -8.75], yaw: 0, bikes: 3 }, { at: [19.8, 8.75], yaw: Math.PI, bikes: 2 }, { at: [-22.6, -32.5], yaw: -Math.PI / 2, bikes: 2 }] as (Spot & { bikes: number })[] },
+  bikes: { riders: 2, ridersByQuality: { low: 1, medium: 2, high: 3 }, racks: [{ at: [-2.6, -8.75], yaw: 0, bikes: 3 }, { at: [19.8, 8.75], yaw: Math.PI, bikes: 2 }, { at: [-22.6, -32.5], yaw: -Math.PI / 2, bikes: 2 }, { at: [53.5, -8.75], yaw: 0, bikes: 1 }] as (Spot & { bikes: number })[] },
   /** The morning: the delivery van double-parked outside the bakery (f3), and the bin lorry doing the round. */
-  delivery: { at: [19, 4.4] as Vec2, yaw: 0, door: [19, 11.9] as Vec2, hours: [6.5, 9.5] as [number, number], later: [[14, 15.5]] as [number, number][] },
+  delivery: { at: [19, 3.2] as Vec2, yaw: 0, door: [19, 11.9] as Vec2, hours: [6.5, 9.5] as [number, number], later: [[14, 15.5]] as [number, number][] },
+  /**
+   * The traffic warden's round (`traffic/ParkingWarden`, Monday to Saturday in her hours): the kerbside of one pavement
+   * and back down the other, between these x, |z| out from the middle of the road (clear of the bins and the trees).
+   */
+  warden: { hours: [9, 18] as [number, number], beat: [-14, 36] as [number, number], kerb: 8.95 },
   /** The bin lorry's morning round, and the recycling round in the afternoon. */
   binLorry: { hours: [5.5, 7.5] as [number, number], later: [[13, 14.5]] as [number, number][] },
   /** The parcel van: double-parked by the far row's door at x 13 a while (late morning, late afternoon), the courier running a parcel in. */
-  parcels: { at: [13.6, 4.4] as Vec2, yaw: 0, door: [13.1, 11.9] as Vec2, hours: [11, 12.5] as [number, number], later: [[16, 17.5]] as [number, number][] },
+  parcels: { at: [13.6, 3.2] as Vec2, yaw: 0, door: [13.1, 11.9] as Vec2, hours: [11, 12.5] as [number, number], later: [[16, 17.5]] as [number, number][] },
   /**
    * Now and then an emergency vehicle along one of the traffic's routes, siren on (one out at a time): real seconds
    * between two, before the first, its speed.
    */
-  ambulance: { every: [420, 1100] as [number, number], first: [90, 400] as [number, number], cruise: 11 },
-  police: { every: [520, 1400] as [number, number], first: [200, 700] as [number, number], cruise: 11.5 },
-  fireEngine: { every: [1500, 3600] as [number, number], first: [700, 1800] as [number, number], cruise: 9.5 },
+  ambulance: { every: [420, 1100] as [number, number], first: [90, 400] as [number, number], cruise: 11, callChance: 0.4 },
+  police: { every: [520, 1400] as [number, number], first: [200, 700] as [number, number], cruise: 11.5, callChance: 0.2 },
+  fireEngine: { every: [1500, 3600] as [number, number], first: [700, 1800] as [number, number], cruise: 9.5, callChance: 0.5 },
+  /**
+   * Where an emergency vehicle's call may be on this street (`callChance` of its outings): on traffic route `route`,
+   * it pulls up in the lane at `at` (clear of the bays) and its crew go in at `door`: our own door, the far row's by the
+   * bus stop.
+   */
+  emergencyCalls: [
+    { route: 1, at: [-3.6, -1.6], door: [-6, -12] },
+    { route: 0, at: [34, 1.6], door: [32.5, 12] },
+  ] as { route: number; at: Vec2; door: Vec2 }[],
 
   // --- People and animals -------------------------------------------------------------------
   /** Passers-by: how many walk at once, and their routes (they appear at the first point, vanish at the last). */
   crowd: {
     /** How many walk at once at the busiest hour (`streetBusyAt`), by quality; fewer as the hour, the day and the rain say. */
-    countByQuality: { low: 3, medium: 6, high: 8 },
+    countByQuality: { low: 4, medium: 7, high: 10 },
     /** The regulars (the same faces every day; the second walks the dog, the fifth is old) and, besides, the day's strangers, by quality. */
     seeds: [301, 317, 331, 347, 353, 367],
     strangersByQuality: { low: 2, medium: 6, high: 8 },
     /** How many of them walk with someone (a child by day, a friend), and how many walk a dog. */
-    companionsByQuality: { low: 0, medium: 2, high: 3 },
+    companionsByQuality: { low: 0, medium: 3, high: 4 },
     dogsByQuality: { low: 1, medium: 2, high: 2 },
     /** People drawn at once in the whole street, all of them (passers-by, the queues, terraces, standing about): the nearest only. */
     budgetByQuality: { low: 6, medium: 10, high: 13 },
@@ -354,15 +412,33 @@ export const STREET_PLAN = {
       { at: [15.5, -9.62], look: [15.5, 1.3, -10.4], kind: 'kiosk', seconds: [3, 7], hours: [6, 22] },
       { at: [21.6, 9.75], look: [22.6, 1.4, 10.8], kind: 'busker', seconds: [6, 14], hours: [9, 21.5], dry: true },
       { at: [-24.5, 10.05], look: [-24.5, 1.7, 9.05], kind: 'column', seconds: [3, 7], dry: true },
+      // The bus stop's timetable on its pole; the pillar clock (and a look at a watch); pictures: the arcade's front, the Fair's bunting.
+      { at: [30.6, 9.7], look: [30.6, 1.6, 8.9], kind: 'timetable', seconds: [3, 6] },
+      { at: [13.6, 9.5], look: [12.8, 3.1, 8.95], kind: 'clock', seconds: [3, 6] },
+      { at: [7.5, 9.3], look: [8, 3.6, -12], kind: 'photo', seconds: [4, 8], dry: true },
+      { at: [6, -9.4], look: [5, 5.5, 0], kind: 'photo', seconds: [4, 8], dry: true, fair: true },
     ] as AttractionSpec[],
     /**
      * The building's residents (`STAIRWELL_PLAN.residents`) out of our own street door at the hour they go out, and back
-     * to it before the hour they come home: along our pavement, over the zebra at Park Street's mouth, along the far
-     * pavement and into the park by its gate (and the same way back). Nobody else uses our door.
+     * to it before the hour they come home, on their errand of the day (`outs` / `backs`). Nobody else uses our door.
      */
     residents: {
-      out: { path: [[-6, -12], [-6, -10.4], [-17.9, -10.4], [-17.9, -8.4], [-17.6, 8.4], [-17.6, 10.1], [-31.9, 10.1], [-32.4, 9.6], [-34.6, 9.6], [-35.1, 10.1], [-38.2, 10.1], [-38.2, PARK_GATE[1]], PARK_GATE], crossing: 3 } as CrowdRoute,
-      back: { path: [PARK_GATE, [-38.2, PARK_GATE[1]], [-38.2, 10.1], [-35.1, 10.1], [-34.6, 9.6], [-32.4, 9.6], [-31.9, 10.1], [-17.6, 10.1], [-17.6, 8.4], [-17.9, -8.4], [-17.9, -10.4], [-6, -10.4], [-6, -12]], crossing: 8 } as CrowdRoute,
+      /**
+       * Their errands, one a day each (`outs[k]` there, `backs[k]` home the same way): the park, the bakery over the
+       * lights, the grocer's next door, a house down Park Street.
+       */
+      outs: [
+        { path: [[-6, -12], [-6, -10.4], [-17.9, -10.4], [-17.9, -8.4], [-17.6, 8.4], [-17.6, 10.1], [-31.9, 10.1], [-32.4, 9.6], [-34.6, 9.6], [-35.1, 10.1], [-38.2, 10.1], [-38.2, PARK_GATE[1]], PARK_GATE], crossing: 3 },
+        { path: [[-6, -12], [-6, -10.4], [3.4, -10.4], [3.4, -8.4], [3.4, 8.4], [3.4, 10.1], [10.1, 10.1], [10.6, 9.6], [15.9, 9.6], [16.4, 10.1], [18.9, 10.1], [18.9, 12]], crossing: 3 },
+        { path: [[-6, -12], [-6, -10.4], [-1, -10.4], [-1, -12]] },
+        { path: [[-6, -12], [-6, -10.4], [-20.8, -10.4], [-20.8, -42.5], [PARK_STREET.line, -42.5]] },
+      ] as CrowdRoute[],
+      backs: [
+        { path: [PARK_GATE, [-38.2, PARK_GATE[1]], [-38.2, 10.1], [-35.1, 10.1], [-34.6, 9.6], [-32.4, 9.6], [-31.9, 10.1], [-17.6, 10.1], [-17.6, 8.4], [-17.9, -8.4], [-17.9, -10.4], [-6, -10.4], [-6, -12]], crossing: 8 },
+        { path: [[18.9, 12], [18.9, 10.1], [16.4, 10.1], [15.9, 9.6], [10.6, 9.6], [10.1, 10.1], [3.4, 10.1], [3.4, 8.4], [3.4, -8.4], [3.4, -10.4], [-6, -10.4], [-6, -12]], crossing: 7 },
+        { path: [[-1, -12], [-1, -10.4], [-6, -10.4], [-6, -12]] },
+        { path: [[PARK_STREET.line, -42.5], [-20.8, -42.5], [-20.8, -10.4], [-6, -10.4], [-6, -12]] },
+      ] as CrowdRoute[],
       /** Game hours after their `out` they may still be seen setting off; before their `back`, they set off home. */
       lateBy: 1.5,
       backBefore: [3, 1.5] as [number, number],
@@ -392,13 +468,28 @@ export const STREET_PLAN = {
   },
   /** People standing about: on the phone, waiting for the bus, on a bench. */
   standing: {
-    phone: { at: [-2.4, -10.9], yaw: Math.PI * 0.85, hours: [8, 21] as [number, number] },
-    /** The one waiting in the shelter, and where someone who got off walks to: out behind the shelter, along the far pavement, into the park by its gate. */
-    busStop: { at: [28.6, 10.35], yaw: Math.PI, alight: [[31, 10.2], [30.9, 11.05], ...FAR_WEST, [-38.2, PARK_GATE[1]], PARK_GATE] as Vec2[] },
+    /** The caller outside the grocer's; in the rain they step in by the wall (`shelter`). */
+    phone: { at: [-2.4, -10.9], yaw: Math.PI * 0.85, hours: [8, 21] as [number, number], shelter: [-2.6, -11.55] as Vec2 },
+    /**
+     * The one waiting in the shelter, and the ways someone who got off walks (one each): out behind the shelter, along
+     * the far pavement, into the park by its gate; into the pharmacy just along; west into the bakery; east towards the works.
+     */
+    busStop: {
+      at: [28.6, 10.35],
+      yaw: Math.PI,
+      alights: [
+        [[31, 10.2], [30.9, 11.05], ...FAR_WEST, [-38.2, PARK_GATE[1]], PARK_GATE],
+        [[31, 10.2], [32.5, 10.4], [32.5, 12]],
+        [[31, 10.2], [30.9, 10.4], [25.3, 10.4], [24.4, 10.1], [18.9, 10.1], [18.9, 12]],
+        [[31, 10.2], [33, 10.5], [37, 10.5]],
+      ] as Vec2[][],
+    },
     /** More waiting in the shelter in the rush (beside the first, under its roof), and how many get off at most. */
     busQueue: [[27.5, 10.4], [29.6, 10.3]] as Vec2[],
     alightMax: 2,
     bench: { at: [-10.5, -11.3], yaw: 0, hours: [9, 19] as [number, number] },
+    /** The far pavement's bench by THE LOCAL: someone resting their legs, eating their lunch at noon, reading (`StandingPeople`). */
+    sitters: [{ at: [-8, 11.4], yaw: Math.PI, hours: [9.5, 18.5], kinds: ['elder', 'lunch', 'reader'] }] as SitterSpot[],
   },
   /**
    * People who stand together a while (`life/Loiterers`): smokers outside the bars by night (THE LOCAL's end of the far
@@ -409,6 +500,8 @@ export const STREET_PLAN = {
     { kind: 'smokers', at: [[-16.6, 11.35], [-17.3, 11.05]] as Vec2[], hours: [19.5, 26] as [number, number], shop: 'bar' },
     { kind: 'smokers', at: [[36.5, -11.35], [37.1, -10.95], [36.4, -10.75]] as Vec2[], hours: [20, 26] as [number, number], shop: 'bar' },
     { kind: 'chatting', at: [[-29.7, 11.35], [-28.9, 11.3]] as Vec2[], hours: [9.5, 19] as [number, number], dry: true },
+    // On the stretch the works opened, once they have moved on.
+    { kind: 'chatting', at: [[66.2, -11.35], [67, -11.25]] as Vec2[], hours: [10, 18.5] as [number, number], dry: true, stretch: true },
   ] as LoiterSpec[],
   /**
    * The morning queue outside the bakery (f3, its painted door found near `door`): spots along the wall from the door
@@ -422,8 +515,48 @@ export const STREET_PLAN = {
     // THE ANCHOR's front (x 31.2..35.6): a table either side of its door (the middle one gives way to the door).
     { from: [31.2, -10.9] as Vec2, to: [35.6, -10.9] as Vec2, tables: 3, hours: [10, 24] as [number, number], customers: 3 },
   ],
-  /** Pigeons pecking about (they take off when the player comes close), and where the stray cat sits. */
-  pigeons: [{ at: [6.5, -10.2] as Vec2, count: 7 }, { at: [-30, 10.2] as Vec2, count: 9 }, { at: [24, 10.6] as Vec2, count: 5 }],
+  /**
+   * Pigeons pecking about (they take off when the player comes close; some sit on the lamps' arms and the cornices by
+   * day), one flock in the park's gardens, and where the stray cat sits. `pigeonsStretch`: a flock on the stretch the
+   * works opened, once they have moved on.
+   */
+  pigeons: [{ at: [6.5, -10.2] as Vec2, count: 7 }, { at: [-30, 10.2] as Vec2, count: 9 }, { at: [24, 10.6] as Vec2, count: 5 }, { at: [-58, -30] as Vec2, count: 6 }],
+  pigeonsStretch: { at: [72, -10.2] as Vec2, count: 6 },
+  /**
+   * In the park's gardens (`life/ParkLife`): where the brisk walker turns back along the gravel path from the gate, and
+   * where the old man feeding the pigeons stands by the pond's fence, facing it.
+   */
+  parkLife: { walkTo: [-82.7, -45.3] as Vec2, feeder: { at: [-83, -40] as Vec2, yaw: -Math.PI / 2 } },
+  /**
+   * Street life by the clock (`life/StreetRounds`): the night shift along our pavement late and at dawn; the sweeper's
+   * round along our kerb at first light; Rémi's crusts for the pigeons at the PARKSIDE CAFE's closing, at the corner.
+   */
+  rounds: {
+    nightShift: { path: [[-20.8, -40], [-20.8, -10.6], [36, -10.6]], hours: [[21.8, 23.2], [5.2, 6.4]] },
+    sweeper: { path: [[-20, -9.3], [36, -9.3]], hours: [5.6, 6.6] },
+    crumbs: { at: [-21, -11.2], yaw: -0.79, off: [-17.2, -14.86], seconds: 70 },
+  } as RoundsSpec,
+  /** Someone waiting for a friend by the pillar clock (`life/Rendezvous`): where, the ways they come and go. */
+  rendezvous: { at: [12.2, 9.35], yaw: Math.PI / 2, from: [3.4, 9.6], friendFrom: [19.5, 9.5], off: [3.4, 9.6], hours: [10, 21] } as RendezvousSpec,
+  /**
+   * The school run (`life/SchoolRun`): the building's children out of our door and down Park Street to school in the
+   * morning (the twins with a grown-up), home after school (at noon on Wednesdays); Lina with her aunt on her days;
+   * Nico from school into the arcade.
+   */
+  schoolRun: [
+    { who: ['hugo'], days: 'weekdays', hours: [8.0, 8.4], path: [[-6, -12], [-6, -10.4], [-20.8, -10.4], [-20.8, -44]] },
+    { who: ['mai', 'tuan'], parent: true, days: 'weekdays', hours: [8.1, 8.5], path: [[-6, -12], [-6, -10.4], [-20.8, -10.4], [-20.8, -44]] },
+    { who: ['hugo'], days: 'notWednesday', hours: [16.3, 16.7], path: [[-20.8, -44], [-20.8, -10.4], [-6, -10.4], [-6, -12]] },
+    { who: ['mai', 'tuan'], parent: true, days: 'notWednesday', hours: [16.25, 16.65], path: [[-20.8, -44], [-20.8, -10.4], [-6, -10.4], [-6, -12]] },
+    { who: ['hugo', 'mai', 'tuan'], days: 'wednesday', hours: [12.1, 12.5], path: [[-20.8, -44], [-20.8, -10.4], [-6, -10.4], [-6, -12]] },
+    { who: ['lina'], parent: true, days: 'free', hours: [10.1, 10.5], path: [[-20.8, -44], [-20.8, -10.4], [-6, -10.4], [-6, -12]] },
+    { who: ['nico'], days: 'notWednesday', hours: [16.2, 16.6], path: [[-20.8, -44], [-20.8, -10.6], [8, -10.6], [8, -12]] },
+    { who: ['nico'], days: 'wednesday', hours: [13.4, 13.9], path: [[-20.8, -44], [-20.8, -10.6], [8, -10.6], [8, -12]] },
+    // Teenagers to and from the school down Park Street, along our pavement.
+    { who: ['teen', 'teen', 'teen'], days: 'weekdays', hours: [7.8, 8.3], path: [[34, -10.6], [-20.8, -10.6], [-20.8, -44]] },
+    { who: ['teen', 'teen'], days: 'notWednesday', hours: [16.4, 16.9], path: [[-20.8, -44], [-20.8, -10.6], [34, -10.6]] },
+    { who: ['teen', 'teen'], days: 'wednesday', hours: [12.3, 12.8], path: [[-20.8, -44], [-20.8, -10.6], [34, -10.6]] },
+  ] as SchoolWalk[],
   /** `on`: the perch is the bench (taken while someone sits there) or a bin (while the bin lorry is on its round): he sits elsewhere then. */
   strayCat: { perches: [{ at: [11, -7], y: 1.46, yaw: 0.6 }, { at: [-10.5, -11.55], y: 0.82, yaw: 0, on: 'bench' }, { at: [-38.5, -14], y: 0, yaw: -1.2 }, { at: [21.2, 8.55], y: 0.96, yaw: 2.4, on: 'bin' }] as StrayCatPerch[] },
 

@@ -1,54 +1,60 @@
-import * as THREE from 'three';
+import type * as THREE from 'three';
 import type { Updatable } from '@/core/Engine';
 import { Timers } from '@/core/Timers';
 import type { ArcadeResult } from '@/game/SessionActions';
 import type { Sfx } from '@/audio/ChipSpeaker';
-import type { Reaction } from '../people/performer';
+import { type HallRegular, regularIn, regularSkill } from '@/economy/hallRegulars';
 import type { Walker } from '../people/Walker';
 import type { Station } from './Station';
+import { CrowdNav, type CrowdStation, type NavNode } from './crowdNav';
+import { CrowdReactions, reactionOf } from './crowdReactions';
+import { HallKid, type HangoutSpot, type KidMood } from './HallKid';
+import { type GuestOptions, HallGuest } from './HallGuest';
 import { Prop } from '../props/Prop';
 import { pick, random, within } from '@/random';
 
-/** A walkable point of the hall (zone-local) and the points it connects to in a straight, clear line. */
-export interface NavNode {
-  id: string;
-  at: [x: number, z: number];
-  links: string[];
+/** A regular of the hall (`hallRegulars`) and their body. */
+interface CrowdRegular {
+  walker: Walker;
+  who: HallRegular;
 }
 
-/** A machine people can use, and (optionally) where a watcher stands to see it played. */
-export interface CrowdStation {
-  station: Station;
-  /** Zone-local spot to watch from; default: behind and a little to the side of whoever plays. */
-  watchAt?: [x: number, z: number];
-}
-
-/** Somewhere the kid likes to stand when nobody is worth watching: facing `yaw`, eyes on `look` (zone-local). */
-export interface HangoutSpot {
-  at: [x: number, z: number];
-  yaw: number;
-  look?: [x: number, y: number, z: number];
+/** The kid's own game: which machine, how well he plays it by now, what he signs. */
+interface KidGamePlan {
+  gameId: string;
+  skill: () => number;
+  initials: string;
+  odds: number;
+  seconds: readonly [number, number];
 }
 
 interface ArcadeCrowdOptions {
   /** The hall's walkable graph; every station's stand spot and every hangout is reached from its nearest node. */
   nav: NavNode[];
-  /** The node at the door: regulars come in and go out there. */
+  /** The node at the door: everyone comes in and goes out there. */
   door: string;
   stations: CrowdStation[];
-  /** The regulars who come and go (hidden when out), and the kid who stays and watches. */
-  regulars: Walker[];
+  /** The regulars who come and go at their hours (hidden when out). */
+  regulars: CrowdRegular[];
+  /** The kid who stays and watches, and the game he plays himself. */
   kid: Walker | null;
+  kidGame?: KidGamePlan;
   hangouts: HangoutSpot[];
+  /** People the player knows who come on their own days (Marco, Hugo). */
+  guests?: readonly GuestOptions[];
   /** At most this many regulars in the hall at once, right now (the hall fills up in the evening). */
   maxInside: () => number;
-  /** Each regular's initials, as they sign the hall of fame (same order as `regulars`). */
-  names?: readonly string[];
+  /** The game clock's hour: each regular comes in their own hours. */
+  hour: () => number;
+  /** The game a station runs: a regular's favourite and skill go by it. */
+  gameOf: (station: Station) => string | undefined;
   /**
-   * A regular's game ended on `station` with `score`: the builder may put it on the hall of fame
-   * under their initials; what it returns (if anything) the regular says.
+   * A game of someone's ended on `station` with `score`: the builder may put it on the hall of fame under `name`;
+   * a line when it did (the regular says their own instead), else null.
    */
   onRegularScore?: (station: Station, score: number, name: string) => string | null;
+  /** A play of the player's ended (after the people round it had their say). */
+  onPlayerResult?: (station: Station, result: ArcadeResult) => void;
   /** A machine the regulars leave to the player right now (the Saturday tournament's cabinet), or null. */
   reserved?: () => Station | null;
   /**
@@ -58,30 +64,24 @@ interface ArcadeCrowdOptions {
   gathering?: () => { spots: readonly THREE.Vector3[]; focus: THREE.Vector3 } | null;
   /** The camera: nobody walks in or out while the player is looking at the door. */
   viewer: THREE.Object3D;
-  /** Zone-local to world and back. */
+  /** Zone-local to world. */
   toWorld: (p: THREE.Vector3) => THREE.Vector3;
-  /**
-   * How the kid takes the player's games (how the player stands with him, docs/social.md): `devoted` comes over for
-   * every one and always takes player two, `cheer` comes over and cheers louder, `plain` comes over now and then,
-   * `heckle` comes to jeer and leaves the second stick alone. Default `devoted` (the kid as he always was).
-   */
-  kidMood?: () => 'devoted' | 'cheer' | 'plain' | 'heckle';
+  /** How the kid takes the player's games (`KidMood`). Default `devoted` (the kid as he always was). */
+  kidMood?: () => KidMood;
 }
 
 /** How long a regular plays a machine, and waits outside between visits (seconds). */
 const PLAY_SECONDS: [number, number] = [40, 110];
 const AWAY_SECONDS: [number, number] = [8, 35];
-/** How far round the player must be looking for the door to count as out of sight (cos of the angle). */
-const DOOR_UNSEEN_COS = 0.35;
-const REGULAR_CHATTER = ['Yes!', 'Come on...', 'Argh!', 'So close!', 'Ha!', 'No no no...'];
-const PARTNER_LINES = ['Player two! Me! Me!', 'I call the blue stick!', 'Two players? I am in.'];
-const PARTNER_RESULTS = { won: ['Rematch. Now.', 'I let you win.', 'The blue stick is broken.'], lost: ['Ha! Kid wins!', 'Too easy.', 'Again? I will go easy.'] };
-/** The kid not getting on with the player: what he jeers at their games. */
-const KID_HECKLES = ['Boo!', 'My nan plays better.', 'Is that it?', 'Ha! Ouch.', 'Give someone else a go.'];
-/** The kid a fan of the player's: what he shouts at a decent game. */
-const KID_LOUD = ['GO GO GO!', 'YES! Did you see that?', 'That’s my player!', 'Teach me that!'];
-/** A kid who is neither: the odds he comes over to a game of the player's, and takes a free second stick. */
-const KID_PLAIN = { watch: 0.6, partner: 0.6 };
+/** The odds a regular coming in or moving on goes to their favourite machine when it is free. */
+const FAVOURITE_ODDS = 0.6;
+/** How long a regular stands watching the tournament before doing something else (seconds), and what they mutter meanwhile. */
+const WATCH_SECONDS: [number, number] = [45, 120];
+const WATCH_CHATTER = ['Who is next?', 'My money is on the new one.', 'Quarter-finals already.', 'I got knocked out by a kid once.', 'Shh, they are playing.', 'Tournament day. Best day.'];
+/** How long after a regular's game ends they put the next coin in (s): before the machine starts it. */
+const NEXT_COIN_AFTER = 1.4;
+/** An ordinary regular at the pinball nudges it this often (per second). */
+const NUDGE_RATE = 0.12;
 
 type RegularState =
   | { kind: 'out'; left: number }
@@ -91,85 +91,59 @@ type RegularState =
   | { kind: 'watching'; spot: number; left: number; chatter: number }
   | { kind: 'leaving' };
 
-/** A regular: the walker, where they are in their round, the name their scores go up under. */
+/** A regular: who they are, their body, where they are in their round. */
 interface Regular {
+  who: HallRegular;
   walker: Walker;
   state: RegularState;
-  name: string;
 }
 
-/** How long a regular stands watching the tournament before doing something else (seconds), what they mutter meanwhile, and how keen they are on it. */
-const WATCH_SECONDS: [number, number] = [45, 120];
-const WATCH_CHATTER = ['Who is next?', 'My money is on the new one.', 'Quarter-finals already.', 'I got knocked out by a kid once.', 'Shh, they are playing.', 'Tournament day. Best day.'];
-const WATCH_ODDS = 0.7;
-
-/** What a machine's sounds mean to the people at it and round it. */
-const REACTION_OF: Partial<Record<Sfx, Reaction>> = {
-  score: 'good',
-  eat: 'good',
-  perfect: 'good',
-  swish: 'good',
-  bonus: 'great',
-  jackpot: 'great',
-  win: 'great',
-  stage: 'great',
-  best: 'record',
-  lose: 'fail',
-  drain: 'fail',
-  penalty: 'fail',
-  tilt: 'fail',
-  crunch: 'fail',
-  miss: 'fail',
-};
-/** Seconds before the same person reacts again, by how much it matters (a record always shows), and how often a small one shows at all. */
-const REACT_GAP: Record<Reaction, number> = { good: 3, great: 1.5, record: 0, fail: 1.6, near: 1.2, over: 0, ready: 0 };
-const GOOD_ODDS = 0.45;
-/** What the kid says, now and then, watching a game go well or badly. */
-const KID_OOH = ['Ooh!', 'Nooo...', 'Ouch!'];
-const KID_NICE = ['Nice!', 'Whoa!', 'Yes!'];
-/** How long after a regular's game ends they put the next coin in (s): before the machine starts it. */
-const NEXT_COIN_AFTER = 1.4;
-/** A regular at the pinball nudges it this often (per second). */
-const NUDGE_RATE = 0.12;
-
-type KidState =
-  | { kind: 'hanging'; left: number }
-  | { kind: 'walking' }
-  | { kind: 'watching'; at: CrowdStation; byPlayer: boolean; left: number }
-  | { kind: 'partner'; at: CrowdStation };
-
-
 /**
- * Who is in the arcade and what they do: a few regulars walk in through the door (only when the
- * player is not looking at it), take a free machine (it plays itself, `Station.occupy`), play it
- * a minute or two with the odd exclamation, then try another or leave; the kid hangs about the
- * hall of fame and the machines, and whenever the player starts a play comes to watch over their
- * shoulder, cheering a record ("NEW RECORD!", arms up), groaning at a flop. Paths follow the
- * hall's nav graph, so nobody walks through a cabinet. An empty `Prop` the zone ticks; the builder
- * places the walkers.
+ * Who is in the arcade and what they do: the regulars walk in through the door at their own hours (only when the
+ * player is not looking at it), take their favourite machine when it is free or another (it plays itself at their
+ * skill, `Station.occupy`), play it a minute or two with their own words, then try another or leave (the sore loser
+ * after a poor game); on Saturday they crowd round the cup. The kid (`HallKid`) and the player's friends who come on
+ * their days (`HallGuest`) go their own ways. Paths follow the hall's nav graph (`CrowdNav`), so nobody walks through
+ * a cabinet. An empty `Prop` the zone ticks; the builder places the walkers.
  */
 export class ArcadeCrowd extends Prop implements Updatable {
   /** The reactions a moment later: on the hall's own time, dropped with it. */
   private readonly timers = new Timers();
   private readonly options: ArcadeCrowdOptions;
-  private readonly nodes = new Map<string, NavNode>();
+  private readonly nav: CrowdNav;
+  private readonly reactions = new CrowdReactions();
   private readonly regulars: Regular[];
-  private kidState: KidState = { kind: 'hanging', left: 2 };
+  private readonly kid: HallKid | null;
+  private readonly guests: HallGuest[];
   /** Stations a regular is heading for, so two never pick the same. */
   private readonly claimed = new Set<CrowdStation>();
-  private readonly scratch = new THREE.Vector3();
-  private readonly forward = new THREE.Vector3();
-  /** When each person last reacted (the hall's clock), so nobody twitches at every point. */
-  private readonly reacted = new Map<Walker, number>();
-  private clock = 0;
 
   constructor(options: ArcadeCrowdOptions) {
     super();
     this.name = 'ArcadeCrowd';
     this.options = options;
-    for (const node of options.nav) this.nodes.set(node.id, node);
-    this.regulars = options.regulars.map((walker, i) => ({ walker, state: { kind: 'out', left: i * 6 + 1 } as RegularState, name: options.names?.[i] ?? 'REG' }));
+    this.nav = new CrowdNav(options.nav, options.door, options.viewer, options.toWorld);
+    this.regulars = options.regulars.map(({ walker, who }, i) => ({ walker, who, state: { kind: 'out', left: i * 6 + 1 } as RegularState }));
     for (const r of this.regulars) r.walker.setPresent(false);
+    const reserved = (): Station | null => options.reserved?.() ?? null;
+    const onScore = (station: Station, score: number, name: string): string | null => options.onRegularScore?.(station, score, name) ?? null;
+    const kidGame = options.kidGame;
+    this.kid = options.kid
+      ? new HallKid({
+          walker: options.kid,
+          nav: this.nav,
+          stations: options.stations,
+          hangouts: options.hangouts,
+          reactions: this.reactions,
+          mood: () => options.kidMood?.() ?? 'devoted',
+          moody: Boolean(options.kidMood),
+          ...(kidGame ? { game: { station: () => this.stationOf(kidGame.gameId), skill: kidGame.skill, initials: kidGame.initials, odds: kidGame.odds, seconds: kidGame.seconds } } : {}),
+          partnerTaken: (cs) => this.guests.some((g) => g.partners(cs) || g.wouldPartner(cs)),
+          reserved,
+          onScore,
+        })
+      : null;
+    this.guests = (options.guests ?? []).map((g) => new HallGuest(g, { nav: this.nav, reactions: this.reactions, reserved, onScore }));
     for (const cs of options.stations) {
       cs.station.stationEvents.onPlayerStart = () => this.playerStarted(cs);
       cs.station.stationEvents.onPlayerResult = (result) => this.playerResult(cs, result);
@@ -179,22 +153,25 @@ export class ArcadeCrowd extends Prop implements Updatable {
     }
   }
 
-  /** Someone already at a machine when the player walks in (the hall is never empty). */
-  seat(regular: number, station: number): void {
-    const r = this.regulars[regular];
+  /** Someone already at a machine when the player walks in (the hall is never empty): a regular whose hours these are, if any is. */
+  seat(station: number): void {
     const cs = this.options.stations[station];
-    if (!r || !cs || !cs.station.occupy(r.walker.performer)) return;
-    r.walker.setPresent(true, this.standSpot(cs));
-    r.walker.rotation.y = this.standYaw(cs);
+    const hour = this.options.hour();
+    const out = this.regulars.filter((o) => o.state.kind === 'out');
+    const r = out.find((o) => regularIn(o.who, hour)) ?? out[0];
+    if (!r || !cs || !cs.station.occupy(r.walker.performer, this.skillAt(r, cs))) return;
+    r.walker.setPresent(true, this.nav.standSpot(cs));
+    r.walker.rotation.y = this.nav.standYaw(cs);
     this.standAtMachine(r.walker, cs);
     r.state = { kind: 'playing', at: cs, left: within(random, PLAY_SECONDS), chatter: 5 + random() * 10 };
   }
 
   update(dt: number): void {
-    this.clock += dt;
     this.timers.update(dt);
+    this.reactions.tick(dt);
     for (const r of this.regulars) this.updateRegular(r, dt);
-    this.updateKid(dt);
+    this.kid?.update(dt);
+    for (const g of this.guests) g.update(dt);
   }
 
   /** How many regulars are in the hall now (walking in, playing, leaving). */
@@ -224,17 +201,21 @@ export class ArcadeCrowd extends Prop implements Updatable {
     }
   }
 
-  /** Outside: the wait runs down, then in through the door (unseen, with room in the hall) to watch the cup or to play. */
+  /** Outside: the wait runs down, then (in their hours, unseen, with room in the hall) in through the door to watch the cup or to play. */
   private waitOutside(r: Regular, s: Extract<RegularState, { kind: 'out' }>, dt: number): void {
     s.left -= dt;
-    if (s.left > 0 || this.inside >= this.options.maxInside() || this.doorInView()) return;
-    const spot = random() < WATCH_ODDS ? this.freeWatchSpot() : null;
-    const target = spot === null ? this.freeStation() : null;
+    if (s.left > 0 || this.inside >= this.options.maxInside() || this.nav.doorInView()) return;
+    if (!regularIn(r.who, this.options.hour())) {
+      s.left = 20;
+      return;
+    }
+    const spot = random() < r.who.watches ? this.freeWatchSpot() : null;
+    const target = spot === null ? this.freeStation(r) : null;
     if (spot === null && !target) {
       s.left = 5;
       return;
     }
-    r.walker.setPresent(true, this.nodePoint(this.options.door));
+    r.walker.setPresent(true, this.nav.doorPoint());
     if (spot !== null) this.goWatch(r, spot);
     else if (target) this.goTo(r, target);
   }
@@ -245,34 +226,38 @@ export class ArcadeCrowd extends Prop implements Updatable {
     s.chatter -= dt;
     if (s.chatter <= 0) {
       s.chatter = 15 + random() * 25;
-      r.walker.say(WATCH_CHATTER[Math.floor(random() * WATCH_CHATTER.length)]!, 2);
+      r.walker.say(pick(random, WATCH_CHATTER), 2);
     }
     if (s.left > 0 && this.options.gathering?.() && this.inside <= this.options.maxInside() + 1) return;
-    const next = random() < 0.4 ? this.freeStation() : null;
+    const next = random() < r.who.stays ? this.freeStation(r) : null;
     if (next) this.goTo(r, next);
     else this.leave(r);
   }
 
-  /** At a machine: a word now and then, a hip to the pinball; the play over (or the hall emptying), the cup to watch, another go, or home. */
+  /** At a machine: their own word now and then, a hip to the pinball; the play over (or the hall emptying, or past their hours), the cup to watch, another go, or home. */
   private play(r: Regular, s: Extract<RegularState, { kind: 'playing' }>, dt: number): void {
     s.left -= dt;
     s.chatter -= dt;
     if (s.chatter <= 0) {
-      s.chatter = 12 + random() * 20;
-      r.walker.say(REGULAR_CHATTER[Math.floor(random() * REGULAR_CHATTER.length)]!, 1.6);
+      s.chatter = within(random, r.who.chatterEvery);
+      r.walker.say(pick(random, r.who.chatter), 1.6);
     }
-    // Pinball players bump the table with their hips now and then.
-    if (s.at.station.name === 'Pinball' && random() < dt * NUDGE_RATE) r.walker.gesture('nudge');
-    // Time to go, or the hall is emptying out for the night.
-    if (s.left > 0 && this.inside <= this.options.maxInside() + 1) return;
-    s.at.station.release();
-    // The tournament to watch, another go somewhere else, or home.
-    const spot = random() < WATCH_ODDS ? this.freeWatchSpot() : null;
+    // Pinball players bump the table with their hips now and then (some more than others).
+    if (s.at.station.name === 'Pinball' && random() < dt * NUDGE_RATE * (r.who.nudges ?? 1)) r.walker.gesture('nudge');
+    if (s.left > 0 && this.inside <= this.options.maxInside() + 1 && regularIn(r.who, this.options.hour())) return;
+    this.moveOn(r, s.at);
+  }
+
+  /** Done at `at`: the cup to watch, another go somewhere else, or home. */
+  private moveOn(r: Regular, at: CrowdStation): void {
+    at.station.release();
+    const inHours = regularIn(r.who, this.options.hour());
+    const spot = inHours && random() < r.who.watches ? this.freeWatchSpot() : null;
     if (spot !== null) {
       this.goWatch(r, spot);
       return;
     }
-    const next = random() < 0.45 ? this.freeStation() : null;
+    const next = inHours && random() < r.who.stays ? this.freeStation(r) : null;
     if (next) this.goTo(r, next);
     else this.leave(r);
   }
@@ -280,11 +265,11 @@ export class ArcadeCrowd extends Prop implements Updatable {
   private goTo(r: Regular, target: CrowdStation): void {
     this.claimed.add(target);
     r.state = { kind: 'going', to: target };
-    r.walker.walk(this.route(r.walker.position, this.standSpot(target)), () => {
+    r.walker.walk(this.nav.route(r.walker.position, this.nav.standSpot(target)), () => {
       this.claimed.delete(target);
       // Taken meanwhile (the player got there first): try another, or give up.
-      if (!target.station.occupy(r.walker.performer)) {
-        const other = this.freeStation();
+      if (!target.station.occupy(r.walker.performer, this.skillAt(r, target))) {
+        const other = this.freeStation(r);
         if (other) this.goTo(r, other);
         else this.leave(r);
         return;
@@ -298,7 +283,7 @@ export class ArcadeCrowd extends Prop implements Updatable {
 
   private leave(r: Regular): void {
     r.state = { kind: 'leaving' };
-    r.walker.walk(this.route(r.walker.position, this.nodePoint(this.options.door)), () => {
+    r.walker.walk(this.nav.route(r.walker.position, this.nav.doorPoint()), () => {
       r.walker.setPresent(false);
       r.state = { kind: 'out', left: within(random, AWAY_SECONDS) };
     });
@@ -306,13 +291,32 @@ export class ArcadeCrowd extends Prop implements Updatable {
 
   /** At the controls: facing the machine, bent over it as it asks, hands on its controls (or the machine directing them), eyes on its screen. */
   private standAtMachine(walker: Walker, cs: CrowdStation): void {
-    walker.stand(this.standYaw(cs), 'play', this.focusOf(cs), cs.station.directs ? null : () => cs.station.handsAt(), cs.station.lean);
+    walker.stand(this.nav.standYaw(cs), 'play', this.nav.focusOf(cs), cs.station.directs ? null : () => cs.station.handsAt(), cs.station.lean);
   }
 
-  private freeStation(): CrowdStation | null {
+  /** How well `r` plays the machine at `cs`. */
+  private skillAt(r: Regular, cs: CrowdStation): number {
+    const game = this.options.gameOf(cs.station);
+    return game ? regularSkill(r.who, game) : r.who.skill;
+  }
+
+  /** A machine `r` may take: their favourite when it is free (most times), else any free one. */
+  private freeStation(r: Regular): CrowdStation | null {
     const reserved = this.options.reserved?.() ?? null;
-    const free = this.options.stations.filter((cs) => cs.station !== reserved && !cs.station.occupant && !cs.station.outOfOrder && !this.claimed.has(cs) && !this.partnered(cs));
-    return free[Math.floor(random() * free.length)] ?? null;
+    const free = this.options.stations.filter((cs) => cs.station !== reserved && !cs.station.occupant && !cs.station.outOfOrder && !this.claimed.has(cs) && !this.secondStickTaken(cs));
+    const favourite = free.find((cs) => this.options.gameOf(cs.station) === r.who.favourite);
+    if (favourite && random() < FAVOURITE_ODDS) return favourite;
+    return free.length ? pick(random, free) : null;
+  }
+
+  /** Someone stands at `cs`'s second stick (the kid, a friend): a regular leaves it be. */
+  private secondStickTaken(cs: CrowdStation): boolean {
+    return Boolean(this.kid?.partners(cs)) || this.guests.some((g) => g.partners(cs));
+  }
+
+  /** A station by its game. */
+  private stationOf(gameId: string): CrowdStation | null {
+    return this.options.stations.find((cs) => this.options.gameOf(cs.station) === gameId) ?? null;
   }
 
   // --- A crowd round the tournament ---------------------------------------------------------------
@@ -323,7 +327,7 @@ export class ArcadeCrowd extends Prop implements Updatable {
     if (!gathering) return null;
     const taken = new Set(this.regulars.map((o) => (o.state.kind === 'toWatch' || o.state.kind === 'watching' ? o.state.spot : -1)));
     const free = gathering.spots.map((_, i) => i).filter((i) => !taken.has(i));
-    return free[Math.floor(random() * free.length)] ?? null;
+    return free.length ? pick(random, free) : null;
   }
 
   /** Off to stand at a watching spot, arms crossed, eyes on the tournament's screen. */
@@ -335,15 +339,13 @@ export class ArcadeCrowd extends Prop implements Updatable {
       return;
     }
     r.state = { kind: 'toWatch', spot };
-    r.walker.walk(this.route(r.walker.position, at.clone()), () => {
+    r.walker.walk(this.nav.route(r.walker.position, at.clone()), () => {
       const now = this.options.gathering?.();
       if (!now) {
         this.leave(r);
         return;
       }
-      const world = this.options.toWorld(at.clone());
-      const yaw = Math.atan2(now.focus.x - world.x, now.focus.z - world.z);
-      r.walker.stand(yaw, random() < 0.5 ? 'crossed' : 'hips', now.focus);
+      r.walker.stand(this.nav.yawTo(at, now.focus), random() < 0.5 ? 'crossed' : 'hips', now.focus);
       r.state = { kind: 'watching', spot, left: within(random, WATCH_SECONDS), chatter: 6 + random() * 10 };
     });
   }
@@ -355,275 +357,75 @@ export class ArcadeCrowd extends Prop implements Updatable {
       .forEach((r, i) => {
         this.timers.after(0.3 + i * 0.45, () => {
           if (r.state.kind !== 'watching') return;
-          r.walker.say(lines[Math.floor(random() * lines.length)]!, 2.4);
+          r.walker.say(pick(random, lines), 2.4);
           r.walker.react(cheer ? 'great' : 'fail');
         });
       });
   }
 
-  // --- The kid ----------------------------------------------------------------------------------
-
-  private updateKid(dt: number): void {
-    const kid = this.options.kid;
-    if (!kid) return;
-    const s = this.kidState;
-    if (s.kind === 'hanging') {
-      s.left -= dt;
-      if (s.left > 0) return;
-      // Watch a regular for a bit, or go and stand somewhere else.
-      const busy = this.options.stations.filter((cs) => cs.station.occupant === 'regular');
-      if (busy.length && random() < 0.4) this.kidWatch(busy[Math.floor(random() * busy.length)]!, false);
-      else this.kidHangOut();
-    } else if (s.kind === 'watching' && !s.byPlayer) {
-      s.left -= dt;
-      if (s.left <= 0 || s.at.station.occupant !== 'regular') this.kidHangOut();
-    }
-  }
-
-  private kidHangOut(): void {
-    const kid = this.options.kid;
-    const spots = this.options.hangouts;
-    if (!kid || !spots.length) return;
-    const spot = spots[Math.floor(random() * spots.length)]!;
-    this.kidState = { kind: 'walking' };
-    kid.walk(this.route(kid.position, new THREE.Vector3(spot.at[0], 0, spot.at[1])), () => {
-      kid.stand(spot.yaw, random() < 0.5 ? 'pockets' : 'crossed', spot.look ? this.options.toWorld(new THREE.Vector3(...spot.look)) : null);
-      this.kidState = { kind: 'hanging', left: 6 + random() * 12 };
-    });
-  }
-
-  private kidWatch(cs: CrowdStation, byPlayer: boolean): void {
-    const kid = this.options.kid;
-    if (!kid) return;
-    this.kidState = { kind: 'walking' };
-    const spot = this.watchSpot(cs);
-    kid.walk(this.route(kid.position, spot), () => {
-      const focus = this.focusOf(cs);
-      const local = this.options.toWorld(spot.clone());
-      const yaw = Math.atan2(focus.x - local.x, focus.z - local.z);
-      kid.stand(yaw, byPlayer ? 'crossed' : 'pockets', focus);
-      this.kidState = { kind: 'watching', at: cs, byPlayer, left: 10 + random() * 15 };
-    });
-  }
+  // --- The player's plays, and everyone's results -----------------------------------------------
 
   private playerStarted(cs: CrowdStation): void {
-    const s = this.kidState;
-    if ((s.kind === 'watching' || s.kind === 'partner') && s.at === cs) return;
-    const mood = this.kidMood();
-    if (cs.station.partner && mood !== 'heckle' && (mood === 'devoted' || random() < KID_PLAIN.partner)) this.kidPartner(cs);
-    else if (mood !== 'plain' || random() < KID_PLAIN.watch) this.kidWatch(cs, true);
-  }
-
-  private kidMood(): 'devoted' | 'cheer' | 'plain' | 'heckle' {
-    return this.options.kidMood?.() ?? 'devoted';
-  }
-
-  /** A two-player machine: the kid takes the second stick (the machine plays it until they get there). */
-  private kidPartner(cs: CrowdStation): void {
-    const kid = this.options.kid;
-    const partner = cs.station.partner;
-    if (!kid || !partner) return;
-    this.kidState = { kind: 'walking' };
-    const spot = partner.standAt.clone().applyAxisAngle(THREE.Object3D.DEFAULT_UP, cs.station.rotation.y).add(cs.station.position).setY(0);
-    kid.say(PARTNER_LINES[Math.floor(random() * PARTNER_LINES.length)]!, 2);
-    kid.walk(this.route(kid.position, spot), () => {
-      if (cs.station.occupant !== 'player') {
-        this.kidState = { kind: 'hanging', left: 1 };
-        return;
-      }
-      kid.stand(this.standYaw(cs), 'play', this.focusOf(cs), () => partner.handsAt(), cs.station.lean);
-      partner.setPartner('KID');
-      this.kidState = { kind: 'partner', at: cs };
-    });
-  }
-
-  /** Whether the kid is at this machine's second stick (a regular leaves it be). */
-  private partnered(cs: CrowdStation): boolean {
-    return this.kidState.kind === 'partner' && this.kidState.at === cs;
+    for (const g of this.guests) g.playerStarted(cs);
+    this.kid?.playerStarted(cs);
   }
 
   private playerResult(cs: CrowdStation, result: ArcadeResult): void {
-    const kid = this.options.kid;
-    const s = this.kidState;
-    if (kid && s.kind === 'partner' && s.at === cs) {
-      const lines = result.best || result.score > 0 ? PARTNER_RESULTS.won : PARTNER_RESULTS.lost;
-      kid.say(lines[Math.floor(random() * lines.length)]!, 2.4);
-      kid.react(lines === PARTNER_RESULTS.won ? 'fail' : 'great');
-      return;
-    }
-    if (!kid || s.kind !== 'watching' || s.at !== cs) return;
-    const mood = this.kidMood();
-    if (mood === 'heckle') {
-      kid.say(pick(random, KID_HECKLES), 2.4);
-      kid.react(result.best ? 'fail' : 'great');
-      return;
-    }
-    let line: string;
-    let cheer = false;
-    if (result.prize) {
-      line = 'NO WAY! It actually let go!';
-      cheer = true;
-    } else if (cs.station.name === 'ClawMachine') {
-      line = random() < 0.5 ? 'Rigged. Told you.' : 'Nearly had it!';
-    } else if (result.best) {
-      line = random() < 0.5 ? 'NEW RECORD!' : 'WHOA!';
-      cheer = true;
-    } else if (result.score === 0) {
-      line = 'Ouch.';
-    } else {
-      line = ['Nice one!', 'Not bad!', 'Aww...', 'So close!', 'Again! Again!'][Math.floor(random() * 5)]!;
-    }
-    // A fan of the player's shouts a decent game from the rooftops.
-    if (!cheer && result.score > 0 && (mood === 'cheer' || mood === 'devoted') && this.options.kidMood) {
-      line = pick(random, KID_LOUD);
-      kid.say(line, 2.4);
-      kid.react('great');
-      return;
-    }
-    kid.say(line, 2.4);
-    kid.react(cheer ? 'record' : result.score === 0 ? 'fail' : 'good');
+    this.kid?.playerResult(cs, result);
+    for (const g of this.guests) g.playerResult(cs, result);
+    this.options.onPlayerResult?.(cs.station, result);
   }
 
   private playerLeft(cs: CrowdStation): void {
-    const s = this.kidState;
     cs.station.partner?.setPartner(null);
-    if ((s.kind === 'watching' || s.kind === 'partner') && s.at === cs) this.kidState = { kind: 'hanging', left: 2 + random() * 3 };
+    this.kid?.playerLeft(cs);
+    for (const g of this.guests) g.playerLeft(cs);
   }
 
-  /** A regular's game ended: their score may go on the board, and they have something to say about it. */
+  /** A game ended with someone of the hall's at the controls: the kid's, a guest's, or a regular's (their own line when it signs the board). */
   private regularResult(cs: CrowdStation, score: number): void {
+    if (this.kid?.plays(cs)) {
+      this.kid.ownResult(cs, score);
+      return;
+    }
+    const guest = this.guests.find((g) => g.plays(cs));
+    if (guest) {
+      guest.ownResult(cs, score);
+      return;
+    }
     const r = this.regulars.find((o) => o.state.kind === 'playing' && o.state.at === cs);
     if (!r) return;
-    const line = this.options.onRegularScore?.(cs.station, score, r.name);
-    if (line) {
-      r.walker.say(line, 2.6);
+    const signed = this.options.onRegularScore?.(cs.station, score, r.who.initials);
+    if (signed) {
+      r.walker.say(pick(random, r.who.boardLines), 2.6);
       r.walker.react('record');
-    } else r.walker.react('over');
-    this.reacted.set(r.walker, this.clock);
+    } else {
+      r.walker.react('over');
+      // The sore loser walks off after a game that did not make the board.
+      if (r.who.soreLoser && random() < 0.5 && r.state.kind === 'playing') {
+        r.walker.say(pick(random, r.who.chatter), 1.6);
+        r.state.left = 0;
+      }
+    }
+    this.reactions.mark(r.walker);
     // Then the next coin, if they are staying on.
     this.timers.after(NEXT_COIN_AFTER + random() * 0.6, () => {
-      if (r.state.kind === 'playing' && r.state.at === cs && !r.walker.performer.gesturing) r.walker.gesture('insertCoin');
+      if (r.state.kind === 'playing' && r.state.at === cs && r.state.left > 0 && !r.walker.performer.gesturing) r.walker.gesture('insertCoin');
     });
   }
 
   /**
-   * A machine made a sound that means something (a point, a bonus, a life lost, a record): whoever
-   * plays it reacts (unless the machine directs their body and shows it itself), and the kid if
-   * watching it, now and then with a word.
+   * A machine made a sound that means something (a point, a bonus, a life lost, a record): whoever plays it reacts
+   * (unless the machine directs their body and shows it itself), and whoever watches it.
    */
   private sound(cs: CrowdStation, sfx: Sfx): void {
-    const reaction = REACTION_OF[sfx];
+    const reaction = reactionOf(sfx);
     if (!reaction) return;
     if (cs.station.occupant === 'regular' && !cs.station.directs) {
       const r = this.regulars.find((o) => o.state.kind === 'playing' && o.state.at === cs);
-      if (r) this.reactOnce(r.walker, reaction);
+      if (r) this.reactions.once(r.walker, reaction);
     }
-    const kid = this.options.kid;
-    const s = this.kidState;
-    if (kid && (s.kind === 'watching' || s.kind === 'partner') && s.at === cs && this.reactOnce(kid, reaction) && random() < 0.3) {
-      if (reaction === 'fail') kid.say(KID_OOH[Math.floor(random() * KID_OOH.length)]!, 1.4);
-      else if (reaction === 'great' || reaction === 'record') kid.say(KID_NICE[Math.floor(random() * KID_NICE.length)]!, 1.4);
-    }
-  }
-
-  /** `walker` reacts, unless they did a moment ago (a record always shows; a small one only sometimes). True when they did. */
-  private reactOnce(walker: Walker, reaction: Reaction): boolean {
-    const last = this.reacted.get(walker) ?? -Infinity;
-    if (this.clock - last < REACT_GAP[reaction]) return false;
-    if (reaction === 'good' && random() > GOOD_ODDS) return false;
-    this.reacted.set(walker, this.clock);
-    walker.react(reaction);
-    return true;
-  }
-
-  // --- Geometry ---------------------------------------------------------------------------------
-
-  /** Zone-local spot in front of a machine where its player stands. */
-  private standSpot(cs: CrowdStation): THREE.Vector3 {
-    const { station } = cs;
-    return station.standAt.clone().applyAxisAngle(THREE.Object3D.DEFAULT_UP, station.rotation.y).add(station.position).setY(0);
-  }
-
-  /** Facing the machine: the machine's +z turned round. */
-  private standYaw(cs: CrowdStation): number {
-    return cs.station.rotation.y + Math.PI;
-  }
-
-  /** World point on the machine where eyes go. */
-  private focusOf(cs: CrowdStation): THREE.Vector3 {
-    return cs.station.localToWorld(cs.station.focus.clone());
-  }
-
-  /** Zone-local spot a watcher takes: the plan's, or behind the player's shoulder. */
-  private watchSpot(cs: CrowdStation): THREE.Vector3 {
-    if (cs.watchAt) return new THREE.Vector3(cs.watchAt[0], 0, cs.watchAt[1]);
-    const { station } = cs;
-    const local = station.standAt.clone().add(new THREE.Vector3(0.38, 0, 0.6));
-    return local.applyAxisAngle(THREE.Object3D.DEFAULT_UP, station.rotation.y).add(station.position).setY(0);
-  }
-
-  private nodePoint(id: string): THREE.Vector3 {
-    const node = this.nodes.get(id)!;
-    return new THREE.Vector3(node.at[0], 0, node.at[1]);
-  }
-
-  private nearestNode(p: THREE.Vector3): NavNode {
-    let best = this.options.nav[0]!;
-    let bestD = Infinity;
-    for (const node of this.options.nav) {
-      const d = Math.hypot(node.at[0] - p.x, node.at[1] - p.z);
-      if (d < bestD) {
-        bestD = d;
-        best = node;
-      }
-    }
-    return best;
-  }
-
-  /** From `from` to `to` (zone-local): to the nearest node, along the graph (shortest by distance), then straight to the spot. */
-  private route(from: THREE.Vector3, to: THREE.Vector3): THREE.Vector3[] {
-    const start = this.nearestNode(from);
-    const goal = this.nearestNode(to);
-    const dist = new Map<string, number>([[start.id, 0]]);
-    const prev = new Map<string, string>();
-    const open = new Set([start.id]);
-    while (open.size) {
-      let id = '';
-      let best = Infinity;
-      for (const o of open) if ((dist.get(o) ?? Infinity) < best) [id, best] = [o, dist.get(o)!];
-      open.delete(id);
-      if (id === goal.id) break;
-      const node = this.nodes.get(id)!;
-      for (const link of node.links) {
-        const other = this.nodes.get(link);
-        if (!other) continue;
-        const d = best + Math.hypot(other.at[0] - node.at[0], other.at[1] - node.at[1]);
-        if (d < (dist.get(link) ?? Infinity)) {
-          dist.set(link, d);
-          prev.set(link, id);
-          open.add(link);
-        }
-      }
-    }
-    const ids: string[] = [];
-    for (let id: string | undefined = goal.id; id; id = prev.get(id)) {
-      ids.unshift(id);
-      if (id === start.id) break;
-    }
-    const path = ids.map((id) => this.nodePoint(id));
-    // Skip the first node when we are already past it towards the second.
-    if (path.length > 1 && from.distanceTo(path[1]!) < path[0]!.distanceTo(path[1]!)) path.shift();
-    path.push(to.clone());
-    return path;
-  }
-
-  /** Whether the player is looking towards the door (nobody pops in or out under their nose). */
-  private doorInView(): boolean {
-    const door = this.options.toWorld(this.nodePoint(this.options.door));
-    this.options.viewer.getWorldPosition(this.scratch);
-    this.options.viewer.getWorldDirection(this.forward);
-    const to = door.sub(this.scratch).setY(0).normalize();
-    this.forward.setY(0).normalize();
-    return this.forward.dot(to) > DOOR_UNSEEN_COS;
+    this.kid?.heard(cs, reaction);
+    for (const g of this.guests) g.heard(cs, reaction);
   }
 }

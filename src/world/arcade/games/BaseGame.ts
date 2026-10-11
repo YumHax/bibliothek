@@ -1,9 +1,9 @@
 import type { Sfx, SfxEvent } from '@/audio/ChipSpeaker';
-import { type ArcadeControls, type ArcadeGame, type RunContext, SCREEN_H, SCREEN_W, drawText } from './ArcadeGame';
+import { type ArcadeControls, type ArcadeGame, type RunContext, SCREEN_H, SCREEN_W, type ScoreGoal, drawText } from './ArcadeGame';
 import { Fx } from './Fx';
 import { KeyEdges } from '@/input/GameInput';
 import { SoundQueue } from '../SoundQueue';
-import { POINTS_PER_TICKET } from '@/economy/pricing';
+import { POINTS_PER_TICKET, ticketsAt } from '@/economy/pricing';
 import { lcg, random as liveRandom } from '@/random';
 
 /** The HUD strip across the top; the playfield starts at `PLAY_TOP`. */
@@ -15,6 +15,9 @@ const BEST_BANNER_SECONDS = 2;
 const LOW_TIME = 5;
 
 const COMBO_COLORS = ['#c9c4ff', '#c9c4ff', '#7ee787', '#ffe066', '#ffb347', '#ff5f5f'];
+/** A goal's word in its own colour when passed, dimmed while it waits. */
+const GOAL_INK: Readonly<Record<string, string>> = { BRONZE: '#e0915a', SILVER: '#dfe6ee', GOLD: '#ffd23a', PLATINUM: '#bfefff' };
+const GOAL_DIM: Readonly<Record<string, string>> = { BRONZE: 'rgba(224,145,90,0.7)', SILVER: 'rgba(223,230,238,0.65)', GOLD: 'rgba(255,210,58,0.7)', PLATINUM: 'rgba(191,239,255,0.7)' };
 
 /**
  * The run every cabinet game shares, so each game is only its rules (a play is a 12-30 second
@@ -40,11 +43,17 @@ export abstract class BaseGame implements ArcadeGame {
   protected timeLeft = Infinity;
   protected elapsed = 0;
   private best = 0;
+  private scoreGoals: readonly ScoreGoal[] = [];
+  /** How many of `scoreGoals` (sorted by score) the score has passed. */
+  private goalsPassed = 0;
+  private ticketFloor = 0;
   private pointsPerTicket = POINTS_PER_TICKET;
   private intro = 0;
   private outro = 0;
   private endReason = '';
   private comboTimer = 0;
+  /** How long the current chain step holds in all (the gauge under the multiplier empties over it). */
+  private comboHold = 1;
   private bestBeaten = false;
   private bestBanner = 0;
   private readonly sounds = new SoundQueue();
@@ -74,9 +83,13 @@ export abstract class BaseGame implements ArcadeGame {
     this.score = 0;
     this.over = false;
     this.best = run.best;
+    this.scoreGoals = [...(run.goals ?? [])].filter((g) => g.score > 0).sort((a, b) => a.score - b.score);
+    this.goalsPassed = 0;
+    this.ticketFloor = run.ticketFloor ?? 0;
     this.pointsPerTicket = run.pointsPerTicket;
     this.combo = 1;
     this.comboTimer = 0;
+    this.comboHold = 1;
     this.timeLeft = this.timeLimit ?? Infinity;
     this.elapsed = 0;
     this.intro = INTRO_SECONDS;
@@ -115,7 +128,10 @@ export abstract class BaseGame implements ArcadeGame {
     this.tick(dt, controls);
     if (this.outro > 0) return;
     if (Number.isFinite(this.timeLeft)) {
+      const before = this.timeLeft;
       this.timeLeft -= dt;
+      // The last five seconds tick, one pip a second.
+      if (before <= LOW_TIME + 1 && this.timeLeft > 0 && Math.ceil(this.timeLeft) < Math.ceil(before)) this.sound('countdown', 1 + (LOW_TIME - Math.ceil(this.timeLeft)) * 0.06);
       if (this.timeLeft <= 0) {
         this.timeLeft = 0;
         this.end('TIME UP');
@@ -161,21 +177,39 @@ export abstract class BaseGame implements ArcadeGame {
       this.fx.burst(x, y, ink, 5 + Math.min(this.combo, 4) * 2, 60, 1);
     }
     this.sound('score', 1 + (this.combo - 1) * 0.12);
+    this.scored();
+    return gained;
+  }
+
+  /** Points as they stand, no multiplier, no pop or sound of their own (a game's flat bonus): the record and the goals still follow. */
+  protected addFlat(points: number): void {
+    this.score += points;
+    this.scored();
+  }
+
+  /** After any points: the NEW BEST banner once, and a word when a medal's score is passed. */
+  private scored(): void {
     if (!this.bestBeaten && this.best > 0 && this.score > this.best) {
       this.bestBeaten = true;
       this.bestBanner = BEST_BANNER_SECONDS;
       this.fx.flash('#7ee787', 0.12);
       this.sound('best');
     }
-    return gained;
+    while (this.goalsPassed < this.scoreGoals.length && this.score >= this.scoreGoals[this.goalsPassed]!.score) {
+      const goal = this.scoreGoals[this.goalsPassed]!;
+      this.goalsPassed += 1;
+      // The player's own best has its banner; a medal's score gets its word.
+      if (goal.label !== 'BEST') {
+        this.fx.pop(`${goal.label} SCORE!`, SCREEN_W / 2, PLAY_TOP + 40, GOAL_INK[goal.label] ?? '#ffe066', 10);
+        this.sound('bonus', 1.2);
+      }
+    }
   }
 
   /** A bare bonus: fixed points (no combo), announced with a caption. */
   protected bonus(points: number, caption: string, x = SCREEN_W / 2, y = SCREEN_H / 2): void {
-    const combo = this.combo;
-    this.combo = 1;
-    this.addScore(points);
-    this.combo = combo;
+    this.addFlat(points);
+    this.sound('score');
     this.fx.pop(`${caption} +${points}`, x, y, '#ffe066', 10);
     this.fx.flash('#ffe066', 0.1);
     this.sound('bonus');
@@ -186,6 +220,7 @@ export abstract class BaseGame implements ArcadeGame {
     const before = this.combo;
     this.combo = Math.min(this.comboMax, this.combo + 1);
     this.comboTimer = hold;
+    this.comboHold = hold;
     if (before < this.comboMax && this.combo === this.comboMax) this.fx.shake(1.5, 0.1);
   }
 
@@ -225,9 +260,14 @@ export abstract class BaseGame implements ArcadeGame {
     return this.intro > 0;
   }
 
-  /** The play's tickets so far; null on a run that pays none (`pointsPerTicket` 0: a cabinet at home). */
+  /** The play's tickets so far, never under what a paid play pays anyway; null on a run that pays none (`pointsPerTicket` 0: a cabinet at home). */
   private get tickets(): number | null {
-    return this.pointsPerTicket > 0 ? Math.floor(this.score / this.pointsPerTicket) : null;
+    return this.pointsPerTicket > 0 ? Math.max(this.ticketFloor, ticketsAt(this.id, this.score, this.pointsPerTicket)) : null;
+  }
+
+  /** The next goal the score has not reached, if any. */
+  private get nextGoal(): ScoreGoal | null {
+    return this.scoreGoals[this.goalsPassed] ?? null;
   }
 
   // --- Overlays -------------------------------------------------------------------------------
@@ -236,7 +276,17 @@ export abstract class BaseGame implements ArcadeGame {
     ctx.fillStyle = 'rgba(0,0,0,0.55)';
     ctx.fillRect(0, 0, SCREEN_W, PLAY_TOP - 3);
     drawText(ctx, `${this.score}`, 6, 10, 10, '#ffffff', 'left');
-    if (this.combo > 1) drawText(ctx, `x${this.combo}`, 6 + ctx.measureText(`${this.score}`).width + 8, 10, 9, COMBO_COLORS[this.combo] ?? '#ffe066', 'left');
+    if (this.combo > 1) {
+      const x = 6 + ctx.measureText(`${this.score}`).width + 8;
+      const ink = COMBO_COLORS[this.combo] ?? '#ffe066';
+      drawText(ctx, `x${this.combo}`, x, 9, 9, ink, 'left');
+      // The chain's hold running out under the multiplier.
+      const left = this.comboHold > 0 ? Math.max(0, Math.min(1, this.comboTimer / this.comboHold)) : 0;
+      ctx.fillStyle = 'rgba(255,255,255,0.15)';
+      ctx.fillRect(Math.round(x), 15, 22, 2);
+      ctx.fillStyle = left < 0.3 && Math.floor(this.elapsed * 10) % 2 === 0 ? '#ff8a80' : ink;
+      ctx.fillRect(Math.round(x), 15, Math.round(22 * left), 2);
+    }
     if (this.tickets !== null) drawText(ctx, `${this.tickets} TIX`, SCREEN_W / 2, 10, 9, '#ffd23a');
     if (Number.isFinite(this.timeLeft)) {
       const low = this.timeLeft <= LOW_TIME && this.live;
@@ -257,6 +307,9 @@ export abstract class BaseGame implements ArcadeGame {
     } else if (this.best > 0) {
       drawText(ctx, `BEST ${this.best}`, SCREEN_W - 6, 10, 8, '#c9c4ff', 'right');
     }
+    // What to reach for next, dim under the clock.
+    const goal = this.nextGoal;
+    if (goal && this.intro <= 0) drawText(ctx, `${goal.label} ${goal.score}`, SCREEN_W - 6, PLAY_TOP + 6, 6, GOAL_DIM[goal.label] ?? 'rgba(201,196,255,0.6)', 'right');
     if (this.bestBanner > 0) {
       const y = PLAY_TOP + 16;
       ctx.fillStyle = 'rgba(0,0,0,0.6)';
@@ -275,7 +328,11 @@ export abstract class BaseGame implements ArcadeGame {
   private drawOutro(ctx: CanvasRenderingContext2D): void {
     ctx.fillStyle = 'rgba(0,0,0,0.6)';
     ctx.fillRect(0, SCREEN_H / 2 - 30, SCREEN_W, 60);
-    drawText(ctx, this.endReason, SCREEN_W / 2, SCREEN_H / 2 - 8, 18, '#ff8a80');
-    drawText(ctx, this.tickets === null ? `${this.score} PTS` : `${this.score} PTS  ${this.tickets} TICKETS`, SCREEN_W / 2, SCREEN_H / 2 + 16, 9, '#ffd23a');
+    drawText(ctx, this.endReason, SCREEN_W / 2, SCREEN_H / 2 - 10, 18, '#ff8a80');
+    drawText(ctx, `${this.score} PTS`, SCREEN_W / 2, SCREEN_H / 2 + 10, 9, '#ffd23a');
+    // How near the next goal came (the machine's own end card counts the tickets).
+    const goal = this.nextGoal;
+    if (goal) drawText(ctx, `${goal.score - this.score} MORE FOR ${goal.label}`, SCREEN_W / 2, SCREEN_H / 2 + 22, 7, '#c9c4ff');
+    else if (this.scoreGoals.length) drawText(ctx, 'EVERY GOAL PASSED', SCREEN_W / 2, SCREEN_H / 2 + 22, 7, '#7ee787');
   }
 }

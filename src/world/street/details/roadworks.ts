@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { STREET_PLAN } from '../streetPlan';
-import { FRONT, PARK_PARKING, PARK_STREET, WORKS, WORKS_LIFT, setFrontStreetEnd } from '@/world/measures/street';
+import { FRONT, PARK_PARKING, PARK_STREET, WORKS, frontWorksOn, setFrontStreetEnd } from '@/world/measures/street';
 
 /** A span across a street (zone-local metres on the across axis), low to high. */
 export type Span = readonly [number, number];
@@ -63,7 +63,7 @@ let current: readonly Closure[] = [frontWorks(frontX), PARK_WORKS];
  * a view of it) is built; the works never move back.
  */
 export function syncWorks(gameDay: number): void {
-  const x = gameDay >= WORKS_LIFT.afterGameDay ? WORKS_LIFT.front : WORKS.front;
+  const x = frontWorksOn(gameDay);
   if (x !== frontX) {
     frontX = x;
     current = [frontWorks(x), PARK_WORKS];

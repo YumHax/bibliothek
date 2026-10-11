@@ -1,9 +1,20 @@
 import * as THREE from 'three';
+import type { Updatable } from '@/core/Engine';
 import type { Interactable } from '@/interaction/Interactable';
 import type { PlayerState, SeatLike, SessionActions } from '@/game/SessionActions';
+import type { Pastimes } from '@/household/pastime';
 import type { Furniture } from '../../Furniture';
 import { FACING_OUT, eyePoseAt, invisibleHitbox } from '../../meshUtils';
 import type { Vec2 } from '../streetPlan';
+
+/** A while on a bench: how long (game minutes, under the household's limit) and what it was for ("until the bakery opens"). */
+export interface BenchWait {
+  minutes: number;
+  /** The caption's words after "sit": "until the bakery opens", "a while". */
+  until: string;
+  /** Said as the view comes back. */
+  after: string;
+}
 
 /** A place to sit in the street: where (zone-local, the seat's middle), the way one faces sitting there, the seat's height. */
 export interface BenchSpot {
@@ -17,22 +28,42 @@ export interface BenchSpot {
   name: string;
   /** Someone of the street sits there now (the bench's reader): not offered. */
   taken?: () => boolean;
+  /** Seated, a click lets time pass (a fade, the clock wound on: `household/pastime`); none: a click stands up. */
+  wait?: () => BenchWait | null;
+  pastimes?: Pastimes;
+  /** Sat a little while, the player overhears something of the street (a passer-by's news); null: nothing today. */
+  overhear?: () => string | null;
+  /** How it is heard: a voice from beside the bench (the notices' `say`). */
+  tell?: (line: string) => void;
+  /** The camera: whether the player is still sitting here (the eye where the seat puts it). */
+  viewer?: THREE.Object3D;
 }
 
 /** Seated on a bench, the eye is this high over its seat, a little behind its front edge. */
 const EYE_OVER_SEAT = 0.75;
 const EYE_BACK = -0.08;
+/** Seconds sat before something is overheard; the eye this near its seated place counts as still sitting (m). */
+const OVERHEAR_AFTER = 14;
+const STILL_SITTING = 0.35;
+/** Seconds for the view to settle on the seat before a step away counts. */
+const SETTLE = 2;
 
 /**
  * One bench seat the player can sit on (a click; a movement key or E stands up, `Seating`): an
  * invisible box over the seat, the eye placed as on the flat's chairs, placed at its spot (`at`,
- * turned `yaw`). A bench the street's reader is on (`taken`) says so instead. The bench itself is
- * `StreetFurniture`'s (and its collider): nothing of its own to draw or collide.
+ * turned `yaw`). A bench the street's reader is on (`taken`) says so instead. Seated, a click lets
+ * time pass (`wait`: until a shop opens nearby, else a while), and after a little while something of
+ * the street is overheard (`overhear`), once a sit. The bench itself is `StreetFurniture`'s (and its
+ * collider): nothing of its own to draw or collide.
  */
-export class BenchSeat extends THREE.Group implements Furniture, Interactable, SeatLike {
+export class BenchSeat extends THREE.Group implements Furniture, Interactable, SeatLike, Updatable {
   readonly contactShadow = false;
   readonly hitboxes: THREE.Object3D[];
   private readonly eye: THREE.Vector3;
+  /** Seconds sat here since the last sit down, or -1 when the player is not sitting here. */
+  private sat = -1;
+  private readonly seatEye = new THREE.Vector3();
+  private readonly camera = new THREE.Vector3();
 
   constructor(private readonly spot: BenchSpot) {
     super();
@@ -56,13 +87,45 @@ export class BenchSeat extends THREE.Group implements Furniture, Interactable, S
   }
 
   label(player: PlayerState): string | null {
-    if (player.seated) return `${this.spot.name} · stand up`;
+    if (player.seated) {
+      const wait = player.seatedIn === this && this.spot.pastimes ? this.spot.wait?.() : null;
+      return wait ? `${this.spot.name} · sit ${wait.until}` : `${this.spot.name} · stand up`;
+    }
     return this.spot.taken?.() ? `${this.spot.name} · taken` : `${this.spot.name} · sit down`;
   }
 
   activate(session: SessionActions): void {
-    if (session.seated) session.stand();
-    else if (this.spot.taken?.()) session.refuse('Someone is sitting there.');
-    else session.sit(this);
+    if (session.seated) {
+      const wait = session.seatedIn === this ? this.spot.wait?.() : null;
+      const pastimes = this.spot.pastimes;
+      if (wait && pastimes) {
+        void pastimes.run({ minutes: wait.minutes, outMs: 700, darkMs: 1400, inMs: 800 }, () => undefined).then((done) => {
+          if (done !== null) session.react(wait.after);
+        });
+        return;
+      }
+      session.stand();
+    } else if (this.spot.taken?.()) session.refuse('Someone is sitting there.');
+    else {
+      session.sit(this);
+      this.sat = 0;
+    }
+  }
+
+  update(dt: number): void {
+    if (this.sat < 0 || !this.spot.viewer || !this.spot.overhear) return;
+    // Still here? The camera where the seat put it, once it has settled (a step away and the sit is over).
+    this.spot.viewer.getWorldPosition(this.camera);
+    this.localToWorld(this.seatEye.copy(this.eye));
+    if (this.sat > SETTLE && this.camera.distanceTo(this.seatEye) > STILL_SITTING) {
+      this.sat = -1;
+      return;
+    }
+    this.sat += dt;
+    if (this.sat < OVERHEAR_AFTER) return;
+    // Once a sit.
+    this.sat = -1;
+    const line = this.spot.overhear();
+    if (line) this.spot.tell?.(line);
   }
 }

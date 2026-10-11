@@ -33,6 +33,11 @@ const CHAIN_HOLD = 2.5;
 /** The chain's top multiplier: a long snake already scores fast, x5 on top made the best runs pay six times an ordinary one. */
 const SNAKE_COMBO_MAX = 4;
 const BODY = ['#39ff9e', '#2fe0c0', '#33c0ff', '#7a8cff', '#c98cff'];
+/** From this stage on, every stage drops a block on the board (to `MAX_BLOCKS`): once the speed tops out, the board keeps closing in. */
+const BLOCKS_FROM = 3;
+const MAX_BLOCKS = 9;
+/** The start row's left part stays clear: the snake comes back there after a crash. */
+const START_CLEAR = 16;
 
 type Dir = 'left' | 'right' | 'up' | 'down';
 const STEP: Record<Dir, [number, number]> = { left: [-1, 0], right: [1, 0], up: [0, -1], down: [0, 1] };
@@ -47,8 +52,10 @@ interface Cell {
  * NEON SNAKE: fifteen seconds and a snake that grows. Steer onto the pellets (two on the board at
  * once); each one pays points and a little time, pellets eaten in quick succession chain the
  * combo, a gold one now and then pays two seconds before it fades. Every six pellets the snake
- * speeds up and the clock gets two seconds. Hitting a wall or yourself costs two seconds and the
- * combo, and the snake starts again short from the middle: only the clock ends the play.
+ * speeds up and the clock gets two seconds; from the third stage each stage also drops a block on
+ * the board, so it keeps closing in once the speed tops out. Hitting a wall, a block or yourself
+ * costs two seconds and the combo, and the snake starts again short from the middle: only the
+ * clock ends the play.
  */
 export class Snake extends BaseGame {
   readonly id = 'snake';
@@ -68,6 +75,8 @@ export class Snake extends BaseGame {
   private crashed = 0;
   private gold: (Cell & { life: number }) | null = null;
   private eaten = 0;
+  /** The blocks dropped on the board, cell by cell. */
+  private blocks: Cell[] = [];
 
   constructor() {
     super(ROUND_SECONDS, SNAKE_COMBO_MAX);
@@ -78,6 +87,7 @@ export class Snake extends BaseGame {
     this.gold = null;
     this.crashed = 0;
     this.pellets = [];
+    this.blocks = [];
     this.startSnake();
     while (this.pellets.length < PELLETS) this.pellets.push(this.freeCell());
   }
@@ -132,6 +142,13 @@ export class Snake extends BaseGame {
     ctx.lineWidth = 2;
     ctx.strokeRect(1, TOP + 1, COLS * CELL - 2, ROWS * CELL - 2);
     // The pellet pulses; the gold one blinks as it runs out.
+    // The blocks: dark slabs with a lit edge.
+    for (const b of this.blocks) {
+      ctx.fillStyle = '#3a2a5a';
+      ctx.fillRect(b.x * CELL, TOP + b.y * CELL, CELL, CELL);
+      ctx.fillStyle = '#7a5aa8';
+      ctx.fillRect(b.x * CELL, TOP + b.y * CELL, CELL, 2);
+    }
     const pulse = Math.round(2 + Math.sin(this.elapsed * 10)); // whole pixels: 1, 2 or 3
     ctx.fillStyle = '#ff5fb0';
     for (const p of this.pellets) ctx.fillRect(p.x * CELL + 3 - pulse / 2, TOP + p.y * CELL + 3 - pulse / 2, 4 + pulse, 4 + pulse);
@@ -144,6 +161,16 @@ export class Snake extends BaseGame {
       ctx.fillStyle = this.crashed > 0 ? '#ff5f5f' : i === 0 ? '#ffffff' : BODY[Math.floor(i / 3) % BODY.length]!;
       ctx.fillRect(c.x * CELL + 1, TOP + c.y * CELL + 1, CELL - 2, CELL - 2);
     });
+    // Two eyes on the head, looking where it goes.
+    const head = this.body[0];
+    if (head && !blink) {
+      const [dx, dy] = STEP[this.dir];
+      const cx = head.x * CELL + CELL / 2 + dx * 2;
+      const cy = TOP + head.y * CELL + CELL / 2 + dy * 2;
+      ctx.fillStyle = '#060a12';
+      ctx.fillRect(Math.round(cx - 1 + dy * 2), Math.round(cy - 1 - dx * 2), 2, 2);
+      ctx.fillRect(Math.round(cx - 1 - dy * 2), Math.round(cy - 1 + dx * 2), 2, 2);
+    }
     this.drawStage(ctx, `STAGE ${this.stage}`);
   }
 
@@ -152,7 +179,7 @@ export class Snake extends BaseGame {
     const out = { left: false, right: false, up: false, down: false, fire: false, firePressed: false };
     if (!this.live || this.queued.length || this.crashed > 0) return out;
     const head = this.body[0]!;
-    const blocked = new Set(this.body.slice(0, -1).map((c) => c.y * COLS + c.x));
+    const blocked = new Set([...this.body.slice(0, -1), ...this.blocks].map((c) => c.y * COLS + c.x));
     const goal = this.gold && skill > 0.5 ? this.gold : this.nearestPellet(head);
     const first = this.firstStepTowards(head, goal, blocked);
     let pick: Dir | null = first;
@@ -180,7 +207,8 @@ export class Snake extends BaseGame {
     const cell = { x: head.x + dx, y: head.y + dy };
     const tailMoves = this.grow === 0;
     const hitsSelf = this.body.some((c, i) => c.x === cell.x && c.y === cell.y && !(tailMoves && i === this.body.length - 1));
-    if (cell.x < 0 || cell.y < 0 || cell.x >= COLS || cell.y >= ROWS || hitsSelf) {
+    const hitsBlock = this.blocks.some((b) => b.x === cell.x && b.y === cell.y);
+    if (cell.x < 0 || cell.y < 0 || cell.x >= COLS || cell.y >= ROWS || hitsSelf || hitsBlock) {
       this.crash();
       return;
     }
@@ -201,8 +229,16 @@ export class Snake extends BaseGame {
       if (this.eaten % PELLETS_PER_STAGE === 0) {
         this.fx.pop(`STAGE ${this.stage}`, SCREEN_W / 2, SCREEN_H / 2 - 20, '#ffffff', 12);
         this.addTime(STAGE_SECONDS, SCREEN_W / 2, SCREEN_H / 2);
+        if (this.stage >= BLOCKS_FROM) this.dropBlock();
       }
-      if (this.eaten % GOLD_EVERY === 0 && !this.gold) this.gold = { ...this.freeCell(), life: GOLD_LIFE };
+      if (this.eaten % GOLD_EVERY === 0 && !this.gold) {
+        this.gold = { ...this.freeCell(), life: GOLD_LIFE };
+        const gx = this.gold.x * CELL + CELL / 2;
+        const gy = TOP + this.gold.y * CELL + CELL / 2;
+        this.fx.pop('GOLD!', gx, gy - 10, '#ffd23a', 8);
+        this.fx.burst(gx, gy, '#ffd23a', 10, 50, 1);
+        this.sound('bonus', 1.3);
+      }
       this.pellets.splice(eatenAt, 1);
       this.pellets.push(this.freeCell());
     } else if (this.gold && cell.x === this.gold.x && cell.y === this.gold.y) {
@@ -216,11 +252,34 @@ export class Snake extends BaseGame {
   }
 
   private freeCell(): Cell {
+    const taken = (cell: Cell): boolean => [...this.body, ...this.pellets, ...this.blocks].some((c) => c.x === cell.x && c.y === cell.y);
     for (let tries = 0; tries < 200; tries++) {
       const cell = { x: 1 + Math.floor(this.rand() * (COLS - 2)), y: 1 + Math.floor(this.rand() * (ROWS - 2)) };
-      if (!this.body.some((c) => c.x === cell.x && c.y === cell.y) && !this.pellets.some((p) => p.x === cell.x && p.y === cell.y)) return cell;
+      if (!taken(cell)) return cell;
     }
     return { x: 1, y: 1 };
+  }
+
+  /** A block of two cells (across or down) where nothing is, nor right ahead of the head, never on the start row's left part. */
+  private dropBlock(): void {
+    if (this.blocks.length >= MAX_BLOCKS * 2) return;
+    const head = this.body[0]!;
+    const [dx, dy] = STEP[this.dir];
+    const startRow = Math.floor(ROWS / 2);
+    const occupied = (c: Cell): boolean =>
+      [...this.body, ...this.pellets, ...this.blocks].some((o) => o.x === c.x && o.y === c.y) ||
+      (c.y === startRow && c.x < START_CLEAR) ||
+      (Math.abs(c.x - (head.x + dx * 2)) <= 2 && Math.abs(c.y - (head.y + dy * 2)) <= 2) ||
+      (this.gold !== null && this.gold.x === c.x && this.gold.y === c.y);
+    for (let tries = 0; tries < 60; tries++) {
+      const a = { x: 2 + Math.floor(this.rand() * (COLS - 4)), y: 2 + Math.floor(this.rand() * (ROWS - 4)) };
+      const across = this.rand() < 0.5;
+      const b = { x: a.x + (across ? 1 : 0), y: a.y + (across ? 0 : 1) };
+      if (occupied(a) || occupied(b)) continue;
+      this.blocks.push(a, b);
+      this.fx.burst(a.x * CELL + CELL, TOP + a.y * CELL + CELL / 2, '#7a5aa8', 8, 40, 1);
+      return;
+    }
   }
 
   /** A wall or the tail: seconds and the combo go, and the snake starts again short once it has blinked. */

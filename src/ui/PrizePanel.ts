@@ -1,8 +1,8 @@
 import type { Game } from '@/catalog/types';
 import type { Wallet } from '@/economy/Wallet';
-import { PRIZES, type Prize, type PrizeStore } from '@/economy/Prizes';
+import { PRIZES, type Prize, type PrizeStore, limitedOnOffer, retiredOnOffer, soldOnce } from '@/economy/Prizes';
 import type { Transactions } from '@/economy/Transactions';
-import { MYSTERY_GAME_MAX_PRICE, TICKETS_PER_COIN } from '@/economy/pricing';
+import { MYSTERY_GAME_MAX_PRICE, RARE_GAME, TICKETS_PER_COIN } from '@/economy/pricing';
 import type { NoticeActions } from '@/notices';
 import { isGrail } from '@/economy/grails';
 import { playCoins } from '@/audio/coins';
@@ -27,6 +27,25 @@ interface MysteryGameSource {
 /** What is at home, for where a prize will go: the dresser the mood lamp stands on, the cat the wand is for. Absent: everything. */
 interface PrizeHomeSource {
   has(what: 'dresser' | 'cat'): boolean;
+}
+
+/**
+ * The counter's back room (docs/economy.md "Prizes"), for when the flat is done: the game day the week's offers turn on
+ * (the limited edition, the retired cabinet), the hall's cabinets a sponsor's plate goes on, and the initials on it.
+ */
+interface BackRoomSource {
+  /** Today's game day (the market calendar's). */
+  today(): number;
+  /** The hall's cabinet games, by id and title: a plate goes on one, the retired cabinet is one. */
+  cabinets(): readonly { id: string; title: string }[];
+  /** The initials on the plate (the ones the hall of fame was last signed with). */
+  initials(): string;
+}
+
+/** The prize pinned as what the player is playing for (`economy/PrizeGoal`): its picture fills by the wallet chip. */
+interface PinnedGoal {
+  readonly prize: Prize | null;
+  pin(id: string | null): void;
 }
 
 /** How many coins' worth of tickets each of the muncher's buttons feeds (the last: all of them). */
@@ -83,6 +102,8 @@ export class PrizePanel extends ModalPanel {
   private cancelRoll: () => void = () => {};
   /** "Cash in" clicked once while the pocket covers a prize: a second click cashes it all. */
   private readonly feedAll = new Arming<'all'>(() => this.renderMuncher());
+  /** The cabinet picked for the sponsor's plate, before it is taken. */
+  private sponsorGame: string | null = null;
 
   constructor(
     container: HTMLElement,
@@ -93,6 +114,10 @@ export class PrizePanel extends ModalPanel {
     private readonly home: PrizeHomeSource | null = null,
     /** The attendant's word (a subtitle) and the prize's reward banner; without them both go on the counter's slip. */
     private readonly notices: Pick<NoticeActions, 'say' | 'reward'> | null = null,
+    /** The back room's offers; without it the counter sells only what is in the glass case. */
+    private readonly back: BackRoomSource | null = null,
+    /** The goal a prize can be pinned as; without it, no pin. */
+    private readonly goal: PinnedGoal | null = null,
   ) {
     super(container, { className: 'ui-modal--centre ui-panel prizes', label: 'Prize counter' });
     paint(
@@ -160,6 +185,37 @@ export class PrizePanel extends ModalPanel {
     if (action === 'exchange') this.exchange(Number(el.dataset.coins ?? Infinity));
     else if (action === 'pick') this.pick(prize ?? '', true);
     else if (action === 'take') this.take(prize ?? '');
+    else if (action === 'pin') this.pinGoal(prize ?? '');
+    else if (action === 'sponsor-pick') {
+      this.sponsorGame = el.dataset.game ?? null;
+      this.renderDetail();
+    }
+  }
+
+  /** Pins `id` as the goal (unpins it when it is the one pinned). */
+  private pinGoal(id: string): void {
+    const goal = this.goal;
+    if (!goal) return;
+    const pinned = goal.prize?.id === id;
+    goal.pin(pinned ? null : id);
+    this.renderDetail();
+    this.detailEl.querySelector<HTMLButtonElement>('button[data-action="pin"]')?.focus();
+  }
+
+  /** Nothing left of it to take: a prize with a home already there, a plate on every cabinet. */
+  private soldOut(p: Prize): boolean {
+    if (p.special === 'sponsor') return !this.back || this.back.cabinets().every((c) => this.sponsored().includes(c.id));
+    return soldOnce(p) && this.prizes.count(p.id) > 0;
+  }
+
+  /** The cabinets that carry the player's plate already. */
+  private sponsored(): string[] {
+    return this.prizes.gamesOf('sponsor');
+  }
+
+  /** A cabinet game's title on the hall's marquees. */
+  private titleOf(id: string): string {
+    return this.back?.cabinets().find((c) => c.id === id)?.title ?? id.toUpperCase();
   }
 
   /** Shows `id` beside the case; `toButton` (a click or A) moves on to its Take button. */
@@ -176,7 +232,7 @@ export class PrizePanel extends ModalPanel {
   /** The dearest prize the pocket covers now (not one already at home for good), or null. */
   private affordablePrize(): Prize | null {
     const have = this.wallet.tickets;
-    const covered = this.forSale().filter((p) => p.tickets! <= have && !(p.home && this.prizes.count(p.id) > 0));
+    const covered = this.forSale().filter((p) => p.tickets! <= have && !this.soldOut(p));
     return covered[covered.length - 1] ?? null;
   }
 
@@ -204,22 +260,30 @@ export class PrizePanel extends ModalPanel {
 
   private take(id: string): void {
     const prize = PRIZES.find((p) => p.id === id);
-    if (!prize || prize.tickets === null) return;
-    const game = prize.game ? this.drawMysteryGame() : null;
+    if (!prize || prize.tickets === null || this.soldOut(prize) || !this.forSale().includes(prize)) return;
+    if (prize.special === 'sponsor' && this.sponsorGame && this.sponsored().includes(this.sponsorGame)) return;
+    const game = prize.game ? (prize.special === 'rare' ? this.drawRareGame() : this.drawMysteryGame()) : null;
     if (prize.game && !game) {
-      this.slip('The mystery box is empty today: every game it could hold is yours already.', true, id);
+      this.slip(prize.special === 'rare' ? 'Gus’s shelf has nothing the collection lacks just now.' : 'The mystery box is empty today: every game it could hold is yours already.', true, id);
       return;
     }
-    const taken = this.tx.takePrize(prize, game);
+    const cabinet = prize.special === 'sponsor' ? this.sponsorGame : prize.special === 'cabinet' && this.back ? retiredOnOffer(this.back.today()) : null;
+    if (prize.special === 'sponsor' && !cabinet) {
+      this.slip('Pick the cabinet the plate goes on first.', true, id);
+      return;
+    }
+    const taken = this.tx.takePrize(prize, game, cabinet ?? undefined);
     if (!taken.ok) {
       if (taken.reason === 'short') this.slip(`The ${prize.name} is ${formatTickets(prize.tickets)}; you have ${this.wallet.tickets}.`, true, id);
       return;
     }
+    if (this.goal?.prize?.id === prize.id) this.goal.pin(null);
+    this.sponsorGame = null;
     // The attendant hands it over across the counter, with a word.
     const shelf = Math.max(0, SHELVES.findIndex((s) => prize.tickets! <= s.upTo));
     const lines = HANDOVER[shelf] ?? HANDOVER[0]!;
     const line = lines[Math.floor(random() * lines.length)]!;
-    const where = game ? 'It will be waiting in the parcel at home.' : this.whereItGoes(prize);
+    const where = game ? 'It will be waiting in the parcel at home.' : cabinet && prize.special === 'sponsor' ? `Gus screws it on the ${this.titleOf(cabinet)} cabinet, your initials up for the whole hall.` : this.whereItGoes(prize);
     const notices = this.notices;
     if (!notices) {
       this.slip(`Attendant: “${line}” ${game ? `You unwrap it: ${game.title}!` : `The ${prize.name} is yours.`} ${where}`, false, id);
@@ -227,7 +291,8 @@ export class PrizePanel extends ModalPanel {
     }
     // Who speaks is a voice, what was won a reward, where it goes the counter's slip (docs/notices.md).
     notices.say(line, 'Attendant');
-    notices.reward({ title: game ? `Mystery game: ${game.title}` : `${prize.name}: yours`, tickets: -prize.tickets!, big: Boolean(game) });
+    const title = game ? `${prize.special === 'rare' ? 'Rare cartridge' : 'Mystery game'}: ${game.title}` : cabinet && prize.special === 'cabinet' ? `The ${this.titleOf(cabinet)} cabinet: yours` : `${prize.name}: yours`;
+    notices.reward({ title, tickets: -prize.tickets!, big: Boolean(game) || !!prize.special });
     this.slip(where, false, id);
   }
 
@@ -244,6 +309,18 @@ export class PrizePanel extends ModalPanel {
     return left[Math.floor(random() * left.length)] ?? null;
   }
 
+  /**
+   * The back room's rare cartridge: a game the collection lacks, never a grail, dearer than the mystery game can be and
+   * at most `RARE_GAME.maxPrice`; null when there is none (or no price to tell one by).
+   */
+  private drawRareGame(): Game | null {
+    const mystery = this.mystery;
+    const worth = mystery?.worth;
+    if (!mystery || !worth) return null;
+    const left = mystery.games.filter((g) => !mystery.collection.owns(g.id) && !isGrail(g.id) && worth(g) > MYSTERY_GAME_MAX_PRICE && worth(g) <= RARE_GAME.maxPrice);
+    return left[Math.floor(random() * left.length)] ?? null;
+  }
+
   /** Where a prize ends up, for the counter's status line: a prize that needs something at home says so. */
   private whereItGoes(prize: Prize): string {
     const home = this.home;
@@ -252,9 +329,22 @@ export class PrizePanel extends ModalPanel {
     return whereItGoes(prize);
   }
 
-  /** What the counter sells: the mystery game only with a collection to draw it for. */
+  /**
+   * What the counter sells: the glass case's prizes (the mystery game only with a collection to draw it for), then the
+   * back room's: this week's limited edition, the rare cartridge, the sponsor's plate, the week's retired cabinet.
+   */
   private forSale(): Prize[] {
-    return PRIZES.filter((p) => p.tickets !== null && (!p.game || this.mystery)).sort((a, b) => a.tickets! - b.tickets!);
+    return PRIZES.filter((p) => p.tickets !== null && this.onOffer(p)).sort((a, b) => a.tickets! - b.tickets!);
+  }
+
+  private onOffer(p: Prize): boolean {
+    if (p.game && !this.mystery) return false;
+    if (!p.special) return true;
+    const back = this.back;
+    if (!back) return false;
+    if (p.special === 'limited') return limitedOnOffer(back.today()).id === p.id;
+    if (p.special === 'sponsor') return back.cabinets().length > 0;
+    return true;
   }
 
   /** Asks the studio for every prize's photo; each drops into its tile (and the detail) as it comes. */
@@ -275,7 +365,8 @@ export class PrizePanel extends ModalPanel {
     this.renderMeter();
     this.renderPurse();
     const restoreFocus = rememberFocus(this.listEl);
-    const sale = this.forSale();
+    const sale = this.forSale().filter((p) => !p.special);
+    const backRoom = this.forSale().filter((p) => p.special);
     let from = 0;
     paint(
       this.listEl,
@@ -290,7 +381,12 @@ export class PrizePanel extends ModalPanel {
           <p class="prizes__card prizes__card--${card}"><span>${range}</span><small>tickets</small></p>
           <div class="prizes__row">${on.map((p) => this.tileHtml(p))}</div>
         </section>`;
-      })}`,
+      })}${backRoom.length
+        ? html`<section class="prizes__shelf prizes__shelf--back">
+          <p class="prizes__card prizes__card--violet"><span>Back</span><small>room</small></p>
+          <div class="prizes__row">${backRoom.map((p) => this.tileHtml(p))}</div>
+        </section>`
+        : ''}`,
     );
     restoreFocus();
     this.renderDetail();
@@ -300,7 +396,7 @@ export class PrizePanel extends ModalPanel {
   private tileHtml(p: Prize): Html {
     const owned = this.prizes.count(p.id);
     const short = p.tickets! > this.wallet.tickets;
-    const sticker = p.home && owned ? 'At home' : owned ? `×${owned}` : '';
+    const sticker = this.soldOut(p) ? (p.special === 'sponsor' ? 'All done' : 'At home') : p.special === 'limited' ? 'This week' : owned ? `×${owned}` : '';
     return html`<button type="button" class="prizes__item${short ? ' prizes__item--short' : ''}" data-action="pick" data-prize="${p.id}"
         aria-pressed="${p.id === this.selected ? 'true' : 'false'}" aria-label="${`${p.name}, ${formatTickets(p.tickets ?? 0)}`}">
         ${this.photoHtml(p)}
@@ -329,21 +425,47 @@ export class PrizePanel extends ModalPanel {
     const restoreFocus = rememberFocus(this.detailEl);
     const have = this.wallet.tickets;
     const owned = this.prizes.count(p.id);
-    const done = !!p.home && owned > 0;
+    const done = this.soldOut(p);
     const short = p.tickets! - have;
-    const label = done ? 'Already at home' : short > 0 ? `${formatTickets(short)} short` : 'Take it';
+    const choosing = p.special === 'sponsor' && !done && !this.sponsorGame;
+    const label = done ? (p.special === 'sponsor' ? 'A plate on every cabinet' : 'Already at home') : short > 0 ? `${formatTickets(short)} short` : choosing ? 'Pick a cabinet' : 'Take it';
     const status = this.status.prize === p.id ? this.status : null;
+    const pinned = this.goal?.prize?.id === p.id;
     paint(
       this.detailEl,
       html`<div class="prizes__stage">${this.photoHtml(p)}</div>
       <h3>${p.name}</h3>
       <p class="prizes__blurb">${p.blurb}</p>
-      <p class="prizes__where">${p.game ? 'Comes home in the parcel.' : this.whereItGoes(p)}${owned && !p.home ? html` <b>${owned} at home already.</b>` : ''}</p>
+      <p class="prizes__where">${p.game ? 'Comes home in the parcel.' : this.whereItGoes(p)}${owned && !soldOnce(p) && p.special !== 'sponsor' ? html` <b>${owned} at home already.</b>` : ''}</p>
+      ${this.backRoomHtml(p, done)}
       <div class="prizes__price"><span class="prizes__stub prizes__stub--big">${p.tickets}</span>${short > 0 && !done ? html`<span class="prizes__need">you have ${have}</span>` : ''}</div>
-      <button type="button" class="prizes__take" data-action="take" data-prize="${p.id}"${attr('disabled', done || short > 0)}>${label}</button>
+      <button type="button" class="prizes__take" data-action="take" data-prize="${p.id}"${attr('disabled', done || short > 0 || choosing)}>${label}</button>
+      ${this.goal ? html`<button type="button" class="prizes__pin${pinned ? ' prizes__pin--on' : ''}" data-action="pin" data-prize="${p.id}" aria-pressed="${pinned ? 'true' : 'false'}"${attr('disabled', done && !pinned)}>${pinned ? 'Pinned as your goal · unpin' : 'Pin as my goal'}</button>` : ''}
       ${status?.text ? html`<p class="prizes__slip${status.error ? ' prizes__slip--error' : ''}">${status.text}</p>` : ''}`,
     );
     restoreFocus();
+  }
+
+  /**
+   * What a back-room prize asks or says before it is taken: the cabinet a sponsor's plate goes on (the ones that carry
+   * it already greyed), which cabinet the hall retires this week, that the limited edition is this week's only.
+   */
+  private backRoomHtml(p: Prize, done: boolean): Html | string {
+    const back = this.back;
+    if (!back || !p.special) return '';
+    if (p.special === 'sponsor') {
+      if (done) return '';
+      const plated = this.sponsored();
+      return html`<div class="prizes__choose" role="group" aria-label="The cabinet the plate goes on">
+        ${back.cabinets().map((c) => {
+          const has = plated.includes(c.id);
+          return html`<button type="button" class="prizes__choice" data-action="sponsor-pick" data-game="${c.id}" aria-pressed="${this.sponsorGame === c.id ? 'true' : 'false'}"${attr('disabled', has)}>${c.title}${has ? html` <small>${back.initials()}</small>` : ''}</button>`;
+        })}
+      </div>`;
+    }
+    if (p.special === 'cabinet') return done ? '' : html`<p class="prizes__where">This week it is the <b>${this.titleOf(retiredOnOffer(back.today()))}</b> cabinet.</p>`;
+    if (p.special === 'limited') return done ? '' : html`<p class="prizes__where">Only this week: next week, another takes its place.</p>`;
+    return '';
   }
 
   /**
@@ -427,10 +549,18 @@ function hex(color: number): string {
 
 /** Where a prize ends up, for the counter's status line. */
 function whereItGoes(prize: Prize): string {
+  if (prize.special === 'cabinet') return 'It will stand in the living-room corner at home, free play.';
+  if (prize.special === 'sponsor') return 'Your initials, on a brass plate, on the cabinet you pick.';
   switch (prize.home) {
     case 'poster': return 'It will be on the bedroom wall.';
     case 'moodLamp': return 'It will be on the bedroom dresser. Click it to change the colour.';
     case 'catToy': return 'It will be by the armchairs at home. Someone will find it.';
+    case 'bath': return 'It will sit on the edge of the bath. It floats, too.';
+    case 'bounce': return 'It will be on the living-room floor. Throw it and see who comes running.';
+    case 'bed': return 'It will sit on the bed at home.';
+    case 'mobile': return 'It will hang over the bed and turn slowly.';
+    case 'hangs': return 'It will hang under the prize shelf at home, ready to play with.';
+    case 'trophies': return 'It will stand on the trophy row of the prize shelf at home.';
     default: return 'It will be on the prize shelf at home.';
   }
 }

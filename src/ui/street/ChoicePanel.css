@@ -1,0 +1,33 @@
+/* A choice in the street (where the bus goes, whom a card is for): a small card over the view (`.ui-modal--centre`). */
+@layer tokens, base, components, panels;
+@layer panels {
+  .choice-panel__card { --card-w: 24rem; }
+  .choice-panel__intro {
+    margin: 0 0 0.8rem;
+    color: var(--ui-text-dim);
+  }
+  .choice-panel__list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: grid;
+    gap: 0.5rem;
+  }
+  .choice-panel__choice {
+    width: 100%;
+    display: grid;
+    gap: 0.15rem;
+    justify-items: start;
+    text-align: left;
+  }
+  .choice-panel__choice[aria-disabled='true'] {
+    opacity: 0.55;
+  }
+  .choice-panel__label {
+    font-weight: 600;
+  }
+  .choice-panel__detail {
+    font-size: var(--fs-4);
+    color: var(--ui-text-dim);
+  }
+}

@@ -15,7 +15,8 @@ interface Tally {
 export class DailyTally {
   private readonly store: PersistedStore<Tally>;
 
-  constructor(key: string, field: string) {
+  /** `mark`: what "today" is (the real `dayKey` by default; Front Street's tallies pass `time/streetDay`'s game day). */
+  constructor(key: string, field: string, private readonly mark: () => string = () => dayKey()) {
     this.store = new PersistedStore<Tally>({
       key,
       version: 2,
@@ -34,12 +35,12 @@ export class DailyTally {
   /** Today's count (0 on a new day). */
   today(): number {
     const saved = this.store.load();
-    return saved.day === dayKey() ? saved.count : 0;
+    return saved.day === this.mark() ? saved.count : 0;
   }
 
   /** One more today. */
   add(): void {
-    this.store.save({ day: dayKey(), count: this.today() + 1 });
+    this.store.save({ day: this.mark(), count: this.today() + 1 });
   }
 }
 

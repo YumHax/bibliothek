@@ -5,8 +5,8 @@ import { ChristmasTree } from '../props/ChristmasTree';
 import { childLook, felixLook, memeThenLook } from './familyLooks';
 import { GRANDMA_FLAT_PLAN as PLAN } from './grandmaFlatPlan';
 import { TableCloth } from './TableCloth';
-import { TornParcel } from './memoryProps';
-import { bareTableTop, beats, hideNamed, holdHandheld, turnedTo, type HeldHandheld } from './memoryStage';
+import { TornParcel, WrappedParcel } from './memoryProps';
+import { backInTheRoom, bareTableTop, beats, hideNamed, holdHandheld, turnedTo, type HeldHandheld } from './memoryStage';
 import type { Present } from './albumWiring';
 
 /** Seated, where a head is (m over the floor), and a standing child's. */
@@ -17,8 +17,9 @@ const CHILD_HEAD = 1.0;
  * THE CHRISTMAS THE PLAYER WAS SIX (`MEMORIES` christmas95, docs/story.md "Mémé"): Mémé's living room in 1995, the
  * tree in the corner, the festive cloth on the table, Mémé in her armchair, Félix in the visitor's, the child on the
  * rug by the parcel torn out of its sports pages, then playing the Game Boy held up to their face; an evening, the
- * curtains open on the snow outside, the lamp on. One scene in her flat; the people's beats on the film's clock. Back in
- * the room the player stands by the table, turned to her wherever she sits at this hour.
+ * curtains open on the snow outside, the lamp on. One scene in her flat; the people's beats on the film's clock. The
+ * film waits on the player to tear the paper (its cue). Back in the room the player stands by the table, turned to her
+ * wherever she sits at this hour.
  */
 export function christmasReel(present: Present): MemoryReel {
   const plan = PLAN.christmas;
@@ -28,9 +29,17 @@ export function christmasReel(present: Present): MemoryReel {
   const after = plan.after.at;
 
   const beat = beats();
-  let cast: { meme: Walker; felix: Walker; child: Walker } | null = null;
+  let cast: { meme: Walker; felix: Walker; child: Walker; wrapped: WrappedParcel; torn: TornParcel } | null = null;
   let gameBoy: HeldHandheld | null = null;
   let last = 0;
+  /** The paper torn (the cue played out, or the clock past it): the parcel open, the child's hop. */
+  const tear = (): void =>
+    beat.now('cheer', () => {
+      if (!cast) return;
+      cast.wrapped.visible = false;
+      cast.torn.visible = true;
+      cast.child.gesture('cheerHop');
+    });
 
   return {
     id: 'christmas95',
@@ -55,7 +64,9 @@ export function christmasReel(present: Present): MemoryReel {
           set.placeAt(new TableCloth({ width, depth, top: bareTableTop(set.zone), drop: 0.26, color: plan.cloth }), PLAN.table.at);
           set.placeAt(new ChristmasTree({ height: plan.tree.height, radius: plan.tree.radius, presents: 2, seed: 95 }), plan.tree.at);
           const [px, pz] = plan.parcel.at;
-          set.place(new TornParcel(), new THREE.Vector3(px, 0, pz), plan.parcel.yaw);
+          const wrapped = set.place(new WrappedParcel(), new THREE.Vector3(px, 0, pz), plan.parcel.yaw);
+          const torn = set.place(new TornParcel(), new THREE.Vector3(px, 0, pz), plan.parcel.yaw);
+          torn.visible = false;
           const childHead = set.world(cx, CHILD_HEAD, cz);
           const meme = set.place(new Walker({ viewer: set.viewer, seed: 1931, look: memeThenLook() }), new THREE.Vector3(ax, 0, az), PLAN.armchair.yaw);
           meme.sit(PLAN.armchair.yaw, PLAN.seatHeight, 'lap', childHead);
@@ -67,14 +78,15 @@ export function christmasReel(present: Present): MemoryReel {
           // The Game Boy, still in its box until it is out of the paper.
           gameBoy = holdHandheld(child, look.height);
           gameBoy.show(false);
-          cast = { meme, felix, child };
+          cast = { meme, felix, child, wrapped, torn };
         },
+        cues: [{ at: plan.tearAt, prompt: 'Tear the paper', done: tear }],
         beat: (t) => {
           gameBoy?.tick(Math.max(0, t - last));
           last = t;
           if (!cast) return;
           const { meme, felix, child } = cast;
-          beat.at(t, plan.cheerAt, 'cheer', () => child.gesture('cheerHop'));
+          if (t >= plan.cheerAt) tear();
           beat.at(t, plan.clapAt, 'clap', () => meme.gesture('clap'));
           beat.at(t, plan.playFrom, 'play', () => {
             if (!gameBoy) return;
@@ -94,10 +106,6 @@ export function christmasReel(present: Present): MemoryReel {
       },
     ],
     after: { zone: 'grandmaFlat', at: after, yaw: turnedTo(present, after) },
-    returned: () => {
-      present.meme.setPresent(true);
-      present.reseat();
-      present.meme.speak(present.afterLine);
-    },
+    returned: () => backInTheRoom(present),
   };
 }

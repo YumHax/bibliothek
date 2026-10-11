@@ -4,6 +4,8 @@ uniform sampler2D atlas;
 uniform vec2 tileSize;
 uniform float daylight;
 uniform vec3 sky;
+uniform vec3 rowColor;
+uniform float nightness;
 uniform float depth;
 uniform float tileMetres;
 uniform float displayDepth;
@@ -18,6 +20,7 @@ varying vec2 vTile;
 varying vec3 vLight;
 varying vec3 vWall;
 varying float vOpen;
+varying float vAcross;
 #include <fog_pars_fragment>
 
 vec4 art(float side, vec2 uv) {
@@ -76,9 +79,31 @@ void main() {
   // Lit by the shop's lamps while open, and by what daylight comes through the glass; deeper is darker.
   float fall = 1.0 - 0.3 * clamp(-h.z / depth, 0.0, 1.0);
   vec3 lit = col * (vLight * (0.04 + 1.15 * vOpen) + vec3(0.3 * daylight)) * fall;
-  // The glass: a little of the sky, much more at a grazing angle.
+  // The glass gives back what is in front of it: on Front Street the row across (its stone, its windows dark by
+  // day and some lit at night, its shopfronts glowing), the road below it, the sky above its roofline; elsewhere the sky.
+  vec3 mirrored = sky;
+  if (vAcross > 0.0) {
+    vec3 r = vec3(d.x, d.y, -d.z);
+    float t = vAcross / max(r.z, 0.03);
+    float up = (o.y - vRoom.z) + r.y * t;
+    float along = o.x + vRoom.y + r.x * t;
+    if (up < 0.0) mirrored = rowColor * 0.35;
+    else if (up < 17.0) {
+      vec2 cellUv = vec2(along / 2.8, (up - 3.9) / 3.1);
+      vec2 cell = floor(cellUv);
+      vec2 inCell = fract(cellUv);
+      float pane = step(0.0, cellUv.y) * step(0.28, inCell.x) * step(inCell.x, 0.72) * step(0.25, inCell.y) * step(inCell.y, 0.85);
+      float lampOn = step(fract(sin(dot(cell, vec2(12.9898, 78.233))) * 43758.5453), 0.3) * nightness;
+      vec3 stone = rowColor;
+      vec3 glass = mix(rowColor * 0.45 + sky * 0.2, vec3(1.0, 0.72, 0.42) * 0.8, lampOn);
+      mirrored = mix(stone, glass, pane);
+      // The shopfronts across: dark glass by day, a warm glow at night.
+      if (up < 3.9) mirrored = mix(rowColor * 0.5, vec3(1.0, 0.8, 0.55) * 0.5, nightness * step(0.3, fract(along / 7.0)));
+    }
+  }
+  // The glass: a little of what it faces, much more at a grazing angle.
   float fresnel = 0.05 + 0.55 * pow(1.0 - abs(d.z), 4.0);
-  gl_FragColor = vec4(mix(lit * 0.9, sky, fresnel * (0.35 + 0.65 * daylight)), 1.0);
+  gl_FragColor = vec4(mix(lit * 0.9, mirrored, fresnel * (0.35 + 0.65 * max(daylight, 0.5 * nightness))), 1.0);
   #include <tonemapping_fragment>
   #include <colorspace_fragment>
   #include <fog_fragment>

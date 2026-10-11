@@ -35,6 +35,23 @@ const SAUCER_SPEED = 110;
 const SAUCER_EVERY = 6;
 /** Kills this close together keep the chain going; a shot that hits nothing breaks it. */
 const CHAIN_HOLD = 1.5;
+/** The fleet drops bombs: one every this many seconds at first (quicker each wave), this fast (px/s), so many at once. */
+const BOMB_EVERY = 2.4;
+const BOMB_SPEED = 72;
+const MAX_BOMBS = 3;
+/** A bomb on the ship costs this, and the ship blinks this long, shrugging off the next. */
+const BOMB_SECONDS = 1;
+const SHIP_SHIELD = 0.9;
+/** A bomb shot down pays a little. */
+const BOMB_POINTS = 15;
+/** A wave cleared without a wasted shot, a bomb taken or a diver let past: this much, more each wave. */
+const PERFECT_WAVE = 400;
+const PERFECT_WAVE_STEP = 100;
+/** A diver flies back to its place in the fleet this fast (px/s). */
+const RETURN_SPEED = 170;
+/** The march's four notes, a step down each. */
+const MARCH_PITCH = [1, 0.94, 0.89, 0.84];
+const BOMB = new Sprite([['.x.', 'xxx', '.x.', 'x.x'], ['x.x', '.x.', 'xxx', '.x.']]);
 
 /* The fleet's three kinds (by row), two frames each, stepping with the march; the ship; the saucer. 16 x 8 in a 16 x 10 cell. */
 export const CRAB = new Sprite([
@@ -60,8 +77,8 @@ interface Alien {
   col: number;
   row: number;
   alive: boolean;
-  /** Set while the alien leaves formation to dive past the ship. */
-  dive: { x: number; y: number; t: number } | null;
+  /** Set while the alien leaves formation to dive past the ship (`back` once it flies home from the top). */
+  dive: { x: number; y: number; t: number; back: boolean } | null;
 }
 
 interface Shot {
@@ -70,19 +87,22 @@ interface Shot {
 }
 
 /**
- * STAR RAID: a fifteen-second shooting gallery. Hold fire for a stream of shots (two in the air),
- * mow down the marching fleet; kills in quick succession chain the combo, and a shot that hits
- * nothing breaks it, so aiming pays and spraying does not. Aliens peel off and dive
- * for a fat bonus and cost a second if they get past; the saucer crossing the top every six
- * seconds is the clock: shooting it pays three seconds. Nothing shoots back: a cleared wave pays a bonus and five more seconds. Every
- * wave is harder: the fleet marches faster and gains a row, divers come quicker, the saucer flies
- * faster and rarer. Nothing stops a run but the clock.
+ * STAR RAID: a fifteen-second shooting gallery. Fire (two shots in the air) to mow down the
+ * marching fleet; kills in quick succession chain the combo, and a shot that hits nothing breaks
+ * it, so aiming pays and spraying does not. Aliens peel off and dive for a fat bonus and cost a
+ * second if they get past (they fly back into the fleet from the top); the fleet drops slow bombs
+ * that cost a second (shoot them for a little); the saucer crossing the top, either way, at a height
+ * of its own, is the clock: shooting it pays three seconds. A cleared wave pays a bonus and five more
+ * seconds, and a wave cleared clean (no wasted shot, no bomb taken, no diver past) a PERFECT WAVE
+ * bonus that grows each wave: what a careful hand earns over a spraying one. Every wave is harder: the
+ * fleet marches faster and gains a row, divers and bombs come quicker, the saucer flies faster and
+ * rarer. Nothing stops a run but the clock.
  */
 export class Invaders extends BaseGame {
   readonly id = 'invaders';
   readonly title = 'STAR RAID';
   get hint(): string {
-    return arcadeHint('{leftRight} or arrows move the ship · hold {fire} to fire');
+    return arcadeHint('{leftRight} or arrows move the ship · {fire} fires: make every shot count');
   }
   readonly summary = '15 SEC · AIM TO CHAIN · SAUCER = +3S';
 
@@ -96,8 +116,14 @@ export class Invaders extends BaseGame {
   private fireTimer = 0;
   private shots: Shot[] = [];
   private diveTimer = 0;
-  private saucer: Shot | null = null;
+  private saucer: (Shot & { dir: number }) | null = null;
   private saucerTimer = 0;
+  private saucerSound = 0;
+  private bombs: Shot[] = [];
+  private bombTimer = 0;
+  private shield = 0;
+  /** Whether this wave has gone without a wasted shot, a bomb taken or a diver let past. */
+  private clean = true;
   /** The fleet's steps so far: the aliens' two frames alternate with it (drawing only). */
   private marchStep = 0;
 
@@ -112,6 +138,9 @@ export class Invaders extends BaseGame {
     this.shots = [];
     this.saucer = null;
     this.saucerTimer = 2.5;
+    this.saucerSound = 0;
+    this.shield = 0;
+    this.marchStep = 0;
     this.spawnWave();
   }
 
@@ -130,9 +159,11 @@ export class Invaders extends BaseGame {
     this.marchFleet(dt, alive);
     this.updateDivers(dt, alive);
     this.updateSaucer(dt);
+    this.updateBombs(dt, alive);
     this.updateShots(dt, alive);
 
-    if (!alive.length) {
+    if (!this.aliens.some((a) => a.alive)) {
+      if (this.clean) this.bonus(PERFECT_WAVE + (this.wave - 1) * PERFECT_WAVE_STEP, 'PERFECT WAVE', SCREEN_W / 2, SCREEN_H / 2 - 18);
       this.wave += 1;
       this.bonus(WAVE_BONUS, 'WAVE CLEAR');
       this.addTime(WAVE_TIME_BONUS, SCREEN_W / 2, SCREEN_H / 2 + 24);
@@ -154,10 +185,12 @@ export class Invaders extends BaseGame {
       kind.draw(ctx, x, y + 1, { x: a.dive ? '#ffffff' : ROW_COLORS[a.row % ROW_COLORS.length]! }, a.dive ? Math.floor(a.dive.t * 8) : this.marchStep);
     }
     if (this.saucer) SAUCER.drawCentred(ctx, this.saucer.x, this.saucer.y - 1, { x: '#ff5f5f', o: '#fff2a8' }, Math.floor(this.elapsed * 6));
-    SHIP.drawCentred(ctx, this.shipX, SHIP_Y, { x: '#e8ffe6', o: '#63b3ff' });
+    for (const b of this.bombs) BOMB.drawCentred(ctx, b.x, b.y, { x: '#ff8a3a' }, Math.floor(this.elapsed * 8));
+    // The ship blinks while a bomb's hit still shields it.
+    if (this.shield <= 0 || Math.floor(this.shield * 12) % 2 === 0) SHIP.drawCentred(ctx, this.shipX, SHIP_Y, { x: '#e8ffe6', o: '#63b3ff' });
     ctx.fillStyle = '#fff2a8';
     for (const s of this.shots) ctx.fillRect(s.x - 1, s.y, 2, 6);
-    this.drawStage(ctx, `WAVE ${this.wave}`);
+    this.drawStage(ctx, this.clean ? `WAVE ${this.wave} · CLEAN` : `WAVE ${this.wave}`);
   }
 
   /** Fire held; under a diver first, then the saucer, else the nearest column of the fleet. */
@@ -166,7 +199,7 @@ export class Invaders extends BaseGame {
     const divers = alive.filter((a) => a.dive).sort((a, b) => b.dive!.y - a.dive!.y);
     let target: number;
     if (divers[0] && random() < skill + 0.2) target = this.alienPos(divers[0]).x + ALIEN_W / 2;
-    else if (this.saucer && this.saucer.x > 0 && skill > 0.5) target = this.saucer.x + 30;
+    else if (this.saucer && this.saucer.x > 0 && this.saucer.x < SCREEN_W && skill > 0.5) target = this.saucer.x + this.saucer.dir * 30;
     else {
       const nearest = alive.reduce<Alien | null>((best, a) => {
         const d = Math.abs(this.alienPos(a).x + ALIEN_W / 2 - this.shipX);
@@ -174,9 +207,15 @@ export class Invaders extends BaseGame {
       }, null);
       target = nearest ? this.alienPos(nearest).x + ALIEN_W / 2 : SCREEN_W / 2;
     }
+    // A bomb about to land on the ship: step aside first.
+    const bomb = this.bombs.find((b) => b.y > SHIP_Y - 50 && Math.abs(b.x - this.shipX) < SHIP_W);
+    if (bomb && random() < skill + 0.2) target = this.shipX + (bomb.x > this.shipX ? -30 : 30);
     const diff = target - this.shipX;
     const dead = 3 + (1 - skill) * 10;
-    return { left: diff < -dead, right: diff > dead, up: false, down: false, fire: random() < 0.6 + skill * 0.4, firePressed: false };
+    // A good hand fires when something is over the gun; a poor one sprays.
+    const lined = alive.some((a) => Math.abs(this.alienPos(a).x + ALIEN_W / 2 - this.shipX) < ALIEN_W / 2) || (this.saucer !== null && Math.abs(this.saucer.x + this.saucer.dir * 30 - this.shipX) < 8);
+    const fire = lined ? random() < 0.5 + skill * 0.5 : random() < (1 - skill) * 0.8;
+    return { left: diff < -dead, right: diff > dead, up: false, down: false, fire, firePressed: false };
   }
 
   private marchFleet(dt: number, alive: Alien[]): void {
@@ -186,6 +225,7 @@ export class Invaders extends BaseGame {
     if (this.stepTimer < interval || !formation.length) return;
     this.stepTimer = 0;
     this.marchStep += 1;
+    this.sound('march', MARCH_PITCH[this.marchStep % MARCH_PITCH.length]);
     let minX = Infinity;
     let maxX = -Infinity;
     for (const a of formation) {
@@ -211,16 +251,32 @@ export class Invaders extends BaseGame {
       const diver = candidates[Math.floor(this.rand() * candidates.length)];
       if (diver) {
         const { x, y } = this.alienPos(diver);
-        diver.dive = { x, y, t: 0 };
+        diver.dive = { x, y, t: 0, back: false };
       }
     }
     for (const a of alive) {
       if (!a.dive) continue;
       a.dive.t += dt;
+      if (a.dive.back) {
+        // Home to its place in the fleet, from the top.
+        const home = this.formationPos(a);
+        const dx = home.x - a.dive.x;
+        const dy = home.y - a.dive.y;
+        const d = Math.hypot(dx, dy);
+        const step = RETURN_SPEED * dt;
+        if (d <= step) a.dive = null;
+        else {
+          a.dive.x += (dx / d) * step;
+          a.dive.y += (dy / d) * step;
+        }
+        continue;
+      }
       a.dive.y += DIVE_SPEED * (1 + (this.wave - 1) * 0.1) * dt;
       a.dive.x += Math.sin(a.dive.t * 4) * 70 * dt;
       if (a.dive.y > SCREEN_H) {
-        a.dive = null; // back into formation
+        a.dive.back = true;
+        a.dive.y = PLAY_TOP - ALIEN_H;
+        this.clean = false;
         this.breakCombo();
         this.addTime(-ESCAPE_SECONDS, this.shipX, SHIP_Y - 24);
         this.fx.pop('ESCAPED', this.shipX, SHIP_Y - 40, '#ff5f5f', 8);
@@ -228,16 +284,57 @@ export class Invaders extends BaseGame {
     }
   }
 
+  /** The fleet's bottom aliens drop bombs now and then; one on the ship costs a second, a shot can stop one. */
+  private updateBombs(dt: number, alive: Alien[]): void {
+    this.shield = Math.max(0, this.shield - dt);
+    this.bombTimer -= dt;
+    if (this.bombTimer <= 0) {
+      this.bombTimer = (BOMB_EVERY / (1 + (this.wave - 1) * 0.2)) * (0.6 + this.rand() * 0.8);
+      const formation = alive.filter((a) => !a.dive);
+      // The lowest alien of a column drawn at random.
+      const col = formation[Math.floor(this.rand() * formation.length)]?.col;
+      const bottom = formation.filter((a) => a.col === col).reduce<Alien | null>((low, a) => (!low || a.row > low.row ? a : low), null);
+      if (bottom && this.bombs.length < MAX_BOMBS) {
+        const { x, y } = this.alienPos(bottom);
+        this.bombs.push({ x: x + ALIEN_W / 2, y: y + ALIEN_H });
+      }
+    }
+    const speed = BOMB_SPEED * (1 + (this.wave - 1) * 0.08);
+    this.bombs = this.bombs.filter((b) => {
+      b.y += speed * dt;
+      if (b.y >= SHIP_Y - SHIP_H / 2 && b.y <= SHIP_Y + SHIP_H / 2 && Math.abs(b.x - this.shipX) <= SHIP_W / 2) {
+        if (this.shield <= 0) {
+          this.shield = SHIP_SHIELD;
+          this.clean = false;
+          this.breakCombo();
+          this.addTime(-BOMB_SECONDS, this.shipX, SHIP_Y - 24);
+          this.fx.shake(3, 0.2);
+          this.fx.flash('#ff5f5f', 0.1);
+          this.fx.burst(this.shipX, SHIP_Y, '#ff8a3a', 14, 90, 2);
+        }
+        return false;
+      }
+      return b.y < SCREEN_H + 4;
+    });
+  }
+
   private updateSaucer(dt: number): void {
     if (this.saucer) {
-      this.saucer.x += SAUCER_SPEED * (1 + (this.wave - 1) * 0.15) * dt;
-      if (this.saucer.x > SCREEN_W + 12) this.saucer = null;
+      this.saucer.x += this.saucer.dir * SAUCER_SPEED * (1 + (this.wave - 1) * 0.15) * dt;
+      this.saucerSound -= dt;
+      if (this.saucerSound <= 0) {
+        this.saucerSound = 0.22;
+        this.sound('saucer');
+      }
+      if (this.saucer.x > SCREEN_W + 12 || this.saucer.x < -12) this.saucer = null;
       return;
     }
     this.saucerTimer -= dt;
     if (this.saucerTimer <= 0) {
       this.saucerTimer = SAUCER_EVERY + (this.wave - 1) * 0.5;
-      this.saucer = { x: -12, y: PLAY_TOP + 8 };
+      // Either way across, a little higher or lower each time (never into the fleet).
+      const dir = this.rand() < 0.5 ? 1 : -1;
+      this.saucer = { x: dir > 0 ? -12 : SCREEN_W + 12, y: PLAY_TOP + 6 + Math.round(this.rand() * 6), dir };
     }
   }
 
@@ -245,7 +342,15 @@ export class Invaders extends BaseGame {
     for (const shot of this.shots) shot.y -= SHOT_SPEED * dt;
     this.shots = this.shots.filter((shot) => {
       if (shot.y < PLAY_TOP - 6) {
+        this.clean = false;
         this.breakCombo();
+        return false;
+      }
+      const bomb = this.bombs.find((b) => Math.abs(shot.x - b.x) <= 3 && Math.abs(shot.y - b.y) <= 5);
+      if (bomb) {
+        this.bombs = this.bombs.filter((b) => b !== bomb);
+        this.addScore(BOMB_POINTS, bomb.x, bomb.y, '#ff8a3a');
+        this.fx.burst(bomb.x, bomb.y, '#ff8a3a', 8, 60, 1);
         return false;
       }
       if (this.saucer && Math.abs(shot.x - this.saucer.x) <= 10 && Math.abs(shot.y - this.saucer.y) <= 5) {
@@ -284,10 +389,18 @@ export class Invaders extends BaseGame {
     this.direction = 1;
     this.stepTimer = 0;
     this.diveTimer = 1;
+    this.bombTimer = 1.5;
+    this.bombs = [];
+    this.clean = true;
   }
 
   private alienPos(a: Alien): { x: number; y: number } {
     if (a.dive) return { x: a.dive.x, y: a.dive.y };
+    return this.formationPos(a);
+  }
+
+  /** Where `a` stands in the marching fleet. */
+  private formationPos(a: Alien): { x: number; y: number } {
     return { x: this.fleetX + a.col * (ALIEN_W + ALIEN_GAP_X), y: this.fleetY + a.row * (ALIEN_H + ALIEN_GAP_Y) };
   }
 }

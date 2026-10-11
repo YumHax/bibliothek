@@ -112,7 +112,11 @@ backtick in them. The check parses every `.glsl` as GLSL ES and fails on one no 
 
 Every decor kind and shop prop on its own and every room as its plan lays it out, built headless at high quality and run
 through the browser's own detector (`world/surface/zfight`); a pair of faces in one plane that is not in the baseline
-fails. docs/props.md "Check" has the recipe; `npm run zfight -- --only <subject>` builds one.
+fails. Front Street is two subjects: `street:base` (ground, park, facades and what stands on them) and `street:fixtures`
+(on the ground: lamps, trees, parked cars, furniture, the works and drains, cabinets and signs, the put-out bins, the
+shops' spill, signals, wayfinding, the post and phone boxes, terraces, December's bulbs, the snowman). Its baseline holds
+three pairs inside the cars' and the trees' instanced parts that only fight past 120 m. The parked cars' shapes and gaps
+are the day's draw (`dailyRandom`), so a pair may come and go with the date. docs/props.md "Check" has the recipe; `npm run zfight -- --only <subject>` builds one.
 
 ## Scene lint (`scripts/scene-lint.mjs`)
 
@@ -124,7 +128,12 @@ HemisphereLight; per room: shadow maps within `QUALITY.lights` and 16 texture un
 12 cm, or two things' parts sharing over half the smaller part's volume; flat things and things hung by their plan line or
 saying `contactShadow = false` are exempt), reach (a clickable thing whose hitboxes all hang above 2.2 m), disposal
 (`dispose()` then `disposeTree` must free nothing `markShared` and leave nothing of the prop's own; a resource two builds
-hold, every prop being built twice, must be marked shared). Findings are keyed by subject, rule and names (`plant#2`,
+hold, every prop being built twice, must be marked shared), and outdoors, for a subject that gives its `ground` (the
+street's fixtures, `groundHeight`), ground (`world/lint/ground`: every mesh split into connected pieces, an instance a
+piece, touching pieces joined into things; a thing whose lowest piece is over the ground under it by more than 3 cm, or
+into it by more than 15 cm, is found; the ground itself, `userData.ground`, and what hangs, `contactShadow = false`, are
+left out). A cache counted by its users (`Buildings`' painted atlases) frees its GPU copy after the unload that let the
+last one go, never inside a `dispose()`. Findings are keyed by subject, rule and names (`plant#2`,
 `FloorLamp > PointLight`), never coordinates, and compared with `scripts/scene-baseline.json`; a new one fails with a hint
 per rule, `--list` shows them all, `--write-baseline` accepts what is there after a look, `--only room:` narrows,
 `--verbose` prints each room's light counts. The props' randomness is seeded for the run. Lights that a `furnish*.ts`

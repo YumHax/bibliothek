@@ -37,6 +37,11 @@ interface PositionMemoryOptions {
    * (a reload never lands past a door's hours), outside on the pavement in front of its door. World floor point.
    */
   instead?: (saved: SavedPosition) => SavedPosition | null;
+  /**
+   * Whether a world floor point (x, z) outside `zone`'s floor is still its ground (the street's park and the stretch
+   * its works opened, past its box): saved there, and restored there as it is (no clamp onto the box).
+   */
+  walked?: (zone: string, x: number, z: number) => boolean;
   storage?: Storage | null;
 }
 
@@ -83,6 +88,12 @@ export class PositionMemory implements Updatable {
     const saved = this.options.instead?.(stored) ?? stored;
     const floor = this.options.floorOf(saved.zone);
     if (!floor) return false;
+    if (!floor.containsPoint(new THREE.Vector2(saved.x, saved.z)) && this.options.walked?.(saved.zone, saved.x, saved.z)) {
+      this.options.player.setPosition(saved.x, saved.z);
+      this.options.player.setLook(saved.yaw, saved.pitch);
+      this.last = saved;
+      return true;
+    }
     const x = THREE.MathUtils.clamp(saved.x, floor.min.x + MARGIN, floor.max.x - MARGIN);
     const z = THREE.MathUtils.clamp(saved.z, floor.min.y + MARGIN, floor.max.y - MARGIN);
     if (!Number.isFinite(x) || !Number.isFinite(z)) return false;
@@ -115,7 +126,8 @@ export class PositionMemory implements Updatable {
     const zone = this.options.currentZone();
     const floor = this.options.floorOf(zone);
     // Between zones (a doorway's threshold, the gap between two walls): wait for a clear spot.
-    if (!floor || !floor.containsPoint(new THREE.Vector2(this.here.x, this.here.z))) return;
+    if (!floor) return;
+    if (!floor.containsPoint(new THREE.Vector2(this.here.x, this.here.z)) && !this.options.walked?.(zone, this.here.x, this.here.z)) return;
     const { yaw, pitch } = player.getLook();
     const next: SavedPosition = { zone, x: round(this.here.x), z: round(this.here.z), yaw: round(yaw), pitch: round(pitch) };
     const last = this.last;

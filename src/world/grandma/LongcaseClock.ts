@@ -117,6 +117,8 @@ export class LongcaseClock extends THREE.Group implements Furniture, Interactabl
   private hour = -1;
   private time = 0;
   private side = 1;
+  /** Run down (docs/grandma.md "Sunday lunch, recipes and favours": wound by the player): no swing, no tick, the hands still. */
+  private stopped = false;
 
   constructor(dayNight: DayNight) {
     super();
@@ -212,6 +214,7 @@ export class LongcaseClock extends THREE.Group implements Furniture, Interactabl
   /** The hands to `hours`; on a new hour, the chime. */
   private setTime(hours: number): void {
     this.hours = hours;
+    if (this.stopped) return;
     this.hourHand.rotation.z = -((hours % 12) / 12) * Math.PI * 2;
     this.minuteHand.rotation.z = -(hours % 1) * Math.PI * 2;
     const hour = Math.floor(hours);
@@ -221,6 +224,7 @@ export class LongcaseClock extends THREE.Group implements Furniture, Interactabl
 
   /** The swing, and the tick at each end of it. */
   update(dt: number): void {
+    if (this.stopped) return;
     this.time += Math.min(dt, 0.5);
     const phase = Math.sin((this.time * 2 * Math.PI) / PENDULUM.period);
     this.pendulum.rotation.z = PENDULUM.swing * phase;
@@ -231,15 +235,31 @@ export class LongcaseClock extends THREE.Group implements Furniture, Interactabl
     }
   }
 
+  /** Run down, or wound again (the hands jump to the time). */
+  setStopped(stopped: boolean): void {
+    if (stopped === this.stopped) return;
+    this.stopped = stopped;
+    this.pendulum.rotation.z = 0;
+    if (!stopped) {
+      this.hour = -1;
+      this.setTime(this.hours);
+    }
+  }
+
   setHovered(hovered: boolean): void {
     this.glint.set(hovered);
   }
 
   label(): string {
+    if (this.stopped) return 'Longcase clock · stopped';
     return `Longcase clock ${formatClock(this.hours)} · check the time`;
   }
 
   activate(session: SessionActions): void {
+    if (this.stopped) {
+      session.react('The pendulum hangs still. It needs winding.');
+      return;
+    }
     session.react(`It’s ${formatClock(this.hours)}`);
   }
 

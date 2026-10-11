@@ -9,6 +9,7 @@ import type { GatheringDeps } from './deps';
 import { GATHERING_RULES } from './gatheringPlan';
 import type { Occasion } from './host';
 import { ClubVisit } from './ClubVisit';
+import { MemeVisit, type MemeVisitDeps } from './MemeVisit';
 import { GamesNight } from './GamesNight';
 import { NightPhotos } from './NightPhotos';
 import { OpenHouse } from './OpenHouse';
@@ -35,6 +36,8 @@ export interface GatheringsOptions extends GatheringDeps {
   collectionSize: () => number;
   /** `?gamesnight` / `?openhouse` / `?clubvisit`: that gathering as soon as the player is home (testing). */
   force?: 'night' | 'house' | 'club';
+  /** Mémé's visits to the flat (docs/grandma.md "The end of the story"). */
+  meme?: MemeVisitDeps;
 }
 
 /**
@@ -46,7 +49,7 @@ export interface GatheringsOptions extends GatheringDeps {
  */
 export class Gatherings extends Prop implements Updatable, ActivityAware, Occasion {
   readonly contactShadow = false;
-  private current: GamesNight | OpenHouse | ClubVisit | null = null;
+  private current: GamesNight | OpenHouse | ClubVisit | MemeVisit | null = null;
   private photos: NightPhotos | null = null;
   private toldHouseDay = -1;
   private forced: GatheringsOptions['force'];
@@ -63,7 +66,7 @@ export class Gatherings extends Prop implements Updatable, ActivityAware, Occasi
 
   holds(day: number): boolean {
     const { book } = this.options;
-    return this.current !== null || book.nightOn(day) !== null || book.house?.day === day;
+    return this.current !== null || book.nightOn(day) !== null || book.house?.day === day || this.options.meme?.family.visitDay === day;
   }
 
   caller(): string | null {
@@ -97,6 +100,7 @@ export class Gatherings extends Prop implements Updatable, ActivityAware, Occasi
       if (current.done) this.end();
       return;
     }
+    this.options.meme?.family.tidy(day);
     if (!host.options.atHome() || host.options.busy?.()) return;
     this.readPaper(day);
     this.tellHouse(day);
@@ -127,6 +131,13 @@ export class Gatherings extends Prop implements Updatable, ActivityAware, Occasi
     if (house?.day === day && inHours(hours, [from, until])) {
       host.rang(day);
       this.current = new OpenHouse(this.options, day, this.options.collectionSize());
+      return;
+    }
+    // Mémé's Saturday (planned at hers), or now and then one after her first visit: before the club, she came first.
+    const meme = this.options.meme;
+    if (meme && !host.rangOn(day) && meme.family.visitAt(day, hours)) {
+      host.rang(day);
+      this.current = new MemeVisit(this.options, meme, day);
       return;
     }
     const honour = honours?.unvisited;

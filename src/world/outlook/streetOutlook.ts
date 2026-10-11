@@ -7,7 +7,8 @@ import { SkyDome } from '../street/SkyDome';
 import { SkyReflection } from '../street/SkyReflection';
 import { StreetTraffic } from '../street/traffic/StreetTraffic';
 import { Precipitation } from '../street/Precipitation';
-import { buildStreetBase, buildStreetFixtures, buildStreetFronts, sceneryAnisotropy } from '../street/streetScenery';
+import { awningShelters } from '../street/relief/FacadeRelief';
+import { buildStreetBase, buildStreetFixtures, buildStreetFronts, sceneryAnisotropy, paintStreetBase } from '../street/streetScenery';
 import { airColor, airDensity } from '../street/streetAir';
 import { fadeSunShadowEdges } from '../street/shadowFade';
 import { STREET_PLAN, type FacadeSpec } from '../street/streetPlan';
@@ -44,6 +45,8 @@ const REFLECT_EVERY = 20;
 const SHADOW_HZ = 5;
 /** The facades' paint, finer on high as in the street itself (`furnishStreet`): from the flat they are 20-30 m off. */
 const DETAIL_SCALE = { high: 1.35, medium: 1, low: 0.6 } as const;
+/** The awnings kept as shelters from the snow (metres along the street from its middle): all a window looks down on. */
+const OUTLOOK_AWNINGS = 70;
 
 /**
  * Front Street and our courtyard as seen through a window from inside (`OutlookView`): the street's own pieces built
@@ -76,6 +79,8 @@ export async function buildStreetOutlook(camera: THREE.Camera, options: StreetOu
   // lamps, trees (the courtyard's chestnut among them), parked and passing cars, furniture. No colliders, no manoeuvres.
   // RETRO GAMES' shelves in today's stock, as the street has them (`RetroLure`'s news), once drawn.
   const shopGoods = RETRO_NEWS.colors ? [...RETRO_NEWS.colors] : null;
+  // The facades' atlas painted a few facades per idle moment: the heaviest step of the build, never in one freeze.
+  for (const _ of paintStreetBase({ facades: [...facades], detailScale: DETAIL_SCALE[QUALITY.level] })) await between();
   await between();
   const { buildings } = buildStreetBase(add, { dayNight, facades: [...facades], detailScale: DETAIL_SCALE[QUALITY.level], shopGoods, ...(windowLife ? { windowLife } : {}) });
   await between();
@@ -84,7 +89,8 @@ export async function buildStreetOutlook(camera: THREE.Camera, options: StreetOu
   const traffic = add(new StreetTraffic());
   buildStreetFixtures(add, { dayNight, viewer: camera, traffic, lampLights: LAMP_LIGHTS[QUALITY.level], moreTrees: [COURTYARD_YARD.chestnut], washed: [buildings], farShadow: lighting.far });
   await between();
-  add(new Precipitation(dayNight));
+  // The awnings as the street has them: the snow seen under them lies only where it does in the street.
+  add(new Precipitation(dayNight, { shelters: awningShelters(buildings.fronts, OUTLOOK_AWNINGS) }));
   // RETRO GAMES' NEW IN banner on a fresh market day, seen from the flat (the street's own; the queue is people: not here).
   if (facades.some((spec) => spec.id === 'retro')) {
     add(new RetroLure({ ...STREET_PLAN.retroLure, queue: [], door: STREET_PLAN.doors.market.at, viewer: camera, place: () => {}, talk: () => '', drawDistance: 0, fade: 0, onStock: () => {} }));

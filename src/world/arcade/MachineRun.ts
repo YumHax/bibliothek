@@ -5,6 +5,7 @@ import type { ArcadeBonus, ArcadeMachineLike, ArcadeResult, SessionActions } fro
 import type { ChipSpeaker } from '@/audio/ChipSpeaker';
 import { GameInput } from '@/input/GameInput';
 import { placeOf } from '@/economy/scoreTable';
+import { ticketsAt } from '@/economy/pricing';
 import { countUpEase } from '@/ui/countUp';
 import { reduceMotion } from '@/settings/motion';
 import { type ArcadeControls, NO_CONTROLS } from './games/ArcadeGame';
@@ -13,6 +14,8 @@ import type { TicketStrip } from './TicketStrip';
 import type { Occupant, StationEvents } from './Station';
 import type { ScoreTable } from './scoreTable';
 import { ARCADE_KEYS } from './arcadeKeys';
+import { playerAtMachine } from './hallDuck';
+import { celebrateHall } from './HallCelebration';
 import { OUT_OF_ORDER_LINE, TAKEN_LINE, againLine, initialsLine, priceText, walkAwayLine } from './machineLines';
 
 /** Where a machine is in its cycle: idle, the player's play, their initials, the end card, a regular on it. */
@@ -82,6 +85,8 @@ export class MachineRun {
   /** The best to beat when the play started, and whether the live score has passed it (the sting plays once). */
   private startBest = 0;
   private bestBeaten = false;
+  /** The end card's closing sound has played (once a card). */
+  private countClosed = false;
 
   constructor(private readonly options: MachineRunOptions) {
     this.keys = new GameInput(ARCADE_KEYS, options.input);
@@ -166,6 +171,11 @@ export class MachineRun {
     return this.clock >= this.countEnd;
   }
 
+  /** The player's play is past its score but not yet shown in full: their initials, or the end card still counting. */
+  get counting(): boolean {
+    return this.who === 'player' && (this.current === 'initials' || (this.current === 'over' && !this.countDone));
+  }
+
   /** On the end card, done counting, and fire let go since: a press or a click now plays again. */
   get canReplay(): boolean {
     return this.current === 'over' && this.countDone && this.fireReleased;
@@ -190,8 +200,8 @@ export class MachineRun {
   }
 
   tickets(score: number): number {
-    const { pointsPerTicket } = this.options;
-    return pointsPerTicket ? Math.floor(score / pointsPerTicket) : 0;
+    const { pointsPerTicket, game } = this.options;
+    return pointsPerTicket ? ticketsAt(game.id, score, pointsPerTicket) : 0;
   }
 
   /** What the next play costs, for a label or a screen: "free play", "1 coin". */
@@ -225,6 +235,7 @@ export class MachineRun {
       this.who = 'player';
       stationEvents.onPlayerStart?.();
     }
+    playerAtMachine(this, true);
   }
 
   /** The player walked away: a running play is lost without payout; initials half-entered are signed as they stand. */
@@ -239,6 +250,12 @@ export class MachineRun {
     this.settledTickets = null;
     this.options.strip?.tear();
     this.options.stationEvents.onPlayerLeave?.();
+    playerAtMachine(this, false);
+  }
+
+  /** The machine is going (its hall unloading): the player no longer stands at it, so the hall's music is not left ducked. */
+  dispose(): void {
+    playerAtMachine(this, false);
   }
 
   /** A regular steps up (the machine then starts their game); false when taken or out of order. */
@@ -285,6 +302,7 @@ export class MachineRun {
     this.bonusLines = [];
     this.settledTickets = null;
     this.bonusTicked = 0;
+    this.countClosed = false;
     this.fireReleased = false;
     if (scores?.qualifies(game.id, score)) {
       this.initials = new InitialsEntry(scores.initials, placeOf(scores.table(game.id), score), score);
@@ -406,6 +424,12 @@ export class MachineRun {
         this.bonusTicked = started;
         speaker.play('bonus');
       }
+      // Everything counted: a closing sound for the player's play, as big as the verdict (the top of the board, a place
+      // on it or a new best, else the strip's clunk).
+      if (!this.countClosed && this.countDone && this.who === 'player') {
+        this.countClosed = true;
+        speaker.play(this.rank === 0 ? 'win' : this.rank !== null || this.result.best ? 'jingle' : 'clunk');
+      }
       strip?.setTickets(this.shownTotal);
     }
     return NO_CONTROLS;
@@ -414,6 +438,8 @@ export class MachineRun {
   private sign(initials: string): void {
     const { scores, game, onSign } = this.options;
     this.rank = scores?.submit(game.id, this.result.score, initials).rank ?? null;
+    // The player on top of the machine's table: the whole hall goes off (`HallCelebration`).
+    if (this.rank === 0 && this.who === 'player' && this.options.pointsPerTicket) celebrateHall('record');
     onSign?.(initials, this.result);
   }
 }

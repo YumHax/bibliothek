@@ -1,23 +1,17 @@
 import * as THREE from 'three';
-import type { Updatable } from '@/core/Engine';
-import type { Interactable, LabelPlacement } from '@/interaction/Interactable';
-import type { ArcadeMachineLike, ArcadeResult, SessionActions } from '@/game/SessionActions';
 import { actionKeyLabel } from '@/ui/keys';
 import { ChipSpeaker, type Sfx } from '@/audio/ChipSpeaker';
 import { createCanvas, toTexture } from '@/covers/generated/canvasUtils';
-import type { Furniture } from '../Furniture';
+import { repaintWhenFontLoads } from '@/graphics/fontReady';
 import { boxMesh, cylinderMesh, eyePoseAt, invisibleHitbox } from '../meshUtils';
 import { layMesh, WALL } from '../surface/layers';
 import { paint, standard } from '../materials/palette';
-import { drawText } from './games/ArcadeGame';
+import { type ArcadeControls, NO_CONTROLS, PIXEL_FONT, drawText } from './games/ArcadeGame';
 import { formatNumber } from '@/text/count';
 import { BALL_R, type PinballEvent, PinballSim } from './pinball/PinballSim';
-import type { Station, StationEvents } from './Station';
 import type { ScoreTable } from './scoreTable';
-import type { TicketMachineWiring } from './TicketMachine';
-import { MachineRun, type MachineState } from './MachineRun';
-import { endCardNote, playAgainLine } from './EndCard';
-import { RunMachine } from './RunMachine';
+import { TicketMachine, type TicketMachineWiring } from './TicketMachine';
+import { TicketStrip } from './TicketStrip';
 import { CHROME, type MachineDisplay, displayScreen, outOfOrderNote } from './machineParts';
 import { lcg } from '@/random';
 import { arcadeHint } from './arcadeHint';
@@ -56,10 +50,13 @@ const BUTTON_Z = BODY_L / 2 - 0.08;
 const HAND_OUT = 0.03;
 /** Playfield canvas: pixels per table unit across. */
 const FIELD_PX = 256;
-/** The backglass repaints this often while nobody plays (the game repaints it every frame). */
+/** The backglass repaints this often while nobody plays (every frame while a game is on). */
 const IDLE_FPS = 4;
+/** How well the machine's own regular plays, when the one at it does not say. */
 const REGULAR_SKILL = 0.7;
-const REGULAR_PAUSE = 3;
+/** How far a nudge throws the table sideways (m). */
+const SHAKE = 0.006;
+const BALL_METRES = BALL_R * FIELD_W;
 
 const STEEL_BALL = standard({ color: 0xe8ecf0, metalness: 1, roughness: 0.12 });
 const BLACK = paint(0x111116, 0.5);
@@ -76,55 +73,68 @@ const SOUNDS: Partial<Record<PinballEvent, Sfx>> = {
   drain: 'drain',
   saved: 'time',
   over: 'over',
+  skill: 'win',
+  ramp: 'bonus',
+  lit: 'stage',
+  multiball: 'jackpot',
+  jackpot: 'jackpot',
+  bonus: 'ticket',
+  nudge: 'thud',
+  danger: 'penalty',
+  tilt: 'tilt',
+  search: 'clunk',
 };
 
 /**
  * A pinball table you can play: a `PinballSim` (three balls, flippers, bumpers, slingshots, top
- * lanes, a target bank) drawn on the sloping playfield under glass, with a real steel ball and
- * flippers moving over it, the plunger pulling back as Space is held, the pop bumpers flashing
- * when hit and the backglass showing the score, the ball in play and the multiplier. A paid play
- * works like a cabinet's (`playArcade`, through its `MachineRun`): A / D flip, Space launches; the
- * result pays tickets and a score good enough asks for initials on the backglass. A regular can
- * take it (`occupy`) and play it themselves; some days it is out of order. Origin on the floor under the middle of the cabinet, +z towards the player's end. Collides.
+ * lanes, a target bank, a wire ramp, multiball, a skill shot, nudge and tilt) drawn on the sloping
+ * playfield under glass, with real steel balls and flippers moving over it, the plunger pulling
+ * back as fire is held, the pop bumpers flashing when hit, the wire ramp's rails over the table and
+ * the backglass showing the score, the ball in play, the multiplier and the big moments. A
+ * `TicketMachine`: paid for like a cabinet (`playArcade`): A / D flip, fire launches, up nudges; the
+ * result pays tickets out of a slot at the front and a score good enough asks for initials on the
+ * backglass. Stepped at the machines' fixed rate (the sim steps itself finer inside). A regular can
+ * take it (`occupy`) and play it themselves; some days it is out of order. Origin on the floor
+ * under the middle of the cabinet, +z towards the player's end. Collides.
  */
-export class Pinball extends RunMachine implements Furniture, Interactable, Updatable, ArcadeMachineLike, Station {
+export class Pinball extends TicketMachine {
   readonly hitboxes: THREE.Object3D[];
   readonly standAt = new THREE.Vector3(0, 0, STAND_Z);
   /** A pinball is played bent well over the glass. */
   readonly lean = 0.5;
   readonly focus = new THREE.Vector3(0, FRONT_TOP + RISE / 2, 0);
-  readonly stationEvents: StationEvents = {};
-  readonly freeWhenBroke = true;
-  /** Pays the hall's tickets through the arcade's books. */
-  readonly payout = 'arcade' as const;
   readonly game: { readonly id: string; readonly title: string; readonly hint: string };
+  protected readonly speaker: ChipSpeaker;
+  protected readonly strip: TicketStrip;
 
   private readonly sim = new PinballSim(FIELD_L / FIELD_W);
-  private readonly wiring: PinballWiring;
-  protected readonly run: MachineRun;
+  private readonly scores: ScoreTable;
   private readonly deck: THREE.Group;
   private readonly hands: [THREE.Vector3, THREE.Vector3] = [new THREE.Vector3(), new THREE.Vector3()];
-  private readonly ball: THREE.Mesh;
+  private readonly ballMeshes: THREE.Mesh[] = [];
   private readonly flippers: THREE.Group[];
   private readonly plunger: THREE.Group;
   private readonly inserts: THREE.MeshStandardMaterial[] = [];
+  private readonly rampInsert: THREE.MeshStandardMaterial;
   private readonly bumperCaps: THREE.MeshStandardMaterial[] = [];
   private readonly backglass: MachineDisplay;
-  private readonly speaker: ChipSpeaker;
+  /** The backglass's art (sky, stars, comets, title), painted once; the live display goes over it each time. */
+  private readonly backdrop: HTMLCanvasElement;
   private readonly title: string;
   private readonly accent: string;
-  private clock = 0;
   private displayClock = 0;
   private demoHold = 0;
+  private shake = 0;
+  private shakeSide = 1;
   private readonly local = new THREE.Vector3();
 
   constructor(options: PinballOptions, wiring: PinballWiring) {
-    super();
+    super(wiring);
     this.name = 'Pinball';
-    this.wiring = wiring;
+    this.scores = wiring.scores;
     this.title = options.title ?? 'METEOR ALLEY';
     this.game = { id: 'pinball', title: this.title, get hint() {
-        return arcadeHint('{leftRight} flip · hold {fire} to pull the plunger, let go to launch');
+        return arcadeHint('{leftRight} flip · hold {fire}, let go to launch · {up} nudges the table');
       } };
     const random = lcg((options.seed ?? 1) * 6151);
     const color = options.color ?? 0x3a1f5c;
@@ -162,7 +172,7 @@ export class Pinball extends RunMachine implements Furniture, Interactable, Upda
     deck.add(boxMesh(FIELD_W, rimH, fieldBack + BODY_L / 2, body, { y: rimY, z: (fieldBack - BODY_L / 2) / 2 }));
     const stripe = paint(accent, 0.5);
     for (const sx of [-1, 1]) deck.add(boxMesh(0.004, 0.05, BODY_L - 0.1, stripe, { x: sx * (BODY_W / 2 + 0.002), y: 0.02 }));
-    // Playfield under glass: the sim's walls, lanes and targets painted once on the table's art.
+    // Playfield under glass: the sim's walls, lanes, targets and the ramp's gate painted once on the table's art.
     const field = new THREE.Mesh(new THREE.PlaneGeometry(FIELD_W, FIELD_L), new THREE.MeshBasicMaterial({ map: this.paintPlayfield(color, accent, random), color: 0x9a9a9a }));
     field.rotation.x = -Math.PI / 2;
     field.position.set(0, FIELD_Y, 0.01);
@@ -186,19 +196,23 @@ export class Pinball extends RunMachine implements Furniture, Interactable, Upda
       top.castShadow = false;
       deck.add(top);
     }
-    // Inserts: a lit dome at each top lane and each target, on when that one is lit.
+    // Inserts: a lit dome at each top lane and each target, on when that one is lit; one more at the ramp's gate.
+    const dome = (x: number, y: number, colour: number): THREE.MeshStandardMaterial => {
+      const mat = new THREE.MeshStandardMaterial({ color: 0x222222, emissive: colour, emissiveIntensity: 0, roughness: 0.3 });
+      const at = this.toDeck(x, y);
+      const mesh = new THREE.Mesh(new THREE.SphereGeometry(0.01, 10, 8, 0, Math.PI * 2, 0, Math.PI / 2), mat);
+      mesh.position.set(at.x, FIELD_Y + 0.001, at.z);
+      mesh.castShadow = false;
+      deck.add(mesh);
+      return mat;
+    };
     const insertAt = [...this.sim.lanes.map((x) => [x, 0.33] as const), ...this.sim.targets.map((y) => [0.09, y] as const)];
     const insertColors = [0xff2fa0, 0x33e0ff, 0xffe23a, 0x4dff7a, 0xff8a2a, 0xb05cff];
-    insertAt.forEach(([x, y], i) => {
-      const mat = new THREE.MeshStandardMaterial({ color: 0x222222, emissive: insertColors[i]!, emissiveIntensity: 0, roughness: 0.3 });
-      this.inserts.push(mat);
-      const at = this.toDeck(x, y);
-      const dome = new THREE.Mesh(new THREE.SphereGeometry(0.01, 10, 8, 0, Math.PI * 2, 0, Math.PI / 2), mat);
-      dome.position.set(at.x, FIELD_Y + 0.001, at.z);
-      dome.castShadow = false;
-      deck.add(dome);
-    });
-    // The flippers: bats turning about their pivots, and the steel ball.
+    insertAt.forEach(([x, y], i) => this.inserts.push(dome(x, y, insertColors[i]!)));
+    const gate = this.sim.rampGate;
+    this.rampInsert = dome((gate.x0 + gate.x1) / 2, gate.y + 0.1, 0xffd23a);
+    this.buildRamp(deck);
+    // The flippers: bats turning about their pivots, and the steel balls (a second for multiball).
     this.flippers = this.sim.flippers.map((f) => {
       const pivot = new THREE.Group();
       const at = this.toDeck(f.pivot.x, f.pivot.y);
@@ -209,11 +223,15 @@ export class Pinball extends RunMachine implements Furniture, Interactable, Upda
       deck.add(pivot);
       return pivot;
     });
-    this.ball = new THREE.Mesh(new THREE.SphereGeometry(BALL_R * FIELD_W, 16, 12), STEEL_BALL);
-    this.ball.castShadow = true;
-    deck.add(this.ball);
+    for (let i = 0; i < 2; i++) {
+      const ball = new THREE.Mesh(new THREE.SphereGeometry(BALL_METRES, 16, 12), STEEL_BALL);
+      ball.castShadow = true;
+      ball.visible = i === 0;
+      this.ballMeshes.push(ball);
+      deck.add(ball);
+    }
 
-    // Flipper buttons on both sides, the plunger on the right of the front, the coin door on the front face.
+    // Flipper buttons on both sides, the plunger on the right of the front, the coin door and the ticket slot on the front face.
     for (const sx of [-1, 1]) {
       const button = cylinderMesh(0.018, 0.02, paint(0xd23a3a, 0.4), { x: sx * (BODY_W / 2 + 0.01), y: 0, z: BUTTON_Z }, { segments: 12 });
       button.rotation.z = Math.PI / 2;
@@ -230,6 +248,11 @@ export class Pinball extends RunMachine implements Furniture, Interactable, Upda
     deck.add(this.plunger);
     deck.add(boxMesh(0.18, 0.14, 0.01, CHROME, { y: -0.02, z: BODY_L / 2 + 0.005 }));
     deck.add(boxMesh(0.04, 0.004, 0.012, BLACK, { x: -0.04, y: -0.02, z: BODY_L / 2 + 0.011 }));
+    // The ticket slot left of the coin door; the strip hangs plumb whatever the deck's tilt.
+    this.strip = new TicketStrip(0.7);
+    this.strip.position.set(-0.17, -0.05, BODY_L / 2 + 0.001); // convention-ok: the slot's plate is a box standing on the face, not a flat layer
+    this.strip.rotation.x = -TILT;
+    deck.add(this.strip);
 
     // The backbox standing on the back end, its lit backglass facing the player.
     const backTop = FRONT_TOP + RISE;
@@ -239,57 +262,30 @@ export class Pinball extends RunMachine implements Furniture, Interactable, Upda
     backglass.position.set(0, backTop + BACKBOX_H / 2, -BODY_L / 2 + BACKBOX_D + WALL.notice.lift);
     layMesh(backglass, WALL.notice);
     this.add(backglass);
+    [this.backdrop] = createCanvas(448, 512);
+    this.paintBackdrop();
+    repaintWhenFontLoads(`36px ${PIXEL_FONT}`, () => this.paintBackdrop());
     // Out of order: a note over the score display.
     const note = outOfOrderNote();
     note.position.set(0.02, -0.06, WALL.flyer.lift);
     backglass.add(note);
+    this.note = note;
 
     const hitbox = invisibleHitbox(BODY_W + 0.06, backTop + BACKBOX_H, BODY_L + 0.2, { y: (backTop + BACKBOX_H) / 2, z: 0.05 });
     this.hitboxes = [hitbox];
     this.add(hitbox);
     this.traverse((obj) => {
       const mesh = obj as THREE.Mesh;
-      if (mesh.isMesh && mesh !== this.ball) mesh.receiveShadow = true;
+      if (mesh.isMesh && !this.ballMeshes.includes(mesh)) mesh.receiveShadow = true;
     });
     this.speaker = new ChipSpeaker(backglass, wiring.listener);
-    this.run = new MachineRun({
-      game: this.game,
-      input: wiring.input,
-      speaker: this.speaker,
-      stationEvents: this.stationEvents,
-      nextPlayCost: wiring.nextPlayCost,
-      pointsPerTicket: wiring.pointsPerTicket,
-      scores: wiring.scores,
-      note,
-      ...(wiring.outOfOrder ? { outOfOrder: wiring.outOfOrder } : {}),
-    });
+    this.newGame();
     this.placeMovingParts();
     this.paintBackglass();
   }
 
   get footprint(): THREE.Box3 {
     return new THREE.Box3(new THREE.Vector3(-BODY_W / 2 - 0.03, 0, -BODY_L / 2 - 0.02), new THREE.Vector3(BODY_W / 2 + 0.03, FRONT_TOP + RISE + BACKBOX_H, BODY_L / 2 + 0.16));
-  }
-
-  start(onOver: (result: ArcadeResult) => void): void {
-    this.run.start(onOver);
-    this.sim.reset();
-  }
-
-  abort(): void {
-    this.run.abort();
-    this.sim.over = true;
-    this.paintBackglass();
-  }
-
-  occupy(): boolean {
-    if (!this.run.occupy()) return false;
-    this.sim.reset();
-    return true;
-  }
-
-  release(): void {
-    if (this.run.release()) this.sim.over = true;
   }
 
   /** A hand on each flipper button, pushed in while that flipper is up. */
@@ -307,95 +303,78 @@ export class Pinball extends RunMachine implements Furniture, Interactable, Upda
   }
 
   /** The middle of the lower playfield, where the eyes go while playing. */
-  screenCentre(): THREE.Vector3 {
+  override screenCentre(): THREE.Vector3 {
     return this.deck.localToWorld(this.toDeck(0.45, this.sim.length * 0.62));
   }
-
-  // --- Interactable ---------------------------------------------------------------------------
 
   setHovered(hovered: boolean): void {
     this.backglass.material.color.setHex(hovered ? 0xffffff : 0xcccccc);
   }
 
-  label(): string {
-    return this.run.label({ attract: `Pinball · ${this.title} · insert a coin (${this.run.priceText()})`, playing: `Pinball · ${actionKeyLabel('walkAway')} or a click walks away (the game is lost)` });
+  protected get score(): number {
+    return this.sim.score;
   }
 
-  labelPlacement(): LabelPlacement {
-    return this.run.labelPlacement();
+  /** A fresh table: three balls for a play or a regular's game; while nobody is at it, the ball waits on the plunger. */
+  protected newGame(): void {
+    this.sim.reset();
+    if (this.state !== 'playing' && this.state !== 'demo') this.sim.over = true;
+    this.demoHold = 0;
   }
 
-  activate(session: SessionActions): void {
-    this.run.activate(session, this);
+  protected attractLabel(price: string): string {
+    return `Pinball · ${this.title} · insert a coin (${price})`;
   }
 
-  // --- Updatable ------------------------------------------------------------------------------
-
-  update(dt: number): void {
-    this.speaker.follow();
-    // The pointer went free mid-play: the ball hangs where it is until it is locked again.
-    if (this.run.paused) return;
-    this.clock += dt;
-    this.run.update(dt);
-    switch (this.state) {
-      case 'playing': {
-        const controls = this.run.readControls();
-        this.sim.update(dt, { left: controls.left, right: controls.right, launch: controls.fire });
-        this.playEvents();
-        this.run.noteScore(this.sim.score);
-        if (this.sim.over) this.run.finish(this.sim.score);
-        break;
-      }
-      case 'demo':
-        this.updateDemo(dt);
-        break;
-      case 'over':
-      case 'attract':
-        this.sim.update(dt, { left: false, right: false, launch: false });
-        break;
-      case 'initials':
-        break;
-    }
-    this.placeMovingParts();
-    this.lightUp();
-    // The backglass: every frame while a game is on, a few times a second otherwise.
-    this.displayClock += dt;
-    if (this.state === 'playing' || this.state === 'initials' || this.state === 'over' || this.displayClock >= 1 / IDLE_FPS) {
-      this.displayClock = 0;
-      this.paintBackglass();
-    }
+  protected override playingLabel(): string {
+    return `Pinball · ${actionKeyLabel('walkAway')} or a click walks away (the game is lost)`;
   }
 
-  dispose(): void {
-    this.speaker.dispose();
+  /** One step of the table: the player's hands, or a regular's (the machine's autopilot, a step at a time). */
+  protected play(dt: number, controls: ArcadeControls): boolean {
+    const input = this.who === 'regular'
+      ? this.sim.autopilot(this.regularSkill ?? REGULAR_SKILL, controls.fire, dt)
+      : { left: controls.left, right: controls.right, launch: controls.fire, nudge: controls.up };
+    this.sim.update(dt, input);
+    this.playEvents();
+    return this.sim.over;
   }
 
-  private get state(): MachineState {
-    return this.run.state;
-  }
-
-  private updateDemo(dt: number): void {
-    if (this.sim.over) {
-      this.run.regularResult(this.sim.score);
-      if (this.run.regularPause(dt, REGULAR_PAUSE)) this.sim.reset();
-      this.sim.update(dt, { left: false, right: false, launch: false });
-      return;
-    }
-    // Pull the plunger for a moment, then let go.
+  /** A regular pulls the plunger for a moment, then lets go (`play` does their flipping). */
+  protected demoControls(dt: number): ArcadeControls {
     let launching = false;
     if (this.sim.waitingToLaunch) {
       this.demoHold += dt;
       launching = this.demoHold < 0.5 + (Math.sin(this.clock * 3.1) + 1) * 0.2;
       if (!launching) this.demoHold = 0;
     }
-    this.sim.update(dt, this.sim.autopilot(REGULAR_SKILL, launching));
-    this.playEvents();
+    return { ...NO_CONTROLS, fire: launching };
+  }
+
+  protected paint(dt: number): void {
+    // Nobody's ball in play: the flippers drop and the bumpers fade.
+    if (this.state !== 'playing' && (this.state !== 'demo' || this.sim.over)) this.sim.update(dt, { left: false, right: false, launch: false });
+    this.shake = Math.max(0, this.shake - dt * 8);
+    this.deck.position.x = Math.sin(this.shake * 30) * this.shake * SHAKE * this.shakeSide;
+    this.placeMovingParts();
+    this.lightUp();
+    // The backglass: every frame while a game is on or the end card counts, a few times a second otherwise.
+    this.displayClock += dt;
+    const live = this.state === 'playing' || this.state === 'initials' || (this.state === 'over' && !this.run.countDone);
+    if (live || this.displayClock >= 1 / IDLE_FPS) {
+      this.displayClock = 0;
+      this.paintBackglass();
+    }
   }
 
   private playEvents(): void {
     for (const event of this.sim.takeEvents()) {
       const sfx = SOUNDS[event];
       if (sfx) this.speaker.play(sfx);
+      if (event === 'nudge' || event === 'tilt') {
+        this.shake = 1;
+        this.shakeSide = -this.shakeSide;
+      }
     }
   }
 
@@ -404,32 +383,83 @@ export class Pinball extends RunMachine implements Furniture, Interactable, Upda
     return out.set((x - 0.5) * FIELD_W, FIELD_Y, -FIELD_L / 2 + (y / this.sim.length) * FIELD_L + 0.01);
   }
 
-  /** Ball, flippers and plunger follow the sim. */
+  /**
+   * The wire ramp: two chrome rails along the sim's ramp course, as high over the playfield as the
+   * ball rides there, on thin posts; the ball runs between them.
+   */
+  private buildRamp(deck: THREE.Group): void {
+    const samples = 40;
+    const centre: THREE.Vector3[] = [];
+    const p = { x: 0, y: 0, lift: 0 };
+    for (let i = 0; i <= samples; i++) {
+      this.sim.rampPoint(i / samples, p);
+      const at = this.toDeck(p.x, p.y);
+      at.y = FIELD_Y + BALL_METRES * 0.45 + p.lift * FIELD_W;
+      centre.push(at);
+    }
+    const up = new THREE.Vector3(0, 1, 0);
+    const across = new THREE.Vector3();
+    for (const s of [-1, 1]) {
+      const rail = centre.map((c, i) => {
+        const next = centre[Math.min(centre.length - 1, i + 1)]!;
+        const prev = centre[Math.max(0, i - 1)]!;
+        across.subVectors(next, prev).cross(up).normalize();
+        return c.clone().addScaledVector(across, s * BALL_METRES * 0.85);
+      });
+      const tube = new THREE.Mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(rail), 60, 0.0018, 6, false), CHROME);
+      tube.castShadow = false;
+      deck.add(tube);
+    }
+    // Posts down to the playfield where the ramp is up.
+    for (const t of [0.2, 0.45, 0.7, 0.88]) {
+      this.sim.rampPoint(t, p);
+      const at = this.toDeck(p.x, p.y);
+      const h = BALL_METRES * 0.45 + p.lift * FIELD_W;
+      deck.add(cylinderMesh(0.0018, h, CHROME, { x: at.x, y: FIELD_Y + h / 2, z: at.z }, { segments: 6 }));
+    }
+  }
+
+  /** Balls, flippers and plunger follow the sim. */
   private placeMovingParts(): void {
-    const { ball, flippers } = this.sim;
-    this.toDeck(ball.x, ball.y, this.local);
-    this.ball.position.set(this.local.x, FIELD_Y + BALL_R * FIELD_W, this.local.z);
-    this.ball.visible = this.state !== 'attract' || this.sim.waitingToLaunch;
+    const { balls, flippers } = this.sim;
+    this.ballMeshes.forEach((mesh, i) => {
+      const ball = balls[i];
+      mesh.visible = !!ball && (i > 0 || this.state !== 'attract' || this.sim.waitingToLaunch);
+      if (!ball) return;
+      this.toDeck(ball.x, ball.y, this.local);
+      mesh.position.set(this.local.x, FIELD_Y + BALL_METRES + ball.lift * FIELD_W, this.local.z);
+    });
     flippers.forEach((f, i) => (this.flippers[i]!.rotation.y = -f.angle));
     this.plunger.position.z = BODY_L / 2 + 0.06 + this.sim.plunger * 0.05;
   }
 
-  /** Inserts show what is lit (chasing round while nobody plays); bumper caps flash on a hit. */
+  /**
+   * Inserts show what is lit (chasing round while nobody plays): the skill-shot lane blinks while
+   * the ball waits, the ramp's insert blinks when multiball is lit and strobes through it; bumper
+   * caps flash on a hit.
+   */
   private lightUp(): void {
-    const lit = [...this.sim.lanesLit, ...this.sim.targetsLit];
+    const { sim } = this;
+    const lit = [...sim.lanesLit, ...sim.targetsLit];
     const idle = this.state === 'attract';
+    const fast = Math.floor(this.clock * 8) % 2 === 0;
+    const skill = sim.waitingToLaunch && !idle ? sim.skillLane : null;
     this.inserts.forEach((mat, i) => {
-      mat.emissiveIntensity = idle ? Math.max(0, Math.sin(this.clock * 4 - i * 1.05)) * 1.8 : lit[i] ? 1.8 : 0.08;
+      const on = i === skill ? fast : lit[i];
+      mat.emissiveIntensity = idle ? Math.max(0, Math.sin(this.clock * 4 - i * 1.05)) * 1.8 : on ? 1.8 : 0.08;
     });
-    this.sim.bumpers.forEach((b, i) => {
+    this.rampInsert.emissiveIntensity = idle ? 0.3 : sim.multiball ? (fast ? 2.4 : 0.6) : sim.multiballLit ? (Math.floor(this.clock * 3) % 2 ? 1.8 : 0.1) : 0.08;
+    sim.bumpers.forEach((b, i) => {
       const cap = this.bumperCaps[i]!;
       cap.emissiveIntensity = b.flash > 0 ? 3 : idle ? 0.5 + Math.max(0, Math.sin(this.clock * 6 + i * 2.1)) * 1.2 : 0.6;
     });
   }
 
-  /** Title art at the top, the score display below (or the initials, or the end card), the ball in play at the bottom. */
-  private paintBackglass(): void {
-    const { ctx, canvas, texture } = this.backglass;
+  /** The backglass's art, once (again when the pixel face lands): night sky, stars, comets, the title. */
+  private paintBackdrop(): void {
+    const canvas = this.backdrop;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
     const W = canvas.width;
     const H = canvas.height;
     const sky = ctx.createLinearGradient(0, 0, 0, H);
@@ -455,6 +485,35 @@ export class Pinball extends RunMachine implements Furniture, Interactable, Upda
       ctx.fill();
     }
     drawText(ctx, this.title, W / 2, H * 0.3, 36, '#ffe680');
+    this.displayClock = Infinity;
+  }
+
+  /** The art, then the score display (or the initials, or the end card), the ball in play, and the big moments over the art. */
+  private paintBackglass(): void {
+    const { ctx, canvas, texture } = this.backglass;
+    const W = canvas.width;
+    const H = canvas.height;
+    ctx.drawImage(this.backdrop, 0, 0);
+    const { sim } = this;
+    const blink = Math.floor(this.clock * 3) % 2 === 0;
+    // A big moment (multiball, a jackpot, the skill shot, the ball's bonus, tilt): turning rays and its name over the art.
+    const big = (this.state === 'playing' || this.state === 'demo') && sim.message?.big ? sim.message : null;
+    if (big) {
+      const tilt = big.text === 'TILT';
+      ctx.save();
+      ctx.translate(W / 2, H * 0.3);
+      ctx.rotate(this.clock * 0.8);
+      ctx.fillStyle = tilt ? 'rgba(255,60,60,0.35)' : 'rgba(255,214,90,0.32)';
+      for (let i = 0; i < 12; i++) {
+        ctx.beginPath();
+        ctx.moveTo(0, 0);
+        ctx.arc(0, 0, 320, (i / 12) * Math.PI * 2, ((i + 0.45) / 12) * Math.PI * 2);
+        ctx.closePath();
+        ctx.fill();
+      }
+      ctx.restore();
+      drawText(ctx, big.text, W / 2, H * 0.3, 30, blink ? '#ffffff' : tilt ? '#ff4a4a' : '#ffe680');
+    }
 
     const { entry, last } = this.run;
     if (this.state === 'initials' && entry) {
@@ -465,33 +524,36 @@ export class Pinball extends RunMachine implements Furniture, Interactable, Upda
       ctx.strokeStyle = '#6a5a9a';
       ctx.lineWidth = 3;
       ctx.strokeRect(30, H * 0.5, W - 60, 120);
-      const top = this.wiring.scores.topOf(this.game.id);
+      const top = this.scores.topOf(this.game.id);
       const live = this.state === 'playing' || this.state === 'demo';
-      drawText(ctx, live && this.sim.multiplier > 1 ? `x${this.sim.multiplier}` : 'PLAYER 1', 60, H * 0.5 + 24, 12, '#c9c4ff', 'left');
-      drawText(ctx, `HI ${top.name} ${formatNumber(top.score)}`, W - 60, H * 0.5 + 24, 12, '#c9c4ff', 'right');
-      const score = this.state === 'attract' ? 0 : this.state === 'over' ? last.score : this.sim.score;
+      const corner = live && sim.multiball ? 'MULTIBALL' : live && sim.multiplier > 1 ? `x${sim.multiplier}` : 'PLAYER 1';
+      drawText(ctx, corner, 60, H * 0.5 + 24, 12, live && sim.multiball ? '#ffd23a' : '#c9c4ff', 'left');
+      drawText(ctx, `HI ${top.name} ${formatNumber(top.score)}`, W - 60, H * 0.5 + 24, 12, top.you ? '#7ee787' : '#c9c4ff', 'right');
+      const score = this.state === 'attract' ? 0 : this.state === 'over' ? last.score : sim.score;
       drawText(ctx, formatNumber(score), W / 2, H * 0.5 + 76, 34, '#ff8a3a');
-      const blink = Math.floor(this.clock * 3) % 2 === 0;
       if (this.state === 'over') {
         // Every ticket counted so far, the bonuses' (challenge, medal...) too.
-        drawText(ctx, `${this.run.shownTotal} TICKETS`, W / 2, H * 0.8, 22, '#ffd23a');
-        const note = endCardNote(this.run, 'GAME OVER');
-        drawText(ctx, note, W / 2, H * 0.87, 16, blink ? '#7ee787' : '#ffffff');
-        if (this.run.canReplay) drawText(ctx, playAgainLine(this.run), W / 2, H * 0.94, 12, '#ffd6a0');
+        drawText(ctx, `${this.shownTotal} TICKETS`, W / 2, H * 0.8, 22, '#ffd23a');
+        drawText(ctx, this.endCardNote('GAME OVER'), W / 2, H * 0.87, 16, blink ? '#7ee787' : '#ffffff');
+        if (this.run.canReplay) drawText(ctx, this.playAgainLine(), W / 2, H * 0.94, 12, '#ffd6a0');
       } else if (this.state === 'attract') {
         drawText(ctx, 'GAME OVER', W / 2, H * 0.82, 20, '#ff4a4a');
         if (blink) drawText(ctx, 'INSERT COIN', W / 2, H * 0.9, 16, '#ffd6a0');
-      } else if (this.sim.message) {
-        drawText(ctx, this.sim.message.text, W / 2, H * 0.84, 22, blink ? '#ffffff' : '#ffe680');
+      } else if (sim.tilted) {
+        drawText(ctx, 'TILT', W / 2, H * 0.84, 26, blink ? '#ff4a4a' : '#ffffff');
+      } else if (sim.message && !sim.message.big) {
+        drawText(ctx, sim.message.text, W / 2, H * 0.84, 22, blink ? '#ffffff' : '#ffe680');
+      } else if (sim.waitingToLaunch && this.state === 'playing') {
+        drawText(ctx, `BALL ${sim.ballNumber}`, W / 2, H * 0.82, 16, '#ffd6a0');
+        drawText(ctx, `HOLD ${actionKeyLabel('fire').toUpperCase()} · LET GO`, W / 2, H * 0.9, 12, blink ? '#ffe680' : '#ffd6a0');
       } else {
-        const hint = this.sim.waitingToLaunch && this.state === 'playing' ? 'HOLD SPACE · LET GO' : `CREDITS ${this.state === 'demo' ? 1 : 0}`;
-        drawText(ctx, `BALL ${this.sim.ballNumber}   ${hint}`, W / 2, H * 0.84, 14, '#ffd6a0');
+        drawText(ctx, `BALL ${sim.ballNumber}   CREDITS ${this.state === 'demo' ? 1 : 0}`, W / 2, H * 0.84, 14, '#ffd6a0');
       }
     }
     texture.needsUpdate = true;
   }
 
-  /** The playfield: the table's art, then the sim's own walls, lanes, slingshots, targets and bumper rings over it. */
+  /** The playfield: the table's art, then the sim's own walls, lanes, slingshots, targets, bumper rings and the ramp's gate over it. */
   private paintPlayfield(color: number, accent: THREE.Color, random: () => number): THREE.Texture {
     const L = this.sim.length;
     const W = FIELD_PX;
@@ -516,6 +578,18 @@ export class Pinball extends RunMachine implements Furniture, Interactable, Upda
     // The shooter lane, darker.
     ctx.fillStyle = 'rgba(0,0,0,0.3)';
     ctx.fillRect(0.88 * W, 0.62 * W, 0.1 * W, H);
+    // The ramp's gate: a lit arrow pointing up the right side, RAMP under it.
+    const gate = this.sim.rampGate;
+    const gx = ((gate.x0 + gate.x1) / 2) * W;
+    const gy = gate.y * W;
+    ctx.fillStyle = '#ffd23a';
+    ctx.beginPath();
+    ctx.moveTo(gx, gy - 14);
+    ctx.lineTo(gx + 12, gy + 8);
+    ctx.lineTo(gx - 12, gy + 8);
+    ctx.closePath();
+    ctx.fill();
+    drawText(ctx, 'RAMP', gx, gy + 40, 10, '#ffd23a');
     // Walls: white rails; slingshots in the accent.
     ctx.lineCap = 'round';
     for (const wall of this.sim.walls) {

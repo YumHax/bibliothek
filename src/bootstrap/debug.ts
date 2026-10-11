@@ -22,7 +22,9 @@ import { forceKidsOut } from '@/building/kids/yardKids';
 import { forceFilmNight } from '@/building/yardCinema';
 import { DebugPanel, type DebugEvent } from '@/ui/debug/DebugPanel';
 import type { Services } from './services';
-import { grandmaDebugEvents } from '@/grandma/grandmaDebug';
+import { albumDebugEvents, grandmaDebugEvents, grandmaHintDebugEvents, keepsakeDebugEvents, lindenDebugEvents, presenceDebugEvents } from '@/grandma/grandmaDebug';
+import { ritualsDebugEvents } from '@/grandma/ritualsDebug';
+import { familyDebugEvents } from '@/family/familyDebug';
 import type { Travel } from '@/world/travel';
 import type { ZoneId } from '@/world/zoneIds';
 
@@ -97,7 +99,11 @@ export function installDebugPanel(services: Services, parts: { input: Input; ope
     { label: '500 tickets', run: () => wallet.addTickets(500) },
   ];
   // Mémé's: back to the first day, every memory ready or seen, the Sunday envelope again (docs/story.md "Mémé").
-  events.push(...grandmaDebugEvents(services.grandma));
+  events.push(...grandmaDebugEvents(services.grandma), ...grandmaHintDebugEvents(services.grandmaHints), ...albumDebugEvents(services.albumFinds), ...keepsakeDebugEvents(services.keepsakes, services.collection), ...presenceDebugEvents(services.grandmaPresence), ...lindenDebugEvents(services.grandmaBread, services.sharedRide, () => services.today.gameDay));
+  // Her ways: lunch, favours, recipes, the occasions forced (docs/grandma.md).
+  events.push(...ritualsDebugEvents(services.grandmaRituals));
+  // The end of the family's story: Gaspard at her table, the Game Boy, her visit to the flat (docs/grandma.md).
+  events.push(...familyDebugEvents(services.family, () => services.today.gameDay));
   const panel = new DebugPanel(services.container, {
     subjects: debugSubjects(services),
     events,

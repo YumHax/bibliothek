@@ -1,4 +1,7 @@
 import * as THREE from 'three';
+import type { SessionActions } from '@/game/SessionActions';
+import type { ZoneId } from '../zoneIds';
+import { formatCoins } from '@/text/money';
 import { QUALITY } from '@/graphics/quality';
 import { getPlatform } from '@/catalog/platforms';
 import { STREET_TREES } from '../city/trees';
@@ -7,6 +10,7 @@ import type { ArcadeContext, BuildContext, HomeContext, MarketContext, MoneyCont
 import { NeonSign } from '../props/NeonSign';
 import { StreetLighting } from './StreetLighting';
 import { SkyDome } from './SkyDome';
+import { SkyBirds } from './SkyBirds';
 import { ParkStrollers } from './life/ParkStrollers';
 import { StreetLamps } from './StreetLamps';
 import { StreetTrees } from './StreetTrees';
@@ -36,6 +40,14 @@ import { attractionStops, windowStops } from './life/crowdTrips';
 import { pavementClutter } from './life/pavementClutter';
 import { Loiterers } from './life/Loiterers';
 import { ShopQueue } from './life/ShopQueue';
+import { ParkLife } from './life/ParkLife';
+import { SchoolRun } from './life/SchoolRun';
+import { Rendezvous } from './life/Rendezvous';
+import { StreetRounds } from './life/StreetRounds';
+import { StreetReactions } from './life/StreetReactions';
+import { pigeonPerches } from './life/pigeonPerches';
+import { randomLook } from '../people/looks';
+import { findPerson } from '@/social/people';
 import { STAIRWELL_PLAN } from '../stairwell/stairwellPlan'; // imports-ok: the building's residents walk Front Street at their hours: the street reads who they are
 import { movedAway, residentName } from '@/building/residentsHome';
 import { Precipitation } from './Precipitation';
@@ -43,14 +55,17 @@ import { Snowman } from './Snowman';
 import { placeDecor } from '../props/decor';
 import { currentHoliday, currentSeason, type Season } from '@/time/season';
 import { StreetChristmas } from './StreetChristmas';
+import { StreetHolidays } from './StreetHolidays';
+import { ChimneySmoke } from './ChimneySmoke';
 import { awningShelters } from './relief/FacadeRelief';
 import { ShopInteriors } from './relief/ShopInteriors';
-import { buildStreetBase, buildStreetFixtures, buildStreetFronts, sceneryAnisotropy, type AddScenery } from './streetScenery';
+import { buildStreetBase, buildStreetFixtures, buildStreetFronts, paintStreetBase, sceneryAnisotropy, type AddScenery } from './streetScenery';
 import { ShopSpill } from './shopfronts/ShopSpill';
 import { WetGround } from './relief/WetGround';
 import { Leaves } from './relief/Leaves';
 import { StreetClutter } from './clutter/StreetClutter';
 import { StreetDetails } from './details/StreetDetails';
+import { StreetFixtures } from './details/StreetFixtures';
 import { StreetSound } from './StreetSound';
 import { StreetTraffic } from './traffic/StreetTraffic';
 import { StreetBus } from './traffic/StreetBus';
@@ -63,9 +78,14 @@ import { ShopSounds } from './audio/ShopSounds';
 import { StreetCues } from './audio/StreetCues';
 import { PeopleSounds } from './audio/PeopleSounds';
 import { RoadworksSound } from './audio/RoadworksSound';
+import { ParkSounds } from './audio/ParkSounds';
+import { LiveMusic } from './audio/LiveMusic';
+import { gigOn } from '@/streetShops/bars';
 import { Ambulance } from './traffic/Ambulance';
 import { PoliceCar } from './traffic/PoliceCar';
 import { FireEngine } from './traffic/FireEngine';
+import { TaxiRank } from './traffic/TaxiRank';
+import { ParkingWarden } from './traffic/ParkingWarden';
 import { streetSurfaceAt } from './audio/streetSurface';
 import { ShopEntrance, type ShopServices } from './shops/ShopEntrance';
 import { SHOP_HOURS, retroShutNotice, shopShutNotice } from './shops/shopHours';
@@ -83,6 +103,7 @@ import { PARK_WALK, WALKABLE } from '@/world/measures/street';
 import { closures, frontWorksMoved, syncWorks } from './details/roadworks';
 import { Flagger } from './details/Flagger';
 import { BenchSeat, type BenchSpot } from './details/BenchSeats';
+import { benchExtras, placeStreetEvents } from './events/placeStreetEvents';
 import { Signpost } from './wayfinding/Signpost';
 import { StreetPlanBoard } from './wayfinding/StreetPlanBoard';
 import { StreetClock } from './wayfinding/StreetClock';
@@ -96,13 +117,21 @@ import { fadeSunShadowEdges } from './shadowFade';
 import { SHOP_DOOR } from '../shop/shopPlan';
 import { fitStockToStalls } from '../market/stockFit';
 import { MansionBell } from './MansionBell';
+import { withLeads } from './townsfolk/streetLeads';
+import { TownRounds } from './townsfolk/TownRounds';
+import { placeSecrets } from './secrets/placeSecrets';
+import { POP_UP_FACADE, StreetCounters } from './shops/counters';
+import { PopUpBoard } from './shops/PopUpBoard';
+import { popUpOpened } from '@/streetShops/popUp';
+import { STREET_SHOPS } from '@/streetShops/rules';
+import { placeNewsagent } from './shops/Newsagent';
 
 /** What Front Street's builder reads of the `BuildContext`: the sky and the camera, the day, the panels its shops open, the stock, the money, the arcade's day, the collection, the story and the people. */
-type StreetBuild = Pick<BuildContext, 'sky' | 'listener' | 'covers' | 'today' | 'panels' | 'collection' | 'story' | 'classifieds' | 'social'> & {
+type StreetBuild = Pick<BuildContext, 'sky' | 'listener' | 'covers' | 'today' | 'panels' | 'collection' | 'story' | 'classifieds' | 'social' | 'notices'> & {
   money: Pick<MoneyContext, 'wallet' | 'purse'>;
-  market: Pick<MarketContext, 'stock' | 'day' | 'lots'>;
-  arcade: Pick<ArcadeContext, 'scores' | 'daily' | 'tournament'>;
-  home: Pick<HomeContext, 'upgrades' | 'household'>;
+  market: Pick<MarketContext, 'stock' | 'day' | 'lots' | 'fame'>;
+  arcade: Pick<ArcadeContext, 'scores' | 'daily' | 'tournament' | 'jackpot'>;
+  home: Pick<HomeContext, 'upgrades' | 'household' | 'strayHome'>;
 };
 
 /** Neon letters over the shopfronts: how tall. */
@@ -146,6 +175,7 @@ interface StreetSite {
   // Ground and buildings.
   lighting?: StreetLighting;
   buildings?: ReturnType<typeof buildStreetBase>['buildings'];
+  park?: ReturnType<typeof buildStreetBase>['park'];
   shopGoods?: string[] | null;
   // Traffic and fixtures.
   traffic?: StreetTraffic;
@@ -166,6 +196,8 @@ interface StreetSite {
   voices: CarVoice[];
   roles: Map<CarVoice, VehicleRole>;
   lorry?: BinLorry;
+  /** The spray off the wheels: its `splashes` counter (a sheet of water over the kerb), for the sound. */
+  splashes?: Spray;
   cues?: StreetCues;
   // Life.
   standing?: StandingPeople;
@@ -194,24 +226,28 @@ function onDoorIn(site: StreetSite): (spot: Vec2) => void {
 function raiseGroundAndBuildings(site: StreetSite): void {
   const { zone, plan, dayNight, origin, scenery, build: { sky, listener, today, market: { stock: market } } } = site;
   site.lighting = zone.place(
-    new StreetLighting(dayNight, listener, (out) => sky.outdoors.lightDirection(dayNight.state, out), { shadowMapSize: Math.min(2048, QUALITY.shadowMapSize * 2) }),
+    new StreetLighting(dayNight, listener, (out) => sky.outdoors.lightDirection(dayNight.state, out), { shadowMapSize: Math.min(2048, QUALITY.shadowMapSize * 2), nearReach: QUALITY.level === 'low' ? 0 : 9 }),
     origin,
   );
-  zone.place(new SkyDome(dayNight, listener), origin);
+  const dome = zone.place(new SkyDome(dayNight, listener), origin);
+  // Swifts over the roofs in summer, a murmuration over the park at dusk in autumn and winter.
+  zone.place(new SkyBirds(dayNight), origin);
   // Today's stock is drawn as the street is built (the stalls' sizes from the market's plan), not only once the hall is
   // visited: the collector's case, the garage sale, the free box, the barista's tip and the paper have it on the way there.
   fitStockToStalls(market);
   market.warm();
   const stock = market.peekToday();
   site.shopGoods = stock?.map((item) => `#${getPlatform(item.game.platform).accentColor.toString(16).padStart(6, '0')}`) ?? null;
-  // The facades are walked past a metre off: on high they are painted a third finer (the shopfronts sharp up close).
-  const detailScale = QUALITY.level === 'low' ? 0.6 : QUALITY.level === 'high' ? 1.35 : 1;
+  const detailScale = streetDetailScale();
   // Our building's lit windows follow its residents (`building/rearWindows`).
   const windowLife = buildingWindowLife({ day: () => today.gameDay, hours: () => dayNight.state.hours });
   // The ground, the park's near stretch over the hedge (its walked gardens), the facades (`streetScenery`, shared with the window views).
-  // The rows along the stretch the roadworks opened (`syncWorks` ran first) painted as walked past, not as seen from afar.
-  const facades = walkedFacades(FACADES, WALKABLE.maxX);
-  site.buildings = buildStreetBase(scenery, { dayNight, facades, detailScale, shopGoods: site.shopGoods, windowLife, walkable: true }).buildings;
+  const facades = streetFacades();
+  const base = buildStreetBase(scenery, { dayNight, facades, detailScale, shopGoods: site.shopGoods, windowLife, walkable: true });
+  site.buildings = base.buildings;
+  site.park = base.park;
+  // The rows stand in what the street reflects (the glass, the paint, the wet setts), taken again as the player walks on.
+  if (QUALITY.level !== 'low') dome.reflectRows(site.buildings, QUALITY.level === 'high' ? 7 : 14);
   for (const sign of plan.signs) {
     zone.place(new NeonSign({ text: sign.text, color: sign.color, width: sign.width, height: SIGN_HEIGHT, intensity: 0, seed: sign.seed }), new THREE.Vector3(...sign.at), sign.yaw);
   }
@@ -224,13 +260,13 @@ function raiseGroundAndBuildings(site: StreetSite): void {
  * shelter, the park's railings and gate; finding the way: the fingerpost, the plan on the wall, the clock by RETRO GAMES.
  */
 function placeTrafficAndFixtures(site: StreetSite): void {
-  const { zone, plan, dayNight, origin, at, anisotropy, scenery, build: { listener, today, arcade: { daily, tournament } } } = site;
+  const { zone, plan, dayNight, origin, at, anisotropy, scenery, build: { listener, today, arcade: { daily, tournament, jackpot } } } = site;
   const traffic = (site.traffic = zone.place(new StreetTraffic(dayNight), origin));
   const { column } = plan.details;
-  const bills = (site.bills = zone.place(new WhatsOnBills({ day: () => today.gameDay, daily, tournament, radius: column.radius, height: column.height, anisotropy }), at(column.at)));
+  const bills = (site.bills = zone.place(new WhatsOnBills({ day: () => today.gameDay, daily, tournament, jackpot, radius: column.radius, height: column.height, anisotropy }), at(column.at)));
   const { lamps, cars } = buildStreetFixtures(scenery, {
     dayNight, viewer: listener, traffic, lampLights: plan.lampLights,
-    cars: { bays: plan.parked, collisions: zone.collisions, taxiStops: plan.taxi.stops, taxiEvery: plan.taxi.every, speaks: true },
+    cars: { bays: plan.parked, collisions: zone.collisions, taxiStops: plan.taxi.stops, taxiEvery: plan.taxi.every, speaks: true, weekday: () => site.weekday(), drivers: 2, season: site.season.name },
     furniture: { gateHours: plan.parkGate.hours, collisions: zone.collisions, viewer: listener, ad: bills.ad },
     ...(site.buildings ? { washed: [site.buildings] } : {}),
     ...(site.lighting ? { farShadow: site.lighting.far } : {}),
@@ -258,7 +294,7 @@ function placeTrafficAndFixtures(site: StreetSite): void {
  * read here), and the bells of Park Corner Mansions, where the small ads' sellers live.
  */
 function hangDoors(site: StreetSite): void {
-  const { zone, plan, dayNight, at, build: { listener, today, panels, collection, classifieds, market: { stock: market, day: marketDay }, arcade: { daily, tournament } } } = site;
+  const { zone, plan, dayNight, at, build: { listener, today, panels, collection, classifieds, market: { stock: market, day: marketDay }, arcade: { daily, tournament, jackpot } } } = site;
   // A shut door a short while before opening time offers to wait on the step (a fade, the clock wound on to it).
   const pastimes = site.build.home.household?.pastimes;
   const waitFor = (kind: ShopKind) => (): (() => void) | null => {
@@ -291,9 +327,24 @@ function hangDoors(site: StreetSite): void {
     return ads;
   };
   // What is on along the street today and tomorrow (the garage sale, the free box, the collector, the arcade, the rain): the paper and the bar pass it on.
-  const news = (site.news = (): string[] => streetNews({ weather: () => dayNight.state, gameDay: () => today.gameDay, challenge: daily ? () => daily.challenge() : undefined, tournamentOn: tournament ? () => tournament.isOn : undefined }));
+  const news = (site.news = (): string[] => streetNews({ weather: () => dayNight.state, gameDay: () => today.gameDay, challenge: daily ? () => daily.challenge() : undefined, tournamentOn: tournament ? () => tournament.isOn : undefined, jackpot: () => (jackpot.newsworthy ? jackpot.value : null) }));
   zone.place(new Newsstand({ panel: panels.news, issue: () => writeWeekly({ stock: market.peekToday(), day: today.gameDay, theme: marketDay.theme, wanted: isWanted, news: marketDay.news(), classifieds: smallAds(), street: news() }) }), at(plan.kiosk.at), plan.kiosk.yaw);
-  if (classifieds) zone.place(new MansionBell(classifieds.book), new THREE.Vector3(plan.mansionBell.at[0], plan.mansionBell.y, plan.mansionBell.at[1]), plan.mansionBell.yaw);
+  // The Mansions' bells: a seller's visit due (the small ads), else the residents (favours, a find on the step).
+  zone.place(
+    new MansionBell({
+      book: classifieds?.book,
+      host: zone,
+      covers: site.build.covers,
+      wallet: site.build.money.wallet,
+      purse: site.build.money.purse,
+      randomGames: (seed, count) => market.randomGames(seed, count),
+      owns: (id) => collection.owns(id),
+      isWanted: (id) => collection.isWanted(id),
+      day: () => today.gameDay,
+    }),
+    new THREE.Vector3(plan.mansionBell.at[0], plan.mansionBell.y, plan.mansionBell.at[1]),
+    plan.mansionBell.yaw,
+  );
 }
 
 /**
@@ -306,18 +357,21 @@ function placePeople(site: StreetSite): void {
   const { zone, plan, dayNight, origin, at, season, weekday, build: { listener, covers, today, social, home: { upgrades }, money: { wallet }, collection, market: { stock: market, day: marketDay }, arcade: { scores } } } = site;
   const owns = (id: string): boolean => collection.owns(id);
   const isWanted = (id: string): boolean => collection.isWanted(id);
-  zone.place(new Busker(dayNight, { viewer: listener, hours: plan.busker.hours, tipsPerDay: plan.busker.tipsPerDay, reach: plan.busker.reach, collisions: zone.collisions, social, day: () => today.gameDay, upgrades, wallet }), at(plan.busker.at), plan.busker.yaw);
-  if (isGarageSaleDay(plan.garageSale.oneDayIn)) {
-    zone.place(
-      new GarageSale({ host: zone, covers, wallet, stock: () => market.peekToday(), price: () => market.binPrice, owns, isWanted }),
-      at(plan.garageSale.at),
-      plan.garageSale.yaw,
-    );
-  }
-  const talk = (site.talk = streetTalk({ sky: () => dayNight.state, market, marketDay, games: collection.games, scores }));
+  const busker = zone.place(new Busker(dayNight, { viewer: listener, hours: plan.busker.hours, tipsPerDay: plan.busker.tipsPerDay, reach: plan.busker.reach, collisions: zone.collisions, social, day: () => today.gameDay, upgrades, wallet }), at(plan.busker.at), plan.busker.yaw);
+  // The loft's own games (never the flea market's stalls) and the neighbour selling them.
+  const garage = isGarageSaleDay(plan.garageSale.oneDayIn, today.gameDay)
+    ? zone.place(
+        new GarageSale({ host: zone, covers, wallet, randomGames: (seed, count) => market.randomGames(seed, count), viewer: listener, price: () => market.binPrice, owns, isWanted }),
+        at(plan.garageSale.at),
+        plan.garageSale.yaw,
+      )
+    : null;
+  // A passer-by's word, and now and then the day's lead instead (`townsfolk/streetLeads`: the journal writes it down).
+  const talk = (site.talk = withLeads(streetTalk({ sky: () => dayNight.state, market, marketDay, games: collection.games, scores, strayTrust: () => site.strayCat?.trust ?? 0, fairDay: () => isBrocante(today.gameDay) }), () => today.gameDay, owns));
   const onDoor = onDoorIn(site);
   const level = QUALITY.level;
   site.budget = zone.place(new PeopleBudget(listener, plan.crowd.budgetByQuality[level]), origin);
+  if (garage) site.budget.join(garage.figure);
   const placeWalker = placeWalkerIn(site);
   // The painted doors open for whoever goes through (and say where a shop's door really is).
   const buildings = ready(site.buildings, 'the buildings');
@@ -359,6 +413,12 @@ function placePeople(site: StreetSite): void {
       barkAt: (spot) => ready(site.cues, 'the cues').barkAt(spot),
       residents: plan.crowd.residents,
       day: () => today.gameDay,
+      fairDay: () => isBrocante(today.gameDay),
+      buskerResting: () => busker.betweenSongs,
+      placeDog: (dog) => zone.place(dog, origin),
+      // The residents and the regulars who keep hours are people to talk to (`townsfolk/knownFaces`).
+      social,
+      owns,
     }),
     origin,
   );
@@ -366,6 +426,8 @@ function placePeople(site: StreetSite): void {
   // Further down the street than the 3D people are drawn: flat figures walking the pavements, faded in past them.
   const far = plan.crowd.far;
   if (far.countByQuality[level] > 0) zone.place(new FarWalkers(dayNight, { lanes: far.lanes, count: far.countByQuality[level], viewer: listener, near: plan.crowd.drawDistance - 4, fade: 6 }), origin);
+  // Victor's espresso at nine and his walk to the market, Lou's break outside her café (`townsfolk/TownRounds`).
+  zone.place(new TownRounds(dayNight, { viewer: listener, day: () => today.gameDay, social, rival: site.build.market.lots?.rival, place: placeWalker }), origin);
   zone.place(new Loiterers(dayNight, { spots: plan.loiterers, viewer: listener, place: placeWalker, talk, drawDistance: plan.crowd.drawDistance, fade: plan.crowd.fade, season: season.name }), origin);
   zone.place(new ShopQueue(dayNight, { queues: plan.shopQueues, viewer: listener, place: placeWalker, talk, drawDistance: plan.crowd.drawDistance, fade: plan.crowd.fade, season: season.name, doors: doorGaps, onDoor }), origin);
 }
@@ -381,14 +443,37 @@ function runVehicles(site: StreetSite): void {
   const traffic = ready(site.traffic, 'the traffic');
   const placeWalker = placeWalkerIn(site);
   const [line] = plan.traffic.routes;
-  const vehicleBase = { traffic, viewer: listener, route: line!, stopFor: plan.traffic.stopFor, collisions: zone.collisions };
+  const weekdayNow = (): ReturnType<StreetSite['weekday']> => site.weekday();
+  const vehicleBase = { traffic, viewer: listener, route: line!, stopFor: plan.traffic.stopFor, collisions: zone.collisions, weekday: weekdayNow };
   const { destinations } = plan.busRide;
+  // Line 38's stops on now (Mémé's in her waking hours, REPLAY in its); two on, the driver is told which (`ui/street/ChoicePanel`).
+  const stopsOn = () => destinations.filter((d) => !d.hours || inHours(dayNight.state.hours, d.hours));
+  const choice = site.build.panels.choice;
   const ride = {
     fare: plan.busRide.fare,
-    destination: () => destinations.find((d) => !d.hours || inHours(dayNight.state.hours, d.hours)) ?? null,
+    destination: () => {
+      const on = stopsOn();
+      if (on.length < 2) return on[0] ?? null;
+      return { to: on[0]!.to, label: on.map((d) => d.label).join(' or '), board: on[0]!.board };
+    },
     closed: () => {
       const first = destinations[0];
       return first?.hours ? `${first.shut ?? 'nobody’s up'}, the first bus there is after ${clockShort(first.hours[0])}` : null;
+    },
+    choose: (session: SessionActions, board: (to: ZoneId, label: string) => void): boolean => {
+      const on = stopsOn();
+      if (on.length < 2 || !choice) return false;
+      choice.show({
+        title: `Bus ${plan.bus.line}`,
+        intro: `${formatCoins(plan.busRide.fare)}, the way back included. Where to?`,
+        choices: on.map((d) => ({ id: d.to, label: d.label, ...(d.detail ? { detail: d.detail } : {}) })),
+        pick: (id) => {
+          const stop = on.find((d) => d.to === id);
+          if (stop) board(stop.to, stop.label);
+        },
+      });
+      session.openPanel(choice);
+      return true;
     },
   };
   const bus = zone.place(new StreetBus(dayNight, { ...vehicleBase, ...plan.bus, ride }), origin);
@@ -402,14 +487,24 @@ function runVehicles(site: StreetSite): void {
   placeWalker(parcels.person, origin);
   const bikes = zone.place(new StreetBikes(dayNight, { traffic, viewer: listener, routes: plan.traffic.routes, riders: plan.bikes.ridersByQuality[QUALITY.level], racks: plan.bikes.racks }), origin);
   const { twoWheelers } = plan;
-  const motorbikes = zone.place(new Motorbikes(dayNight, { traffic, viewer: listener, routes: plan.traffic.routes, riders: twoWheelers.ridersByQuality[QUALITY.level], gap: twoWheelers.gap, courier: twoWheelers.courier, moto: twoWheelers.moto }), origin);
+  const motorbikes = zone.place(new Motorbikes(dayNight, { traffic, viewer: listener, routes: plan.traffic.routes, riders: twoWheelers.ridersByQuality[QUALITY.level], gap: twoWheelers.gap, courier: twoWheelers.courier, moto: twoWheelers.moto, weekday: weekdayNow }), origin);
   zone.place(new SignalHeads(traffic, dayNight, plan.signals.posts), origin);
-  zone.place(new Spray(traffic, dayNight), origin);
-  const callBase = { traffic, viewer: listener, routes: plan.traffic.routes, stopFor: plan.traffic.stopFor, collisions: zone.collisions };
+  const spray = zone.place(new Spray(traffic, dayNight, listener), origin);
+  const cars = ready(site.cars, 'the cars');
+  // The people who walk to and from the parked cars.
+  for (const person of cars.people) placeWalker(person, origin);
+  // Now and then a call on this street (crew in at a door), or the police pulling a driver over.
+  const callBase = { traffic, viewer: listener, routes: plan.traffic.routes, stopFor: plan.traffic.stopFor, collisions: zone.collisions, calls: plan.emergencyCalls, cars };
   const ambulance = zone.place(new Ambulance(dayNight, { ...callBase, ...plan.ambulance }), origin);
   const police = zone.place(new PoliceCar(dayNight, { ...callBase, ...plan.police }), origin);
   const fireEngine = zone.place(new FireEngine(dayNight, { ...callBase, ...plan.fireEngine }), origin);
-  const cars = ready(site.cars, 'the cars');
+  for (const person of [...ambulance.crew, ...police.crew, ...fireEngine.crew]) placeWalker(person, origin);
+  // The taxi rank: hail one, get in, off wherever the bus goes (`traffic/TaxiRank`); the warden's round (`traffic/ParkingWarden`).
+  const { rank } = plan.taxi;
+  zone.place(new TaxiRank({ cars, dayNight, stop: rank.stop, at: rank.at, yaw: rank.yaw, fare: plan.taxi.fare, destinations: () => plan.busRide.destinations, ...(choice ? { choice } : {}) }), origin);
+  const warden = zone.place(new ParkingWarden({ cars, dayNight, viewer: listener, weekday: weekdayNow, ...plan.warden }), origin);
+  placeWalker(warden.walker, origin);
+  site.splashes = spray;
   site.voices.push(...cars.voices, bus, van, parcels, lorry, ambulance, police, fireEngine, ...bikes.voices, ...motorbikes.voices);
   site.roles = new Map<CarVoice, VehicleRole>([[bus, 'bus'], [van, 'van'], [parcels, 'van'], [lorry, 'lorry']]);
   site.cues = zone.place(new StreetCues({ listener, crossing: traffic, beepers: plan.signals.posts.map((p) => p.at), barkers: ready(site.crowd, 'the crowd').barkers, sirens: [ambulance, police, fireEngine] }), origin);
@@ -424,22 +519,69 @@ function placeLife(site: StreetSite): void {
   const cues = ready(site.cues, 'the cues');
   const placeWalker = placeWalkerIn(site);
   const onDoor = onDoorIn(site);
-  const standing = (site.standing = zone.place(new StandingPeople(dayNight, { spots: plan.standing, busStop: plan.bus.stop.at, traffic, viewer: listener, talk, weekday, place: placeWalker, ...seen, busStopOnly: fewer, onDoor }), origin));
+  const shelterSeat = { at: shelterBench(plan.shelter), yaw: plan.shelter.yaw };
+  const standing = (site.standing = zone.place(new StandingPeople(dayNight, { spots: plan.standing, busStop: plan.bus.stop.at, shelterSeat, traffic, viewer: listener, talk, weekday, place: placeWalker, ...seen, busStopOnly: fewer, onDoor }), origin));
   site.terraces = zone.place(
     new Terraces(dayNight, { terraces: plan.terraces, viewer: listener, collisions: zone.collisions, toWorld: (p) => zone.toWorld(p), place: placeWalker, talk, weekday, season: season.name, ...seen, maxCustomers: fewer ? 1 : undefined }),
     origin,
   );
-  site.pigeons = zone.place(new Pigeons(dayNight, { flocks: plan.pigeons, viewer: listener, share: fewer ? 0.5 : 1, walkers: site.walkers, dogs: crowd.dogs, onTakeOff: (spot) => cues.flutter(spot), onCoo: (spot) => cues.coo(spot) }), origin);
+  // Some of them up on the lamps' arms and the cornices by day; a flock on the stretch the works opened, once they moved on.
+  const flocks = frontWorksMoved() ? [...plan.pigeons, plan.pigeonsStretch] : plan.pigeons;
+  const pigeons = (site.pigeons = zone.place(
+    new Pigeons(dayNight, { flocks, viewer: listener, share: fewer ? 0.5 : 1, walkers: site.walkers, dogs: crowd.dogs, onTakeOff: (spot) => cues.flutter(spot), onCoo: (spot) => cues.coo(spot), perches: pigeonPerches(plan.lamps, plan.lampHeight), crumbs: () => site.terraces?.crumbs() ?? [] }),
+    origin,
+  ));
+  const feed = (spot: Vec2): boolean => pigeons.feedAt(spot);
   // The strollers turn back at the gardens' hoop fence (`PARK_WALK`), never walking through it.
-  if (!fewer) zone.place(new ParkStrollers(dayNight, { viewer: listener, place: placeWalker, count: 2, drawDistance: 70, fade: 10, reach: PARK_WALK.minX + 1.5 }), origin);
+  if (!fewer) zone.place(new ParkStrollers(dayNight, { viewer: listener, place: placeWalker, count: 2, drawDistance: 70, fade: 10, reach: PARK_WALK.minX + 1.5, talk }), origin);
+  // In the gardens: children at the playground with a parent, a brisk walker, an old man feeding the pigeons.
+  const gate = plan.parkGate.at;
+  zone.place(
+    new ParkLife(dayNight, {
+      viewer: listener,
+      place: placeWalker,
+      talk,
+      gate: [gate[0] - 2.2, gate[1]],
+      hours: plan.parkGate.hours,
+      walkTo: plan.parkLife.walkTo,
+      feeder: plan.parkLife.feeder,
+      feed,
+      drawDistance: 60,
+      fade: 8,
+      fewer,
+      swings: site.park?.swings ?? [],
+      cues,
+    }),
+    origin,
+  );
+  // The school run, someone waiting by the clock for a friend, the street's rounds by the clock (shutters, night shift, sweeper, Rémi's crusts).
+  zone.place(new SchoolRun(dayNight, { walks: plan.schoolRun, viewer: listener, place: placeWalker, talk, day: () => today.gameDay, ...seen, onDoor }), origin);
+  if (!fewer) zone.place(new Rendezvous(dayNight, { spec: plan.rendezvous, viewer: listener, place: placeWalker, talk, ...seen }), origin);
+  const remi = findPerson('remi');
+  zone.place(
+    new StreetRounds(dayNight, {
+      spec: plan.rounds,
+      viewer: listener,
+      place: placeWalker,
+      talk,
+      feed,
+      remi: remi ? { name: remi.short ?? remi.name, lines: [remi.intro, ...(remi.facts ?? []).map((f) => f.says)], look: randomLook(remi.look.seed, remi.look.role, { season: season.name }) } : undefined,
+      onDoor,
+      ...seen,
+    }),
+    origin,
+  );
+  // Heads turning at a horn, a bark, a siren; a word for a player in the way.
+  zone.place(new StreetReactions({ walkers: site.walkers, voices: site.voices, sirens: traffic.sirens, barkers: crowd.barkers, viewer: listener }), origin);
   // The benches and the shelter's, to sit on (the bench's reader keeps the bench they are on).
   const benchSpots: BenchSpot[] = [
-    ...plan.benches.map((b, i) => ({ at: b.at, yaw: b.yaw, seat: 0.46, length: 1.6, name: 'Bench', taken: i === 0 ? () => standing.benchTaken : undefined })),
+    ...plan.benches.map((b, i) => ({ at: b.at, yaw: b.yaw, seat: 0.46, length: 1.6, name: 'Bench', taken: i === 0 ? () => standing.benchTaken : () => standing.benchTakenAt(b.at) })),
     { at: shelterBench(plan.shelter), yaw: plan.shelter.yaw, seat: 0.48, length: plan.shelter.length * 0.6, name: 'Bus shelter bench' },
   ];
-  for (const spot of benchSpots) zone.place(new BenchSeat(spot), at(spot.at), spot.yaw);
+  // Seated, a while waited out and something overheard (`events/placeStreetEvents` `benchExtras`).
+  for (const spot of benchSpots) zone.place(new BenchSeat({ ...spot, ...benchExtras(site.build, dayNight, site.news) }), at(spot.at), spot.yaw);
   const lorry = ready(site.lorry, 'the bin lorry');
-  site.strayCat = zone.place(new StrayCat({ perches: plan.strayCat.perches, viewer: listener, traffic, purse, gameDay: () => today.gameDay, taken: (on) => (on === 'bench' ? standing.benchTaken : lorry.active) }), origin);
+  site.strayCat = zone.place(new StrayCat({ perches: plan.strayCat.perches, viewer: listener, traffic, purse, gameDay: () => today.gameDay, taken: (on) => (on === 'bench' ? standing.benchTaken : lorry.active), home: site.build.home.strayHome, dogs: crowd.dogs }), origin);
 }
 
 /**
@@ -464,8 +606,8 @@ function dressFronts(site: StreetSite): void {
     interiors?.repaintGoods(colors);
   };
   const marketBusy = () => ({ crowd: marketDay.theme.crowd ?? 1, grail: marketDay.news().some((n) => n.kind === 'grail' && n.inDays === 0) });
-  zone.place(new RetroLure({ ...plan.retroLure, queue: fewer ? plan.retroLure.queue.slice(0, 3) : plan.retroLure.queue, door: plan.doors.market.at, viewer: listener, place: placeWalker, talk, ...seen, onStock, day: marketBusy }), origin);
-  if (isBrocante(today.gameDay)) zone.place(new FairDay({ viewer: listener, place: placeWalker, talk, ...seen }), origin);
+  zone.place(new RetroLure({ ...plan.retroLure, queue: fewer ? plan.retroLure.queue.slice(0, 3) : plan.retroLure.queue, door: plan.doors.market.at, viewer: listener, place: placeWalker, talk, ...seen, onStock, day: marketBusy, sky: () => dayNight.state }), origin);
+  if (isBrocante(today.gameDay)) zone.place(new FairDay({ viewer: listener, place: placeWalker, talk, ...seen, sky: () => dayNight.state }), origin);
   zone.place(new ShopSpill(dayNight, { spots: plan.shopSpill, board: plan.chalkBoard, collisions: zone.collisions }), origin);
   // The wet road's mirror leaves the people out (a passer-by's draw calls twice over are not worth a puddle).
   const lamps = ready(site.lamps, 'the lamps');
@@ -474,6 +616,7 @@ function dressFronts(site: StreetSite): void {
   if (season.name === 'autumn') zone.place(new Leaves(dayNight, plan.trees, season), origin);
   zone.place(new StreetClutter(dayNight, { trees: plan.trees, bins: plan.bins, benches: plan.benches, binHours: plan.binLorry.hours, viewer: listener }), origin);
   zone.place(new StreetDetails(anisotropy, dayNight), origin);
+  zone.place(new StreetFixtures(), origin);
   for (const [i, closure] of closures().entries()) {
     const said = closure.id === 'front' && frontWorksMoved() ? FLAGGER_LINES.moved : FLAGGER_LINES[closure.id];
     const lines = said.map((line) => line || gateLine(plan.parkGate.hours));
@@ -489,6 +632,10 @@ function playSounds(site: StreetSite): void {
   site.doorBells.push((spot) => shopSounds.ring(spot));
   zone.place(new PeopleSounds(dayNight, { listener, walkers: site.walkers, surfaceAt: streetSurfaceAt }), origin);
   zone.place(new RoadworksSound(dayNight, { listener, weekday: () => weekdayOf(today.gameDay) }), origin);
+  zone.place(new ParkSounds(dayNight, { listener }), origin);
+  // Lou's band at THE ANCHOR on Thursday nights, heard through the bar's door (the regulars clap between songs).
+  const anchor = shopDoors().find((door) => door.shop.name === 'THE ANCHOR');
+  if (anchor) zone.place(new LiveMusic({ listener, at: anchor.at, throughDoor: true, styles: ['FUNK', 'SYNTHWAVE'], seed: 4417, audience: () => 8, playing: () => (gigOn(today.gameDay, dayNight.state.hours) ? 1 : 0) }), origin);
 }
 
 /**
@@ -497,11 +644,28 @@ function playSounds(site: StreetSite): void {
  * collector outside RETRO GAMES (some days).
  */
 function openShops(site: StreetSite): void {
-  const { zone, plan, dayNight, origin, at, build: { listener, covers, today, panels, social, story, collection, money: { wallet, purse }, market: { stock: market, day: marketDay, lots } } } = site;
+  const { zone, plan, dayNight, origin, at, build: { listener, covers, today, panels, social, story, collection, classifieds, home: { household }, money: { wallet, purse }, market: { stock: market, day: marketDay, lots, fame } } } = site;
   const owns = (id: string): boolean => collection.owns(id);
   const isWanted = (id: string): boolean => collection.isWanted(id);
   if (purse) {
-    const services: ShopServices = { hours: () => dayNight.state.hours, purse, market, marketDay, isWanted, scratch: panels.scratch, streetNews: ready(site.news, 'the news'), social, day: () => today.gameDay };
+    // What the doors do beyond their plain offers: the bookshops, the basket and the tart, the board, the bars' nights, the pop-up.
+    const counters = panels.streetShops
+      ? new StreetCounters({
+          day: () => today.gameDay,
+          hours: () => dayNight.state.hours,
+          purse,
+          panels: panels.streetShops,
+          games: () => collection.games.games,
+          owns,
+          homeLife: household?.life,
+          pastimes: household?.pastimes,
+          classifieds: classifieds?.book,
+          buyGame: lots ? (game, price, where) => lots.tx.winAuctionLot(game, price, where) : undefined,
+          fame,
+          cues: site.cues,
+        })
+      : undefined;
+    const services: ShopServices = { hours: () => dayNight.state.hours, purse, market, marketDay, isWanted, scratch: panels.scratch, streetNews: ready(site.news, 'the news'), social, day: () => today.gameDay, counters };
     for (const door of shopDoors()) {
       if (door.shop.kind === 'retro' || door.shop.kind === 'arcade' || SHOP_ZONE_OF[door.shop.kind]) continue;
       // The door's step, half a metre out on the pavement, must be somewhere the player can stand.
@@ -510,14 +674,28 @@ function openShops(site: StreetSite): void {
     }
     zone.place(new DroppedCoins({ spots: plan.coins.spots, perDay: plan.coins.perDay, host: zone, purse, viewer: listener, today }), origin);
   }
-  if (isGiveawayDay(plan.giveaway.oneDayIn)) {
-    const spot = giveawaySpot(plan.giveaway.spots, today.realDate());
+  if (isGiveawayDay(plan.giveaway.oneDayIn, today.gameDay)) {
+    const spot = giveawaySpot(plan.giveaway.spots, today.gameDay);
     zone.place(new GiveawayBox({ host: zone, covers, wallet, stock: () => market.peekToday(), owns, isWanted }), at(spot.at), spot.yaw);
   }
   if (isTraderDay(plan.trader.oneDayIn, today.gameDay)) {
     const trader = zone.place(new Trader(dayNight, { host: zone, covers, wallet, market, today, owns, isWanted, hours: plan.trader.hours, viewer: listener, collisions: zone.collisions, talk: () => story?.atTrader() ?? null, rival: lots?.rival, social }), at(plan.trader.at), plan.trader.yaw);
     ready(site.budget, 'the people budget').join(trader.figure);
   }
+  // CONTINUE?, the pop-up in the empty shop by the butcher, once it has opened: its A-board out by the door.
+  const popUp = popUpOpened(today.gameDay) ? shopDoors().find((d) => d.facade.id === POP_UP_FACADE && d.shop.kind === 'shut') : undefined;
+  if (popUp && doorOnPavement(popUp)) {
+    const { open, close } = STREET_SHOPS.popUp.hours;
+    const out = new THREE.Vector3(Math.sin(popUp.yaw), 0, Math.cos(popUp.yaw));
+    const along = new THREE.Vector3(out.z, 0, -out.x);
+    zone.place(new PopUpBoard(`${clockShort(open)}–${clockShort(close)}`), at(popUp.at).addScaledVector(out, 1).addScaledVector(along, 1.6), popUp.yaw + Math.PI / 2);
+  }
+  // The newsagent in the kiosk's hatch: today's paper to keep, its cover cards, a subscription to the doormat.
+  if (purse && panels.streetShops) {
+    placeNewsagent({ viewer: listener, kiosk: { at: at(plan.kiosk.at), yaw: plan.kiosk.yaw }, place: placeWalkerIn(site), counter: panels.streetShops.counter, day: () => today.gameDay, purse });
+  }
+  // What nobody points out: the dusty TO LET window, the children's chalk, the initials in the railing (`secrets/`).
+  placeSecrets({ zone, covers, wallet, purse, randomGames: (seed, count) => market.randomGames(seed, count), owns, isWanted });
 }
 
 /**
@@ -530,6 +708,9 @@ function finishWeatherAndEdges(site: StreetSite): ZoneHandle {
   const { zone, plan, dayNight, origin, at, season, build: { listener } } = site;
   placeDecor(zone, plan.decor);
   if (currentHoliday() === 'christmas') zone.place(new StreetChristmas(dayNight, { trees: STREET_TREES }), origin);
+  const holiday = currentHoliday();
+  if (holiday) zone.place(new StreetHolidays(ready(site.buildings, 'the buildings').fronts, holiday, dayNight), origin);
+  zone.place(new ChimneySmoke(ready(site.buildings, 'the buildings').chimneyTops, dayNight), origin);
   zone.place(new Snowman({ viewer: listener, collisions: zone.collisions }), at(plan.snowman.at), plan.snowman.yaw);
   const roof = shelterRoof(plan.shelter.length);
   const kiosk = NEWSSTAND_ROOF;
@@ -537,12 +718,22 @@ function finishWeatherAndEdges(site: StreetSite): ZoneHandle {
   const fronts = ready(site.buildings, 'the buildings').fronts;
   const shelters = [sas, standingBox(plan.shelter.at, plan.shelter.yaw, roof.length, roof.depth, roof.height), standingBox(plan.kiosk.at, plan.kiosk.yaw, kiosk.width, kiosk.depth, kiosk.height), ...awningShelters(fronts), ...ready(site.shopfronts, 'the shopfronts').colliders];
   zone.place(new Precipitation(dayNight, { shelters, petals: season.name === 'spring' && season.depth < 0.6 }), origin);
-  zone.place(new StreetSound(dayNight, { listener, cars: site.voices, roles: site.roles, traffic: ready(site.traffic, 'the traffic'), shelters }), origin);
+  zone.place(new StreetSound(dayNight, { listener, cars: site.voices, roles: site.roles, traffic: ready(site.traffic, 'the traffic'), shelters, parked: ready(site.cars, 'the cars') }), origin);
   zone.place(new StreetBounds(FACADES, [...StreetLamps.colliders(plan.lamps), ...StreetTrees.colliders(plan.trees)]), origin);
   const lighting = ready(site.lighting, 'the lighting');
   // The sun's shadow fades out towards its map's edge on everything the street built, into the rows' far shadow (no hard square 28 m out).
   fadeSunShadowEdges(zone.group, lighting.far);
   return { lightLevel: () => lighting.lightLevel(), surfaceAt: (local) => (sas.containsPoint(local) ? 'tiles' : streetSurfaceAt(local)) };
+}
+
+/** The facades are walked past a metre off: on high they are painted a third finer (the shopfronts sharp up close). */
+function streetDetailScale(): number {
+  return QUALITY.level === 'low' ? 0.6 : QUALITY.level === 'high' ? 1.35 : 1;
+}
+
+/** Every facade, the rows along the stretch the roadworks opened (`syncWorks` ran first) painted as walked past, not as seen from afar. */
+function streetFacades(): ReturnType<typeof walkedFacades> {
+  return walkedFacades(FACADES, WALKABLE.maxX);
 }
 
 /**
@@ -576,6 +767,8 @@ function* furnishStreetSteps(zone: Zone, build: StreetBuild): Generator<void, Zo
     voices: [],
     roles: new Map(),
   };
+  // The facades' atlas first, a facade a step: the heaviest painting, never in one idle moment.
+  for (const _ of paintStreetBase({ facades: streetFacades(), detailScale: streetDetailScale() })) yield;
   raiseGroundAndBuildings(site);
   yield;
   placeTrafficAndFixtures(site);
@@ -584,6 +777,8 @@ function* furnishStreetSteps(zone: Zone, build: StreetBuild): Generator<void, Zo
   yield;
   placePeople(site);
   yield;
+  // The passers-by's bodies made ahead, one a step (a street's worth would hitch the first minutes of the walk).
+  yield* ready(site.crowd, 'the crowd').prebuild(Math.ceil(plan.crowd.countByQuality[QUALITY.level] * 1.5));
   runVehicles(site);
   yield;
   placeLife(site);
@@ -593,6 +788,9 @@ function* furnishStreetSteps(zone: Zone, build: StreetBuild): Generator<void, Zo
   playSounds(site);
   yield;
   openShops(site);
+  yield;
+  // The post box and the phone box, the park's gardens, the Fair's stalls, the holidays' (`events/placeStreetEvents`).
+  placeStreetEvents(zone, build, { placeWalker: placeWalkerIn(site), news: site.news, cues: site.cues });
   yield;
   return finishWeatherAndEdges(site);
 }

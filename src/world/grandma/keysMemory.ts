@@ -4,7 +4,7 @@ import { Walker } from '../people/Walker';
 import { memeLook } from './familyLooks';
 import { KEYS_MEMORY_PLAN as PLAN } from './keysMemoryPlan';
 import { KeyRing } from './memoryProps';
-import { beats, hideNamed, tableTop, turnedTo } from './memoryStage';
+import { backInTheRoom, beats, hideNamed, tableTop, turnedTo } from './memoryStage';
 import { presentPeople } from './presentPeople';
 import type { Present } from './albumWiring';
 
@@ -15,7 +15,8 @@ const IN_PALMS = 0.018;
  * THE KEYS (`MEMORIES` keys, docs/story.md "Mémé"): the last memory, the nearest. At Mémé's on a Monday afternoon
  * this year, Félix's keys on the table before her, then held out to the player (the camera's eyes: the player is never
  * seen); then our landing, the push in to the flat's door, and the opening's own line to end on ("By the time you got
- * the keys…"): the film the game began with picks up from there. The lullaby. Back in her room after, by the table.
+ * the keys…"): the film the game began with picks up from there. The lullaby. The film waits on the player to take
+ * the keys from her hands (its cue). Back in her room after, by the table, she is shaken before she speaks.
  */
 export function keysReel(present: Present): MemoryReel {
   const after = PLAN.after.at;
@@ -68,6 +69,20 @@ export function keysReel(present: Present): MemoryReel {
             standing.feel({ smile: 0.3, frown: 0.3 }, 5);
           });
         },
+        cues: [
+          {
+            at: PLAN.takeAt,
+            prompt: 'Take the keys',
+            // Taken (or given into the player's hands): her palms empty, her hands down, a small smile.
+            done: () =>
+              beat.now('taken', () => {
+                if (!her) return;
+                her.keys.visible = false;
+                her.standing.stand(PLAN.standing.yaw, 'stand', her.eyes);
+                her.standing.feel({ smile: 0.5, frown: 0.35, browsUp: 0.3 }, 4);
+              }),
+          },
+        ],
         strike: () => {
           her = null;
         },
@@ -87,10 +102,6 @@ export function keysReel(present: Present): MemoryReel {
       },
     ],
     after: { zone: 'grandmaFlat', at: after, yaw: turnedTo(present, after) },
-    returned: () => {
-      present.meme.setPresent(true);
-      present.reseat();
-      present.meme.speak(present.afterLine);
-    },
+    returned: () => backInTheRoom(present, 'hard'),
   };
 }

@@ -36,6 +36,7 @@ import type { Loan, PlannedVisit, VisitBook } from './VisitBook';
 import { HOUSEHOLD } from '@/household/rules';
 import { FloorNav, PERSON_WALKER } from '../nav/FloorNav';
 import { CLUB_VISITOR, GUESTS } from './gathering/gatheringPlan';
+import { MEME_VISITOR } from './gathering/memeVisitPlan';
 import type { Occasion, VisitHost } from './gathering/host';
 import { clockShort } from '@/text/clock';
 import { dayStream } from '@/time/daily';
@@ -237,7 +238,7 @@ export class Visitors extends Prop implements Updatable, ActivityAware, DoorCall
     this.doorPoint = hallway.toWorld(new THREE.Vector3(HALLWAY_PLAN.room.width / 2 - 0.1, 2.1, 0));
     this.panel = new BorrowPanel(options.container);
     // The friends, and the gatherings' guests (`gathering/`): an open house's strangers, the collectors' club's visitor.
-    for (const plan of [...FRIENDS, ...GUESTS, CLUB_VISITOR]) {
+    for (const plan of [...FRIENDS, ...GUESTS, CLUB_VISITOR, MEME_VISITOR]) {
       const friend = living.place(new Friend(plan, options.viewer), this.route.stairs.clone());
       friend.setPresent(false);
       // Drawn (under the floor) until the first frame, so the start-up `prime()` compiles their materials.

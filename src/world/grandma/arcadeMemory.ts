@@ -7,12 +7,13 @@ import { felixLook, playerTeenLook } from './familyLooks';
 import { ARCADE_MEMORY_PLAN as PLAN } from './arcadeMemoryPlan';
 import { GRANDMA_FLAT_PLAN } from './grandmaFlatPlan';
 import { presentPeople } from './presentPeople';
-import { hideNamed } from './memoryStage';
+import { backInTheRoom, hideNamed } from './memoryStage';
 import type { Present } from './albumWiring';
 
 /**
  * THREE LETTERS (`MEMORIES` arcade, docs/story.md "Mémé"): a Saturday at the arcade on Front Street, the player at
- * fourteen on the space-invaders cabinet with Félix behind their shoulder, the record beaten, the initials typed in.
+ * fourteen on the space-invaders cabinet with Félix behind their shoulder, the record beaten, the initials typed in
+ * (the film waits on the player's own three letters there: its cue; the arcade's table keeps them, `playerInitials`).
  * Filmed in the arcade as it stands, today's regulars and attendant kept out of the picture; back at Mémé's after.
  */
 export function arcadeReel(present: Present): MemoryReel {
@@ -68,6 +69,7 @@ export function arcadeReel(present: Present): MemoryReel {
           neighbour.stand(n.yaw, 'play', set.world(...n.screen));
           cast = { teen, felix, watchers, neighbour };
         },
+        cues: [{ at: PLAN.initialsCueAt, prompt: 'Type your three letters', input: 'initials', done: () => once(Infinity, 0, 'initials', () => cast?.teen.setPose('play')) }],
         beat: (t) => {
           today?.hold();
           for (const topper of toppers) topper.visible = false;
@@ -92,9 +94,6 @@ export function arcadeReel(present: Present): MemoryReel {
       },
     ],
     after: { zone: 'grandmaFlat', at: [bx, bz], yaw: Math.atan2(-(mx - bx), -(mz - bz)) },
-    returned: () => {
-      present.reseat();
-      present.meme.speak(present.afterLine);
-    },
+    returned: () => backInTheRoom(present),
   };
 }

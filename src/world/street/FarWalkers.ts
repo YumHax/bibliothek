@@ -7,6 +7,7 @@ import { HAIRS, SHIRTS, SKINS, TROUSERS } from '../props/outdoors/figures';
 import { afterChunk, patchShader } from '../materials/shaderPatch';
 import { wakefulnessAt } from '@/time/wakefulness';
 import { lcg } from '@/random';
+import { currentSeason } from '@/time/season';
 
 /** A walking lane down the street: from x0 to x1 at z (zone-local), and who walks it. */
 interface FarLane {
@@ -26,10 +27,14 @@ interface FarWalkersOptions {
   fade: number;
 }
 
-/** The figures' atlas: looks across, two steps of the walk down; a cell's size in pixels and the figure's height (m). */
+/** The figures' atlas: looks across, two steps of the walk down, without and with an umbrella up; a cell's size in pixels and the figure's height (m). */
 const LOOKS = 12;
+const ROWS = 4;
+/** Rain this hard puts umbrellas up (as on the 3D crowd), on this share of them. */
+const UMBRELLAS = { above: 0.12, share: 0.6 };
 const CELL = { w: 24, h: 64 };
-const HEIGHT = 1.72;
+/** The cell's height in metres: a person (about 1.7) with room over the head for an umbrella. */
+const HEIGHT = 2.05;
 const WIDTH = (HEIGHT * CELL.w) / CELL.h;
 /** Walking pace (m/s) and steps a second (the two frames swap at each step). */
 const PACE = [1.1, 1.5] as const;
@@ -70,7 +75,7 @@ export class FarWalkers extends THREE.InstancedMesh implements Furniture, Updata
           #ifdef USE_MAP
             float farLook = mod(farCell, ${LOOKS.toFixed(1)});
             float farStep = floor(farCell / ${LOOKS.toFixed(1)});
-            vMapUv = vec2((farLook + uv.x) / ${LOOKS.toFixed(1)}, (farStep + uv.y) / 2.0);
+            vMapUv = vec2((farLook + uv.x) / ${LOOKS.toFixed(1)}, (farStep + uv.y) / ${ROWS.toFixed(1)});
           #endif
         `);
       shader.vertexShader = shader.vertexShader.replace(
@@ -111,6 +116,7 @@ export class FarWalkers extends THREE.InstancedMesh implements Furniture, Updata
     // Lit by the day, and by the street's lamps a little at night; fewer about in the small hours.
     this.uniforms.farLight.value = 0.3 + 0.7 * s.daylight;
     const about = THREE.MathUtils.clamp(wakefulnessAt(s.hours) * (1 - 0.5 * s.rain), 0, 1);
+    const wet = s.rain > UMBRELLAS.above;
     this.options.viewer.getWorldPosition(this.eye);
     this.worldToLocal(this.eye);
     let shown = 0;
@@ -127,7 +133,8 @@ export class FarWalkers extends THREE.InstancedMesh implements Furniture, Updata
       if (Math.hypot(w.at - this.eye.x, w.lane.z - this.eye.z) < this.options.near - 1) continue;
       this.setMatrixAt(shown, this.m.makeTranslation(w.at, 0, w.lane.z));
       const step = Math.floor((this.clock + w.phase) * STEPS) % 2;
-      this.cells.setX(shown, w.look + step * LOOKS);
+      const umbrella = wet && w.phase < UMBRELLAS.share ? 1 : 0;
+      this.cells.setX(shown, w.look + (step + 2 * umbrella) * LOOKS);
       shown++;
     }
     this.count = shown;
@@ -136,9 +143,15 @@ export class FarWalkers extends THREE.InstancedMesh implements Furniture, Updata
   }
 }
 
-/** The figures, painted once: `LOOKS` people (shirt, trousers, skin, hair from the window view's palettes), each in two steps of a walk. */
+/**
+ * The figures, painted once: `LOOKS` people (shirt, trousers, skin, hair from the window view's palettes), each in two
+ * steps of a walk, and the same under an umbrella; dressed for the season (in autumn and winter a coat to mid-thigh
+ * and, in winter, a scarf; in summer bare arms).
+ */
 function figureAtlas(): THREE.CanvasTexture {
-  const [canvas, ctx] = createCanvas(CELL.w * LOOKS, CELL.h * 2);
+  const [canvas, ctx] = createCanvas(CELL.w * LOOKS, CELL.h * ROWS);
+  const season = currentSeason().name;
+  const coat = season === 'winter' || season === 'autumn';
   ctx.clearRect(0, 0, canvas.width, canvas.height);
   const random = lcg(4409);
   const px = CELL.h / HEIGHT;
@@ -148,9 +161,12 @@ function figureAtlas(): THREE.CanvasTexture {
     const skin = SKINS[Math.floor(random() * SKINS.length)]!;
     const hair = HAIRS[Math.floor(random() * HAIRS.length)]!;
     const broad = 0.38 + random() * 0.1;
-    for (let step = 0; step < 2; step++) {
-      // Row 0 of the texture is the bottom (flipY): step 0 drawn in the lower half.
-      const top = (1 - step) * CELL.h;
+    const canopy = UMBRELLA_COLOURS[look % UMBRELLA_COLOURS.length]!;
+    for (let row = 0; row < ROWS; row++) {
+      const step = row % 2;
+      const umbrella = row >= 2;
+      // Row 0 of the texture is the bottom (flipY): row 0 drawn lowest.
+      const top = (ROWS - 1 - row) * CELL.h;
       const cx = look * CELL.w + CELL.w / 2;
       const y = (m: number): number => top + CELL.h - m * px;
       const box = (x: number, y0: number, w: number, h: number, fill: string): void => {
@@ -163,12 +179,29 @@ function figureAtlas(): THREE.CanvasTexture {
       const spread = step === 0 ? 0.09 : 0.03;
       box(-spread, 0, 0.12, 0.84, trousers);
       box(spread, 0, 0.12, 0.84, trousers);
-      box(0, 0.8, broad, 0.62, shirt);
-      box(-broad / 2 - 0.04, 0.88, 0.08, 0.5, shirt);
-      box(broad / 2 + 0.04, 0.88, 0.08, 0.5, shirt);
+      // A coat down to mid-thigh in the cold months, else the shirt to the hips.
+      if (coat) box(0, 0.5, broad + 0.04, 0.92, shirt);
+      else box(0, 0.8, broad, 0.62, shirt);
+      const arm = season === 'summer' ? skin : shirt;
+      box(-broad / 2 - 0.04, 0.88, 0.08, 0.5, arm);
+      // Under an umbrella the right arm is up, holding it.
+      if (umbrella) box(broad / 2 + 0.02, 1.2, 0.08, 0.5, shirt);
+      else box(broad / 2 + 0.04, 0.88, 0.08, 0.5, arm);
+      if (season === 'winter') box(0, 1.36, broad * 0.7, 0.08, SCARF[look % SCARF.length]!);
       box(0, 1.44, 0.2, 0.24, skin);
       box(0, 1.58, 0.22, 0.12, hair);
+      if (umbrella) {
+        // The canopy over the head, its handle down to the raised hand.
+        box(0.06, 1.62, 0.02, 0.26, '#2a2a2a');
+        ctx.fillStyle = canopy;
+        ctx.beginPath();
+        ctx.ellipse(cx + 0.03 * px, y(1.88), 0.34 * px, 0.13 * px, 0, Math.PI, 0);
+        ctx.fill();
+      }
     }
   }
   return toTexture(canvas, 'facing');
 }
+
+const UMBRELLA_COLOURS = ['#1d1f24', '#6a1f2a', '#1f3a5c', '#2f4a2a', '#5a4a6a', '#8a7a2a'];
+const SCARF = ['#a23a2a', '#2a4a7a', '#d8c8a0', '#3a6a3a'];

@@ -1,0 +1,39 @@
+/* Front Street's counters (`ui/streetShops/`): the bookshops', the kiosk's and the pop-up's counter, THE LOCAL's quiz and darts. */
+@layer tokens, base, components, panels;
+@layer panels {
+  .street-counter, .street-quiz, .street-darts {
+    --sc-chalk: #2b3a33;
+    --sc-chalk-ink: #f2ead6;
+  }
+  .street-counter .ui-panel__card { width: min(var(--card-w-lg), 100%); max-height: 100%; overflow-y: auto; }
+  /* The shopkeeper's words: a fixed height, so a longer line never pushes the rows. */
+  .street-counter__says { min-height: 3.2em; margin: 0 0 var(--sp-2); font-family: var(--ui-font-hand); font-size: var(--fs-6); line-height: 1.35; }
+  .street-counter__wallet { margin: 0 0 var(--sp-3); color: var(--ui-text-dim); font-size: var(--fs-3); }
+  .street-counter__section h3 { margin: var(--sp-3) 0 var(--sp-2); font-size: var(--fs-4); letter-spacing: 0.06em; text-transform: uppercase; color: var(--ui-text-dim); }
+  .street-counter__rows { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: var(--sp-2); }
+  .street-counter__row { display: flex; align-items: center; gap: var(--sp-2); }
+  .street-counter__cover { width: 2.4em; height: 3.2em; object-fit: cover; border-radius: var(--ui-radius-xs); flex: none; }
+  .street-counter__what { display: flex; flex-direction: column; flex: 1; min-width: 0; }
+  .street-counter__what small { color: var(--ui-text-dim); font-size: var(--fs-3); }
+  .street-counter__empty { margin: 0; color: var(--ui-text-dim); font-style: italic; }
+
+  /* The quiz: the question chalked up on the pub's board. */
+  .street-quiz .ui-panel__card { width: min(var(--card-w-md), 100%); }
+  .street-quiz .ui-panel__body { background: var(--sc-chalk); color: var(--sc-chalk-ink); border-radius: var(--ui-radius-sm); padding: var(--sp-3); }
+  .street-quiz__count { margin: 0; font-size: var(--fs-4); letter-spacing: 0.08em; text-transform: uppercase; opacity: 0.8; }
+  .street-quiz__question { margin: var(--sp-2) 0 var(--sp-3); font-family: var(--ui-font-hand); font-size: var(--fs-7); min-height: 2.6em; }
+  .street-quiz__answers { display: grid; grid-template-columns: 1fr 1fr; gap: var(--sp-2); }
+  .street-quiz__answer { min-height: 2.8em; text-align: left; }
+  .street-quiz__answer--right { border-color: var(--ui-success); background: var(--ui-success-soft); }
+  .street-quiz__answer--wrong { border-color: var(--ui-danger); background: var(--ui-danger-soft); }
+  .street-quiz__answer:disabled { opacity: 1; }
+  .street-quiz__said { min-height: 3.2em; margin: var(--sp-3) 0 0; font-family: var(--ui-font-hand); font-size: var(--fs-6); line-height: 1.35; }
+
+  /* The darts: the board, the chalkboard's best over it, each dart called under it. */
+  .street-darts { padding: var(--sp-4); }
+  .street-darts__card { width: min(var(--card-w-sm), 100%); }
+  .street-darts__chalk { margin: 0 0 var(--sp-2); padding: var(--sp-1) var(--sp-2); border-radius: var(--ui-radius-xs); background: var(--sc-chalk); color: var(--sc-chalk-ink); font-family: var(--ui-font-hand); font-size: var(--fs-5); text-align: center; }
+  .street-darts__board { display: grid; place-items: center; }
+  .street-darts__canvas { display: block; width: 100%; max-width: 20rem; height: auto; aspect-ratio: 1; cursor: crosshair; touch-action: none; }
+  .street-darts__call { min-height: 2.6em; margin: var(--sp-2) 0 0; font-family: var(--ui-font-hand); font-size: var(--fs-6); text-align: center; }
+}

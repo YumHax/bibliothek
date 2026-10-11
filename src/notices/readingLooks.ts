@@ -123,7 +123,7 @@ export function buildCard(card: ReadingNotice & { more?: number }): CardParts {
     face.appendChild(more);
   }
   const foot = document.createElement('div');
-  foot.className = 'reading__foot';
+  foot.className = 'notice-foot';
   const hint = dismissHint();
   foot.appendChild(hint);
   el.appendChild(foot);

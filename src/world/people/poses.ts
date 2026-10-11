@@ -1,3 +1,5 @@
+import type { TouchSpot } from './motion/touch';
+
 /*
  * Arm poses of the `PersonModel`, as joint angles (radians). Each arm hangs along -y from its
  * shoulder pivot; the forearm hangs from the elbow pivot. Rotation about x swings the limb
@@ -29,6 +31,18 @@ interface PoseAngles {
 
 /** The poses whose forearms cross in front of the chest: a fuller chest or belly (or a coat) pushes their elbows forward (`PersonModel`). */
 export const ACROSS_CHEST: ReadonlySet<Pose> = new Set<Pose>(['crossed', 'think', 'read']);
+
+/**
+ * The arms a pose puts on the body rather than at angles ([-x arm, +x arm]): standing still, the palm is solved
+ * onto the spot every frame (`motion/touch`, mirrored for the -x arm), whatever the person's build and
+ * proportions; the angles in `POSES` are where the arm goes on its way there and what the far level of detail
+ * starts from. Arms folded: the +x forearm in front, its hand over the other arm; the -x hand tucked under it.
+ */
+export const POSE_SPOTS: Partial<Record<Pose, readonly [TouchSpot | null, TouchSpot | null]>> = {
+  crossed: ['foldUnder', 'foldOver'],
+  think: ['elbowHold', 'chin'],
+  phone: [null, 'ear'],
+};
 
 const HANG = (side: -1 | 1): ArmAngles => ({ ux: 0, uz: side * 0.08, lx: -0.25, ly: 0, lz: 0 });
 

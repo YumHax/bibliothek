@@ -1,39 +1,53 @@
+import { STYLES } from '@/audio/JukeboxTune';
 import type { SoundGraph } from './soundGraph';
 import { unitOf } from '@/random';
 
-/** Chord loops a bar's jukebox goes round (semitones from the key's root, minor for m). */
-const LOOPS: readonly (readonly [number, boolean][])[] = [
-  [[0, false], [9, true], [5, false], [7, false]],
-  [[0, true], [8, false], [3, false], [10, false]],
-  [[0, false], [5, false], [0, false], [7, false]],
-  [[2, true], [7, false], [0, false], [0, false]],
-  [[0, true], [5, true], [10, false], [3, false]],
-];
+type Style = (typeof STYLES)[number];
+
 const LOOKAHEAD = 0.2;
-/** Seconds of a song, and the gap between two (the jukebox changing record). */
+/** Seconds of a song, and the gap between two (the jukebox changing record, the band tuning up). */
 const SONG = [120, 200] as const;
 const GAP = [3, 7] as const;
 
+interface BarMusicOptions {
+  /** The whole band (hats, the lead) as heard close in the open; else only what comes through a door (kick, snare, bass, a pad). */
+  full?: boolean;
+  /** Which of the jukebox's stations it plays (`JukeboxTune.STYLES` names); all of them by default. */
+  styles?: readonly string[];
+}
+
 /**
- * What a bar plays through its door in the evening, synthesised and as heard from the pavement:
- * the bass and the kick come through, the chords only as a muffled pad, the highs gone (the door,
- * the glass, the talk inside). A song is a chord loop, a tempo and a key drawn from the bar's
- * seed and the song's number; between two, a few seconds' silence. `update` schedules a moment
- * ahead into `out` while `level` is above nothing.
+ * Music in the street, synthesised from the arcade jukebox's own stations (`JukeboxTune.STYLES`: their tempos,
+ * progressions, drum and bass patterns, lead and pad): a bar's jukebox through its door in the evening (only the
+ * kick, the snare, the bass walking the chords and a pad come through; the owner low-passes it) or, `full`, a band
+ * heard in the open (a gig, the bandstand: hats and a lead too). A song is a station, a key, a tempo and a
+ * progression drawn from the seed and the song's number; between two, a few seconds' silence (`betweenSongs`, the
+ * moment a crowd claps). `update` schedules a moment ahead into `out` while `level` is above nothing.
  */
 export class BarMusic {
   private song = 0;
-  private bpm = 100;
+  private style: Style = STYLES[0]!;
+  private sixteenth = 0.14;
   private root = 45;
-  private loop: readonly (readonly [number, boolean])[] = LOOPS[0]!;
+  private progression: readonly (readonly number[])[] = [[0, 3, 7]];
   private step = 0;
   private nextTime = 0;
   private songLeft = 0;
   private gapLeft = 0;
   private draws = 0;
+  private lead = 3;
+  private hats: { g: SoundGraph; out: AudioNode; band: BiquadFilterNode } | null = null;
+  private readonly styles: readonly Style[];
 
-  constructor(private readonly seed: number) {
+  constructor(private readonly seed: number, private readonly options: BarMusicOptions = {}) {
+    const named = options.styles ? STYLES.filter((s) => options.styles!.includes(s.name)) : STYLES;
+    this.styles = named.length > 0 ? named : STYLES;
     this.pickSong();
+  }
+
+  /** True in the pause between two songs (and for the first frame of one): when listeners clap. */
+  get betweenSongs(): boolean {
+    return this.gapLeft > 0;
   }
 
   update(dt: number, g: SoundGraph, out: AudioNode, level: number): void {
@@ -54,43 +68,63 @@ export class BarMusic {
       return;
     }
     if (this.nextTime < now) this.nextTime = now + 0.02;
-    const sixteenth = 60 / this.bpm / 4;
     while (this.nextTime < now + LOOKAHEAD) {
-      this.tick(g, out, this.nextTime, sixteenth);
-      this.nextTime += sixteenth;
+      this.tick(g, out, this.nextTime);
+      this.nextTime += this.sixteenth;
     }
   }
 
   private pickSong(): void {
     this.song++;
-    const r = this.random();
-    this.bpm = 88 + Math.floor(r * 36);
-    this.root = 40 + Math.floor(this.random() * 8);
-    this.loop = LOOPS[Math.floor(this.random() * LOOPS.length)]!;
+    const style = this.styles[Math.floor(this.random() * this.styles.length)]!;
+    this.style = style;
+    const bpm = style.bpm[0] + this.random() * (style.bpm[1] - style.bpm[0]);
+    this.sixteenth = 60 / bpm / 4;
+    this.root = style.root[0] + Math.floor(this.random() * (style.root[1] - style.root[0] + 1));
+    this.progression = style.progressions[Math.floor(this.random() * style.progressions.length)]!;
     this.songLeft = SONG[0] + this.random() * (SONG[1] - SONG[0]);
     this.step = 0;
   }
 
-  /** One sixteenth: the kick on the beats, the bass walking the chord, a pad at each bar. */
-  private tick(g: SoundGraph, out: AudioNode, time: number, sixteenth: number): void {
-    const bar = Math.floor(this.step / 16) % this.loop.length;
-    const inBar = this.step % 16;
-    const [chord, minor] = this.loop[bar]!;
-    if (inBar % 4 === 0) this.kick(g, out, time);
-    if (inBar === 4 || inBar === 12) g.burst(out, time, 0.05, 0.08);
-    if (inBar % 2 === 0) {
-      const walk = [0, 0, 7, 0, 12, 0, 7, 10][inBar / 2]!;
-      this.note(g, out, 'triangle', midi(this.root + chord + walk), time, sixteenth * 1.8, 0.35);
+  /** One sixteenth of the station's patterns: drums, the bass on the chord's root, a pad at each bar, the lead (full). */
+  private tick(g: SoundGraph, out: AudioNode, time: number): void {
+    const style = this.style;
+    const s = this.step % 16;
+    const chord = this.progression[Math.floor(this.step / 16) % this.progression.length]!;
+    const full = this.options.full === true;
+    if (style.kick.includes(s)) this.kick(g, out, time);
+    if (style.snare.includes(s)) g.burst(out, time, 0.06, full ? 0.12 : 0.08);
+    if (full && style.hat.includes(s)) g.burst(this.hatBand(g, out), time, 0.025, 0.05);
+    if (style.bass.includes(s)) {
+      const octave = style.bassOctave.includes(s) ? 12 : 0;
+      this.note(g, out, style.name === 'CHIPTUNE' ? 'triangle' : 'sawtooth', midi(this.root - 24 + chord[0]! + octave), time, this.sixteenth * 1.6, 0.3);
     }
-    if (inBar === 0) {
-      for (const interval of [12, minor ? 15 : 16, 19]) this.note(g, out, 'sawtooth', midi(this.root + chord + interval), time, sixteenth * 15, 0.04);
+    if (style.pad && s === 0) for (const n of chord) this.note(g, out, style.pad, midi(this.root + n), time, this.sixteenth * 15, full ? 0.035 : 0.03);
+    if (full && this.random() < style.leadDensity) {
+      let pitch: number;
+      if (style.arpeggio) pitch = chord[s % chord.length]! + (s % 8 >= 4 ? 12 : 0);
+      else {
+        this.lead = Math.max(0, Math.min(style.scale.length - 1, this.lead + Math.round((this.random() - 0.5) * 3)));
+        pitch = style.scale[this.lead]!;
+      }
+      this.note(g, out, style.lead, midi(this.root + 12 + pitch), time, this.sixteenth * (this.random() < 0.25 ? 2.8 : 0.9), 0.06);
     }
-    this.step = (this.step + 1) % (16 * this.loop.length);
+    this.step = (this.step + 1) % (16 * this.progression.length);
+  }
+
+  /** The hats' band into `out`, made once per graph and output. */
+  private hatBand(g: SoundGraph, out: AudioNode): BiquadFilterNode {
+    if (this.hats?.g !== g || this.hats.out !== out) {
+      const band = g.filter('highpass', 7000, 0.8);
+      band.connect(out);
+      this.hats = { g, out, band };
+    }
+    return this.hats.band;
   }
 
   private kick(g: SoundGraph, out: AudioNode, time: number): void {
     const osc = g.ctx.createOscillator();
-    osc.frequency.setValueAtTime(110, time);
+    osc.frequency.setValueAtTime(120, time);
     osc.frequency.exponentialRampToValueAtTime(42, time + 0.12);
     const env = g.gain();
     env.gain.setValueAtTime(0.7, time);
@@ -113,7 +147,7 @@ export class BarMusic {
     osc.stop(time + length + 0.25);
   }
 
-  /** The bar's own draws, song after song. */
+  /** The music's own draws, song after song. */
   private random(): number {
     return unitOf(this.seed, this.song, ++this.draws);
   }

@@ -6,6 +6,7 @@ import { paint, standard } from '../../materials/palette';
 import { PooledLight } from '../../lighting/LightPool';
 import { layMesh, WALL } from '../../surface/layers';
 import { CHROME, type MachineDisplay, displayScreen, outOfOrderNote, paintMarquee } from '../machineParts';
+import { TicketStrip } from '../TicketStrip';
 import { BASE_H, CARRIAGE_Y, CASE_H, type ClawPlush, DEPTH, RAIL_Y, TOP_H, TOTAL_H, WIDTH } from './ClawSim';
 
 const BLACK = paint(0x111116, 0.5);
@@ -26,6 +27,10 @@ export interface ClawModel {
   readonly display: MachineDisplay;
   readonly note: THREE.Mesh;
   readonly hitbox: THREE.Mesh;
+  /** The tickets a miss pays back feed out of a slot on the front. */
+  readonly strip: TicketStrip;
+  /** A lit spot on the heap straight under the claw while it is steered (where it would come down). */
+  readonly marker: THREE.Mesh;
   /** One group per plush of the sim, in its order, and each one's recolourable fur. */
   readonly plush: readonly { group: THREE.Group; fur: THREE.MeshStandardMaterial }[];
 }
@@ -144,14 +149,24 @@ export function buildClawModel(root: THREE.Group, color: number, plush: readonly
     carriage.add(prong);
   }
   root.add(carriage);
+  // The spot under the claw: a little red light on whatever is there (placed each frame by the machine).
+  const marker = new THREE.Mesh(new THREE.CircleGeometry(0.02, 16), new THREE.MeshBasicMaterial({ color: 0xff4a3a, transparent: true, opacity: 0.85, depthWrite: false }));
+  marker.rotation.x = -Math.PI / 2;
+  marker.castShadow = false;
+  marker.visible = false;
+  root.add(marker);
+  // The ticket slot on the front, right of the print.
+  const tickets = new TicketStrip(0.5);
+  tickets.position.set(WIDTH / 2 - 0.12, 0.5, DEPTH / 2 + 0.001); // convention-ok: the slot's plate is a box standing on the face, not a flat layer
+  root.add(tickets);
 
   const hitbox = invisibleHitbox(WIDTH + 0.04, TOTAL_H, DEPTH + 0.04, { y: TOTAL_H / 2 });
   root.add(hitbox);
   root.traverse((obj) => {
     const mesh = obj as THREE.Mesh;
-    if (mesh.isMesh) mesh.receiveShadow = true;
+    if (mesh.isMesh && mesh !== marker) mesh.receiveShadow = true;
   });
-  return { marquee: marqueeMat, chaser, beam, carriage, cable, hub, prongs, stick, stickBall, button, display, note, hitbox, plush: toys };
+  return { marquee: marqueeMat, chaser, beam, carriage, cable, hub, prongs, stick, stickBall, button, display, note, hitbox, strip: tickets, marker, plush: toys };
 }
 
 /** A plush: a body sphere, a head on top, two ears; the plush's eyes as two dark dots facing `yaw`. Its fur is its own, so a restock can recolour it. */

@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { KIDS, type KidId } from '@/building/kids/kidsPlan';
-import { kidsOut } from '@/building/kids/yardKids';
+import { kidsOut, playgroundDay } from '@/building/kids/yardKids';
 import { seasonOf } from '@/time/season';
 import type { BuildContext } from '../buildContext';
 import type { Zone } from '../zone/Zone';
@@ -27,7 +27,8 @@ export function placeKids(zone: Zone, ctx: Pick<BuildContext, 'sky' | 'listener'
       host: zone,
       viewer: ctx.listener,
       spots,
-      out: () => kidsOut(today.gameDay, sky.dayNight.state.hours, sky.dayNight.state, today.realDate()),
+      // On Sundays they are at the park's playground on Front Street instead (`playgroundDay`).
+      out: () => (playgroundDay(today.gameDay) ? [] : kidsOut(today.gameDay, sky.dayNight.state.hours, sky.dayNight.state, today.realDate())),
       day: () => today.gameDay,
       date: () => today.realDate(),
       season: () => seasonOf(today.realDate()).name,

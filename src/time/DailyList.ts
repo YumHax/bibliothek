@@ -10,6 +10,8 @@ interface DailyListSpec<T> {
   /** Whether a saved entry is a valid item (the others are dropped). */
   isItem: (value: unknown) => value is T;
   migrate?: Readonly<Record<number, (data: unknown) => unknown>>;
+  /** What "today" is: the real `dayKey` by default (Front Street's lists pass `time/streetDay`'s game day). */
+  mark?: () => string;
 }
 
 /**
@@ -19,9 +21,11 @@ interface DailyListSpec<T> {
  */
 export class DailyList<T> {
   private readonly store: PersistedStore<{ day: string; items: T[] }>;
+  private readonly mark: () => string;
 
   constructor(spec: DailyListSpec<T>) {
     const { key, version, field, isItem, migrate } = spec;
+    this.mark = spec.mark ?? (() => dayKey());
     this.store = new PersistedStore<{ day: string; items: T[] }>({
       key,
       version,
@@ -40,7 +44,7 @@ export class DailyList<T> {
   /** Today's items (none on a new day). */
   today(): T[] {
     const saved = this.store.load();
-    return saved.day === dayKey() ? saved.items : [];
+    return saved.day === this.mark() ? saved.items : [];
   }
 
   has(item: T): boolean {
@@ -48,10 +52,10 @@ export class DailyList<T> {
   }
 
   add(item: T): void {
-    this.store.save({ day: dayKey(), items: [...this.today().filter((other) => other !== item), item] });
+    this.store.save({ day: this.mark(), items: [...this.today().filter((other) => other !== item), item] });
   }
 
   remove(item: T): void {
-    this.store.save({ day: dayKey(), items: this.today().filter((other) => other !== item) });
+    this.store.save({ day: this.mark(), items: this.today().filter((other) => other !== item) });
   }
 }

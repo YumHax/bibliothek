@@ -4,6 +4,7 @@ import { conversing, type NoticeActions } from '@/notices';
 import { farewell, optionsFor, opening, perform, playerLine, type OptionView, type InteractionExtra, type TalkContext } from '@/social/conversation';
 import { extrasFor } from '@/social/extras';
 import { gameFit, giftName, tasteOf, type GameGift } from '@/social/gifts';
+import { giftWrap } from '@/holidays/giftWrap';
 import { tiesOf } from '@/social/gossip';
 import { isBirthday, moodInfo, moodOf } from '@/social/mood';
 import { firstConversation, noteOffered, offeredBefore } from '@/social/noticed';
@@ -25,6 +26,7 @@ import { portrait } from './portrait';
 import './social.css';
 import { capitalise } from '@/text/strings';
 import { formatCoins } from '@/text/money';
+import { frameSubject, releaseFrame } from '@/graphics/framing';
 
 /** Something in the pocket that can be given. */
 export interface PocketGift {
@@ -108,8 +110,10 @@ const RESTLESS = 2;
 
 /** From the point their words come from down to their face (m): where the hearts and the thought appear, for a body that does not say. */
 const FACE = -0.45;
-/** How much the view narrows on the face while talking (70 degrees to about 50). */
-const CLOSE_SHOT = 1.4;
+/** How much the view narrows while talking (70 degrees to about 64): a shot from the waist up, the hands and their gestures in it, not a close-up of the face. */
+const CLOSE_SHOT = 1.12;
+/** How far below their eyes the view is aimed (m): the face in the upper third, the hands in the frame. */
+const SHOT_BELOW_EYES = 0.2;
 
 /**
  * From `anchor` down to their eyes (m): the body's own measure when it gives one (`userData.faceLift`: a child, a
@@ -248,8 +252,10 @@ export class ConversationPanel extends ModalPanel implements ConversationPanelLi
     // The view turns to their face; the card waits for it before placing itself beside them.
     const anchor = this.anchor();
     const framing = !!anchor && !!this.deps.frame;
-    if (anchor && this.deps.frame) this.deps.frame(anchor, faceLift(anchor));
+    if (anchor && this.deps.frame) this.deps.frame(anchor, faceLift(anchor) - SHOT_BELOW_EYES);
     if (anchor) this.deps.zoom?.(CLOSE_SHOT);
+    // The depth of field holds on their face and they take a soft portrait light (`graphics/framing`).
+    if (anchor) frameSubject(anchor, faceLift(anchor));
     this.wish = !introduced && anchor ? wishOf(talk.person, ctx) : null;
     this.card.style.left = '';
     this.placedAt = framing ? performance.now() + 120 : -Infinity;
@@ -283,6 +289,7 @@ export class ConversationPanel extends ModalPanel implements ConversationPanelLi
     }
     conversing(false);
     this.deps.zoom?.(1);
+    releaseFrame();
     this.talk = null;
     talk?.onClose?.();
   }
@@ -762,14 +769,15 @@ export class ConversationPanel extends ModalPanel implements ConversationPanelLi
       const games = [...this.deps.givable()]
         .map((g) => ({ game: g, gift: gameGift(g) }))
         .map((g) => ({ ...g, fit: gameFit(id, g.gift) }))
-        .sort((a, b) => b.fit - a.fit)
+        // What was wrapped for giving comes first (`holidays/giftWrap`).
+        .sort((a, b) => Number(!!b.gift.wrapped) - Number(!!a.gift.wrapped) || b.fit - a.fit)
         .slice(0, GAME_LIST);
       for (const { game, gift } of games) {
         const key = `game:${game.id}`;
         const armed = this.arming.isArmed(key);
         rows.push({
           key,
-          label: armed ? armedLine('give it away for good') : game.title,
+          label: armed ? armedLine('give it away for good') : gift.wrapped ? `${game.title} (wrapped)` : game.title,
           icon: 'cart',
           cover: coverImg(this.deps.coverUrl(game), game, 'social-row__cover'),
           run: () => {
@@ -847,7 +855,7 @@ function tasteTags(id: PersonId, kind: GiftKind): Html[] {
 
 /** A game of the collection as a gift is weighed. */
 function gameGift(game: Game): GameGift {
-  return { title: game.title, platform: game.platform, genres: game.genre ? [game.genre.toLowerCase()] : [], year: yearOf(game) };
+  return { title: game.title, platform: game.platform, genres: game.genre ? [game.genre.toLowerCase()] : [], year: yearOf(game), wrapped: giftWrap.isWrapped(game.id) };
 }
 
 function yearOf(game: Game): number | undefined {

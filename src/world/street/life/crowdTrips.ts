@@ -4,7 +4,8 @@ import type { PaintedFront } from '../Buildings';
 import { FacadeFrame } from '../relief/facadeFrame';
 import { hasShopfront } from '../shopfronts/shopfrontPlan';
 import type { Vec2 } from '../streetPlan';
-import { isWalkable, WORKS } from '@/world/measures/street';
+import type { ShopDoor } from '@/world/city/facades';
+import { FRONT, isWalkable, WALKABLE, WORKS } from '@/world/measures/street';
 
 /*
  * A passer-by's trip (`StreetCrowd`): a route of the plan walked as steps, with stops on the way: a look in a
@@ -26,28 +27,37 @@ export interface Stop {
   at: Vec2;
   yaw: number;
   focus: THREE.Vector3;
-  kind: 'window' | 'kiosk' | 'busker' | 'column';
+  kind: StopKind;
   /** How long they stay (seconds). */
   seconds: readonly [number, number];
   /** Only in these game hours (the busker's, the kiosk's). */
   hours?: readonly [number, number];
   /** Only while it is dry (nobody lingers at a window in the rain). */
   dry: boolean;
+  /** Only on the Grand Flea Fair's day (a picture of the bunting). */
+  fair?: boolean;
   /** What they do there now and then (a coin in the busker's case). */
   gesture?: GestureName;
   /** The facade's direction (for windows: the lane must run along it). */
   along?: THREE.Vector2;
 }
 
+/**
+ * What a stop is: a shop's window, the newsstand's front page, the busker, the Morris column's bills, the bus stop's
+ * timetable, the pillar clock (a look at it, then at a watch), a picture of the Fair's bunting.
+ */
+export type StopKind = 'window' | 'kiosk' | 'busker' | 'column' | 'timetable' | 'clock' | 'photo';
+
 /** An attraction in the plan (`STREET_PLAN.crowd.attractions`). */
 export interface AttractionSpec {
   at: Vec2;
   /** What they look at: a point (x, y, z). */
   look: readonly [number, number, number];
-  kind: 'kiosk' | 'busker' | 'column';
+  kind: Exclude<StopKind, 'window'>;
   seconds: readonly [number, number];
   hours?: readonly [number, number];
   dry?: boolean;
+  fair?: boolean;
 }
 
 /** Something on the pavement a window-shopper must not stand in (a terrace, a bench, a queue's spot): a disc. */
@@ -68,7 +78,7 @@ export interface RouteStop {
 export type Step =
   | { kind: 'walk'; points: THREE.Vector3[] }
   | { kind: 'kerb'; crossing: number }
-  | { kind: 'pause'; seconds: number; yaw: number; focus: THREE.Vector3; gesture?: GestureName };
+  | { kind: 'pause'; seconds: number; yaw: number; focus: THREE.Vector3; gesture?: GestureName; what: StopKind };
 
 /** A window-shopper stands this far out from the wall (further for a walk-in shop's display, which stands out 0.45 m). */
 const WINDOW_OUT = 0.95;
@@ -93,7 +103,8 @@ export function windowStops(fronts: readonly PaintedFront[], clear: readonly Cle
       const out = hasShopfront(w.kind) ? DISPLAY_OUT : WINDOW_OUT;
       const p = frame.point(mid, 0, out);
       const at: Vec2 = [p.x, p.z];
-      if (!isWalkable(at) || at[0] > WORKS.front - 2 || clear.some((c) => Math.hypot(c.at[0] - at[0], c.at[1] - at[1]) < c.r)) continue;
+      // Short of the works (their end moves on with them: `WALKABLE`).
+      if (!isWalkable(at) || at[0] > WALKABLE.maxX - 1.6 || clear.some((c) => Math.hypot(c.at[0] - at[0], c.at[1] - at[1]) < c.r)) continue;
       const focus = frame.point(mid, 1.45, 0);
       stops.push({ at, yaw: frame.yaw + Math.PI, focus, kind: 'window', seconds: WINDOW_SECONDS, dry: true, along: frame.u.clone() });
     }
@@ -106,7 +117,8 @@ export function attractionStops(specs: readonly AttractionSpec[]): Stop[] {
   return specs.map((a) => {
     const focus = new THREE.Vector3(...a.look);
     const yaw = Math.atan2(focus.x - a.at[0], focus.z - a.at[1]);
-    return { at: a.at, yaw, focus, kind: a.kind, seconds: a.seconds, hours: a.hours, dry: a.dry ?? false, gesture: a.kind === 'busker' ? 'insertCoin' : undefined };
+    const gesture: GestureName | undefined = a.kind === 'busker' ? 'insertCoin' : a.kind === 'clock' ? 'checkWatch' : undefined;
+    return { at: a.at, yaw, focus, kind: a.kind, seconds: a.seconds, hours: a.hours, dry: a.dry ?? false, fair: a.fair, gesture };
   });
 }
 
@@ -153,7 +165,7 @@ export function planTrip(route: CrowdRoute, from: number, t0: number, chosen: re
     for (const c of here) {
       walk.push(v3(c.lane), v3(c.stop.at));
       flush();
-      steps.push({ kind: 'pause', seconds: pause(c.stop), yaw: c.stop.yaw, focus: c.stop.focus, gesture: c.stop.gesture });
+      steps.push({ kind: 'pause', seconds: pause(c.stop), yaw: c.stop.yaw, focus: c.stop.focus, gesture: c.stop.gesture, what: c.stop.kind });
       walk.push(v3(c.after));
     }
     walk.push(v3(path[i + 1]!));
@@ -201,4 +213,38 @@ export function besideStart(start: THREE.Vector3, steps: readonly Step[], side: 
 
 function v3([x, z]: Vec2): THREE.Vector3 {
   return new THREE.Vector3(x, 0, z);
+}
+
+/** The pavements' lanes on the stretch past the first works (|z|), and how far apart two doors of one route are at least. */
+const STRETCH_LANE = 10.4;
+const STRETCH_MIN = 8;
+/** On the far pavement, doors past the bus shelter (its back stands across the lane short of this). */
+const STRETCH_FAR_FROM = 31;
+
+/**
+ * Once the works have moved on (`WALKABLE` runs past `WORKS.front`), routes on the stretch they opened: out of a shop's
+ * door there, along its pavement, into another (on the stretch or back towards the first works' end), both pavements.
+ * Empty while the works still stand at `WORKS.front`.
+ */
+export function stretchRoutes(doors: readonly ShopDoor[]): CrowdRoute[] {
+  if (WALKABLE.maxX <= WORKS.front + 4) return [];
+  const routes: CrowdRoute[] = [];
+  for (const side of [-1, 1] as const) {
+    // The doors on this side's building line within the walkable street, past (or near) the first works.
+    const line = side < 0 ? FRONT.ourLine : FRONT.farLine;
+    const along = doors
+      .map((d) => d.at)
+      .filter(([x, z]) => Math.abs(z - line) < 0.3 && x > (side < 0 ? WORKS.front - 14 : STRETCH_FAR_FROM) && x < WALKABLE.maxX - 1.5)
+      .sort((a, b) => a[0] - b[0]);
+    const lane = side * STRETCH_LANE;
+    for (let i = 0; i < along.length; i++) {
+      const a = along[i]!;
+      // To a door well along, either way: on the stretch, or back to the old works' end.
+      const across = along[(i + Math.ceil(along.length / 2)) % along.length]!;
+      const b = Math.abs(across[0] - a[0]) > STRETCH_MIN ? across : along.find((d) => Math.abs(d[0] - a[0]) > STRETCH_MIN);
+      if (!b) continue;
+      routes.push({ path: [a, [a[0], lane], [b[0], lane], b] });
+    }
+  }
+  return routes;
 }

@@ -1,4 +1,5 @@
 import { themeOf } from '@/economy/marketDays';
+import { subscriptionMail } from '@/streetShops/newsagent';
 import type { MarketNews } from '@/economy/marketEvents';
 import { flyerRumour } from '@/economy/rumours';
 import { ESTATE, estatePhase, estateStart } from '@/building/estateSale';
@@ -19,6 +20,8 @@ interface MailSources {
   marketDay?: { news(): readonly MarketNews[] };
   /** A story the player follows (`src/story`): its clipping, or the clue a missed channel sent by post; asked once a day. */
   story?: { mail(day: number): MailPiece | null };
+  /** Mémé's letter when a photo of her album waits and the player has not been round for days (`grandma/GrandmaHints`); asked once a day. */
+  grandma?: { mail(day: number): MailPiece | null };
 }
 
 /** Whatever the day, one of these can come through the door. */
@@ -45,12 +48,16 @@ export function mailFor(day: number, sources: MailSources): MailPiece[] {
   const rumour = rumourFlyer(sources);
   // A story's letter comes first, whatever else the day brings (it is asked once: the story moves on as it is posted).
   const letter = sources.story?.mail(day) ?? null;
+  // So does Mémé's, in her hand.
+  const meme = sources.grandma?.mail(day) ?? null;
   // The late Mr Lambert's family clears his flat once only: their flyer comes through the door every day of the notice and the sale.
   const estate = estateFlyer(day);
+  // THE GAMING WEEKLY, for a subscriber (`streetShops/newsagent`): every morning, its cover card inside.
+  const paper = subscriptionMail(day);
   // Talk of the market (a grail, the Flea Fair, a sale) always finds its way through the door.
-  const count = Math.max((letter ? 1 : 0) + (estate ? 1 : 0), rumour ? 1 : 0, roll < NONE ? 0 : roll < ONE ? 1 : 2);
+  const count = Math.max((letter ? 1 : 0) + (meme ? 1 : 0) + (estate ? 1 : 0) + (paper ? 1 : 0), rumour ? 1 : 0, roll < NONE ? 0 : roll < ONE ? 1 : 2);
   if (!count) return [];
-  const topical = [letter, estate, rumour, challengeFlyer(sources), tomorrowFlyer(day), dealFlyer(sources, random)].filter((p): p is MailPiece => p !== null);
+  const topical = [letter, meme, paper, estate, rumour, challengeFlyer(sources), tomorrowFlyer(day), dealFlyer(sources, random)].filter((p): p is MailPiece => p !== null);
   const everyday = shuffled(random, EVERYDAY);
   return [...topical, ...everyday].slice(0, count).map((piece, i) => ({ ...piece, seed: day * 3 + i }));
 }

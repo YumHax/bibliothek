@@ -11,6 +11,7 @@ import type { DayNight } from '../props/DayNight';
 import { Walker } from '../people/Walker';
 import { KEYS as SAVE_KEYS } from '@/persistence';
 import { DailyTally } from '@/time/DailyTally';
+import { streetDayMark } from '@/time/streetDay';
 import { Timers } from '@/core/Timers';
 import { inHours } from '@/time/clock';
 import { keptAway } from '@/time/schedule';
@@ -28,6 +29,7 @@ import { actReaction } from '../people/socialHook';
 import { favouriteRequest, giveTape, noteRequest, tapeGiven } from './buskerBook';
 import { formatTickets } from '@/text/money';
 import { loudness } from '@/audio/hearing';
+import { streetLook } from './life/streetLook';
 
 interface BuskerOptions {
   /** The ears (the camera): the tune's level and side follow it. */
@@ -72,7 +74,7 @@ const ASK_WINDOW = 6;
 /** Beyond this the busker is not drawn nor posed (the tune still carries). */
 const DRAW_DISTANCE = 40;
 /** Tips given today, saved so the daily limit holds across reloads. */
-const tips = new DailyTally(SAVE_KEYS.busker, 'tips');
+const tips = new DailyTally(SAVE_KEYS.busker, 'tips', streetDayMark);
 const THANKS = ['Cheers! This one is for you.', 'Thank you kindly!', 'You are a legend.'];
 /** Where the keyboard's keys are, in the busker's frame (the stand faces them, +z is towards the passers-by). */
 const KEYS = { y: 0.93, z: 0.42, spread: 0.17 };
@@ -118,13 +120,18 @@ export class Busker extends THREE.Group implements Furniture, Updatable, Interac
   constructor(private readonly dayNight: DayNight, private readonly options: BuskerOptions) {
     super();
     this.name = 'Busker';
-    this.person = new Walker({ viewer: options.viewer, seed: options.seed ?? 77, label: 'Busker · tip' });
+    this.person = new Walker({ viewer: options.viewer, seed: options.seed ?? 77, look: streetLook(options.seed ?? 77), label: 'Busker · tip' });
     this.add(this.person);
     this.person.stand(0, 'play', null, () => this.handPoints(), 0.12);
     this.hitboxes = this.person.hitboxes;
     this.tune = new BuskerTune(options.seed ?? 77);
     this.buildKit();
     this.add(this.kit);
+  }
+
+  /** Out and between two songs (those listening clap). */
+  get betweenSongs(): boolean {
+    return this.present && this.resting;
   }
 
   /** Empty: the stand's box comes and goes with them (`collider`), so no ghost is left once they have packed up. */

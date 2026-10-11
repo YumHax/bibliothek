@@ -8,8 +8,9 @@ import { TicketMachine, type TicketMachineWiring } from './TicketMachine';
 import type { MachineRunOptions } from './MachineRun';
 import type { ScoreTable } from './scoreTable';
 import { AlleySim, BALL_R, LANE_NEAR } from './alley/AlleySim';
-import { type AlleyModel, BACK_H, BACK_Z, WIDTH, buildAlleyModel } from './alley/alleyModel';
+import { type AlleyModel, BACK_H, BACK_Z, POCKET_LAMP_OFF, POCKET_LAMP_ON, WIDTH, buildAlleyModel } from './alley/alleyModel';
 import { arcadeHint } from './arcadeHint';
+import { actionKeyLabel } from '@/ui/keys';
 
 export interface AlleyRollerOptions {
   /** Paint of the cabinet. Default a racing red. */
@@ -29,9 +30,11 @@ const PERSON_Z = 1.3;
 
 /**
  * The ticket alley every funfair has: roll a wooden ball up an inclined lane, over the hump and
- * into the rings (10 to 50, 100 in the corner pockets). Nine balls a play. A / D move the ball in
- * hand across the lane; hold Space and the power meter on the backboard swings up and down, let
- * go to roll at that strength (too soft and it rolls back: nothing). The rules and the ball's path
+ * onto the ring board, where it rolls down into its ring's hole (10 to 50, 100 in the corner
+ * pockets, 200 in the one lit for this ball; a hot streak pays more, the last ball double). Nine
+ * balls a play. A / D move the ball in hand across the lane; hold fire and the power meter on the
+ * backboard swings up and down (a mark where the last one was let go), let go to roll at that
+ * strength (too soft and it rolls back: nothing). The rules and the ball's path
  * are the `AlleySim`'s, the body `alley/alleyModel`'s; this class moves the ball to match, plays
  * the sounds and paints the backboard. A `TicketMachine`: paid for like a cabinet (`playArcade`),
  * pays tickets from a slot at the front, asks for initials on the backboard for a score that
@@ -109,12 +112,20 @@ export class AlleyRoller extends TicketMachine {
     return { fireAfterRelease: true };
   }
 
+  /** The NEW BEST sting already played the moment the score passed it (`MachineRun.noteScore`): a cheer, not the sting again. */
   protected override finished(result: ArcadeResult): void {
-    this.speaker.play(result.best ? 'best' : 'over');
+    this.speaker.play(result.best ? 'win' : 'over');
   }
 
   protected paint(dt: number): void {
     this.placeBall();
+    // The pocket lit for this ball glows (blinking while it waits to be rolled); idle, they take turns.
+    const live = this.state === 'playing' || this.state === 'demo';
+    const blink = Math.floor(this.clock * 4) % 2 === 0;
+    this.model.pocketLamps.forEach((lamp, i) => {
+      const on = live ? i === this.sim.litPocket && (this.sim.phase !== 'aim' || blink) : Math.floor(this.clock) % 2 === i;
+      lamp.color.setHex(on ? POCKET_LAMP_ON : POCKET_LAMP_OFF);
+    });
     this.displayClock += dt;
     if (this.state !== 'attract' || this.displayClock > 0.25) {
       this.displayClock = 0;
@@ -135,7 +146,7 @@ export class AlleyRoller extends TicketMachine {
   }
 
   protected demoControls(dt: number): ArcadeControls {
-    return this.sim.autopilot(dt);
+    return this.regularSkill === null ? this.sim.autopilot(dt) : this.sim.autopilot(dt, this.regularSkill);
   }
 
   /** The ball and the trough follow the sim. */
@@ -165,9 +176,10 @@ export class AlleyRoller extends TicketMachine {
     const blink = Math.floor(this.clock * 3) % 2 === 0;
     if (this.state === 'attract') {
       const top = this.scores.topOf(this.game.id);
+      const best = this.scores.bestOf(this.game.id);
       drawText(ctx, this.title, W / 2, 40, 22, '#ffe680');
       drawText(ctx, `HI ${top.name} ${top.score}`, W / 2, 80, 14, top.you ? '#7ee787' : '#c9c4ff');
-      drawText(ctx, `9 BALLS · ${this.wiring.pointsPerTicket} PTS = 1 TICKET`, W / 2, 112, 10, '#9a96c0');
+      drawText(ctx, best > 0 && !top.you ? `YOUR BEST ${best}` : 'ROLL THEM IN!', W / 2, 112, 10, '#9a96c0');
       if (blink) drawText(ctx, 'INSERT COIN', W / 2, 152, 18, '#ff8a80');
       texture.needsUpdate = true;
       return;
@@ -183,10 +195,13 @@ export class AlleyRoller extends TicketMachine {
     }
     const { sim } = this;
     const aiming = sim.phase === 'aim';
-    drawText(ctx, `${sim.points}`, W / 2, 50, 40, '#ff8a3a');
-    drawText(ctx, `BALLS ${sim.ballsLeft}`, 20, 100, 12, '#c9c4ff', 'left');
-    if (sim.lastPoints !== null && aiming) drawText(ctx, sim.lastPoints > 0 ? `+${sim.lastPoints}` : 'MISS', W - 20, 100, 14, sim.lastPoints >= 100 ? '#ffd23a' : sim.lastPoints > 0 ? '#7ee787' : '#ff8a80', 'right');
-    // The power meter.
+    drawText(ctx, `${sim.points}`, W / 2, 46, 40, '#ff8a3a');
+    drawText(ctx, `BALLS ${sim.ballsLeft}`, 20, 92, 12, '#c9c4ff', 'left');
+    if (sim.lastPoints !== null && aiming) drawText(ctx, sim.lastPoints > 0 ? `+${sim.lastPoints}` : 'MISS', W - 20, 92, 14, sim.lastPoints >= 100 ? '#ffd23a' : sim.lastPoints > 0 ? '#7ee787' : '#ff8a80', 'right');
+    // What made the last ball special, else what this one has going for it.
+    const line = aiming && sim.lastNote ? sim.lastNote : aiming && sim.lastBall ? 'LAST BALL x2' : aiming && sim.hot >= 2 ? 'ON A ROLL!' : '';
+    if (line) drawText(ctx, line, W / 2, 114, 12, blink ? '#ffd23a' : '#fff2a8');
+    // The power meter, with a mark where the last ball was let go.
     ctx.fillStyle = '#222233';
     ctx.fillRect(20, 130, W - 40, 26);
     const grad = ctx.createLinearGradient(20, 0, W - 20, 0);
@@ -195,7 +210,12 @@ export class AlleyRoller extends TicketMachine {
     grad.addColorStop(1, '#ff4a3a');
     ctx.fillStyle = grad;
     ctx.fillRect(20, 130, (W - 40) * (aiming ? sim.power : 0), 26);
-    drawText(ctx, aiming ? 'HOLD SPACE · LET GO' : 'ROLLING...', W / 2, 176, 10, '#9a96c0');
+    if (sim.lastPower !== null) {
+      const x = Math.round(20 + (W - 40) * sim.lastPower);
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(x - 1, 124, 3, 38);
+    }
+    drawText(ctx, aiming ? `HOLD ${actionKeyLabel('fire').toUpperCase()} · LET GO` : 'ROLLING...', W / 2, 176, 10, '#9a96c0');
     texture.needsUpdate = true;
   }
 }

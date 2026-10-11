@@ -1,7 +1,7 @@
 import { KEYS, PersistedStore } from '@/persistence';
 import { dayKey } from './calendar';
 import { TOURNAMENT } from './pricing';
-import { REGULARS, rivalScore } from './rivals';
+import { NOT_COMPETING, REGULARS, rivalScore } from './rivals';
 import { dayStream } from '@/time/daily';
 import { weekdayOf } from '@/time/wakefulness';
 import { flag } from '@/settings/flags';
@@ -44,6 +44,8 @@ interface TournamentView {
   out: boolean;
   /** The next opponent and the score to beat, while the player is still in. */
   next: { round: number; name: string; score: number } | null;
+  /** The cup played for (it grows with the titles won) and the titles won so far. */
+  cup: { name: string; titles: number };
 }
 
 /** What a tournament play did: the round, the opponent's score, and how the player's run ended (if it did) with its reward. */
@@ -58,13 +60,21 @@ export interface TournamentOutcome {
   /** Tickets paid now (the run ended), and the cup for the champion. */
   tickets: number;
   prize: string | null;
+  /** The cup's name (the Saturday cup, then silver and gold ones as titles are won). */
+  cup: string;
+}
+
+/** A Saturday left before the player's run ended (a round or two won, then home): what it still pays, once. */
+interface UnfinishedRun {
+  wins: number;
+  tickets: number;
 }
 
 /** How a round is announced at the end of the play. */
 export function tournamentLine(outcome: TournamentOutcome): string {
   const round = ['quarter-final', 'semi-final', 'final'][outcome.round]!;
   const vs = `${formatNumber(outcome.score)} against ${outcome.opponent}'s ${formatNumber(outcome.opponentScore)}`;
-  if (outcome.finished === 'champion') return `TOURNAMENT CHAMPION! ${vs}. ${formatTickets(outcome.tickets)}, and the Saturday cup goes on the prize shelf at home.`;
+  if (outcome.finished === 'champion') return `TOURNAMENT CHAMPION! ${vs}. ${formatTickets(outcome.tickets)}, and the ${outcome.cup.toLowerCase()} goes home with you.`;
   if (outcome.finished === 'out') return `Knocked out in the ${round}: ${vs}.${outcome.tickets ? ` ${formatTickets(outcome.tickets)} for getting this far.` : ''} Next Saturday!`;
   return `${round[0]!.toUpperCase()}${round.slice(1)} won: ${vs}. Next round: play again.`;
 }
@@ -75,6 +85,11 @@ interface TournamentFile {
   entered: boolean;
   /** The player's score in each round played, in order. */
   scores: number[];
+  /** Titles won in all (the cup grows with them), and how many there were when this day's sheet was signed. */
+  titles: number;
+  cupAt?: number;
+  /** A past Saturday's run left unfinished, still to pay (`takeUnfinished`). */
+  owed?: UnfinishedRun;
 }
 
 interface ArcadeTournamentOptions {
@@ -102,7 +117,12 @@ interface ArcadeTournamentOptions {
  * round), shown on the sheet and said when the round starts.
  * The other matches are decided the same way and shown as the player's round reaches them (all of
  * them once the player is out). Going out after n wins pays `TOURNAMENT.reward[n]` tickets, the
- * champion also takes the cup home. Persisted by date: a new Saturday starts a new bracket.
+ * champion also takes the cup home. Persisted by date: a new Saturday starts a new bracket; a run left
+ * before it ended (rounds won, then home) is paid as if the player had gone out then (`takeUnfinished`,
+ * the next ticket play). The cup grows with the titles won (`TOURNAMENT.cups`: a silver cup, then a gold
+ * one; the regulars play better for it and it pays more), fixed for a Saturday once its sheet is signed.
+ * The cabinets it may be played on include physical machines (the pinball, the hoops): any machine
+ * that keeps a table.
  */
 export class ArcadeTournament {
   private readonly games: readonly string[];
@@ -124,12 +144,42 @@ export class ArcadeTournament {
     this.gameDay = options.gameDay ?? null;
     this.store = new PersistedStore<TournamentFile>({
       key: ARCADE_TOURNAMENT_KEY,
-      version: 1,
+      // Version 1: the day's entry. Version 2: the titles won and an unfinished run's tickets (the format reads both).
+      version: 2,
       storage: options.storage,
-      defaults: () => ({ day: '', entered: false, scores: [] }),
+      defaults: () => ({ day: '', entered: false, scores: [], titles: 0 }),
       read: readTournament,
     });
     this.state = this.store.load();
+  }
+
+  /** The cup played for now: the one signed for today, else the one the titles won so far earn (`TOURNAMENT.cups`). */
+  private get cup(): (typeof TOURNAMENT.cups)[number] {
+    return this.cupOn(this.today());
+  }
+
+  /** The cup played for on `day` (a title won that day does not change it). */
+  private cupOn(day: string): (typeof TOURNAMENT.cups)[number] {
+    return cupFor(this.state.day === day && this.state.cupAt !== undefined ? this.state.cupAt : this.state.titles);
+  }
+
+  /** Titles won in all. */
+  get titles(): number {
+    return this.state.titles;
+  }
+
+  /**
+   * A past Saturday's run the player left before it ended (rounds won, never knocked out): what it pays, once (the
+   * next ticket play settles it). Null when there is none.
+   */
+  takeUnfinished(): UnfinishedRun | null {
+    this.settlePast();
+    const owed = this.state.owed;
+    if (!owed) return null;
+    const { owed: _paid, ...rest } = this.state;
+    this.state = rest;
+    this.commit();
+    return owed;
   }
 
   /** Whether today is tournament day. */
@@ -140,8 +190,7 @@ export class ArcadeTournament {
 
   /** Today's cabinet (whatever the day: the board says which game next Saturday's is not, only today's). */
   get gameId(): string {
-    const rng = dayStream(`${this.today()}:tournament`);
-    return this.games[Math.floor(rng() * this.games.length)]!;
+    return this.gameOn(this.today());
   }
 
   /** Whether the player signed today's sheet. */
@@ -163,7 +212,8 @@ export class ArcadeTournament {
   /** Signs today's sheet (the coins are the caller's to take); false when it is not a tournament day or already signed. */
   enter(): boolean {
     if (!this.isOn || this.current().entered) return false;
-    this.state = { day: this.today(), entered: true, scores: [] };
+    this.settlePast();
+    this.state = { ...this.state, day: this.today(), entered: true, scores: [], cupAt: this.state.titles };
     this.commit();
     return true;
   }
@@ -178,6 +228,7 @@ export class ArcadeTournament {
     const won = score > opponentScore;
     const wins = round + (won ? 1 : 0);
     const finished = !won ? 'out' : wins >= ROUNDS ? 'champion' : null;
+    const cup = this.cup;
     const outcome: TournamentOutcome = {
       round,
       opponent: name,
@@ -185,9 +236,14 @@ export class ArcadeTournament {
       score,
       won,
       finished,
-      tickets: finished ? (TOURNAMENT.reward[wins] ?? 0) : 0,
-      prize: finished === 'champion' ? TOURNAMENT.prize : null,
+      tickets: finished ? reward(wins, cup.pay) : 0,
+      prize: finished === 'champion' ? cup.prize : null,
+      cup: cup.name,
     };
+    if (finished === 'champion') {
+      this.state = { ...this.state, titles: this.state.titles + 1 };
+      this.commit();
+    }
     for (const cb of this.roundListeners) cb(outcome);
     return outcome;
   }
@@ -200,10 +256,13 @@ export class ArcadeTournament {
 
   /** Today's bracket as far as it is known. */
   view(): TournamentView {
-    const on = this.isOn;
-    const gameId = this.gameId;
-    const entrants = this.entrants();
-    const file = this.current();
+    return this.bracket(this.today(), this.isOn, this.current());
+  }
+
+  /** `day`'s bracket as far as `file` (the player's entry that day) has got. */
+  private bracket(day: string, on: boolean, file: Pick<TournamentFile, 'entered' | 'scores'>): TournamentView {
+    const gameId = this.gameOn(day);
+    const entrants = this.entrants(day);
     const entered = on && file.entered;
     const rounds: Match[][] = [];
     // Who goes through, round by round; the player's matches use their scores, every other match the drawn ones.
@@ -217,7 +276,7 @@ export class ArcadeTournament {
       for (let m = 0; m < field.length; m += 2) {
         const a = field[m]!;
         const b = field[m + 1]!;
-        const scoreB = this.npcScore(b, r);
+        const scoreB = this.npcScore(day, b, r);
         if (a === YOU) {
           const played = file.scores[r];
           if (entered && played !== undefined) {
@@ -232,11 +291,11 @@ export class ArcadeTournament {
             if (upcoming) next = { round: r, name: b, score: scoreB };
             // The score to beat is on the sheet before the round is played: the player knows what they are up against.
             matches.push({ a, b, scoreA: null, scoreB: upcoming ? scoreB : null, winner: null });
-            through.push(entered ? YOU : this.npcWinner(a, b, r));
+            through.push(entered ? YOU : this.npcWinner(day, a, b, r));
           }
           continue;
         }
-        const scoreA = this.npcScore(a, r);
+        const scoreA = this.npcScore(day, a, r);
         const winner = scoreA >= scoreB ? a : b;
         matches.push({ a, b, scoreA, scoreB, winner });
         through.push(winner);
@@ -261,7 +320,7 @@ export class ArcadeTournament {
         return { ...match, a: left ?? '???', b: right ?? '???' };
       });
     }
-    return { on, gameId, entrants, rounds: visible, entered, wins, out, next };
+    return { on, gameId, entrants, rounds: visible, entered, wins, out, next, cup: { name: this.cupOn(day).name, titles: this.state.titles } };
   }
 
   subscribe(cb: () => void): () => void {
@@ -269,26 +328,35 @@ export class ArcadeTournament {
     return () => this.listeners.delete(cb);
   }
 
-  /** A player who never signed is counted as if a regular stood in: the bracket still plays out. */
-  private npcWinner(a: string, b: string, round: number): string {
-    return this.npcScore(a, round) >= this.npcScore(b, round) ? a : b;
+  /** `day`'s cabinet. */
+  private gameOn(day: string): string {
+    const rng = dayStream(`${day}:tournament`);
+    return this.games[Math.floor(rng() * this.games.length)]!;
   }
 
-  /** What `name` scores in `round` today: between the hall of fame's fifth and fourth score in the quarter-finals, climbing to its second in the final. */
-  private npcScore(name: string, round: number): number {
-    const gameId = this.gameId;
-    const rng = dayStream(`${this.today()}:tournament:${name}:${round}`);
+  /** A player who never signed is counted as if a regular stood in: the bracket still plays out. */
+  private npcWinner(day: string, a: string, b: string, round: number): string {
+    return this.npcScore(day, a, round) >= this.npcScore(day, b, round) ? a : b;
+  }
+
+  /**
+   * What `name` scores in `round` on `day`: between the hall of fame's fifth and fourth score in the quarter-finals,
+   * climbing to its second in the final; the cup's `strength` higher once titles have been won.
+   */
+  private npcScore(day: string, name: string, round: number): number {
+    const gameId = this.gameOn(day);
+    const rng = dayStream(`${day}:tournament:${name}:${round}`);
     const low = rivalScore(gameId, 4 - round);
     const high = rivalScore(gameId, 3 - round);
-    const raw = (low + (high - low) * rng()) * (0.9 + 0.2 * rng());
+    const raw = (low + (high - low) * rng()) * (0.9 + 0.2 * rng()) * this.cupOn(day).strength;
     const step = raw >= 10000 ? 100 : 10;
     return Math.max(step, Math.round(raw / step) * step);
   }
 
-  /** The eight names on today's sheet: the player, the hall's regulars, then others from the hall of fame's. */
-  private entrants(): string[] {
-    const rng = dayStream(`${this.today()}:tournament:entrants`);
-    const others = REGULARS.filter((n) => n !== 'KID' && !this.names.includes(n));
+  /** The eight names on `day`'s sheet: the player, the hall's regulars, then others from the hall of fame's. */
+  private entrants(day: string): string[] {
+    const rng = dayStream(`${day}:tournament:entrants`);
+    const others = REGULARS.filter((n) => !NOT_COMPETING.includes(n) && !this.names.includes(n));
     for (let i = others.length - 1; i > 0; i--) {
       const j = Math.floor(rng() * (i + 1));
       [others[i], others[j]] = [others[j]!, others[i]!];
@@ -305,7 +373,20 @@ export class ArcadeTournament {
   /** Today's entry, or a blank one when the saved one is for another day. */
   private current(): TournamentFile {
     const day = this.today();
-    return this.state.day === day ? this.state : { day, entered: false, scores: [] };
+    return this.state.day === day ? this.state : { day, entered: false, scores: [], titles: this.state.titles };
+  }
+
+  /**
+   * A past Saturday's entry whose run never ended (rounds won, not knocked out, not champion): its tickets are owed
+   * (`takeUnfinished`), as if the player had gone out then. Done once: the entry is closed.
+   */
+  private settlePast(): void {
+    const file = this.state;
+    if (!file.entered || file.day === this.today()) return;
+    const v = this.bracket(file.day, true, file);
+    const owed = !v.out && v.wins > 0 && v.wins < ROUNDS ? { wins: v.wins, tickets: reward(v.wins, this.cupOn(file.day).pay) } : null;
+    this.state = { ...file, entered: false, scores: [], ...(owed ? { owed } : {}) };
+    this.commit();
   }
 
   /** The day's key: the game day's (`g12`) on the game's week, else the real date's. */
@@ -319,13 +400,27 @@ export class ArcadeTournament {
   }
 }
 
+/** The cup for a player with `titles` titles. */
+function cupFor(titles: number): (typeof TOURNAMENT.cups)[number] {
+  return TOURNAMENT.cups.filter((c) => titles >= c.titles).pop() ?? TOURNAMENT.cups[0];
+}
+
+/** What going out after `wins` rounds pays, at the cup's `pay`. */
+function reward(wins: number, pay: number): number {
+  return Math.round((TOURNAMENT.reward[wins] ?? 0) * pay);
+}
+
 function readTournament(data: unknown): TournamentFile | null {
   if (typeof data !== 'object' || data === null) return null;
   const d = data as Partial<TournamentFile>;
   if (typeof d.day !== 'string') return null;
+  const owed = d.owed && typeof d.owed.wins === 'number' && typeof d.owed.tickets === 'number' ? { wins: d.owed.wins, tickets: d.owed.tickets } : null;
   return {
     day: d.day,
     entered: d.entered === true,
     scores: Array.isArray(d.scores) ? d.scores.filter((s): s is number => typeof s === 'number' && Number.isFinite(s)).slice(0, ROUNDS) : [],
+    titles: typeof d.titles === 'number' && Number.isFinite(d.titles) ? Math.max(0, Math.floor(d.titles)) : 0,
+    ...(typeof d.cupAt === 'number' && Number.isFinite(d.cupAt) ? { cupAt: d.cupAt } : {}),
+    ...(owed ? { owed } : {}),
   };
 }

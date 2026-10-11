@@ -43,6 +43,14 @@ interface YardSky {
   daylight: number;
 }
 
+/** The game weekday the kids go to the park's playground on Front Street instead of the yard (Sunday). */
+const PLAYGROUND_WEEKDAY = 6;
+
+/** Whether on `day` the kids who come out are at the park's playground (`street/events/placeStreetEvents`), not in the yard. */
+export function playgroundDay(day: number): boolean {
+  return day !== forcedDay && weekdayOf(day) === PLAYGROUND_WEEKDAY;
+}
+
 /** The windows the kids may be down in on `day` (game hours): after school, Wednesday afternoons, weekends. */
 function windowsOf(day: number): readonly (readonly [number, number])[] {
   const weekday = weekdayOf(day);

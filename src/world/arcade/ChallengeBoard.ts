@@ -24,9 +24,10 @@ const POLL_SECONDS = 1;
 const FRAME = paint(0x1a1208, 0.5);
 
 /**
- * TODAY'S CHALLENGE: a lit sign by the way in with the day's game, the score to reach and the
- * tickets it pays on top, stamped BEATEN once paid. The challenge itself is `ArcadeDaily`'s (the
- * same for everyone all day); the Session pays it. Wall-hung, +z into the room. Never collides.
+ * TODAY'S CHALLENGE: a lit sign by the way in with the day's game, what it asks (a score, the same twice, the day's
+ * plays added up), how far along the player is (two lamps for a twice, a filling bar for the day's total) and the
+ * tickets it pays on top, stamped BEATEN once paid. The challenge itself is `ArcadeDaily`'s (one a game day); the
+ * Session pays it. Wall-hung, +z into the room. Never collides.
  */
 export class ChallengeBoard extends Prop implements Updatable {
   private readonly canvas: HTMLCanvasElement;
@@ -64,7 +65,7 @@ export class ChallengeBoard extends Prop implements Updatable {
   private repaint(): void {
     const c = this.options.challenge();
     // The chaser round the edge moves every repaint; the rest only when the challenge does.
-    const key = `${c.gameId}|${c.target}|${c.done}|${Math.floor(this.clock) % 2}`;
+    const key = `${c.gameId}|${c.line ?? c.target}|${c.progress ?? 0}|${c.done}|${Math.floor(this.clock) % 2}`;
     if (key === this.shown) return;
     this.shown = key;
     const ctx = this.ctx;
@@ -84,9 +85,10 @@ export class ChallengeBoard extends Prop implements Updatable {
     }
     drawText(ctx, "TODAY'S CHALLENGE", W / 2, H * 0.17, Math.round(H * 0.08), '#ffd23a');
     drawText(ctx, this.options.titleOf(c.gameId), W / 2, H * 0.36, Math.round(H * 0.11), '#ffffff');
-    drawText(ctx, `SCORE ${formatNumber(c.target)}`, W / 2, H * 0.54, Math.round(H * 0.085), '#9ad6ff');
-    drawText(ctx, `+${c.reward} TICKETS ON TOP`, W / 2, H * 0.7, Math.round(H * 0.07), '#7ee787');
-    drawText(ctx, 'ONE PRIZE A DAY · NEW ONE AT MIDNIGHT, YOUR TIME', W / 2, H * 0.84, Math.round(H * 0.04), '#b09ac0');
+    drawText(ctx, c.line ?? `SCORE ${formatNumber(c.target)}`, W / 2, H * 0.53, Math.round(H * 0.075), '#9ad6ff');
+    drawText(ctx, `+${c.reward} TICKETS ON TOP`, W / 2, H * 0.68, Math.round(H * 0.065), '#7ee787');
+    if (c.personal) drawText(ctx, 'SET FROM YOUR OWN BEST', W / 2, H * 0.43, Math.round(H * 0.04), '#ffd23a');
+    this.paintProgress(c, W, H);
     if (c.done) {
       ctx.save();
       ctx.translate(W / 2, H * 0.5);
@@ -98,5 +100,29 @@ export class ChallengeBoard extends Prop implements Updatable {
       ctx.restore();
     }
     this.texture.needsUpdate = true;
+  }
+
+  /** How far along: a lamp per play that reached it (a twice), a bar filling with the day's points (a total). */
+  private paintProgress(c: TodaysChallenge, W: number, H: number): void {
+    const need = c.need ?? 1;
+    const progress = c.progress ?? 0;
+    if (need <= 1 || c.done) return;
+    const ctx = this.ctx;
+    const y = H * 0.82;
+    if (need <= 5) {
+      for (let i = 0; i < need; i++) {
+        const x = W / 2 + (i - (need - 1) / 2) * H * 0.1;
+        ctx.fillStyle = i < progress ? '#7ee787' : '#3a2a4a';
+        ctx.beginPath();
+        ctx.arc(x, y, H * 0.03, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      return;
+    }
+    const w = W * 0.6;
+    ctx.fillStyle = '#3a2a4a';
+    ctx.fillRect((W - w) / 2, y - H * 0.022, w, H * 0.044);
+    ctx.fillStyle = '#7ee787';
+    ctx.fillRect((W - w) / 2, y - H * 0.022, w * Math.min(1, progress / need), H * 0.044);
   }
 }

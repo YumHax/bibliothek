@@ -11,17 +11,31 @@ import { WARM_STRIP, bakedGlow, poolTexture } from '../showcase/glow';
 import { CABINET_CHROME } from './cabinetModel';
 import { PROUD } from '../props/joinery';
 import { paint, standard, timber } from '@/world/materials/palette';
-import type { PrizeKind } from '@/economy/Prizes';
+import { type OwnedPrize, type Prize, soldOnce } from '@/economy/Prizes';
+import type { Updatable } from '@/core/Engine';
 import { prizeModel } from '../prizes/prizeModel';
 import { formatTickets } from '@/text/money';
+
+/** The prizes taken home, as the counter reads them: what was taken today leaves a gap, a new one is handed over. */
+interface TakenPrizes {
+  readonly owned: readonly OwnedPrize[];
+  takenOn(id: string, day: number): boolean;
+  subscribe(cb: () => void): () => void;
+}
 
 interface PrizeCounterOptions {
   /** Tickets one coin is worth, written on the sign. */
   ticketsPerCoin: number;
   /** What the glass case shows: the prizes on sale, left to right (their price tagged on the pegboard behind). */
-  prizes?: readonly { kind: PrizeKind; color: number; tickets?: number }[];
+  prizes?: readonly Prize[];
   /** Gap between the counter's back and the wall the sign hangs on (room for an attendant behind). Default 0.02. */
   wallBehind?: number;
+  /** The prizes taken: today's leave their gap in the case till the next game day, the newest is set on the counter top. */
+  taken?: TakenPrizes;
+  /** The pocket: the pegboard's tags light up over what it covers. */
+  wallet?: { readonly tickets: number; subscribe(cb: () => void): () => void };
+  /** Today's game day (the market calendar's): the case is restocked on the next. */
+  today?: () => number;
 }
 
 const WIDTH = 1.5;
@@ -41,21 +55,40 @@ const PEG_PX = 400;
 /** The pegboard's thickness, and the case's LED strip's height. */
 const PEG_T = 0.008;
 const STRIP_H = 0.012;
+/** Where the attendant sets a prize just taken, counter-local (on the top, on the hall's side of the bowl), and its size there. */
+const HANDOVER = { x: -0.32, z: 0.08, scale: 1.5 };
+/** How often the case checks the day for its restock (s). */
+const RESTOCK_CHECK_S = 2;
 
 /**
  * The arcade's prize counter: a glass-fronted desk showing the prizes on two glass shelves, a lit
  * sign giving the rate. Clicking it opens the counter's panel (`SessionActions.openPrizeCounter`):
  * prizes for tickets, tickets for coins. Local +z faces the room.
  */
-export class PrizeCounter extends THREE.Group implements Furniture, Interactable {
+export class PrizeCounter extends THREE.Group implements Furniture, Interactable, Updatable {
   readonly hitboxes: THREE.Object3D[];
   private readonly sign: THREE.MeshBasicMaterial;
   private readonly rate: number;
+  /** The case's models by prize id: one taken today is a gap till tomorrow. */
+  private readonly inCase = new Map<string, THREE.Object3D>();
+  private readonly options: PrizeCounterOptions;
+  /** The pegboard's face, repainted when the tags the pocket covers change. */
+  private pegboard: { texture: THREE.CanvasTexture; repaint: (lit: ReadonlySet<string>) => void; lit: string } | null = null;
+  /** The prize just handed over, on the counter top. */
+  private handedOver: THREE.Object3D | null = null;
+  private seen: number;
+  private day: number;
+  private checkIn = 0;
+  private readonly unsubscribe: (() => void)[] = [];
 
-  constructor({ ticketsPerCoin, wallBehind = 0.02, prizes = [] }: PrizeCounterOptions) {
+  constructor(options: PrizeCounterOptions) {
     super();
+    const { ticketsPerCoin, wallBehind = 0.02, prizes = [] } = options;
     this.name = 'PrizeCounter';
+    this.options = options;
     this.rate = ticketsPerCoin;
+    this.seen = options.taken?.owned.length ?? 0;
+    this.day = options.today?.() ?? 0;
 
     // Desk: a wooden carcass, a glass display in the front, a thicker top.
     this.add(boxMesh(WIDTH, HEIGHT - 0.04, DEPTH * 0.55, WOOD, { y: (HEIGHT - 0.04) / 2, z: -DEPTH * 0.22 }));
@@ -74,6 +107,7 @@ export class PrizeCounter extends THREE.Group implements Furniture, Interactable
       model.scale.setScalar(1.4);
       model.position.set(-WIDTH / 2 + 0.12 + ((WIDTH - 0.24) * (col + 0.5)) / count, 0.12 + row * 0.36, DEPTH * 0.28);
       this.add(model);
+      this.inCase.set(prize.id, model);
     });
     this.add(boxMesh(WIDTH - 0.1, 0.006, DEPTH * 0.4, GLASS, { y: 0.12 + 0.35, z: DEPTH * 0.28 }));
     this.lightCase();
@@ -94,6 +128,64 @@ export class PrizeCounter extends THREE.Group implements Furniture, Interactable
     const hitbox = invisibleHitbox(WIDTH + 0.06, HEIGHT + 0.1, DEPTH + 0.06, { y: (HEIGHT + 0.1) / 2 });
     this.hitboxes = [hitbox];
     this.add(hitbox);
+
+    this.restock();
+    this.lightTags();
+    if (options.taken) this.unsubscribe.push(options.taken.subscribe(() => this.onTaken()));
+    if (options.wallet) this.unsubscribe.push(options.wallet.subscribe(() => this.lightTags()));
+  }
+
+  update(dt: number): void {
+    this.checkIn -= dt;
+    if (this.checkIn > 0 || !this.options.today) return;
+    this.checkIn = RESTOCK_CHECK_S;
+    const day = this.options.today();
+    if (day === this.day) return;
+    this.day = day;
+    this.restock();
+  }
+
+  dispose(): void {
+    for (const off of this.unsubscribe) off();
+  }
+
+  /** A gap in the case where a prize was taken today; the rest in their places (a new day fills every gap). */
+  private restock(): void {
+    const taken = this.options.taken;
+    for (const [id, model] of this.inCase) model.visible = !taken?.takenOn(id, this.day);
+  }
+
+  /** A prize was just taken: its gap in the case, and the attendant sets it down on the counter top for the player. */
+  private onTaken(): void {
+    const taken = this.options.taken!;
+    const fresh = taken.owned.slice(this.seen);
+    this.seen = taken.owned.length;
+    this.restock();
+    this.lightTags();
+    const prize = [...fresh].reverse().map((o) => this.options.prizes?.find((p) => p.id === o.id)).find(Boolean);
+    if (!prize) return;
+    if (this.handedOver) this.remove(this.handedOver);
+    const model = prizeModel(prize.kind, prize.color);
+    model.scale.setScalar(HANDOVER.scale);
+    model.position.set(HANDOVER.x, HEIGHT + PROUD, HANDOVER.z); // stood on the top, not in its face
+    model.rotation.y = 0.3;
+    this.handedOver = model;
+    this.add(model);
+  }
+
+  /** The pegboard's tags over what the pocket covers glow (a prize sold once and home already stays dark). */
+  private lightTags(): void {
+    const board = this.pegboard;
+    if (!board) return;
+    const wallet = this.options.wallet;
+    // Without a pocket to read, every tag is lit.
+    const covered = (p: Prize): boolean => !wallet || (p.tickets !== null && p.tickets <= wallet.tickets && !(soldOnce(p) && this.options.taken?.owned.some((o) => o.id === p.id)));
+    const lit = new Set((this.options.prizes ?? []).filter(covered).map((p) => p.id));
+    const key = [...lit].sort().join(',');
+    if (key === board.lit) return;
+    board.lit = key;
+    board.repaint(lit);
+    board.texture.needsUpdate = true;
   }
 
   get footprint(): THREE.Box3 {
@@ -143,16 +235,18 @@ export class PrizeCounter extends THREE.Group implements Furniture, Interactable
    * on sale hung on a hook with its ticket price on a tag under it. What a coin of tickets buys, at
    * a glance from across the hall.
    */
-  private addPegboard(wallZ: number, prizes: readonly { kind: PrizeKind; color: number; tickets?: number }[]): void {
-    const hung = prizes.filter((p) => p.tickets !== undefined);
+  private addPegboard(wallZ: number, prizes: readonly Prize[]): void {
+    const hung = prizes.filter((p) => p.tickets !== null);
     const { width, height, y, perRow } = PEGBOARD;
     const rows = Math.max(1, Math.ceil(hung.length / perRow));
     const slots = hung.map((prize, i) => ({ prize, col: i % perRow, row: Math.floor(i / perRow) }));
     const cellW = width / perRow;
     const cellH = height / rows;
+    const face = paintPegboard(width, height, slots, rows);
+    this.pegboard = { ...face, lit: '' };
     const board = new THREE.Mesh(
       new THREE.BoxGeometry(width, height, PEG_T),
-      [PEG_EDGE, PEG_EDGE, PEG_EDGE, PEG_EDGE, new THREE.MeshStandardMaterial({ map: paintPegboard(width, height, slots, rows), roughness: 0.85 }), PEG_EDGE],
+      [PEG_EDGE, PEG_EDGE, PEG_EDGE, PEG_EDGE, new THREE.MeshStandardMaterial({ map: face.texture, roughness: 0.85, emissiveMap: face.texture, emissive: 0xffffff, emissiveIntensity: 0.35 }), PEG_EDGE],
     );
     board.position.set(0, y, wallZ + PEG_T / 2 + PROUD);
     board.receiveShadow = true;
@@ -194,26 +288,32 @@ export class PrizeCounter extends THREE.Group implements Furniture, Interactable
 
 const PEG_EDGE = paint(0x6a4a2c, 0.8);
 
-/** The pegboard's face: hardboard with its grid of holes, a tag under each hook with the prize's price. */
-function paintPegboard(width: number, height: number, slots: readonly { prize: { tickets?: number }; col: number; row: number }[], rows: number): THREE.CanvasTexture {
+/**
+ * The pegboard's face: hardboard with its grid of holes, a tag under each hook with the prize's price; a tag the pocket
+ * covers is lit (`repaint(lit)`), the rest of the board stays dim under the face's faint emissive.
+ */
+function paintPegboard(width: number, height: number, slots: readonly { prize: Prize; col: number; row: number }[], rows: number): { texture: THREE.CanvasTexture; repaint: (lit: ReadonlySet<string>) => void } {
   const W = Math.round(width * PEG_PX);
   const H = Math.round(height * PEG_PX);
   const [canvas, ctx] = createCanvas(W, H);
   const cellW = W / PEGBOARD.perRow;
   const cellH = H / rows;
+  let lit: ReadonlySet<string> = new Set();
   const paint = (): void => {
-    ctx.fillStyle = '#8a6440';
+    // Dark hardboard: the face's emissive only lifts what is pale on it, the lit tags.
+    ctx.fillStyle = '#3a2a1a';
     ctx.fillRect(0, 0, W, H);
-    ctx.fillStyle = 'rgba(40,24,12,0.75)';
+    ctx.fillStyle = 'rgba(12,6,2,0.8)';
     for (let x = 10; x < W; x += 20) for (let y = 10; y < H; y += 20) ctx.fillRect(x - 2, y - 2, 4, 4);
     for (const { prize, col, row } of slots) {
       const x = cellW * (col + 0.5);
       const y = cellH * row + cellH * 0.86;
-      ctx.fillStyle = '#fff8e6';
+      const on = lit.has(prize.id);
+      ctx.fillStyle = on ? '#fff8e6' : '#6e665a';
       ctx.fillRect(x - cellW * 0.36, y - 13, cellW * 0.72, 26);
-      ctx.fillStyle = '#ff2fa0';
+      ctx.fillStyle = on ? '#ff2fa0' : '#5a3a4a';
       ctx.fillRect(x - cellW * 0.36, y - 13, 5, 26);
-      drawText(ctx, `${prize.tickets ?? 0} TIX`, x + 2, y + 1, 13, '#1a0f2a');
+      drawText(ctx, `${prize.tickets ?? 0} TIX`, x + 2, y + 1, 13, on ? '#1a0f2a' : '#2a241e');
     }
   };
   paint();
@@ -222,5 +322,11 @@ function paintPegboard(width: number, height: number, slots: readonly { prize: {
     paint();
     texture.needsUpdate = true;
   });
-  return texture;
+  return {
+    texture,
+    repaint: (next) => {
+      lit = next;
+      paint();
+    },
+  };
 }

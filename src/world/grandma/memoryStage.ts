@@ -9,14 +9,25 @@ import { HandheldScreens, handheldModel } from '../courtyard/handheldModel';
  * table's top as it stands today, today's things of hers put aside by name, the child's Game Boy held up to the face.
  */
 
-/** Beats on the film's clock, each fired once the first frame the clock passes it; `reset` at every staging. */
-export function beats(): { at(t: number, when: number, key: string, run: () => void): void; reset(): void } {
+/**
+ * Beats on the film's clock, each fired once the first frame the clock passes it; `now` fires one at once (a cue
+ * played out early), `skip` marks one fired without running it (the moment the player let pass); `reset` at every staging.
+ */
+export function beats(): { at(t: number, when: number, key: string, run: () => void): void; now(key: string, run: () => void): void; skip(key: string): void; reset(): void } {
   let fired = new Set<string>();
   return {
     at: (t, when, key, run) => {
       if (t < when || fired.has(key)) return;
       fired.add(key);
       run();
+    },
+    now: (key, run) => {
+      if (fired.has(key)) return;
+      fired.add(key);
+      run();
+    },
+    skip: (key) => {
+      fired.add(key);
     },
     reset: () => {
       fired = new Set();
@@ -54,6 +65,44 @@ export function hideNamed(set: MemorySet, ...names: string[]): void {
     if (names.includes(obj.name)) found.push(obj);
   });
   if (found.length) set.hide(...found);
+}
+
+/** What a reel's `returned` needs of the present to play her after-line (`albumWiring`'s `Present`). */
+interface Returning {
+  meme: Walker;
+  reseat(): void;
+  afterLine: string;
+  after(seconds: number, fn: () => void): void;
+}
+
+/** Her beats back in the room after a hard memory, and after a gentler one (s after the room comes back under the black). */
+const MOVED = {
+  /** The row, the sale, the keys: her glasses off (as near as her hands go), a long breath out, then her words slowly. */
+  hard: { glasses: 1.6, sigh: 3.4, speak: 5.8, between: 3, face: { frown: 0.5, squint: 0.45, browsUp: 0.3, smile: 0 }, hold: 9 },
+  /** The last Wednesday: a sigh and a small smile, then her words. */
+  soft: { glasses: null, sigh: 1.8, speak: 3.6, between: 2.4, face: { smile: 0.3, frown: 0.2, browsUp: 0.2 }, hold: 6 },
+} as const;
+
+/**
+ * Mémé back in her chair after a memory, under the last black: at once her line for a light one; after a hard one
+ * (`moved`) she is shaken first, and says it a sentence at a time. Mémé of today shown again and seated.
+ */
+export function backInTheRoom(present: Returning, moved: keyof typeof MOVED | null = null): void {
+  // Put aside while her younger self was in the picture (a memory filmed at hers): back in her chair.
+  if (!present.meme.isPresent) present.meme.setPresent(true);
+  present.reseat();
+  if (!moved) {
+    present.meme.speak(present.afterLine);
+    return;
+  }
+  const { meme } = present;
+  const beat = MOVED[moved];
+  meme.feel(beat.face, beat.hold);
+  if (beat.glasses !== null) present.after(beat.glasses, () => meme.gesture('adjustGlasses'));
+  present.after(beat.sigh, () => meme.gesture('sigh'));
+  present.afterLine
+    .split(/(?<=[.?!…])\s+/)
+    .forEach((sentence, i) => present.after(beat.speak + i * beat.between, () => meme.speak(sentence)));
 }
 
 /** The yaw that turns someone standing at zone-local `at` towards Mémé where she is now (her spot for the hour). */

@@ -14,7 +14,8 @@ export type Sfx =
   | 'ticket' | 'coin' | 'tilt' | 'bumper' | 'flipper' | 'launch' | 'drain' | 'whir' | 'clunk' | 'win' | 'roll' | 'thud'
   | 'letter' | 'confirm' | 'jingle' | 'eat'
   | 'kick' | 'snare' | 'hat' | 'bang' | 'reload' | 'empty' | 'tick' | 'swish' | 'rim' | 'jackpot'
-  | 'lane' | 'perfect' | 'good' | 'miss' | 'crunch' | 'shield' | 'stage';
+  | 'lane' | 'perfect' | 'good' | 'miss' | 'crunch' | 'shield' | 'stage'
+  | 'bass' | 'march' | 'saucer' | 'countdown' | 'dash' | 'graze' | 'capsule' | 'steel';
 
 /** A sound a game asked for this frame; `pitch` scales its notes (a combo climbs). */
 export interface SfxEvent {
@@ -114,6 +115,18 @@ const RECIPES: Record<Sfx, { notes?: Note[]; hiss?: Hiss[] }> = {
   crunch: { hiss: [{ at: 0, length: 0.18, filter: 'lowpass', frequency: 1400, level: 0.9 }, { at: 0.05, length: 0.1, filter: 'bandpass', frequency: 500, level: 0.6 }], notes: [{ wave: 'square', from: 140, to: 45, at: 0, length: 0.16, level: 0.6 }] },
   shield: { notes: [{ wave: 'sine', from: 180, to: 220, at: 0, length: 0.95, level: 0.22 }, { wave: 'triangle', from: 360, to: 440, at: 0, length: 0.95, level: 0.08 }] },
   stage: { notes: [...scale([659, 880, 1318], 0.06, 'square', 0.06, 0.5), { wave: 'square', from: 1760, at: 0.18, length: 0.2, level: 0.5 }] },
+  // STEP BEAT's bass line (pitched per note from 110 Hz), STAR RAID's four-step march (pitched down a step each) and its saucer's warble.
+  bass: { notes: [{ wave: 'triangle', from: 110, at: 0, length: 0.16, level: 0.7 }, { wave: 'square', from: 110, at: 0, length: 0.05, level: 0.15 }] },
+  march: { notes: [{ wave: 'square', from: 98, to: 82, at: 0, length: 0.07, level: 0.45 }] },
+  saucer: { notes: [{ wave: 'square', from: 900, to: 1300, at: 0, length: 0.1, level: 0.12 }, { wave: 'square', from: 1300, to: 900, at: 0.1, length: 0.1, level: 0.12 }] },
+  // The last five seconds of any game's clock, one a second.
+  countdown: { notes: [{ wave: 'square', from: 1568, at: 0, length: 0.05, level: 0.35 }] },
+  // COMET DASH's burst sideways and the close shave of a rock.
+  dash: { hiss: [{ at: 0, length: 0.12, filter: 'bandpass', frequency: 2200, level: 0.4 }], notes: [{ wave: 'triangle', from: 300, to: 900, at: 0, length: 0.1, level: 0.35 }] },
+  graze: { notes: [{ wave: 'triangle', from: 1200, to: 1700, at: 0, length: 0.06, level: 0.3 }] },
+  // A capsule caught (BRICK STORM), a steel brick shrugging a ball off.
+  capsule: { notes: scale([659, 988, 1318, 1760], 0.045, 'triangle', 0.05, 0.55) },
+  steel: { notes: [{ wave: 'square', from: 1975, at: 0, length: 0.03, level: 0.25 }, { wave: 'triangle', from: 2637, at: 0.01, length: 0.08, level: 0.2 }] },
 };
 
 /**

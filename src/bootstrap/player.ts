@@ -4,6 +4,7 @@ import type { FirstPersonController } from '@/player/FirstPersonController';
 import { Footsteps } from '@/audio/Footsteps';
 import type { Fader } from '@/ui/Fader';
 import { Travel, travelStops, travelTint } from '@/world/travel';
+import { takeRideVia } from '@/world/travel/rideVia';
 import { isZoneId, zonePlan } from '@/world/worldPlan';
 import { surfaceUnderfoot } from '@/world/zoneHandle';
 import { airlockLink } from '@/world/airlock';
@@ -11,9 +12,11 @@ import { outsideIfShut } from '@/world/shop/ClosingTime';
 import * as THREE from 'three';
 import { reduceMotion } from '@/settings/motion';
 import { playRide } from '@/ui/busRide/BusRide';
+import { ridersFor } from '@/ui/busRide/busRiders';
 import { STREET_PLAN } from '@/world/street/streetPlan';
 import type { Services } from './services';
 import type { BuiltWorld, GameWorld } from './world';
+import { streetGround } from './worldZones';
 
 export type PlayerMoves = ReturnType<typeof createPlayerMoves>;
 
@@ -43,13 +46,21 @@ export function createPlayerMoves(services: Services, parts: { world: GameWorld;
     },
     // The curtain falls in the light of where the player goes: a shop's warm lamps, the street's sky.
     tint: (id) => travelTint(zonePlan(id).kind, sky.dayNight.state.daylight),
-    // Line 38 to Mémé's and back (docs/story.md "Mémé"): the ride from a seat by the window over the curtain.
+    // Line 38 to Mémé's and back (docs/story.md "Mémé"): the ride from a seat by the window over the curtain, with the
+    // line's regulars of the hour, and some mornings Mémé herself on her way back from the market (docs/grandma.md).
     interlude: (from, to) => {
+      // By taxi (`traffic/TaxiRank`): no bus ride over the curtain.
+      if (takeRideVia() === 'taxi') return null;
       const line = STREET_PLAN.busRide.destinations.find((d) => (from === 'street' && to === d.to) || (from === d.to && to === 'street'));
-      if (!line || reduceMotion()) return null;
+      if (!line) return null;
       const { daylight, hours } = sky.dayNight.state;
       const home = to === 'street';
-      return () => playRide(services.container, { board: `${STREET_PLAN.bus.line} ${home ? 'FRONT STREET' : line.board}`, daylight, hours, seed: home ? 83 : 38 });
+      const day = services.today.gameDay;
+      // Decided whether the ride is shown or not: she gets off at Linden Avenue with the player all the same.
+      const meme = !home && to === 'lindenAvenue' && services.sharedRide.board(day, hours);
+      if (reduceMotion()) return null;
+      const riders = ridersFor(day, hours, meme);
+      return () => playRide(services.container, { board: `${STREET_PLAN.bus.line} ${home ? 'FRONT STREET' : line.board}`, daylight, hours, seed: home ? 83 : 38, riders });
     },
   });
   // The building's sas: crossing between the hall's twin and the street's moves the player with no curtain
@@ -65,6 +76,7 @@ export function createPlayerMoves(services: Services, parts: { world: GameWorld;
   });
   // Back where the player last stood (zone, spot, look) after a reload; `?fresh` starts in the living room.
   // The ZoneManager notices on the first frame and loads that zone.
+  const onStreet = streetGround(world, () => services.today.gameDay);
   const positionMemory = new PositionMemory({
     camera: engine.camera,
     player,
@@ -73,6 +85,8 @@ export function createPlayerMoves(services: Services, parts: { world: GameWorld;
     // Not onto the stairs (which flight?), nor up in the attic or on the roof (the restore sets the feet at 0: the flat under them).
     floorOf: (id) => (id !== 'stairwell' && id !== 'attic' && id !== 'roof' && isZoneId(id) ? world.zone(id).floorBounds : null),
     busy: () => built.activity.held,
+    // The park's gardens and the stretch the works opened lie past the street's box: still the street, kept as they are.
+    walked: (zone, x, z) => zone === 'street' && onStreet(x, z),
     // Left in a shop or the flea market that has shut since: out on Front Street in front of its door.
     instead: (saved) => {
       const spot = outsideIfShut(saved.zone, sky.dayNight.state.hours);

@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import type { Casement } from '../facadePainter';
 import type { TriBuilder } from '../relief/TriBuilder';
 import { gapAt } from '../../surface/layers';
+import type { ShutterLeaves } from './FacadeShutters';
 
 /*
  * One window of a framed facade in 3D, in its facade's frame (`relief/facadeFrame`: s along, y up, out towards the
@@ -14,11 +15,11 @@ import { gapAt } from '../../surface/layers';
 /** The gap between two parts' faces that holds as far as a near facade is seen from (the street's far end). */
 const G = gapAt(80);
 /** How far each part's face stands out of the glass. */
-const FRONT = { bar: 2 * G, frame: 3 * G, shutter: 2 * G, louvre: 3.4 * G, surround: 5.5 * G, lintel: 7 * G, sill: 8 * G, pediment: 8.5 * G, keystone: 9 * G, cornice: 10 * G, box: 13 * G, flower: 11 * G };
+const FRONT = { bar: 2 * G, frame: 3 * G, shutter: 2 * G, louvre: 3.4 * G, hinge: 5 * G, surround: 5.5 * G, lintel: 7 * G, sill: 8 * G, pediment: 8.5 * G, keystone: 9 * G, cornice: 10 * G, box: 13 * G, flower: 11 * G };
 /** How far each part runs back into the wall (behind the glass, out of sight). */
 const BACK = { bar: -0.8 * G, frame: -1.2 * G, shutter: -0.6 * G, surround: -1.6 * G, lintel: -2 * G, sill: -2.4 * G, keystone: -2.8 * G, pediment: -3.2 * G, cornice: -3.6 * G, box: -0.4 * G, flower: 3 * G };
 /** Widths across the face: the surround's jambs, the frame's stiles and rails, a glazing bar, an arch's voussoirs at the crown. */
-const WIDE = { surround: 0.09, frame: 0.055, bar: 0.035, voussoir: 0.16 };
+const WIDE = { surround: 0.09, frame: 0.055, bar: 0.035, voussoir: 0.16, meeting: 0.0235 };
 /** How far one part runs into the next where they meet in the face's plane (an end buried, never flush). */
 const INTO = 0.01;
 /** Where a sash's transom crosses, up its glass. */
@@ -26,6 +27,8 @@ const TRANSOM = 0.62;
 /** Arch segments (the painter's sine segment, `facadePainter.paintWindow`). */
 const ARC_STEPS = 8;
 const FLOWER_BOX = '#6a4a32';
+/** The dark of a room seen through an open window. */
+const ROOM_DARK = '#121214';
 
 const color = new THREE.Color();
 
@@ -54,7 +57,7 @@ function side(b: TriBuilder, m: THREE.Matrix4, [ps, py]: readonly [number, numbe
  * on its cornice over the first floor of a grand front, or a ring of voussoirs on its keystone), the open shutters
  * with their louvres and the flower box.
  */
-export function buildCasement(b: TriBuilder, m: THREE.Matrix4, c: Casement): void {
+export function buildCasement(b: TriBuilder, m: THREE.Matrix4, c: Casement, leaves: ShutterLeaves, window: number): void {
   const { s0, s1, y0, y1, rise } = c;
   const w = s1 - s0;
   const mid = (s0 + s1) / 2;
@@ -102,34 +105,63 @@ export function buildCasement(b: TriBuilder, m: THREE.Matrix4, c: Casement): voi
   // The frame: stiles, rails (a rail at the springing under an arch's fanlight), its run into the surround and head.
   const F = WIDE.frame;
   const top = arched ? spring : y1;
-  // (The stiles' ends half as deep as the rails' and the jambs': no two buried ends in one plane.)
-  block(b, m, s0 - INTO, s0 + F, y0 - INTO / 2, top + INTO / 2, BACK.frame, FRONT.frame, c.frame);
-  block(b, m, s1 - F, s1 + INTO, y0 - INTO / 2, top + INTO / 2, BACK.frame, FRONT.frame, c.frame);
-  block(b, m, s0 + F - INTO, s1 - F + INTO, y0 - INTO, y0 + F, BACK.frame, FRONT.frame, c.frame);
-  block(b, m, s0 + F - INTO, s1 - F + INTO, top - F, top + INTO, BACK.frame, FRONT.frame, c.frame);
-  // The glazing bars: a sash's mullion and transom, a French window's mullion and two transoms; none in frosted glass.
-  if (c.glazing !== 'frosted') {
-    block(b, m, mid - WIDE.bar / 2, mid + WIDE.bar / 2, y0 + F - INTO, top - F + INTO, BACK.bar, FRONT.bar, c.frame);
+  if (c.glazing === 'frosted') {
+    // (The stiles' ends half as deep as the rails' and the jambs': no two buried ends in one plane.)
+    block(b, m, s0 - INTO, s0 + F, y0 - INTO / 2, top + INTO / 2, BACK.frame, FRONT.frame, c.frame);
+    block(b, m, s1 - F, s1 + INTO, y0 - INTO / 2, top + INTO / 2, BACK.frame, FRONT.frame, c.frame);
+    block(b, m, s0 + F - INTO, s1 - F + INTO, y0 - INTO, y0 + F, BACK.frame, FRONT.frame, c.frame);
+    block(b, m, s0 + F - INTO, s1 - F + INTO, top - F, top + INTO, BACK.frame, FRONT.frame, c.frame);
+  } else {
+    // Two casements meeting in the middle, each hinged at its jamb (`FacadeShutters` swings them in on a hot day), with
+    // the glazing bars: a sash's transom, a French window's two; and the room's dark shown in the opening meanwhile.
     const transoms = c.glazing === 'tall' ? [0.33, 0.66] : [TRANSOM];
-    for (const t of transoms) {
-      const y = y0 + (top - y0) * t;
-      block(b, m, s0 + F - INTO, s1 - F + INTO, y - WIDE.bar / 2, y + WIDE.bar / 2, BACK.bar, FRONT.bar - G / 3, c.frame);
+    const meet = WIDE.meeting;
+    for (const [outer, inner, side] of [[s0, mid - G / 2, -1], [s1, mid + G / 2, 1]] as const) {
+      leaves.leaf('sash', m, outer, 0, side < 0 ? -1 : 1, window, false, (lb) => {
+        const [a, z] = side < 0 ? [outer, inner] : [inner, outer];
+        const stile = side < 0 ? [a - INTO, a + F] : [z - F, z + INTO];
+        const meeting = side < 0 ? [mid - meet, z] : [a, mid + meet];
+        block(lb, m, stile[0]!, stile[1]!, y0 - INTO / 2, top + INTO / 2, BACK.frame, FRONT.frame, c.frame);
+        block(lb, m, meeting[0]!, meeting[1]!, y0 + F - INTO, top - F + INTO, BACK.bar, FRONT.bar, c.frame);
+        const r0 = side < 0 ? a + F - INTO : mid + meet - INTO;
+        const r1 = side < 0 ? mid - meet + INTO : z - F + INTO;
+        block(lb, m, r0, r1, y0 - INTO, y0 + F, BACK.frame, FRONT.frame, c.frame);
+        block(lb, m, r0, r1, top - F, top + INTO, BACK.frame, FRONT.frame, c.frame);
+        for (const t of transoms) {
+          const y = y0 + (top - y0) * t;
+          block(lb, m, r0, r1, y - WIDE.bar / 2, y + WIDE.bar / 2, BACK.bar, FRONT.bar - G / 3, c.frame);
+        }
+      });
     }
+    leaves.leaf('opening', m, y0 + F, 0, 1, window, false, (lb) => {
+      lb.quad(m, [s0 + F, y0 + F, G / 2], [s1 - F, y0 + F, G / 2], [s1 - F, top - F, G / 2], [s0 + F, top - F, G / 2], ROOM_DARK);
+    });
   }
   if (c.sill) block(b, m, s0 - 0.1, s1 + 0.1, y0 - 0.08, y0, BACK.sill, FRONT.sill, stone);
-  if (c.shutters) shutters(b, m, c.shutters, s0 - R, s1 + R, y0, spring, w * 0.44);
+  if (c.shutters) shutters(leaves, m, c.shutters, s0 - R, s1 + R, y0, spring - INTO, window, !!c.flowers);
   if (c.flowers) flowerBox(b, m, c.flowers, s0 - 0.05, s1 + 0.05, y0);
 }
 
-/** Open louvred shutters folded back against the wall either side of the surround (`a` and `z` its outer edges), `width` each. */
-function shutters(b: TriBuilder, m: THREE.Matrix4, paint: string, a: number, z: number, y0: number, y1: number, width: number): void {
+/**
+ * Louvred shutters either side of the surround (`a` and `z` its outer edges), folded back against the wall, each half
+ * the opening wide so that swung shut (`FacadeShutters`, on their hinges at the surround's edges, `FRONT.hinge` out)
+ * they meet over the window. Louvres on both faces: the outer ones show once they are closed. `fixed`: they never
+ * close (a flower box on the sill).
+ */
+function shutters(leaves: ShutterLeaves, m: THREE.Matrix4, paint: string, a: number, z: number, y0: number, y1: number, window: number, fixed: boolean): void {
   const slat = tone(paint, 0.82);
-  for (const [l, r] of [[a - 0.02 - width, a - 0.02], [z + 0.02, z + 0.02 + width]] as const) {
-    block(b, m, l, r, y0, y1, BACK.shutter, FRONT.shutter, paint);
-    // Louvres leaning out at the top: one strip each, between the stiles and the top and bottom rails.
-    for (let y = y0 + 0.1; y + 0.08 < y1 - 0.08; y += 0.1) {
-      b.quad(m, [l + 0.05, y, FRONT.shutter], [r - 0.05, y, FRONT.shutter], [r - 0.05, y + 0.08, FRONT.louvre], [l + 0.05, y + 0.08, FRONT.louvre], slat);
-    }
+  const width = (z - a) / 2 + 0.015;
+  const hinged = [[a - 0.02 - width, a - 0.02, a - 0.02, -1], [z + 0.02, z + 0.02 + width, z + 0.02, 1]] as const;
+  for (const [l, r, hinge, turn] of hinged) {
+    leaves.leaf('shutter', m, hinge, FRONT.hinge, turn, window, fixed, (b) => {
+      block(b, m, l, r, y0, y1, BACK.shutter, FRONT.shutter, paint);
+      // Louvres leaning out at the top: one strip each, between the stiles and the top and bottom rails; the same on
+      // the leaf's back (buried in the wall while it is open).
+      for (let y = y0 + 0.1; y + 0.08 < y1 - 0.08; y += 0.1) {
+        b.quad(m, [l + 0.05, y, FRONT.shutter], [r - 0.05, y, FRONT.shutter], [r - 0.05, y + 0.08, FRONT.louvre], [l + 0.05, y + 0.08, FRONT.louvre], slat);
+        b.quad(m, [r - 0.05, y, BACK.shutter], [l + 0.05, y, BACK.shutter], [l + 0.05, y + 0.08, BACK.shutter - 1.4 * G], [r - 0.05, y + 0.08, BACK.shutter - 1.4 * G], slat);
+      }
+    });
   }
 }
 

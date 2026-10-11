@@ -1,3 +1,6 @@
 [
-  "street:base | Buildings #ffffff (BufferGeometry) | Buildings #ffffff (BufferGeometry)"
+  "street:base | Buildings #ffffff (BufferGeometry) | Buildings #ffffff (BufferGeometry)",
+  "street:fixtures | StreetCars > InstancedMesh #1a232b (BufferGeometry) | StreetCars > InstancedMesh #ffffff (BufferGeometry)",
+  "street:fixtures | StreetCars > InstancedMesh #ffffff (BufferGeometry) | StreetCars > InstancedMesh #ffffff (BufferGeometry)",
+  "street:fixtures | StreetTrees > InstancedMesh #ffffff (BufferGeometry) | StreetTrees > InstancedMesh #ffffff (BufferGeometry)"
 ]

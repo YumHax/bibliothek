@@ -5,6 +5,7 @@ import type { DayNight } from '../props/DayNight';
 import { seasonalLawn } from '../props/outdoors/paint';
 import { QuadBuilder } from './QuadBuilder';
 import { asphaltTile, kerbTile, lawnTile, pavingTile, settsTile, tactileTile, type Tile } from './groundTextures';
+import { lawnLook } from './lawnLook';
 import { ROAD_WEAR, STREET_PLAN, type FacadeSpec } from './streetPlan';
 import { CORNER_BAY, FRONT, KERB_HEIGHT, LAWN_REACH, PARK_PARKING, PARK_STREET, SIDE_STREET, STREET_ENDS } from '@/world/measures/street';
 import { FACADES, SHOP_ZONE_OF, shopDoors } from '@/world/city/facades';
@@ -13,6 +14,7 @@ import { KERB_CORNERS, KERB_RADIUS } from './relief/ground';
 import { GROUND, onSurface } from '../surface/layers';
 import { VALUE_NOISE, afterChunk, patchShader } from '../materials/shaderPatch';
 import { envBoost } from '../materials/envBoost';
+import { SLAB_COLOR, SLAB_TILT } from './pavingSlabs';
 
 /** The side street runs south to the building across its end. */
 const SIDE_END = STREET_ENDS.side;
@@ -261,7 +263,8 @@ export class StreetGround extends THREE.Group implements Furniture, Updatable {
     this.addSurface(kerbs.build(), kerb, 0.8, 0.6, 0xffffff, BUMP.kerb);
     onSurface(this.addSurface(tops.build(), kerb, 0.75, 0.6, 0xd8d6d0, BUMP.kerb).material as THREE.MeshStandardMaterial, GROUND.marking);
     onSurface(this.addSurface(gutters.build(), kerb, 0.9, 1, 0x86868a).material as THREE.MeshStandardMaterial, GROUND.marking);
-    this.addSurface(lawn.build(), lawnTile(seasonalLawn('#5d8a3c'), anisotropy), 0.95, 0.2);
+    // The lawn's tile under a world-space mottle and the mower's stripes (`lawnLook`).
+    lawnLook(this.addSurface(lawn.build(), lawnTile(seasonalLawn('#5d8a3c'), anisotropy), 0.95, 0.2).material as THREE.MeshStandardMaterial);
     this.addPavementInlays(anisotropy, kerb);
     this.addMarkings();
   }
@@ -650,8 +653,10 @@ function macro(material: THREE.MeshStandardMaterial, road: boolean): void {
     shader.uniforms.streetSlush = SLUSH;
     shader.uniforms.streetWet = STREET_WET;
     shader.vertexShader = 'varying vec2 vGroundXZ;\n' + afterChunk(shader.vertexShader, 'begin_vertex', MACRO_VERTEX);
-    let fragment = GROUND_PARS + VALUE_NOISE + afterChunk(shader.fragmentShader, 'map_fragment', road ? MACRO_ROAD : MACRO_PAVING + WALL_FOOT + PAVING_SNOW);
+    let fragment = GROUND_PARS + VALUE_NOISE + afterChunk(shader.fragmentShader, 'map_fragment', road ? MACRO_ROAD : MACRO_PAVING + SLAB_COLOR + WALL_FOOT + PAVING_SNOW);
     fragment = afterChunk(fragment, 'roughnessmap_fragment', road ? MACRO_ROAD_ROUGHNESS : MACRO_PAVING_ROUGHNESS);
+    // The pavement's slabs each settled at its own tilt (`pavingSlabs`).
+    if (!road) fragment = afterChunk(fragment, 'normal_fragment_maps', SLAB_TILT);
     shader.fragmentShader = fragment;
   });
 }

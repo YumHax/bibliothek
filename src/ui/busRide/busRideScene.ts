@@ -1,12 +1,13 @@
 import { mulberry32, type Rng } from '@/random';
 import { clamp, lerp } from '@/math/scalar';
+import { drawSeated, drawStanding, type Rider } from './busRiders';
 
 /*
  * THE VIEW FROM THE BUS SEAT (`BusRide`): drawn on a canvas, not built in 3D. The side window of a line 38 bus, the
  * town going past in three depths (the roofs far off, the facades across the road, the trees, lamps and parked cars
  * by the kerb), the light of the hour (sky, lit windows, the street lamps at night, the glass giving back the bus's
  * own strip lights), and around it the inside: the destination display over the window, the yellow pole with its
- * STOP button, the grab rail, the seat in front in its moquette. Everything in fractions of the canvas, so it fits
+ * STOP button, the grab rail, the seat in front in its moquette, and who rides with the player (`busRiders`). Everything in fractions of the canvas, so it fits
  * any screen; the town is drawn out of a seed, so a ride is the same each time it is played from the same seed.
  */
 
@@ -99,7 +100,7 @@ export class BusRideScene {
   private readonly roofs: Strip<Roof>;
   private moquette: CanvasPattern | null = null;
 
-  constructor(seed: number) {
+  constructor(seed: number, private readonly riders: readonly Rider[] = []) {
     this.roofs = new Strip(seed + 1, (rng, x) => {
       const width = 8 + rng() * 22;
       return { item: { x, width, height: 0.04 + rng() * 0.09, spire: rng() < 0.06 }, advance: width + rng() * 4 };
@@ -141,7 +142,7 @@ export class BusRideScene {
     this.drawGlass(ctx, w, h, night);
     ctx.restore();
 
-    this.drawInside(ctx, w, h, f, night);
+    this.drawInside(ctx, w, h, f, night, bounce);
     ctx.restore();
     // The corners darker, like an eye in a dim bus.
     const vignette = ctx.createRadialGradient(w / 2, h / 2, h * 0.35, w / 2, h / 2, h * 0.95);
@@ -341,7 +342,7 @@ export class BusRideScene {
     }
   }
 
-  private drawInside(ctx: CanvasRenderingContext2D, w: number, h: number, f: RideFrame, night: number): void {
+  private drawInside(ctx: CanvasRenderingContext2D, w: number, h: number, f: RideFrame, night: number, bounce: number): void {
     // The panels round the window: warm grey plastic, lit by the strip lights at night.
     const wall = mix('#c4beb0', '#9a968c', night * 0.5);
     ctx.fillStyle = wall;
@@ -376,6 +377,10 @@ export class BusRideScene {
     ctx.fillStyle = rail;
     ctx.fillRect(0, railY - h * 0.01, w, h * 0.02);
 
+    // Whoever stands by the pole, holding it.
+    const riding = { t: f.t, night, bounce: bounce * 0.4 };
+    drawStanding(ctx, w, h, this.riders, riding);
+
     // The yellow pole by the door, its STOP button lit once someone has pressed it.
     const poleX = w * 0.86;
     const pole = ctx.createLinearGradient(poleX - w * 0.012, 0, poleX + w * 0.012, 0);
@@ -405,7 +410,8 @@ export class BusRideScene {
     ctx.textAlign = 'center';
     ctx.fillText('STOP', poleX, buttonY + h * 0.036);
 
-    // The seat in front, its back in the bus company's moquette.
+    // Whoever sits in the seat in front, then its back in the bus company's moquette.
+    drawSeated(ctx, w, h, this.riders, riding);
     ctx.fillStyle = this.moquettePattern(ctx) ?? '#2a2e5a';
     ctx.beginPath();
     ctx.moveTo(-w * 0.02, h * 1.02);

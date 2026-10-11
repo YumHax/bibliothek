@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { takeFlinch } from './flinch';
 import { PointerLockControls } from 'three/examples/jsm/controls/PointerLockControls.js';
 import type { Updatable } from '@/core/Engine';
 import type { Input } from '@/core/Input';
@@ -41,6 +42,8 @@ const CLIMB = { probe: 0.35, rise: 0.06, factor: 0.75, ease: 5 };
 /** Speeding up is gentler than stopping (1/s, exponential). */
 const ACCEL = 8;
 const DECEL = 16;
+/** A flinch (`player/flinch`): how long, how far the eye jerks back and down (m). */
+const FLINCH = { seconds: 0.45, back: 0.09, down: 0.04 };
 /** The bob: metres of rise per m/s of walk, one bob every half stride, and the sway at a full sprint (m). */
 const BOB_PER_SPEED = 0.005;
 const STRIDE = 1.5;
@@ -138,6 +141,11 @@ export class FirstPersonController implements Updatable {
   private fovSet = false;
   /** The stride's phase (radians), the dip of the last step down (m), and the bob / sway last added to the eye. */
   private bobPhase = 0;
+  /** A flinch under way (`player/flinch`): seconds left, the way back from what startled, the jolt it adds to the eye. */
+  private flinchT = 0;
+  private readonly flinchAway = new THREE.Vector3();
+  private readonly flinchFrom = new THREE.Vector3();
+  private readonly flinchJolt = new THREE.Vector3();
   private dip = 0;
   /** The floor under the feet last frame, to tell the frame a tread steps down, and whether it moved the frame before (a lift's car, not a tread). */
   private lastFloor = 0;
@@ -287,10 +295,10 @@ export class FirstPersonController implements Updatable {
   }
 
   /**
-   * Sits: the eye moves to `eyePosition`, turned to `yaw` (an eased move, or at once when `instant` or
-   * with reduced motion), and remembers where the player stood.
+   * Sits: the eye moves to `eyePosition`, turned to `yaw` and tilted to `pitch` (an eased move, or at once when
+   * `instant` or with reduced motion), and remembers where the player stood.
    */
-  sit(eyePosition: THREE.Vector3, yaw: number, instant = false): void {
+  sit(eyePosition: THREE.Vector3, yaw: number, instant = false, pitch = 0): void {
     if (!this.seated) this.standingPosition.copy(this.camera.position).sub(this.bobOffset);
     this.seated = true;
     this.velocity.set(0, 0, 0);
@@ -302,7 +310,7 @@ export class FirstPersonController implements Updatable {
       this.sprintAmount = 0;
       this.setSprintKick(0);
     }
-    this.moveSeat(eyePosition, yaw, 0, instant);
+    this.moveSeat(eyePosition, yaw, pitch, instant);
   }
 
   /** Returns to the spot the player stood on before sitting, so they never stand inside the chair. */
@@ -623,6 +631,26 @@ export class FirstPersonController implements Updatable {
     this.camera.updateProjectionMatrix();
   }
 
+  /**
+   * A start at something close (`player/flinch`): the eye jerks back from it and down a little, then settles, over
+   * `FLINCH.seconds`. None with reduced motion.
+   */
+  private flinchOffset(dt: number): THREE.Vector3 {
+    const from = takeFlinch(this.flinchFrom);
+    if (from && !reduceMotion()) {
+      this.flinchAway.set(this.camera.position.x - from.x, 0, this.camera.position.z - from.z);
+      if (this.flinchAway.lengthSq() < 1e-6) this.flinchAway.set(0, 0, 1);
+      this.flinchAway.normalize();
+      this.flinchT = FLINCH.seconds;
+    }
+    this.flinchT = Math.max(0, this.flinchT - dt);
+    if (this.flinchT <= 0) return this.flinchJolt.set(0, 0, 0);
+    // A quick jerk, then easing back: up to full at a fifth of the way through.
+    const t = 1 - this.flinchT / FLINCH.seconds;
+    const k = t < 0.2 ? t / 0.2 : (1 - (t - 0.2) / 0.8) ** 2;
+    return this.flinchJolt.copy(this.flinchAway).multiplyScalar(FLINCH.back * k).setY(-FLINCH.down * k);
+  }
+
   /** A few millimetres of rise with each step, a little sway at a sprint, and the dip of a step down. */
   private applyBob(dt: number, crouch: boolean): void {
     this.dip *= Math.exp(-DIP_RECOVER * dt);
@@ -632,7 +660,7 @@ export class FirstPersonController implements Updatable {
     // A bump each step round the eye's own height (|sin| averages 2/π), a sway each stride.
     const rise = on ? (Math.abs(Math.sin(this.bobPhase)) - 2 / Math.PI) * speed * BOB_PER_SPEED : 0;
     const sway = on ? Math.sin(this.bobPhase) * SPRINT_SWAY * this.sprintAmount : 0;
-    this.bobOffset.set(this.right.x * sway, rise - this.dip, this.right.z * sway);
+    this.bobOffset.set(this.right.x * sway, rise - this.dip, this.right.z * sway).add(this.flinchOffset(dt));
     this.camera.position.add(this.bobOffset);
   }
 

@@ -74,6 +74,8 @@ function cloth(color: number, roughness: number): THREE.MeshStandardMaterial {
 export class Bed extends THREE.Group implements Furniture, Interactable {
   readonly footprint: THREE.Box3;
   readonly hitboxes: THREE.Object3D[];
+  /** Height of the fitted sheet's top over the origin: where something set on the bed sits (the arcade's plush). */
+  readonly sheetTop: number;
   private readonly eye: THREE.Vector3;
   private readonly catSpot: THREE.Vector3;
   private readonly catApproach: THREE.Vector3;
@@ -109,6 +111,7 @@ export class Bed extends THREE.Group implements Furniture, Interactable {
     // A soft block in striped ticking (flat faces, rounded edges); the fitted sheet wraps its top and the top of its sides.
     softPart(this, mw, MATTRESS_H, ml, TICKING, { y: mattressY + MATTRESS_H / 2, z: HEADBOARD_T + ml / 2 }, { round: 8, pinch: 0.05 });
     const top = mattressY + MATTRESS_H;
+    this.sheetTop = top + SHEET_OVER;
     softPart(this, mw + 2 * SHEET_OVER, SHEET_WRAP, ml + 2 * SHEET_OVER, LINEN, { y: top + SHEET_OVER - SHEET_WRAP / 2, z: HEADBOARD_T + ml / 2 }, { round: 8, pinch: 0 }).castShadow = false;
 
     // The bedding comes in two states, one shown at a time (`setMade`): made, and slept in.

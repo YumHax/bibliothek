@@ -9,6 +9,7 @@ import { snowCovered } from './snowCover';
 import type { Vec2 } from './streetPlan';
 import { FLAT_IN_STREET, LAWN_REACH, PARK_STREET, STREET_ENDS } from '@/world/measures/street';
 import { GrassTufts, type TuftStrip } from './GrassTufts';
+import { LawnBlades } from './LawnBlades';
 import { GROUND, onSurface } from '../surface/layers';
 import { buildParkFeatures, type ParkFeatures } from './StreetParkFeatures';
 import { lcg } from '@/random';
@@ -147,6 +148,8 @@ export class StreetPark extends THREE.Group implements Furniture, Updatable {
     const hedgeFoot = PARK_STREET.hedge - 0.75;
     edges.push({ from: [hedgeFoot, STREET_ENDS.south + 1], to: [hedgeFoot, LAWN_REACH.z], width: 0.3, y: options.lawnY });
     this.add(new GrassTufts(edges, 2.2, 211));
+    // Blades of grass round the eye where one walks on the lawn (not from a window's view or the roof).
+    if (options.walkable && LawnBlades.wanted()) this.add(new LawnBlades(options.lawnY));
 
     const dayNight = options.dayNight;
     this.features = buildParkFeatures(this, options.lawnY, options.walkable ?? false, dayNight ? () => dayNight.state : undefined);
@@ -155,6 +158,11 @@ export class StreetPark extends THREE.Group implements Furniture, Updatable {
 
   update(dt: number): void {
     this.features.update(dt);
+  }
+
+  /** The playground's swings (`StreetParkFeatures`), for the children to ride. */
+  get swings(): ParkFeatures['swings'] {
+    return this.features.swings;
   }
 
   get footprint(): THREE.Box3 {

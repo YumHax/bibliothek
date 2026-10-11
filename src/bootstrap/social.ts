@@ -3,10 +3,15 @@ import { SEED_GAMES } from '@/catalog';
 import { isKeepsake } from '@/economy/Transactions';
 import { startSocialLife } from '@/social/life/startLife';
 import { pocket } from '@/errands/pocket';
+import { getPrize } from '@/economy/Prizes';
+import { givePlush, plushToGive } from '@/social/street/plushGifts';
+import { onStreetMark } from '@/social/street/streetMarks';
+import { onLead } from '@/social/street/leads';
 import type { ErrandId } from '@/errands/errands';
 import type { Notices } from '@/notices';
 import { announceTiers } from '@/social/announce';
 import { wireRivalry } from '@/social/rivalry';
+import { wireCraneGameBoy } from '@/family/craneGameBoy';
 import { startMarketSocial } from '@/social/market';
 import { everyone } from '@/social/people';
 import { phoneNote, phoneRefusal } from '@/social/phoneHours';
@@ -29,9 +34,11 @@ import { lookTowards } from '@/player/lookTowards';
 import { zoomView } from '@/player/zoomView';
 import { MEMORIES } from '@/grandma/memories';
 import { callGrandma, watchGrandma } from '@/social/grandmaSocial';
+import { watchGrandmaRituals } from '@/social/grandmaRitualsSocial';
 import { rememberLook } from '@/social/lookBook';
-import { MEME_ID } from '@/social/people/family';
-import { memeLook } from '@/world/grandma/familyLooks';
+import { giftWrap } from '@/holidays/giftWrap';
+import { GASPARD_ID, MEME_ID } from '@/social/people/family';
+import { gaspardLook, memeLook } from '@/world/grandma/familyLooks';
 
 /** What in the pocket is given as what (`errands/pocket`'s ids to the social layer's gifts). */
 const POCKET_GIFTS: readonly [ErrandId, GiftKind][] = [
@@ -39,6 +46,8 @@ const POCKET_GIFTS: readonly [ErrandId, GiftKind][] = [
   ['bunch', 'flowers'],
   ['treats', 'treats'],
   ['scrap', 'scrap'],
+  ['coffee', 'coffee'],
+  ['cake', 'cake'],
 ];
 
 /**
@@ -48,6 +57,7 @@ const POCKET_GIFTS: readonly [ErrandId, GiftKind][] = [
 export function createSocial(services: Services, container: HTMLElement, notices: Notices, session?: () => SessionActions, player?: Pick<FirstPersonController, 'getLook' | 'setLook' | 'getEyePosition'>) {
   const { wallet, collection, tx, today, sky, params, journal, engine } = services;
   const hour = (): number => sky.dayNight.state.hours;
+  const plushShelf = { get owned() { return services.prizes.owned; }, isPlush: (id: string) => getPrize(id)?.kind === 'plush' };
   // The People book (its key, the journal, the pause menu, a name in a conversation) and the phone's contacts (docs/social.md).
   const peopleBook = new PeopleBook(container, { day: () => today.gameDay, hour });
   const conversation = new ConversationPanel(container, {
@@ -55,9 +65,17 @@ export function createSocial(services: Services, container: HTMLElement, notices
     hour,
     wallet,
     givable: () => collection.games.filter((g) => (g.status ?? 'owned') === 'owned' && !isKeepsake(g)),
-    giveGame: (game) => tx.giveAway(game).ok,
-    pocket: () =>
-      POCKET_GIFTS.map(([errand, kind]): PocketGift => ({ kind, count: pocket.count(errand), take: () => pocket.take(errand) === errand })),
+    // A game wrapped at the Christmas stall leaves its paper behind once given (`holidays/giftWrap`).
+    giveGame: (game) => {
+      const ok = tx.giveAway(game).ok;
+      if (ok) giftWrap.unwrap(game.id);
+      return ok;
+    },
+    pocket: () => [
+      ...POCKET_GIFTS.map(([errand, kind]): PocketGift => ({ kind, count: pocket.count(errand), take: () => pocket.take(errand) === errand })),
+      // The claw's bunnies won at the arcade (`social/street/plushGifts`): given from the prize shelf.
+      { kind: 'plush', count: plushToGive(plushShelf), take: () => givePlush(plushShelf) },
+    ],
     notices,
     coverUrl: services.coverUrl,
     // The conversation sits beside the person and turns the view to their face (docs/social.md "Talking").
@@ -104,7 +122,15 @@ export function createSocial(services: Services, container: HTMLElement, notices
     note: (text, weight) => journal.note('note', text, { weight }),
   });
   // Victor Crane: a kind word after beating him, a gloat; his collection shown at the end of the arc (docs/social.md "Victor").
-  wireRivalry({ rival: services.lots.rival, collection, notices, pool: SEED_GAMES, day: () => today.gameDay });
+  wireRivalry({ rival: services.lots.rival, collection, notices, pool: SEED_GAMES, day: () => today.gameDay, onNewDay: (cb) => void today.onNewGameDay(cb) });
+  // Front Street's moments (the stray come home, a secret, a find) count in the collector's book; a passer-by's lead goes in the journal.
+  onStreetMark(() => services.collectorWatch.refresh());
+  onLead((lead) => journal.note('note', lead.note, { weight: 'note' }));
+  // A wrapped game gone from the collection (sold, traded, given) takes its paper with it (`holidays/giftWrap`).
+  const pruneWraps = (): void => giftWrap.prune((id) => collection.owns(id));
+  collection.subscribe(pruneWraps);
+  // Lot one, the Christmas Game Boy, asked after and bought back from him once Mémé has told it (docs/grandma.md).
+  wireCraneGameBoy({ family: services.family, wallet, collection, pool: SEED_GAMES, notices, day: () => today.gameDay });
   const contacts: PhoneContacts = {
     list: () =>
       everyone()
@@ -127,6 +153,8 @@ export function createSocial(services: Services, container: HTMLElement, notices
   };
   // Mémé: her face as she is in her flat, and her warmth from the visits, lunches, gifts and the album's memories.
   rememberLook(MEME_ID, memeLook());
+  rememberLook(GASPARD_ID, gaspardLook());
   watchGrandma(services.grandma, { day: () => today.gameDay, title: (id) => MEMORIES.find((m) => m.id === id)?.title ?? null, scarf: () => services.perks.outfit.id === 'memeScarf' });
+  watchGrandmaRituals(services.grandmaRituals, () => today.gameDay);
   return { conversation, social, peopleBook, contacts };
 }

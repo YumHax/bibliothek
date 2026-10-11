@@ -17,6 +17,7 @@ import { FacadeFrame } from './facadeFrame';
 import { TriBuilder } from './TriBuilder';
 import { frontVariant } from '../shopfronts/shopfrontPlan';
 import { gapAt } from '../../surface/layers';
+import { windSwayed } from '../wind';
 import { lcg } from '@/random';
 
 /** An awning: fixed to the wall at `top`, reaching `reach` out and down to `edge`, a valance `valance` deep, stripes `stripe` wide. */
@@ -118,6 +119,9 @@ export class FacadeRelief extends THREE.Group implements Furniture, Updatable {
         // in a plain front's surround.
         if (door.shop && features.shopfronts.some((f) => isFramed(front.spec.detail, f.kind) && door.s > f.s0 && door.s < f.s1)) continue;
         surround(stone, m, door.s, door.width, door.height, door.shop ? door.color : features.trim);
+        // A residents' door seen close: its leaves built (panels, brass, the fanlight's bars), unless it is a way in (the sas's).
+        const walked = (front.spec.openings ?? []).some((o) => Math.abs(o.at - door.s) < o.width);
+        if (fine && door.leaf && !walked) doorLeaves(props, m, door.s, door.width, door.height, door.leaf);
       }
       if (features.downpipe !== null) downpipe(props, m, features.downpipe, features.cornice);
       if (front.spec.flat?.balcony) flatBalcony(stone, iron, plants, plantEnds, bistro, m, front.spec.flat.floorY, front.spec.flat.balcony, slab);
@@ -202,8 +206,10 @@ export class FacadeRelief extends THREE.Group implements Furniture, Updatable {
           `attribute vec3 aPivot;\nattribute float aAwning;\nuniform vec4 awningOut[${this.awningOut.length}];\n` +
           afterChunk(shader.vertexShader, 'begin_vertex', 'int awningAt = int(aAwning + 0.5);\ntransformed = mix(aPivot, transformed, awningOut[awningAt / 4][awningAt - (awningAt / 4) * 4]);');
       });
-    const mesh = new THREE.Mesh(merged, fold(snowCovered(new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.92 })), 'awningFold'));
-    mesh.customDepthMaterial = fold(new THREE.MeshDepthMaterial({ depthPacking: THREE.RGBADepthPacking }), 'awningFoldDepth') as THREE.MeshDepthMaterial;
+    // The canvas gives a little in the street's wind (`wind.ts`), the valance most, furthest from its fixing.
+    const flap = <M extends THREE.Material>(material: M, key: string): M => windSwayed(material, key, { pivotY: 0, give: 0.18, flutter: 0.03, reachExpression: 'length(transformed - aPivot)' });
+    const mesh = new THREE.Mesh(merged, flap(fold(snowCovered(new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.92 })), 'awningFold'), 'awning'));
+    mesh.customDepthMaterial = flap(fold(new THREE.MeshDepthMaterial({ depthPacking: THREE.RGBADepthPacking }), 'awningFoldDepth') as THREE.MeshDepthMaterial, 'awningDepth');
     mesh.castShadow = true;
     mesh.receiveShadow = true;
     mesh.name = 'Awnings';
@@ -399,6 +405,33 @@ function surround(stone: TriBuilder, m: THREE.Matrix4, s: number, width: number,
   for (const side of [-1, 1]) stone.box(m, s + side * (width / 2 + jw / 2), (height + head) / 2, depth / 2, jw, height + head, depth, color);
   stone.box(m, s, height + head / 2, depth / 2, width + 2 * jw, head, depth, color);
 }
+
+/** A residents' door's two leaves over its painted one: raised panels, a brass knob, letterbox and knocker, and the fanlight's bars over it. */
+function doorLeaves(props: TriBuilder, m: THREE.Matrix4, s: number, width: number, height: number, paint: string): void {
+  const { leaf, panel, brass } = DOOR;
+  const half = width / 2;
+  const raised = new THREE.Color(paint).multiplyScalar(1.12);
+  for (const side of [-1, 1] as const) {
+    // Clear of the surround's jambs and of each other by a real gap (no two faces in one plane).
+    const s0 = side < 0 ? s - half + DOOR_GAP : s + DOOR_GAP;
+    const s1 = side < 0 ? s - DOOR_GAP : s + half - DOOR_GAP;
+    props.box(m, (s0 + s1) / 2, (leaf.foot + height) / 2, leaf.depth / 2, s1 - s0, height - leaf.foot, leaf.depth, paint);
+    for (const [y0, y1] of panel.rows) props.box(m, (s0 + s1) / 2, (y0 + y1) / 2, leaf.depth + panel.raise / 2, s1 - s0 - 2 * panel.inset, y1 - y0, panel.raise, raised);
+  }
+  props.box(m, s + 0.17, 1.23, leaf.depth + panel.raise + brass.out / 2, 0.05, 0.05, brass.out, BRASS);
+  props.box(m, s - 0.35, 1.05, leaf.depth + panel.raise, 0.3, 0.05, 2 * DOOR_GAP, BRASS);
+  moved.makeTranslation(s + half / 2, 1.58, leaf.depth + panel.raise + 0.014).premultiply(m);
+  props.geometry(moved, KNOCKER, BRASS);
+  // The fanlight's bars, standing on its painted glass.
+  for (let i = 1; i < 5; i++) props.box(m, s - half + (width * i) / 5, height + 0.32, 0.012, 0.025, 0.52, 0.024, paint);
+}
+
+/** A residents' door's leaves (their foot over the step, how far they stand out), raised panels (rows, inset, raise), the brass's reach. */
+const DOOR = { leaf: { foot: 0.15, depth: 0.035 }, panel: { rows: [[0.35, 1.15], [1.42, 2.5]] as const, inset: 0.09, raise: 0.014 }, brass: { out: 0.05 } };
+const BRASS = '#c9a75b';
+/** Between a door's leaves, their jambs, what stands on them: a real gap seen from across the street. */
+const DOOR_GAP = gapAt(40);
+const KNOCKER = new THREE.TorusGeometry(0.06, 0.012, 5, 12);
 
 /** A cast-iron downpipe at s from its hopper under the cornice (`top`) down to its shoe on the pavement, on brackets. */
 function downpipe(props: TriBuilder, m: THREE.Matrix4, s: number, top: number): void {

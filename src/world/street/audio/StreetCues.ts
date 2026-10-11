@@ -7,6 +7,8 @@ import type { ActivityAware } from '../../zone/lifecycle';
 import type { Vec2 } from '../streetPlan';
 import { SoundGraph } from './soundGraph';
 import { StreetEar, falloff } from './streetEar';
+import { plop, quack, slideWhoosh, swingCreak } from './parkCues';
+import { applause, cheer, coinSlot, dart, letterDrop, phoneRing, pinball } from './townCues';
 import { random } from '@/random';
 
 /** Someone on the street who barks now and then (a counter that only goes up) where they are (zone-local). */
@@ -36,7 +38,7 @@ interface StreetCuesOptions {
 
 const MASTER = 0.55;
 /** A sound this far off is at half its level (metres), per kind. */
-const HALF = { flutter: 7, bark: 14, beep: 5, rattle: 9, siren: 28, coo: 4, meow: 6 } as const;
+const HALF = { flutter: 7, bark: 14, beep: 5, rattle: 9, siren: 28, coo: 4, meow: 6, quack: 9, play: 7, plop: 5, small: 4, crowd: 10, ring: 9 } as const;
 /** The beeper's pitch and its pulse (seconds between beeps) while green, and while flashing. */
 const BEEP = { hz: 2400, every: 0.9, flashing: 0.3 };
 /** The near siren (hi-lo, like the window's) and the speed of sound for its doppler. */
@@ -50,7 +52,9 @@ const SOUND_SPEED = 343;
  * (`flutter`) and their cooing (`coo`), a dog's bark (`barkers`, or `barkAt`), the stray cat's
  * meow and hiss (`meow`, `catHiss`), the crossing's beeper while the green man is lit, a roller
  * shutter's rattle as it rolls (`rattle`), and each passing siren (`sirens`), louder and higher
- * coming, lower going. Each is louder the nearer, to its side, duller behind the head. Only while
+ * coming, lower going. For the things others place: the ducks (`quack`), the playground (`swing`, `slide`),
+ * something dropped in water (`plop`), the post box (`letterDrop`), the phone box (`phoneRing`, `coinSlot`), a bar's
+ * `pinball` and `dart`, a crowd's `applause` and `cheer` (`parkCues`, `townCues`). Each is louder the nearer, to its side, duller behind the head. Only while
  * the player is in the street (`setOccupied`); let go while the zone is dormant.
  */
 export class StreetCues extends THREE.Group implements Furniture, Updatable, OccupancyAware, ActivityAware {
@@ -67,7 +71,7 @@ export class StreetCues extends THREE.Group implements Furniture, Updatable, Occ
   constructor(private readonly options: StreetCuesOptions) {
     super();
     this.name = 'StreetCues';
-    this.ear = new StreetEar(options.listener);
+    this.ear = new StreetEar(options.listener, this);
     this.heard = options.barkers.map((b) => b.barks);
   }
 
@@ -190,6 +194,68 @@ export class StreetCues extends THREE.Group implements Furniture, Updatable, Occ
     for (let when = 0; when < 3.6; when += 0.045 + random() * 0.012) g.burst(band, t + when, 0.02, 0.1 * heard.level);
   }
 
+  /** A duck on the pond quacking at `at` (a call or a run of them). */
+  quack([x, z]: Vec2): void {
+    this.play(x, 0.2, z, HALF.quack, 2, (g, out, level) => quack(g, out, level));
+  }
+
+  /** A swing creaking at the top of its arc at `at` (call it each swing). */
+  swing([x, z]: Vec2): void {
+    this.play(x, 2, z, HALF.play, 1, (g, out, level) => swingCreak(g, out, level));
+  }
+
+  /** Someone sliding down the playground's slide at `at` (its foot). */
+  slide([x, z]: Vec2): void {
+    this.play(x, 1, z, HALF.play, 2, (g, out, level) => slideWhoosh(g, out, level));
+  }
+
+  /** Something dropped in water at `at`: a coin in the fountain, a crust for the ducks. */
+  plop([x, z]: Vec2): void {
+    this.play(x, 0.2, z, HALF.plop, 1, (g, out, level) => plop(g, out, level));
+  }
+
+  /** A letter posted in the post box at `at`. */
+  letterDrop([x, z]: Vec2): void {
+    this.play(x, 1, z, HALF.small, 1.5, (g, out, level) => letterDrop(g, out, level));
+  }
+
+  /** The phone box's bell at `at`: one double ring (call it every 3 s while it rings). */
+  phoneRing([x, z]: Vec2): void {
+    this.play(x, 1.6, z, HALF.ring, 1.5, (g, out, level) => phoneRing(g, out, level));
+  }
+
+  /** Coins into a slot at `at` (the phone box, a pinball table, a meter). */
+  coinSlot([x, z]: Vec2): void {
+    this.play(x, 1.2, z, HALF.small, 1, (g, out, level) => coinSlot(g, out, level));
+  }
+
+  /** `people` clapping at `at` for `seconds` (the busker's listeners, a gig's end, the bandstand). */
+  applause([x, z]: Vec2, people: number, seconds = 2.5): void {
+    this.play(x, 1.4, z, HALF.crowd, seconds + 1, (g, out, level) => applause(g, out, level, people, seconds));
+  }
+
+  /** A crowd cheering at `at` (a quiz's right answer through the bar's door, a song's end). */
+  cheer([x, z]: Vec2): void {
+    this.play(x, 1.5, z, HALF.crowd, 2.5, (g, out, level) => cheer(g, out, level));
+  }
+
+  /** A pinball table being played at `at` (call it every second or two while someone plays). */
+  pinball([x, z]: Vec2): void {
+    this.play(x, 1, z, HALF.small, 1.5, (g, out, level) => pinball(g, out, level));
+  }
+
+  /** A dart thrown into the board at `at`. */
+  dart([x, z]: Vec2): void {
+    this.play(x, 1.7, z, HALF.small, 1, (g, out, level) => dart(g, out, level));
+  }
+
+  /** Plays `sound` at zone-local (x, y, z), half as loud at `halfAt` m, if the street is heard and it is audible. */
+  private play(x: number, y: number, z: number, halfAt: number, seconds: number, sound: (g: SoundGraph, out: AudioNode, level: number) => void): void {
+    const g = this.ready();
+    const heard = g && this.at(x, y, z, halfAt, seconds);
+    if (g && heard) sound(g, heard.out, heard.level);
+  }
+
   update(dt: number): void {
     if (!this.active) return;
     const g = this.graph ?? this.build();
@@ -229,7 +295,7 @@ export class StreetCues extends THREE.Group implements Furniture, Updatable, Occ
       siren.osc.frequency.setTargetAtTime(twoTone(on.tones ?? SIREN_TONES, on.step ?? SIREN_STEP, now) * doppler, now, 0.015);
       siren.gain.gain.setTargetAtTime(0.16 * falloff(d, HALF.siren), now, 0.15);
       const side = this.ear.spatial(this.point);
-      siren.leg.set(side.pan, 0, false, side.rear ?? 0);
+      siren.leg.set(side.pan, side.walls, false, side.rear ?? 0);
     }
   }
 

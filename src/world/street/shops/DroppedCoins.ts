@@ -9,7 +9,8 @@ import { fromUnpaddedDayKey } from '@/economy/calendar';
 import { KEYS, PersistedStore } from '@/persistence';
 import { withDay } from '@/time/DailyTally';
 import { DailyList } from '@/time/DailyList';
-import { dailyRandom, gameDayRandom } from '@/time/daily';
+import { gameDayRandom } from '@/time/daily';
+import { streetDay, streetDayMark } from '@/time/streetDay';
 import { shared } from '../../materials/palette';
 import { bareMetal } from '../metals';
 import { markShared } from '../../materials/sharedResources';
@@ -39,8 +40,8 @@ const LINES = ['A coin in the gutter. Finders keepers.', 'A coin, face up. Lucky
 
 /**
  * The spots picked clean today (indices into `spots`), remembered across reloads: `{ day, picked }`.
- * Version 2: `day` is a `dayKey` (YYYY-MM-DD); version 1 wrote it unpadded (`2026-9-5`), read as
- * the same day. Without storage (private mode) a coin comes back on the next visit.
+ * `day` is the street's day mark (`time/streetDay`: `g12`; older saves a `dayKey`, which no longer matches: a fresh
+ * day). Without storage (private mode) a coin comes back on the next visit.
  */
 const picks = new DailyList<number>({
   key: KEYS.finds,
@@ -48,6 +49,7 @@ const picks = new DailyList<number>({
   field: 'picked',
   isItem: (n): n is number => Number.isInteger(n),
   migrate: { 1: (data) => withDay(data, fromUnpaddedDayKey) },
+  mark: streetDayMark,
 });
 
 /**
@@ -64,7 +66,7 @@ const legacyDayPick = new PersistedStore<{ day: number }>({
 oncePerDay.adopt(DAY_COIN, legacyDayPick.exists ? legacyDayPick.load().day : null, -1);
 
 /**
- * The coins people drop on Front Street: a few a (real) day at spots drawn from the date, and one
+ * The coins people drop on Front Street: a few a game day at spots drawn from the day (`time/streetDay`), and one
  * more each market day (the game's) on a spot of its own, each a small worn disc on the slabs that
  * glints now and then when the player is near (a star of light, additive, alpha kept). Clicking one
  * pockets it (a coin in the wallet, the clink); a picked spot stays empty till tomorrow (the market
@@ -73,7 +75,7 @@ oncePerDay.adopt(DAY_COIN, legacyDayPick.exists ? legacyDayPick.load().day : nul
 export class DroppedCoins extends THREE.Group implements Furniture, Updatable {
   readonly contactShadow = false;
   private readonly coins: DroppedCoin[] = [];
-  /** The real day's spots (the market day's coin goes elsewhere). */
+  /** The day's few spots (the market day's own coin goes elsewhere). */
   private readonly layout: number[];
   /** The market day's coin, while it lies there. */
   private dayCoin: DroppedCoin | null = null;
@@ -82,7 +84,7 @@ export class DroppedCoins extends THREE.Group implements Furniture, Updatable {
   constructor(private readonly options: DroppedCoinsOptions) {
     super();
     this.name = 'DroppedCoins';
-    const random = dailyRandom('coins');
+    const random = gameDayRandom('coins.street', streetDay() ?? options.today?.gameDay ?? 0);
     const picked = new Set(picks.today());
     const order = shuffled(random, options.spots.map((_, i) => i));
     const layout = order.slice(0, options.perDay);
@@ -113,7 +115,7 @@ export class DroppedCoins extends THREE.Group implements Furniture, Updatable {
     this.unsubscribe?.();
   }
 
-  /** Market day `day`'s coin, on a spot the real day's leave free, unless it was picked already; yesterday's goes. */
+  /** Market day `day`'s coin, on a spot the day's few leave free, unless it was picked already; yesterday's goes. */
   private layDayCoin(day: number): void {
     if (this.dayCoin) {
       this.coins.splice(this.coins.indexOf(this.dayCoin), 1);

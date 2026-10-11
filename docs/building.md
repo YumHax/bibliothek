@@ -188,7 +188,8 @@ The building's children (`kids/kidsPlan`: Hugo, the Moreaus' son, 12; Mai and Tu
 handheld between them; Lina, Mrs Haddad's niece, 10, Wednesdays and weekends only) are down in the courtyard with their
 handhelds after school (`KIDS_RULES.hours`: 16:45-19:15, Wednesdays from 13:30, weekend mornings and afternoons), each most
 days (`comesDown`, drawn per kid and game day, the twins together, a little late and a little early); never in the rain,
-after dark nor on a party day (`kidsOut`). They are people of the social layer (`social/people/kids`, group
+after dark nor on a party day (`kidsOut`). On the game's Sundays (`playgroundDay`) the ones out are at the park's
+playground on Front Street instead (`street/events/placeStreetEvents`, the same `YardKids`), not in the yard. They are people of the social layer (`social/people/kids`, group
 `building`): met, warmed, given gifts and favours like anyone. Each conversation adds:
 - **Heard anything?** Kids hear everything (`kidNews.kidsNews`): tomorrow's clear-out by the bins and its owner (a
   console in it, said), the day's pile, a party within three days (urgent: the first kid to see the player shouts it,

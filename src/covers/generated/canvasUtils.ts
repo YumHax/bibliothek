@@ -30,12 +30,21 @@ export function wrapLines(ctx: CanvasRenderingContext2D, text: string, maxWidth:
   return lines;
 }
 
-/** Shrinks the font size until `text` fits `maxWidth`. Returns the size used. */
+/**
+ * Shrinks the font size until `text` fits `maxWidth`. Returns the size used. `minPx` is where the
+ * shrinking stops being a pixel at a time: text still too wide there is scaled straight down to fit,
+ * never left to spill off its sign.
+ */
 export function fitFontSize(ctx: CanvasRenderingContext2D, text: string, maxWidth: number, startPx: number, minPx: number, family: string, weight = 'bold'): number {
   let size = startPx;
   ctx.font = `${weight} ${size}px ${family}`;
   while (ctx.measureText(text).width > maxWidth && size > minPx) {
     size -= 1;
+    ctx.font = `${weight} ${size}px ${family}`;
+  }
+  const width = ctx.measureText(text).width;
+  if (width > maxWidth) {
+    size = Math.max(1, Math.floor((size * maxWidth) / width));
     ctx.font = `${weight} ${size}px ${family}`;
   }
   return size;

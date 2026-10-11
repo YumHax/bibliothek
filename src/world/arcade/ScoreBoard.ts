@@ -15,6 +15,8 @@ interface ScoreBoardOptions {
   games: readonly { id: string; title: string }[];
   /** The tables; the board repaints when one changes. */
   scores: ScoreTable;
+  /** How many game days the player's record on a game has stood (null: they do not hold it). */
+  heldDays?: (gameId: string) => number | null;
   width?: number;
   height?: number;
 }
@@ -45,7 +47,7 @@ export class ScoreBoard extends Prop implements Updatable {
   constructor(options: ScoreBoardOptions) {
     super();
     this.name = 'ScoreBoard';
-    this.options = { width: 1.5, height: 1.0, ...options };
+    this.options = { width: 1.5, height: 1.0, heldDays: () => null, ...options };
     const { width, height } = this.options;
 
     const frame = boxMesh(width + 0.08, height + 0.08, 0.05, FRAME, { z: 0.025 });
@@ -112,10 +114,13 @@ export class ScoreBoard extends Prop implements Updatable {
         const colour = entry.you ? '#7ee787' : '#ffffff';
         drawText(ctx, `${rank + 1}`, x0 + 30, y, size, MEDALS[rank]!, 'left');
         drawText(ctx, entry.name, x0 + 70, y, size, colour, 'left');
+        // The player's lines say so in a word, not only in green; a record of theirs, for how long it has stood.
+        const held = entry.you && rank === 0 ? this.options.heldDays(game.id) : null;
+        if (entry.you) drawText(ctx, held ? `YOU ${held} ${held === 1 ? 'DAY' : 'DAYS'}` : 'YOU', x0 + 70 + size * 4, y, Math.round(size * (held ? 0.55 : 0.7)), colour, 'left');
         drawText(ctx, formatNumber(entry.score), x0 + cellW - 30, y, size, colour, 'right');
       });
     });
-    drawText(ctx, 'BEAT THE BOARD · YOUR SCORES IN GREEN', W / 2, H * 0.96, Math.round(H * 0.028), '#ff8a80');
+    drawText(ctx, 'BEAT THE BOARD · PUT YOUR INITIALS UP THERE', W / 2, H * 0.96, Math.round(H * 0.028), '#ff8a80');
     this.texture.needsUpdate = true;
   }
 }

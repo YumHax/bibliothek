@@ -14,9 +14,13 @@ import { CatVoice } from '@/audio/CatVoice';
 import { dayKey } from '@/economy/calendar';
 import { KEYS, PersistedStore } from '@/persistence';
 import { pocket } from '@/errands/pocket';
+import { markStreet } from '@/social/street/streetMarks';
 import { random } from '@/random';
 import { damp, dampAngle } from '@/math/damp';
 import { wrapAngle } from '@/math/angles';
+
+/** A dog this close gets a hiss (again once it is this far off); this close and him low, he is off to a high perch (higher than `high`). */
+const DOG = { hiss: 3.2, calm: 6, flee: 2.6, high: 0.5 };
 
 interface StrayCatOptions {
   /** Where it likes to sit: a spot on the ground, how high the perch is (a car roof, a bench, a bin), the way it faces. */
@@ -30,6 +34,13 @@ interface StrayCatOptions {
   purse?: { earnCoins(coins: number): void };
   /** The game's day count: his treat, his trust's step and his coin follow the game's days (the real date without it). */
   gameDay?: () => number;
+  /** The dogs out on their leads (zone-local, a live list): he hisses at one coming close, and is off up somewhere high if he is low. */
+  dogs?: readonly { readonly position: THREE.Vector3; readonly visible: boolean }[];
+  /**
+   * Félix's cat coming home (docs/story.md "The cat"): whether a cat lives in the flat already, and his adoption once
+   * trusted all the way. None: he stays a street cat.
+   */
+  home?: { catHome(): boolean; bring(): void };
 }
 
 /**
@@ -59,13 +70,20 @@ const FED = [
   'He eats, purrs, and sits on your foot as if it were his.',
   'He eats like a king and blinks slowly at his servant.',
 ];
+/** Stroked, trusted all the way, with a cat already at home: the street is his. */
+const HIS_STREET = [
+  'He purrs, then looks up at your windows, then back at you. The street is his kingdom; you are his favourite subject.',
+  'He walks you to the corner and sits, as if to say: you have a cat. I have a street.',
+];
 const STROKED = ['He arches into your hand, purring like an engine.', 'He rolls over on the warm slabs. A trap, surely. No: a belly rub.', 'He purrs and kneads the air.'];
 
-/** How the stray knows the player, across reloads: trust (0..`TRUST.max`), the real day he was last fed, and last brought a coin. */
+/** How the stray knows the player, across reloads: trust (0..`TRUST.max`), the real day he was last fed, and last brought a coin; gone home with them. */
 interface Bond {
   trust: number;
   fed: string;
   found: string;
+  /** He followed the player home (he is the flat's cat now, not on the street). */
+  home?: boolean;
 }
 const bonds = new PersistedStore<Bond>({
   key: KEYS.strayCat,
@@ -75,7 +93,7 @@ const bonds = new PersistedStore<Bond>({
     if (typeof data !== 'object' || data === null) return null;
     const o = data as Partial<Bond>;
     const trust = typeof o.trust === 'number' && Number.isFinite(o.trust) ? Math.max(0, Math.min(TRUST.max, Math.floor(o.trust))) : 0;
-    return { trust, fed: typeof o.fed === 'string' ? o.fed : '', found: typeof o.found === 'string' ? o.found : '' };
+    return { trust, fed: typeof o.fed === 'string' ? o.fed : '', found: typeof o.found === 'string' ? o.found : '', ...(o.home === true ? { home: true } : {}) };
   },
 });
 
@@ -115,6 +133,8 @@ export class StrayCat extends THREE.Group implements Furniture, Updatable, Inter
   private sitting = 1;
   private groom = 0;
   private stare = 0;
+  /** Hissed at the dog close by already (again once it has gone off). */
+  private hissedAtDog = false;
   private line = 0;
   private started = false;
   /** His voice: a chirp when fed, a purr when stroked, a hiss at a stranger too close. */
@@ -168,6 +188,18 @@ export class StrayCat extends THREE.Group implements Furniture, Updatable, Inter
     this.voice.setPitch(0.86);
   }
 
+  /** How far he trusts the player now (0 to his most): what the street has seen of the two of them. */
+  get trust(): number {
+    return this.bond.trust;
+  }
+
+  /** The nearest dog on a lead (m), or Infinity. */
+  private dogNear(): number {
+    let best = Infinity;
+    for (const d of this.options.dogs ?? []) if (d.visible) best = Math.min(best, Math.hypot(d.position.x - this.position.x, d.position.z - this.position.z));
+    return best;
+  }
+
   get footprint(): THREE.Box3 {
     return new THREE.Box3();
   }
@@ -194,7 +226,9 @@ export class StrayCat extends THREE.Group implements Furniture, Updatable, Inter
     // A cat does not glow.
   }
 
-  label(): string {
+  label(): string | null {
+    if (this.bond.home) return null;
+    if (this.canComeHome()) return 'Stray cat · take him home';
     const fedToday = this.bond.fed === this.dayMark();
     if (!fedToday && (pocket.count('scrap') > 0 || pocket.count('treats') > 0)) return 'Stray cat · give him a treat';
     return this.bond.trust >= TRUST.stroke ? 'Stray cat · stroke him' : 'Stray cat · talk';
@@ -205,7 +239,12 @@ export class StrayCat extends THREE.Group implements Furniture, Updatable, Inter
    * more. Trusted enough he is stroked (and purrs); a good friend now and then brings a coin he found in the gutter.
    */
   activate(session: SessionActions): void {
+    if (this.bond.home) return;
     this.stare = 3;
+    if (this.canComeHome()) {
+      this.comeHome(session);
+      return;
+    }
     const today = this.dayMark();
     if (this.bond.fed !== today) {
       const food = pocket.take('scrap', 'treats');
@@ -227,11 +266,44 @@ export class StrayCat extends THREE.Group implements Furniture, Updatable, Inter
         session.react('He trots off and comes back with something in his mouth: a coin from the gutter, dropped at your feet.');
         return;
       }
+      // Trusted all the way with a cat at home already: the street stays his.
+      if (this.bond.trust >= TRUST.max && this.options.home?.catHome()) {
+        session.react(HIS_STREET[this.line++ % HIS_STREET.length]!);
+        return;
+      }
       session.react(STROKED[this.line++ % STROKED.length]!);
       return;
     }
     this.voice.meow(this.bond.trust > 0 ? 'greet' : 'grumble');
     session.react(LINES[this.line++ % LINES.length]!);
+  }
+
+  /** Trusted all the way, and no cat at home yet: he will follow the player home. */
+  private canComeHome(): boolean {
+    return !this.bond.home && this.bond.trust >= TRUST.max && !!this.options.home && !this.options.home.catHome();
+  }
+
+  /** He follows the player to their door and moves in: Félix's cat, home again (docs/story.md "The cat"). */
+  private comeHome(session: SessionActions): void {
+    this.save({ ...this.bond, home: true });
+    this.voice.meow('trill');
+    this.options.home?.bring();
+    markStreet('strayHome');
+    session.reward({
+      title: 'Mistigri comes home',
+      detail: 'He trots ahead of you to the building’s door as if he had always known it, and up the stairs to the flat. He goes straight to the corner where Félix kept his bowl, and sits there.',
+      big: true,
+    });
+    this.hide();
+  }
+
+  /** Off the street for good (gone home): not drawn, not in the drivers' way. */
+  private hide(): void {
+    this.visible = false;
+    // Parked out of reach: the dogs' noses (`dogBait`) and the drivers forget him.
+    this.position.set(0, -50, 0);
+    this.obstacle.active = false;
+    this.voice.setPurring(false);
   }
 
   private save(bond: Bond): void {
@@ -240,6 +312,10 @@ export class StrayCat extends THREE.Group implements Furniture, Updatable, Inter
   }
 
   update(dt: number): void {
+    if (this.bond.home) {
+      if (this.visible) this.hide();
+      return;
+    }
     if (!this.started) {
       // On its perch from the first frame (placing it in the zone set it at the origin).
       this.started = true;
@@ -256,7 +332,15 @@ export class StrayCat extends THREE.Group implements Furniture, Updatable, Inter
     if (state.kind === 'perched') {
       state.since += dt;
       const crowded = near < wary;
-      if ((crowded || this.isTaken(this.perch)) && state.since > 1.5) {
+      // A dog coming close: a hiss, and off the ground perch for a high one (a car roof, a bin).
+      const dog = this.dogNear();
+      if (dog < DOG.hiss && !this.hissedAtDog) {
+        this.hissedAtDog = true;
+        this.voice.meow('hiss');
+        this.stare = 1.5;
+      } else if (dog > DOG.calm) this.hissedAtDog = false;
+      const dogScare = dog < DOG.flee && this.options.perches[this.perch]!.y < DOG.high;
+      if ((crowded || dogScare || this.isTaken(this.perch)) && state.since > 1.5) {
         // A stranger right on top of him gets a hiss on the way.
         if (crowded && this.bond.trust === 0 && near < wary * 0.6) this.voice.meow('hiss');
         this.leave();

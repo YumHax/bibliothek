@@ -56,7 +56,7 @@ export class ConsoleDeskPanel extends CardPanel {
   protected render(): Html {
     const { workshop } = this.deps;
     const working = workshop.working;
-    const broken = workshop.consoles.filter((c) => !c.fixed);
+    const broken = workshop.consoles.filter((c) => !c.fixed && c.atShop === undefined);
     const rows = working.map((c) => {
       const price = resaleOf(c.platform);
       const armed = this.arming.isArmed(c.id);

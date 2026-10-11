@@ -54,6 +54,9 @@ import type { NewsPanel } from '@/ui/NewsPanel';
 import type { ScratchCardPanel } from '@/ui/ScratchCardPanel';
 import type { HomeShopPanel } from '@/ui/HomeShopPanel';
 import type { ToDoNotePanel } from '@/ui/ToDoNotePanel';
+import type { CounterDeal } from '@/ui/streetShops/CounterPanel';
+import type { QuizNight } from '@/ui/streetShops/PubQuizPanel';
+import type { DartsGo } from '@/ui/streetShops/DartsPanel';
 import type { Classifieds } from '@/classifieds/Classifieds';
 import type { Ad } from '@/classifieds/ads';
 import type { SellerLot } from '@/classifieds/sellerLot';
@@ -61,7 +64,20 @@ import type { HomeConsole, Workshop } from '@/repair/Workshop';
 import type { StoryChannels } from '@/story';
 import type { MemoryProjector } from '@/memories/MemoryFilm';
 import type { GrandmaVisits } from '@/grandma/GrandmaVisits';
+import type { GrandmaRituals } from '@/grandma/GrandmaRituals';
+import type { Keepsakes } from '@/grandma/Keepsakes';
+import type { FamilyStory } from '@/family/FamilyStory';
+import type { AlbumFinds } from '@/grandma/AlbumFinds';
+import type { AlbumPrints } from '@/grandma/albumPrints';
+import type { PhotoRoll } from '@/photo/photoRoll';
+import type { GrandmaHints } from '@/grandma/GrandmaHints';
+import type { GrandmaPresence } from '@/grandma/GrandmaPresence';
+import type { BreadErrand } from '@/grandma/breadErrand';
+import type { SharedRide } from '@/grandma/sharedRide';
 import type { KidPanels } from '@/building/kids/kidDeals';
+import type { ChoicePanel } from '@/ui/street/ChoicePanel';
+import type { WrapPanel } from '@/ui/street/WrapPanel';
+import type { PastimePanels } from '@/ui/grandma/pastimePanels';
 
 /*
  * What every zone builder is handed (`BuildContext`) and what it hands back (`ZoneHandle`). Kept
@@ -105,6 +121,11 @@ export interface HomeContext {
   onSelectPlatform?: PlatformSelectHandler;
   /** Calls the cat over (the feather wand won at the arcade), and says how that went. */
   callCat?: () => string;
+  /**
+   * Félix's cat, the stray on Front Street (docs/story.md "The cat"): whether a cat lives in the flat already, and his
+   * coming home once trusted all the way (adopted for nothing, his name and his ginger coat).
+   */
+  strayHome?: { catHome(): boolean; bring(): void };
   /** The collector's book on the sideboard, and what its milestones bring home (the plaque, the display cabinet). */
   collector?: CollectorHome;
   /** The guided first day: the to-do card on the hall console and "KEYS!" on the front door (none: no notes). */
@@ -221,6 +242,14 @@ export interface WorldPanels {
   screening?: ModalLike;
   /** The courtyard's kids: a swap of carts, a go on their handheld, a cart handed over (`courtyard/YardKids`). */
   kids?: KidPanels;
+  /** What the player does with Mémé at hers: the quiz, the crossword, the cards, the wool (`grandma/visit/pastimes`). */
+  memePastimes?: PastimePanels;
+  /** Front Street's counters (`ui/streetShops/`): the bookshops', the kiosk's and the pop-up's counter, THE LOCAL's quiz and darts. */
+  streetShops?: { counter: ModalLike & { show(deal: CounterDeal): void }; quiz: ModalLike & { show(night: QuizNight): void }; darts: ModalLike & { show(go: DartsGo): void } };
+  /** A pick of one of a few things in the street: where line 38 goes, whom a card in the pillar box is for (`ui/street/ChoicePanel`). */
+  choice?: ChoicePanel;
+  /** The Christmas stall's gift wrapping: a game of the collection into paper for a friend (`ui/street/WrapPanel`). */
+  wrap?: WrapPanel;
 }
 
 /** The shared services every zone builder may draw on; `src/bootstrap/world.ts` assembles it once. */
@@ -258,6 +287,24 @@ export interface BuildContext {
   memories?: MemoryProjector;
   /** The visits to Mémé's: counted, the Sunday envelope, the memories seen (`src/grandma`). */
   grandma?: GrandmaVisits;
+  /** Mémé's ways: lunch at her table, her recipes and the dish cooked at home, her favours, her occasions (docs/grandma.md). */
+  grandmaRituals?: GrandmaRituals;
+  /** What Mémé gave the player to take home after the memories, and Félix's lots she was told are home (docs/grandma.md). */
+  keepsakes?: Keepsakes;
+  /** The end of the family's story: Gaspard at her table, the Christmas Game Boy, her visits to the flat (docs/grandma.md). */
+  family?: FamilyStory;
+  /** Her album's other photos: the snapshots she finds, the player's prints glued in, the shots to give her (docs/grandma.md). */
+  albumFinds?: AlbumFinds;
+  albumPrints?: AlbumPrints;
+  photoRoll?: PhotoRoll;
+  /** Her hints toward the album's next photo: her chat, her ring on the bedroom's phone, her letter (docs/grandma.md). */
+  grandmaHints?: GrandmaHints;
+  /** Her own memory of the player: the stories told, the news heard, Gaspard's last ring (docs/grandma.md "Her presence"). */
+  grandmaPresence?: GrandmaPresence;
+  /** The baguette she asks for from Lebrun's on Linden Avenue (docs/grandma.md "Around her flat"). */
+  grandmaBread?: BreadErrand;
+  /** Her mornings on the 38 with the player: she walks home from the stop ahead of them (docs/grandma.md "Around her flat"). */
+  sharedRide?: SharedRide;
 }
 
 /** The small ads and the consoles (docs/economy.md "Small ads and the seller's flat", docs/household.md "Repairing a console"). */

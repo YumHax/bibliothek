@@ -1,4 +1,5 @@
 import { shade } from './colour';
+import { GROUND_FLOOR, STOREY } from '@/world/measures/street';
 import { lcg, pick } from '@/random';
 
 /*
@@ -46,7 +47,16 @@ export interface FacadeStyle {
   number: number;
   /** Which end of the front its downpipe runs down from the gutter, if any. */
   downpipe: 'left' | 'right' | null;
+  /** Its own roof's slope (the kind's, steeper or shallower by the building): none on a flat roof. */
+  slope: { rise: number; run: number } | null;
+  /** Its dormers' heads (a mansard's), and whether the odd bay goes without one or an oeil-de-boeuf. */
+  dormer: DormerKind;
+  dormerSkip: number;
+  dormerOeil: boolean;
 }
+
+/** A dormer's head: a little triangular pediment, a segmental arch, a flat zinc hood. */
+export type DormerKind = 'pediment' | 'segment' | 'hood';
 
 export interface WindowSize {
   sill: number;
@@ -66,7 +76,7 @@ const SLATES = ['#4a4f58', '#545a63', '#3f454e'];
 const TILES = ['#9a5a3d', '#8a4a32', '#a8664a'];
 const WINDOW_FRAME = '#e8e4dc';
 
-/** How far a sloping roof rises over the cornice and how far back it reaches while it does, metres. */
+/** How far a sloping roof rises over the cornice and how far back it reaches while it does, metres (each building's own: `FacadeStyle.slope`; our own building keeps these). */
 export const ROOF_SLOPE: Record<Exclude<RoofKind, 'flat'>, { rise: number; run: number }> = {
   mansard: { rise: 3.2, run: 1.4 },
   pitched: { rise: 2.6, run: 3.6 },
@@ -103,10 +113,17 @@ export function facadeStyle(seed: number, stoneShare = 0.25, random: () => numbe
   const number = 1 + Math.floor(more() * 58);
   const pipe = more();
   const downpipe = pipe < 0.3 ? 'left' : pipe < 0.6 ? 'right' : null;
-  return { ...base, windows, parapet, door, number, downpipe };
+  // The roof's own pitch and its dormers, from a draw of their own again (everything above stays where it was).
+  const roofDraw = lcg(seed * 3307 + 61);
+  const slope = base.roof === 'flat' ? null : { rise: ROOF_SLOPE[base.roof].rise * (0.88 + roofDraw() * 0.22), run: ROOF_SLOPE[base.roof].run * (0.86 + roofDraw() * 0.26) };
+  const d = roofDraw();
+  const dormer: DormerKind = grand ? (d < 0.6 ? 'pediment' : 'segment') : d < 0.4 ? 'pediment' : d < 0.7 ? 'segment' : 'hood';
+  const dormerSkip = roofDraw() < 0.25 ? 0.5 : 0.08;
+  const dormerOeil = roofDraw() < 0.22;
+  return { ...base, windows, parapet, door, number, downpipe, slope, dormer, dormerSkip, dormerOeil };
 }
 
-type BaseStyle = Omit<FacadeStyle, 'windows' | 'parapet' | 'door' | 'number' | 'downpipe'>;
+type BaseStyle = Omit<FacadeStyle, 'windows' | 'parapet' | 'door' | 'number' | 'downpipe' | 'slope' | 'dormer' | 'dormerSkip' | 'dormerOeil'>;
 
 function baseStyle(seed: number, stoneShare: number, random: () => number): BaseStyle {
   const r = random();
@@ -148,13 +165,13 @@ interface BalconyRow {
 }
 
 /**
- * Where a building's balconies are, floor by floor and bay by bay: right across the first and top
- * floors of a grand front, a few bays wide on the odd floor of a plainer one. Drawn from the style's
+ * Where a building's balconies are, floor by floor and bay by bay: right across the second and top floors of a grand
+ * front (the first and top on a low one), a few bays wide on the odd floor of a plainer one. Drawn from the style's
  * seed, so both renderers hang them on the same windows.
  */
 export function balconyRows(style: FacadeStyle, storeys: number, bays: number): BalconyRow[] {
   if (style.balconies === 'none') return [];
-  if (style.balconies === 'haussmann') return [...new Set([1, storeys - 1])].filter((f) => f >= 1).map((floor) => ({ floor, from: 0, to: bays - 1 }));
+  if (style.balconies === 'haussmann') return [...new Set([storeys - 1 >= 4 ? 2 : 1, storeys - 1])].filter((f) => f >= 1).map((floor) => ({ floor, from: 0, to: bays - 1 }));
   const random = lcg(style.seed * 104729 + 3);
   const rows: BalconyRow[] = [];
   for (let floor = 1; floor < storeys; floor++) {
@@ -169,4 +186,52 @@ export function balconyRows(style: FacadeStyle, storeys: number, bays: number): 
 /** Whether bay `bay` of floor `floor` opens onto a balcony. */
 export function onBalcony(rows: readonly BalconyRow[], floor: number, bay: number): boolean {
   return rows.some((row) => row.floor === floor && bay >= row.from && bay <= row.to);
+}
+
+/**
+ * How a front's floors stack (`storeys`, the ground floor included): each floor's foot over the pavement and its
+ * height, the ground floor first. The fronts' total stays `GROUND_FLOOR + (storeys - 1) * STOREY` (roofs, party walls
+ * and the window view's rows keep their heights), but the floors share it as the building's style has it: a grand
+ * front's first floor taller (its noble floor) and the second a little, its top floor lower, a plainer one by less, the
+ * odd render front even. `regular`: every floor `STOREY` (our own building: the flat's floor is where the stairs say).
+ */
+export interface StoreyLayout {
+  foot: number[];
+  height: number[];
+}
+
+export function storeyLayout(style: FacadeStyle, storeys: number, regular = false): StoreyLayout {
+  const floors = Math.max(0, storeys - 1);
+  const shift = new Array<number>(floors).fill(0);
+  if (!regular && floors >= 2) {
+    const random = lcg(style.seed * 2903 + 41);
+    const noble = style.kind === 'stone' ? 0.32 + random() * 0.08 : style.kind === 'brick' ? 0.12 + random() * 0.1 : random() < 0.5 ? 0 : 0.08 + random() * 0.12;
+    shift[0]! += noble;
+    shift[floors - 1]! -= noble;
+    if (style.kind === 'stone' && floors >= 4) {
+      shift[1]! += 0.12;
+      shift[floors - 2]! -= 0.12;
+    }
+  }
+  const foot = [0];
+  const height = [GROUND_FLOOR];
+  let y = GROUND_FLOOR;
+  for (let f = 0; f < floors; f++) {
+    foot.push(y);
+    height.push(STOREY + shift[f]!);
+    y += STOREY + shift[f]!;
+  }
+  return { foot, height };
+}
+
+/** How tall a style's windows are on a floor `height` tall: taller on a noble floor, shorter under the roof, always clear of the floor over it. */
+export function windowHeightOn(style: FacadeStyle, height: number): number {
+  return Math.max(0.9, Math.min(style.windows.height + (height - STOREY) * 0.9, height - style.windows.sill - 0.42));
+}
+
+/** Which floor (0 the ground floor) the height `y` over the pavement is on. */
+export function floorAt(layout: StoreyLayout, y: number): number {
+  let floor = 0;
+  for (let f = 1; f < layout.foot.length; f++) if (y >= layout.foot[f]!) floor = f;
+  return floor;
 }

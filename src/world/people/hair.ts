@@ -86,22 +86,30 @@ const BEARD_LINE: Keys = [
 /** Under the skin, where there is no hair. */
 const SUNK = -0.003;
 
+/** The strand texture the hair's mass wears (shared by every look with this colour and curl). */
+export function hairStrandMap(look: PersonLook): THREE.CanvasTexture {
+  const curly = look.hairStyle === 'curly';
+  return cachedTexture(`hair|${look.hair}|${curly}`, () => strandTexture(look.hair, curly, look.hair * 7 + 3));
+}
+
 export function hairMaterial(look: PersonLook): THREE.MeshStandardMaterial {
   const curly = look.hairStyle === 'curly';
-  const map = cachedTexture(`hair|${look.hair}|${curly}`, () => strandTexture(look.hair, curly, look.hair * 7 + 3));
+  const map = hairStrandMap(look);
   // Where a shell tapers to the skin (hairline, fringe, beard edge) it lies within a hair of it: the offset keeps it in front instead of z-fighting.
   const material = new THREE.MeshStandardMaterial({ map, bumpMap: map, bumpScale: 1.5, roughness: 0.55, side: THREE.DoubleSide, polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -2 }); // convention-ok: a shell over the skin, not a surface layer
-  return QUALITY.detailedMaterials ? strandSheen(material, curly ? 0.4 : 1) : material;
+  return QUALITY.detailedMaterials ? strandSheen(material, curly ? 0.4 : 1, 0.15) : material;
 }
 
 /**
  * Light along the strands (Kajiya-Kay): the strand's direction is where the texture's v runs on the
  * surface (from the screen-space derivatives, no tangents needed), and each direct light adds a
  * sharp white band across it and a broader one tinted by the hair, shifted either way along the
- * normal. Curly hair (`strength` lower) only glints. No texture unit.
+ * normal. Curly hair (`strength` lower) only glints. `glow` is the light coming through from behind
+ * (strands against a lamp light up at the edge, whichever way they face): faint on the shell's mass,
+ * strong on the loose strands (`hairStrands`). No texture unit.
  */
-function strandSheen(material: THREE.MeshStandardMaterial, strength: number): THREE.MeshStandardMaterial {
-  return patchShader(material, `strandSheen${strength}`, (shader) => {
+export function strandSheen(material: THREE.MeshStandardMaterial, strength: number, glow: number): THREE.MeshStandardMaterial {
+  return patchShader(material, `strandSheen${strength}|${glow}`, (shader) => {
     shader.fragmentShader = afterChunk(
       afterChunk(
         shader.fragmentShader,
@@ -116,6 +124,8 @@ function strandSheen(material: THREE.MeshStandardMaterial, strength: number): TH
           float primary = pow(sqrt(max(0.0, 1.0 - a * a)), 90.0);
           float secondary = pow(sqrt(max(0.0, 1.0 - b * b)), 22.0);
           reflectedLight.directSpecular += directLight.color * lit * ${strength.toFixed(2)} * (primary * 0.14 + secondary * 0.5 * material.diffuseColor);
+          float behind = pow(saturate(dot(-directLight.direction, geometryViewDir)), 5.0);
+          reflectedLight.directDiffuse += directLight.color * ${glow.toFixed(2)} * behind * (0.35 + material.diffuseColor);
         }
         #undef RE_Direct
         #define RE_Direct RE_Direct_Hair`,
@@ -141,7 +151,7 @@ export function addHair(parts: Parts, look: PersonLook, shape: FaceShape, materi
   const shell = shellGeometry(shape, 112, 84, (d) => hairCover(d, look), thickness);
   if (shell) parts.add(shell, material);
   if (look.beard === 'full') {
-    const beard = shellGeometry(shape, 112, 84, beardCover, (d) => 0.0028 + 0.0035 * ramp(d.y, -0.6, -0.9));
+    const beard = shellGeometry(shape, 112, 84, beardCover, beardThickness);
     if (beard) parts.add(beard, material);
   }
   if (style === 'bun' && !look.hat) parts.add(bunGeometry(shape), material);
@@ -174,7 +184,7 @@ interface Cut {
 }
 
 /** The cut for `look`, from its own stream (the look's draws stay as they were). */
-function cutOf(look: PersonLook): Cut {
+export function cutOf(look: PersonLook): Cut {
   const random = lcg(seedOfLook(look) * 7919 + 5);
   const volume = 0.75 + random() * 0.6;
   const roll = random();
@@ -190,7 +200,7 @@ export function ponytailAnchor(shape: FaceShape): THREE.Vector3 {
 }
 
 /** How much of the direction `d` the hair covers, 0 to 1. */
-function hairCover(d: THREE.Vector3, look: PersonLook): number {
+export function hairCover(d: THREE.Vector3, look: PersonLook): number {
   const a = Math.abs(Math.atan2(d.x, d.z));
   const e = Math.asin(THREE.MathUtils.clamp(d.y, -1, 1));
   const fringe = look.brows > 1;
@@ -212,7 +222,37 @@ function edge(e: number, line: number): number {
   return ramp(e, line - 0.08, line + 0.08);
 }
 
-function hairThickness(d: THREE.Vector3, style: HairStyle, hat: boolean, cut: Cut): number {
+/** The hairline's elevation (radians) at azimuth `a` from the front (0) to the back (pi), where `hairCover` is a half. */
+export function hairlineAt(look: PersonLook, a: number): number {
+  const fringe = look.brows > 1;
+  switch (look.hairStyle) {
+    case 'long':
+      return spline(fringe ? LONG_FRINGE : LONG, a);
+    case 'short':
+    case 'curly':
+      return spline(fringe ? FRINGE : HAIRLINE, a);
+    default:
+      return spline(HAIRLINE, a);
+  }
+}
+
+/** The hair shell's outer surface (distance from the head's centre) in direction `d`, as `addHair` builds it; at least on the skin. */
+export function hairRadius(d: THREE.Vector3, look: PersonLook, shape: FaceShape, cut: Cut): number {
+  return shellRadius(d, shape, hairCover(d, look), (v) => hairThickness(v, look.hairStyle, !!look.hat, cut));
+}
+
+/** A full beard's thickness in direction `d` (thicker under the chin). */
+export function beardThickness(d: THREE.Vector3): number {
+  return 0.0028 + 0.0035 * ramp(d.y, -0.6, -0.9);
+}
+
+/** A shell's radius where its cover is `c`: pushed out by the thickness, tapering to just under the skin at its edge. */
+export function shellRadius(d: THREE.Vector3, shape: FaceShape, c: number, thickness: (d: THREE.Vector3) => number): number {
+  // Thinning towards the edge (c^1.5) so a hairline or a fringe tapers instead of ending in a ledge.
+  return headRadius(d, shape) + (c > 0 ? THREE.MathUtils.lerp(SUNK, thickness(d), c ** 1.5) : SUNK);
+}
+
+export function hairThickness(d: THREE.Vector3, style: HairStyle, hat: boolean, cut: Cut): number {
   const top = Math.max(0, d.y);
   let t: number;
   switch (style) {
@@ -277,8 +317,7 @@ function shellGeometry(shape: FaceShape, widthSegments: number, heightSegments: 
     (d) => {
       const c = cover(d);
       covered.push(c);
-      // Thinning towards the edge (c^1.5) so a hairline or a fringe tapers instead of ending in a ledge.
-      return headRadius(d, shape) + (c > 0 ? THREE.MathUtils.lerp(SUNK, thickness(d), c ** 1.5) : SUNK);
+      return shellRadius(d, shape, c, thickness);
     },
     widthSegments,
     heightSegments,
@@ -291,14 +330,16 @@ function shellGeometry(shape: FaceShape, widthSegments: number, heightSegments: 
   return geometry;
 }
 
+/** The falling sheet's grid: columns round the head, rows down (vertex (i, j) is at j * (cols + 1) + i). */
+export const CURTAIN_GRID = { cols: 44, rows: 14 } as const;
+
 /**
  * Long hair falling from behind the ears to the shoulders: a sheet that leaves the shell high on
  * the back of the head, drapes over the widest part of the skull and falls from there, flaring a
  * little, in loose clumps, the ends uneven.
  */
 function curtainGeometry(shape: FaceShape, thickness: (d: THREE.Vector3) => number): THREE.BufferGeometry {
-  const cols = 44;
-  const rows = 14;
+  const { cols, rows } = CURTAIN_GRID;
   const positions: number[] = [];
   const uvs: number[] = [];
   const follow: number[] = [];
@@ -357,18 +398,31 @@ function bunGeometry(shape: FaceShape): THREE.BufferGeometry {
   return geometry;
 }
 
-/** Gathered at the back of the head, bushing out below the tie and tapering to the tip. */
-function ponytailGeometry(shape: FaceShape): THREE.BufferGeometry {
+/** A ponytail's nominal radius (`TAIL` shapes it along its length). */
+const PONYTAIL_RADIUS = 0.017;
+
+/** The ponytail's centre line (the head's frame), from the tie down to the tip. */
+export function ponytailCurve(shape: FaceShape): THREE.CatmullRomCurve3 {
   const base = ponytailAnchor(shape);
-  const curve = new THREE.CatmullRomCurve3([
+  return new THREE.CatmullRomCurve3([
     base,
     base.clone().add(new THREE.Vector3(0, -0.02, -0.04)),
     base.clone().add(new THREE.Vector3(0, -0.1, -0.07)),
     base.clone().add(new THREE.Vector3(0, -0.2, -0.055)),
   ]);
+}
+
+/** The ponytail's radius `t` along it (0 at the tie, 1 at the tip). */
+export function ponytailRadius(t: number): number {
+  return PONYTAIL_RADIUS * spline(TAIL, t);
+}
+
+/** Gathered at the back of the head, bushing out below the tie and tapering to the tip. */
+function ponytailGeometry(shape: FaceShape): THREE.BufferGeometry {
+  const curve = ponytailCurve(shape);
   const tubular = 20;
   const radial = 10;
-  const geometry = new THREE.TubeGeometry(curve, tubular, 0.017, radial, false);
+  const geometry = new THREE.TubeGeometry(curve, tubular, PONYTAIL_RADIUS, radial, false);
   const position = geometry.getAttribute('position') as THREE.BufferAttribute;
   const uv = geometry.getAttribute('uv') as THREE.BufferAttribute;
   const p = new THREE.Vector3();
@@ -388,9 +442,14 @@ function ponytailGeometry(shape: FaceShape): THREE.BufferGeometry {
   return geometry;
 }
 
-/** Streaks of lighter and darker strands running down the texture (along v); tight coils for curly hair. */
+/**
+ * Streaks of lighter and darker strands running down the texture (along v); tight coils for curly
+ * hair. Under them, locks: broad soft bands each a little warmer or cooler, lighter or darker than
+ * the rest, so the colour is never one flat dye. v = 1 is where the hair grows from (the crown on the
+ * shell, the root of the falling sheet and of a ponytail): darker there, the ends lighter.
+ */
 function strandTexture(color: number, curly: boolean, seed: number): THREE.CanvasTexture {
-  const S = 256;
+  const S = 512;
   const [canvas, ctx] = createCanvas(S, S);
   const random = lcg(seed);
   const r = (color >> 16) & 255;
@@ -399,27 +458,54 @@ function strandTexture(color: number, curly: boolean, seed: number): THREE.Canva
   const shade = (k: number, alpha: number): string => `rgba(${Math.min(255, Math.round(r * k + 8 * (k - 1)))},${Math.min(255, Math.round(g * k + 8 * (k - 1)))},${Math.min(255, Math.round(b * k + 8 * (k - 1)))},${alpha})`;
   ctx.fillStyle = shade(1, 1);
   ctx.fillRect(0, 0, S, S);
+  // Locks, wrapping round the seam (the texture repeats across).
+  for (let i = 0; i < 28; i++) {
+    const x = random() * S;
+    const w = 12 + random() * 36;
+    const k = 0.84 + random() * 0.3;
+    const warm = random() < 0.5;
+    const tint = `${Math.min(255, Math.round((warm ? r * 1.08 + 8 : r * 0.94) * k))},${Math.min(255, Math.round((warm ? g * 1.02 + 3 : g * 0.98) * k))},${Math.min(255, Math.round((warm ? b * 0.9 : b * 1.06 + 4) * k))}`;
+    for (const offset of [-S, 0, S]) {
+      const band = ctx.createLinearGradient(x + offset - w, 0, x + offset + w, 0);
+      band.addColorStop(0, `rgba(${tint},0)`);
+      band.addColorStop(0.5, `rgba(${tint},0.32)`);
+      band.addColorStop(1, `rgba(${tint},0)`);
+      ctx.fillStyle = band;
+      ctx.fillRect(x + offset - w, 0, 2 * w, S);
+    }
+  }
   if (curly) {
-    for (let i = 0; i < 900; i++) {
+    for (let i = 0; i < 2600; i++) {
       ctx.strokeStyle = shade(random() < 0.5 ? 0.6 : 1.35, 0.45);
-      ctx.lineWidth = 1 + random();
+      ctx.lineWidth = 1 + random() * 1.4;
       ctx.beginPath();
-      ctx.arc(random() * S, random() * S, 2 + random() * 3, random() * 6, random() * 6 + 3);
+      ctx.arc(random() * S, random() * S, 2.5 + random() * 4, random() * 6, random() * 6 + 3);
       ctx.stroke();
     }
   } else {
-    for (let i = 0; i < 700; i++) {
+    for (let i = 0; i < 1800; i++) {
       const x = random() * S;
       ctx.strokeStyle = shade(random() < 0.5 ? 0.62 + random() * 0.2 : 1.2 + random() * 0.35, 0.3 + random() * 0.3);
-      ctx.lineWidth = 0.6 + random() * 1.4;
+      ctx.lineWidth = 0.6 + random() * 1.6;
       ctx.beginPath();
       ctx.moveTo(x, 0);
-      ctx.bezierCurveTo(x + (random() - 0.5) * 6, S / 3, x + (random() - 0.5) * 6, (2 * S) / 3, x, S);
+      ctx.bezierCurveTo(x + (random() - 0.5) * 10, S / 3, x + (random() - 0.5) * 10, (2 * S) / 3, x + (random() - 0.5) * 4, S);
       ctx.stroke();
     }
   }
+  // Darker at the roots (the top rows, v = 1), lighter towards the ends.
+  const roots = ctx.createLinearGradient(0, 0, 0, S * 0.3);
+  roots.addColorStop(0, 'rgba(12,8,6,0.16)');
+  roots.addColorStop(1, 'rgba(12,8,6,0)');
+  ctx.fillStyle = roots;
+  ctx.fillRect(0, 0, S, S * 0.3);
+  const ends = ctx.createLinearGradient(0, S * 0.55, 0, S);
+  ends.addColorStop(0, 'rgba(255,236,205,0)');
+  ends.addColorStop(1, 'rgba(255,236,205,0.12)');
+  ctx.fillStyle = ends;
+  ctx.fillRect(0, S * 0.55, S, S * 0.45);
   const texture = toTexture(canvas, 'facing');
   texture.wrapS = THREE.RepeatWrapping; // convention-ok: wraps one way only
-  texture.repeat.set(3, 1);
+  texture.repeat.set(2, 1);
   return texture;
 }

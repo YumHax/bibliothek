@@ -3,7 +3,7 @@ import type { ArcadeDaily } from '@/economy/ArcadeDaily';
 import type { ArcadeLeague } from '@/economy/ArcadeLeague';
 import type { ArcadeTournament } from '@/economy/ArcadeTournament';
 import type { Jackpot } from '@/economy/Jackpot';
-import { PLAY_COST, TOURNAMENT, playIsFree } from '@/economy/pricing';
+import { LEAGUE, PLAY_COST, TOURNAMENT, playIsFree } from '@/economy/pricing';
 import { PRIZES } from '@/economy/Prizes';
 import { rivalScore } from '@/economy/rivals';
 import { Prop } from '../props/Prop';
@@ -21,6 +21,8 @@ interface ArcadeHallOptions {
   league?: ArcadeLeague;
   tournament: ArcadeTournament;
   jackpot: Jackpot;
+  /** The medals: the attendant mentions a platinum and the hall's tour. */
+  medals?: { readonly tourDone: boolean; readonly golds: number };
   /** The machines that may be out of order (game ids). */
   breakable: readonly string[];
   /** The game clock's hour, and how many regulars may be in from which hour on. */
@@ -37,26 +39,35 @@ interface HallGame {
 }
 
 /**
- * The hall's rules for the day, for as long as it stands: what the next play costs (broke: on
- * the house), today's challenge per game, the one machine out of order (never the tournament's
- * cabinet; decided when the hall is built), how many regulars the hour brings in, whether a
- * regular's score goes on the table, and the attendant's news (each topical line said once, then
- * the usual ones). An empty `Prop`; the builder places it and hands its answers to the machines,
- * the crowd and the attendant.
+ * The hall's rules for the day: what the next play costs (broke: on the house), today's challenge per game, the one
+ * machine out of order (never the tournament's cabinet; looked at again when the game day turns, so a hall that stands
+ * through midnight gets the new day's), how many regulars the hour brings in, whether a regular's score goes on the
+ * table, and the attendant's news (each topical line said once, then the usual ones). An empty `Prop`; the builder
+ * places it and hands its answers to the machines, the crowd and the attendant.
  */
 export class ArcadeHall extends Prop {
-  /** Today's machine out of order, or null. */
-  readonly broken: string | null;
   private readonly options: ArcadeHallOptions;
   private readonly said = new Set<string>();
+  /** The day `brokenOn` was worked out for, and its answer. */
+  private brokenDay = '';
+  private brokenOn: string | null = null;
 
   constructor(options: ArcadeHallOptions) {
     super();
     this.name = 'ArcadeHall';
     this.options = options;
-    const { daily, tournament } = options;
-    const brokenToday = daily?.outOfOrder(options.breakable) ?? null;
-    this.broken = tournament.isOn && brokenToday === tournament.gameId ? null : brokenToday;
+  }
+
+  /** Today's machine out of order, or null (worked out once a day). */
+  get broken(): string | null {
+    const { daily, tournament } = this.options;
+    const day = daily?.day ?? '';
+    if (day !== this.brokenDay) {
+      this.brokenDay = day;
+      const brokenToday = daily?.outOfOrder(this.options.breakable) ?? null;
+      this.brokenOn = tournament.isOn && brokenToday === tournament.gameId ? null : brokenToday;
+    }
+    return this.brokenOn;
   }
 
   /** The next play's price right now (0: on the house). */
@@ -118,6 +129,7 @@ export class ArcadeHall extends Prop {
       ...this.machineNews(titleOf),
       ...this.tournamentNews(titleOf),
       ...this.leagueNews(),
+      ...this.medalNews(),
       ...this.jackpotNews(),
       ...this.recordNews(tabled),
       ...this.prizeNews(),
@@ -128,8 +140,13 @@ export class ArcadeHall extends Prop {
   private challengeNews(titleOf: (id: string) => string): string[] {
     const challenge = this.options.daily?.challenge();
     if (!challenge) return [];
-    if (challenge.done) return ['You beat the challenge today. A new one comes at midnight, your midnight, not this clock’s.'];
-    return [`Today’s challenge is ${titleOf(challenge.gameId)}: score ${formatNumber(challenge.target)} and I add ${formatTickets(challenge.reward)}.`];
+    if (challenge.done) return ['You beat the challenge today. A new one comes at midnight.'];
+    const title = titleOf(challenge.gameId);
+    const reward = formatTickets(challenge.reward);
+    if (challenge.kind === 'twice') return [`Today’s challenge: ${formatNumber(challenge.target)} on ${title}, twice. Do that and I add ${reward}.`];
+    if (challenge.kind === 'total') return [`Today’s challenge: ${formatNumber(challenge.target)} on ${title}, all your goes today added up. I add ${reward}.`];
+    if (challenge.personal) return [`Today’s challenge is ${title}: ${formatNumber(challenge.target)}. I set it from your own best, gold medallist. ${reward} if you do it.`];
+    return [`Today’s challenge is ${title}: score ${formatNumber(challenge.target)} and I add ${formatTickets(challenge.reward)}.`];
   }
 
   /** The change machine, and the machine out of order. */
@@ -147,7 +164,8 @@ export class ArcadeHall extends Prop {
     const lines: string[] = [];
     if (!cup.entered) lines.push(`Tournament day! ${titleOf(cup.gameId)}, three rounds against the regulars. The sheet is on the back wall, ${formatCoins(TOURNAMENT.entry)} to sign.`);
     if (cup.entered && cup.next) lines.push(`Your ${cup.next.round === 2 ? 'final' : cup.next.round === 1 ? 'semi-final' : 'quarter-final'} is against ${cup.next.name}: beat ${formatNumber(cup.next.score)}. They practised all week.`);
-    if (cup.wins >= 3) lines.push('Champion of the Saturday cup. I will engrave it. With a biro.');
+    if (cup.wins >= 3) lines.push(`Champion of the ${cup.cup.name.toLowerCase()}. I will engrave it. With a biro.`);
+    if (!cup.entered && cup.cup.titles >= TOURNAMENT.cups[1]!.titles) lines.push(`It is the ${cup.cup.name.toLowerCase()} for you now. The regulars have been practising, because of you.`);
     return lines;
   }
 
@@ -157,17 +175,30 @@ export class ArcadeHall extends Prop {
     if (!league) return [];
     const lines: string[] = [];
     const last = league.lastWeek;
-    if (last?.won) lines.push('You won last week’s league! Play anything and I hand you the pennant.');
+    if (last?.won) lines.push(`You won last week’s ${LEAGUE.divisionNames[last.division]?.toLowerCase() ?? ''} league! Play anything and I hand you the pennant.`);
     else if (last) lines.push(`Last week’s league: you came ${last.rank + 1 === 2 ? 'second' : last.rank + 1 === 3 ? 'third' : `number ${last.rank + 1}`}. There is always this week.`);
+    if (league.division.level > 0 && !last) lines.push(`The ${league.division.name.toLowerCase()} league this week. Different crowd up there.`);
+    const { tier } = league.card;
+    if (tier) lines.push(tier === 'HALL LEGEND' ? 'A legend of the hall, on my card. I might frame it.' : `${tier === 'REGULAR' ? 'A regular' : `A ${tier.toLowerCase()}`}. I remember faces, you know.`);
+    if (league.tokens > 0) lines.push(league.tokens === 1 ? 'You have a gold token. It goes in any slot.' : `${league.tokens} gold tokens in your pocket. They go in any slot.`);
     if (league.streakDays >= 2) lines.push(`${league.streakDays} days in a row. You should get a hobby. Oh wait.`);
     const leader = league.standings()[0];
     if (leader?.you && league.tickets > 0) lines.push('Top of the league this week. The regulars are furious.');
     return lines;
   }
 
-  /** The wheel's pot, once it is worth mentioning. */
+  /** The hall's tour, and the golds on the way to it. */
+  private medalNews(): string[] {
+    const { medals } = this.options;
+    if (!medals) return [];
+    if (medals.tourDone) return ['Gold on every machine. I have been here twenty years and I have seen it twice.'];
+    return medals.golds >= 5 ? [`${medals.golds} golds. The whole hall in gold, and there would be a trophy in it.`] : [];
+  }
+
+  /** The wheel's pot, once it is worth mentioning; past a thousand, it is the talk of the hall. */
   private jackpotNews(): string[] {
     const { jackpot } = this.options;
+    if (jackpot.newsworthy) return [`The wheel’s jackpot is over ${formatNumber(Math.floor(jackpot.value / 100) * 100)}. People come in off the street just to look at it.`];
     return jackpot.value >= 400 ? [`The wheel’s jackpot is at ${jackpot.value}. Somebody is going to be very happy.`] : [];
   }
 

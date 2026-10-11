@@ -5,7 +5,7 @@ import { LORRY, lorryGeometries, vehicleGlass } from '../carModel';
 import { snowCovered } from '../snowCover';
 import { paint } from '../../materials/palette';
 import { bareMetal } from '../metals';
-import { EmergencyVehicle, shade, type EmergencyOptions } from './Emergency';
+import { EmergencyVehicle, shade, uniform, type EmergencyOptions } from './Emergency';
 import { LampMaterial } from './lampMaterial';
 import { WheelMaterial } from './wheelSpin';
 
@@ -15,7 +15,9 @@ const LADDER = { length: 6.6, width: 0.6, rungs: 14, lift: 0.14 } as const;
 /**
  * Once in a long while a fire engine: the bin lorry's cab and body in fire red with a white band,
  * roller shutters down its sides, a ladder on the roof, blue lamps over the cab and its siren on
- * (`EmergencyVehicle`: the drivers pull over for it). Slower to get going than a car.
+ * (`EmergencyVehicle`: the drivers pull over for it). Slower to get going than a car. Now and then
+ * the call is here: it parks in the lane, beacons turning, and two firefighters go in to check a smell
+ * of burning.
  */
 export class FireEngine extends EmergencyVehicle {
   readonly siren = 'fire' as const;
@@ -24,13 +26,13 @@ export class FireEngine extends EmergencyVehicle {
   readonly step = 0.85;
 
   constructor(dayNight: DayNight, options: EmergencyOptions) {
-    super(dayNight, options, LORRY, 'fire', 1.5);
+    super(dayNight, options, LORRY, 'fire', 1.5, [uniform(81, 0x1f2a3a, 0xe8d23a, 0x1f2a3a), uniform(82, 0x1f2a3a, 0xe8d23a, 0x1f2a3a)]);
     this.name = 'FireEngine';
     const g = lorryGeometries();
     const lamps = new LampMaterial();
     const wheels = new WheelMaterial(false);
     this.lampFace = lamps;
-    this.wheelFace = { material: wheels, radius: LORRY.wheelRadius };
+    this.wheelFace = { material: wheels, radius: LORRY.wheelRadius, base: 6.6 };
     g.beacon.dispose();
     this.add(
       shade(new THREE.Mesh(g.body, snowCovered(new THREE.MeshStandardMaterial({ color: 0xb3221c, roughness: 0.35 })))),
@@ -57,5 +59,13 @@ export class FireEngine extends EmergencyVehicle {
     for (const r of rails) r.deleteAttribute('uv');
     this.add(shade(new THREE.Mesh(mergeGeometries(rails.map((r) => (r.index ? r.toNonIndexed() : r)))!, bareMetal({ color: 0xc8ccd0, roughness: 0.3 }))));
     this.lightBar(3.8, 2.98, width - 0.4);
+  }
+
+  protected override crewLines(): readonly string[] {
+    return ['Burnt toast. It’s always burnt toast.', 'Keep back from the engine, please.', 'All under control.'];
+  }
+
+  protected override crewLabel(): string {
+    return 'Firefighter';
   }
 }

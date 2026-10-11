@@ -7,7 +7,7 @@ import { RETRO_GAMES, type PlannedShop, type Storefront, paintShopfronts } from 
 import type { FacadeSpec } from '../../street/streetPlan';
 import { FACADES } from '@/world/city/facades';
 import { FLAT_IN_STREET, FRONT, GROUND_FLOOR, STOREY } from '@/world/measures/street';
-import { BRICKS, balconyRows, facadeBays, facadeStyle, onBalcony, windowWidth, type FacadeStyle } from '@/world/city/facadeStyle';
+import { BRICKS, balconyRows, facadeBays, facadeStyle, onBalcony, storeyLayout, windowHeightOn, windowWidth, type FacadeStyle } from '@/world/city/facadeStyle';
 import { roofFurniture } from '@/world/city/roofFurniture';
 import { BACKDROP_BLOCKS, BACKDROP_WALLS, type BackdropBlock } from '@/world/city/skyline';
 import { holidayBetween, paintPumpkin, wantsPumpkin } from './Holiday';
@@ -241,9 +241,11 @@ function paintGroundFloor(f: FacadeFrame, random: Rng, arch: FacadeStyle, spec: 
 /** Upper floors, the windows where the walkable street has them (the style's `windows`); tall French windows onto the balconies. */
 function paintUpperFloors(f: FacadeFrame, random: Rng, arch: FacadeStyle, floors: number, { cols, pitch, winW }: Bays, balconies: ReturnType<typeof balconyRows>): void {
   const { w, fine } = f;
+  // The floors as the walkable street stacks them (a noble floor, a lower top floor: `storeyLayout`).
+  const layout = storeyLayout(arch, floors);
   for (let fl = 1; fl < floors; fl++) {
-    const hb = GROUND + (fl - 1) * FLOOR + arch.windows.sill;
-    const ht = hb + arch.windows.height;
+    const hb = (layout.foot[fl] ?? GROUND + (fl - 1) * FLOOR) + arch.windows.sill;
+    const ht = hb + windowHeightOn(arch, layout.height[fl] ?? FLOOR);
     if (fine && arch.courses && fl > 1) f.detail(f.strip(0, w, hb - 0.95, hb - 0.8), shade(arch.trim, 0.9));
     for (let c = 0; c < cols; c++) {
       const s0 = c * pitch + (pitch - winW) / 2;
@@ -587,7 +589,7 @@ function paintRoof(f: FacadeFrame, random: Rng, arch: FacadeStyle, h: number, co
   else paintFlatRoof(f, arch, things, span, base);
   if (fine && things.dish) paintDish(f, span, things.dish, base);
   // Chimney stacks, with their pots, standing up from the roof ridge.
-  const roofTop = base + (arch.roof === 'mansard' ? 3.2 : arch.roof === 'pitched' ? 2.6 : 0.7);
+  const roofTop = base + (arch.slope?.rise ?? 0.7);
   sheet.begin(d, 0.05);
   paintChimneys(f, arch, things, span, roofTop);
   if (fine && things.aerial) paintAerial(f, span, things.aerial, roofTop);
@@ -614,7 +616,7 @@ function paintCornice(f: FacadeFrame, arch: FacadeStyle, h: number): void {
 function paintPitchedRoof(f: FacadeFrame, random: Rng, arch: FacadeStyle, things: RoofThings, span: Span, base: number): void {
   const { sheet, d, w, fine } = f;
   const mansard = arch.roof === 'mansard';
-  const top = base + (mansard ? 3.2 : 2.6);
+  const top = base + (arch.slope?.rise ?? (mansard ? 3.2 : 2.6));
   const inset = Math.min(mansard ? 1.4 : 1.0, w * 0.12);
   const p = new Path2D();
   const [x0, y0] = f.P(0, base);
@@ -657,18 +659,41 @@ function paintPitchedRoof(f: FacadeFrame, random: Rng, arch: FacadeStyle, things
   if (fine && mansard) for (const dormer of things.dormers) paintDormer(f, arch, span, dormer, base);
 }
 
-/** A dormer in the mansard: cheeks, a little pediment, the pane. */
+/** A dormer in the mansard, as the walkable street builds it (`RoofClutter`): cheeks, its head (a little pediment, a segmental arch, a zinc hood), the pane; or a round oeil-de-boeuf. */
 function paintDormer(f: FacadeFrame, arch: FacadeStyle, span: Span, dormer: RoofThings['dormers'][number], base: number): void {
   const [s0, s1] = span(dormer.s - dormer.width / 2, dormer.s + dormer.width / 2);
+  if (dormer.kind === 'oeil') {
+    const mid = (s0 + s1) / 2;
+    f.detail(f.quad(mid - 0.45, mid + 0.45, base + 0.7, base + 1.6), arch.trim);
+    const [cx, cy] = f.P(mid, base + 1.15);
+    const [ex] = f.P(mid + 0.3, base + 1.15);
+    const pane = new Path2D();
+    pane.arc(cx, cy, Math.abs(ex - cx), 0, Math.PI * 2);
+    f.detail(pane, WINDOW_GLASS);
+    if (dormer.lit) f.sheet.lit(f.quad(mid - 0.22, mid + 0.22, base + 0.93, base + 1.37), 'warm', 0.85, dormer.lit);
+    return;
+  }
   f.detail(f.quad(s0 - 0.15, s1 + 0.15, base + 0.5, base + 2.1), arch.trim);
   const cap = new Path2D();
   const [ca, cb] = [f.P(s0 - 0.25, base + 2.05), f.P(s1 + 0.25, base + 2.05)];
-  const cc = f.P((s0 + s1) / 2, base + 2.55);
-  cap.moveTo(...ca);
-  cap.lineTo(...cb);
-  cap.lineTo(...cc);
+  if (dormer.kind === 'hood') {
+    const [ha, hb] = [f.P(s0 - 0.3, base + 2.2), f.P(s1 + 0.3, base + 2.2)];
+    cap.moveTo(...ca);
+    cap.lineTo(...cb);
+    cap.lineTo(...hb);
+    cap.lineTo(...ha);
+  } else if (dormer.kind === 'segment') {
+    cap.moveTo(...ca);
+    for (let i = 0; i <= 8; i++) cap.lineTo(...f.P(s0 - 0.25 + ((s1 - s0 + 0.5) * i) / 8, base + 2.05 + 0.32 * Math.sin((Math.PI * i) / 8)));
+    cap.lineTo(...cb);
+  } else {
+    const cc = f.P((s0 + s1) / 2, base + 2.55);
+    cap.moveTo(...ca);
+    cap.lineTo(...cb);
+    cap.lineTo(...cc);
+  }
   cap.closePath();
-  f.detail(cap, shade(arch.trim, 0.9));
+  f.detail(cap, dormer.kind === 'pediment' ? shade(arch.trim, 0.9) : '#8a9094');
   const pane = f.quad(s0, s1, base + 0.7, base + 1.9);
   f.detail(pane, WINDOW_GLASS);
   f.detail(f.quad((s0 + s1) / 2 - 0.03, (s0 + s1) / 2 + 0.03, base + 0.7, base + 1.9), arch.frame);

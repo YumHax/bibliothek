@@ -1,7 +1,7 @@
 import { findPerson } from './people';
 import { isBirthday } from './mood';
 import { standing } from './standing';
-import { BIRTHDAY_GIFT, GAME_GIFT, GIFT_LIKE, GIFTS } from './socialPlan';
+import { BIRTHDAY_GIFT, GAME_GIFT, GIFT_LIKE, GIFTS, WRAPPED_GIFT } from './socialPlan';
 import type { GiftKind, PersonId } from './types';
 
 /*
@@ -15,6 +15,8 @@ export interface GameGift {
   platform: string;
   genres?: readonly string[];
   year?: number;
+  /** Wrapped at the Christmas stall (`holidays/giftWrap`): it means more (`WRAPPED_GIFT`). */
+  wrapped?: boolean;
 }
 
 /** How well `game` fits `id`'s tastes, 0 (not at all) .. 1 (right up their street). */
@@ -33,7 +35,7 @@ export function gameFit(id: PersonId, game: GameGift): number {
 export function giftWarmth(id: PersonId, kind: GiftKind, day: number, game?: GameGift): number {
   const card = findPerson(id);
   let warmth = GIFTS[kind].warmth;
-  if (kind === 'game' && game) warmth = Math.round(warmth * (GAME_GIFT.base + gameFit(id, game) * GAME_GIFT.fit));
+  if (kind === 'game' && game) warmth = Math.round(warmth * (GAME_GIFT.base + gameFit(id, game) * GAME_GIFT.fit) * (game.wrapped ? WRAPPED_GIFT : 1));
   if (card?.dislikes?.includes(kind)) return GIFT_LIKE.disliked;
   if (card?.likes?.includes(kind)) warmth *= GIFT_LIKE.liked;
   if (isBirthday(id, day)) warmth *= BIRTHDAY_GIFT;

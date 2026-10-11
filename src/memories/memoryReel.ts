@@ -66,12 +66,34 @@ export interface MemorySet {
   dream(): boolean;
 }
 
+/**
+ * A moment the film waits on the player (docs/grandma.md "In the films"): at `at` the picture holds, a prompt with its
+ * key under the narration, until the player does it or `wait` seconds pass and it happens by itself. Either way `done`
+ * runs (the people's beat: the paper torn, the keys taken); the music goes on meanwhile.
+ */
+export interface MemoryCue {
+  /** On the film's clock (s), inside one of its scene's shots (the camera holds there). */
+  at: number;
+  /** The player's act, as the prompt words it ("Tear the paper"). */
+  prompt: string;
+  /** The action key (or a click) this many times (default 1), or three letters typed (`initials`, kept for the arcade). */
+  input?: { presses: number } | 'initials';
+  /** Seconds it waits before going on by itself (default 6; the initials 20). */
+  wait?: number;
+  /** A press before the last (a first blow into the cartridge): how many so far. */
+  press?(count: number): void;
+  /** The moment played out: `byPlayer` false when it went on by itself. */
+  done(byPlayer: boolean): void;
+}
+
 /** One scene of a memory: a zone, what stands there in the past, its shots. */
 export interface MemoryScene {
   /** The zone it is filmed in. Scenes elsewhere than where the album is are built and compiled before the film starts. */
   zone: ZoneId;
   /** In order, on the film's clock: the first scene's first starts after the opening black, the next scene's where the last one ends. */
   shots: readonly MemoryShot[];
+  /** The moments it waits on the player, in order on the film's clock. */
+  cues?: readonly MemoryCue[];
   light?: PastLight;
   /** Under the black before it: the people and things of the past laid out (`set.place`, `set.hide`). */
   stage(set: MemorySet): void;

@@ -62,7 +62,8 @@ perks when you get along, penalties when you don't. Read this before touching an
 - The panel (`ui/social/ConversationPanel` + `social.css`), built the way The Sims does it: **the person is the
   show, the UI says no rules**. No odds, no numbers, no previews of what a choice brings, no locked rows, no "done
   today" labels, no help page: the player learns to read people from their mood, their ways and their reactions.
-  - The person: the view turns gently to their face (`player/lookTowards`, through `deps.frame`). Their answers come
+  - The person: the view turns gently to them, the face in the upper third and the hands in the shot
+    (`player/lookTowards`, through `deps.frame`; the depth of field and a portrait light on them, `graphics/framing`). Their answers come
     over their head (`body.speak`), their body takes what was said (`react`; talked out it looks at its watch,
     leaving it waves); while the panel is open the speech layer is `conversing` (`notices/speech`): an answer replaces
     the speaker's line at once instead of queueing behind it, the bubble drops its name tag and a reward banner comes
@@ -174,6 +175,7 @@ with her own first words (`TalkSession.opening`: the album, Sunday, Saturday, sm
 21:00 to 23:00 she answers in her nightie and rings off. At Close (`knitsScarf`) the wardrobe has her scarf. In her flat
 (`world/grandma/meme.ts`) a click opens the conversation, with what the player has for her (flowers, cake, the latest
 game) and "Tell me about Félix?" as entries. Her portrait is her look in her flat (`lookBook.rememberLook` at start-up).
+Gaspard (`GASPARD_ID`, same file) is not family: met at her Sunday table, he can go cold (docs/grandma.md "The end of the story").
 
 ## Debug
 
@@ -271,7 +273,8 @@ change; wired once from `bootstrap/world` (`wire.ts`). What was given once and w
   under 0.4, they have filled it (`Cat.bowl.refill`) and left a note. Once a game day.
 - **The race** (`stairsRace.ts`): Friendly with Pascal, met 2 storeys or more below our landing, "Race you up!": back
   on our landing (world y 0) before his 6.2 s a storey pays 10 coins. One a day.
-- **Word of mouth** (`smallPerks.ts`): Sofia's "Anything in the post for me?" (`MailPost`) and a Comets tip a day; the
+- **Word of mouth** (`smallPerks.ts`): Sofia's "Anything in the post for me?" (`MailPost`) and a Comets tip a day (it
+  pays on the player's next COMET DASH game: `rossiCoaching` tickets, "a better first strip", `arcade/guestDays`); the
   postman's, Pascal's (carrying) and the Nguyens' (the spare pad) offers are lines only: the flat's furniture has no
   weight and a games night no pad limit to lift.
 
@@ -326,6 +329,15 @@ as having met him (`RivalCollector.meet`).
   (`LotRun.drop`, `Saleroom.splitWithRival`) and pays half the hammer price if the player wins.
   `showsCollection` (Close): once (`RivalCollector.shown`), an invitation to see his collection: a letter card, one
   of his duplicates (`a gift from Victor`, a big reward), the arc's end.
+- **The wager** (`social/street/wager`, `bibliothek.rivalWager.v1`): his challenge taken up (and landed, not a gloat
+  on a day he was beaten) is a bet on his next hunt at the flea market (`RivalCollector.endHunt` settles it): the
+  player first to his copy wins (+4 trust, a moment for the book), him taking it loses. The loser owes an espresso:
+  his waits behind either café's counter ("An espresso (on Victor)", the coffee of the day for nothing); the player's
+  is bought in conversation (`COFFEE_PRICE`, +5 warmth, +3 trust), or after 3 game days it is welshing (−6, −6, a
+  memory). One wager at a time; "Still on for our bet?" while it runs.
+- **First meeting**: before the player has ever spoken to him, his first word is the sale of Félix's flat (docs/story.md).
+  One of Félix's copies sits in his suitcase some of his days (`felixLotOn(day, 'crane')`), firm at his markup, never
+  at cost; he has a word about it once a visit. Bought back, a moment for the book.
 
 ## Friends (`world/visitors/friendSocial.ts`, `social/friendsLife.ts`)
 
@@ -339,7 +351,8 @@ opens the conversation; a game they asked to borrow is its first entry ("They as
   collection for 5 game days (`friendsLife.borrow`; `Transactions.isKeepsake` keeps it off every desk, stall,
   swap and gift), then goes back with a note on the mat (`returnBorrowed`; a copy the player bought meanwhile stays).
   `helpsCarry` (Marco Friendly, Sam Friend): a hand with the furniture (a tip on moving it). `arcadePartner`
-  (Marco): a word for the arcade. `postcards` (Inès Friendly): a postcard now and then on a new day at home,
+  (Marco): "Fancy the arcade tomorrow?" fixes the next game day (`friendsLife.arcadeDate`): that afternoon he is in
+  the hall (`arcade/guestDays`), takes player two at PADDLE WARS and signs MAR on its table; a game together, +2. `postcards` (Inès Friendly): a postcard now and then on a new day at home,
   sometimes with a game (`maybePostcard`). `dropsBy` (Close): an unannounced visit outside the usual round
   (`VisitBook.plan`, `PlannedVisit.dropBy`) with a game they found. `takesSide` (Close): "Could you have a word
   with …?" for the coldest person met, once a week per friend (+8 warmth to them).
@@ -370,17 +383,45 @@ with (a `Walker` adds 200 to its seed: the busker's 77 is 277, Nico's 23 is 223)
   `freeTreats` (Friend) a pouch of three portions a game day, `catAdvice` (Close) a word on the cat by name. Karim:
   `repairTips` (Friend) says the fault and the tool of the console waiting on the kitchen table (`Workshop.nextBroken`,
   `repair/consoles.FAULTS`). Iris: `extraBunch` (Friend) four bunches for two (`CounterErrand`'s `portions`).
-- **Gus**, the attendant: "What's new today?" is the day's news a line at a time (`ArcadeHall.newsToday`, the story's
-  word first); `freeCredit` a coin across the counter once a day (Friendly), twice (Close); `insider` (Friend) all the
+- **Gus**, the attendant: "What's new today?" is the day's news a line at a time (the story's word first, then his
+  people news, `arcade/gusLines`, then `ArcadeHall.newsToday`); his usual lines follow how he gets on with the player
+  (curt when cold, warmer for a friend); `freeCredit` a coin across the counter once a day (Friendly), twice (Close); `insider` (Friend) all the
   news at once on a card; `noChange` (Cold) keeps the change machine "out of order" for the player
   (`ChangeMachine.jammed`).
-- **Nico**, the kid: talkable; how he takes the player's games is `arcadeTalk.kidMood` (`ArcadeCrowd.kidMood`):
+- **Nico**, the kid: talkable; how he takes the player's games is `arcadeTalk.kidMood` (`HallKid`'s `KidMood`):
   `plain` comes over to watch and takes a free second stick six times in ten, `cheer` (Friendly) always comes and
   shouts a decent game, `devoted` (Close: `playerTwo`) always comes and always takes player two, `heckle` (Cold) comes
   to jeer and leaves the second stick alone. `doubles` (Friend): a tournament round won pays the regulars' whip-round,
-  5 tickets (`ArcadeTournament.onRound`). The regulars stay anonymous.
+  5 tickets (`ArcadeTournament.onRound`). The regulars (`economy/hallRegulars`) have names and their own words but no
+  card: not talkable.
+- **Hugo** (the building's kid) comes on Wednesday mornings (`arcade/guestDays`): talkable there (`arcadeTalk.hugoTalk`):
+  "Want a tip for Snake?" once a day, +3 and he plays a little better (five tips count); watching the player's Snake,
+  +1 once a day.
 - Animals keep their own trust: the stray cat (`street/life/StrayCat`) is fed and won over as before, outside this
-  layer.
+  layer. Trusted all the way with no cat at home, "take him home": Félix's cat moves in (`HomeContext.strayHome`:
+  adopted for nothing, Mistigri, ginger), a big reward; with a cat at home already, the street stays his.
+- **The shopkeepers** (`world/street/townsfolk/shopkeeperTalk`, `shopkeeperOf`): Stan the butcher and Agnès at CORNER
+  BOOKS are a voice over their counter like the baristas. The shop's own business (its offer, or what a click did) is
+  the first entry, the conversation closed first; "Have a look round" its lines. Stan: `freeScrap` (Friendly) a scrap
+  for the stray once a game day, `noScrap` (Cold) refuses the counter; his `felixCat` fact (Friend) says whose cat the
+  stray is. Agnès: `discount` 0.9 (Friendly; for the bookshop's prices), `felixGuide` (Close) once, a guide with
+  Félix's pencilled maps (a card).
+- **Known faces in the crowd** (`world/street/townsfolk/knownFaces`): the building's residents out at their hours are
+  the stairs' people (`personAtDoor`, place `street`); two regulars keep hours (`townsfolk/regularsPlan`: they stay in
+  outside them) and have cards: Théo the 8:10 commuter (`passesLeads`, Friendly: "Heard anything on the platform?" is
+  the day's lead) and Mrs Hall walking Biscuit (`mansionWord`, Friendly: which bell at the Mansions is worth ringing).
+  Met, a known face passing within 6 m nods (Acquaintance) or waves (Friend), once a trip.
+- **Out and about** (`world/street/townsfolk/TownRounds`, `townsfolkPlan`): Victor's espresso at the SUNNY SIDE CAFE at
+  nine and his walk on to the flea market by RETRO GAMES' door, on his market and suitcase days (talkable, his
+  rivalry's conversation); Lou outside her café's door on her breaks (talkable, place `street`).
+- **Leads** (`social/street/leads`, `world/street/townsfolk/streetLeads`): a passer-by clicked now and then (once a game
+  day) says something worth knowing instead of their line: one of Félix's copies on a stall today, who at the Mansions
+  is clearing out or needs a hand, Victor's suitcase tomorrow. The journal writes it down (`onLead`, `bootstrap/social`).
+- **Gifts from the street**: a coffee and a slice of cake to take away at either café ("A coffee to take away" in the
+  barista's conversation: `errands` `coffee`, `cake`, into the pocket); the claw's bunnies from the prize shelf
+  (`social/street/plushGifts`: what was won less what was given; the shelf still shows them). A game wrapped at the
+  Christmas stall (`holidays/giftWrap`) comes first in "A game…" and means more given (`WRAPPED_GIFT`); a card posted
+  in Front Street's pillar box warms a friend or family member once a game week (`post/cards`).
 
 ## Favours, birthdays, introductions, go-betweens (`social/life/`, saved under `KEYS.socialLife`)
 

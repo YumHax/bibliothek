@@ -25,6 +25,11 @@ const BRACKET = paint(0x2a2a30, 0.45);
  * tube running along local x. Decoration: never collides.
  */
 export class NeonTube extends Prop {
+  private readonly tube: THREE.Mesh;
+  private readonly halo: THREE.Mesh;
+  /** The glass lit and flickered out: two shared looks, swapped (never edited) by `setLit`. */
+  private readonly glass: { lit: THREE.Material; out: THREE.Material };
+
   constructor(options: NeonTubeOptions = {}) {
     super();
     this.name = 'NeonTube';
@@ -34,7 +39,9 @@ export class NeonTube extends Prop {
     const standoff = options.standoff ?? 0.06;
 
     const glass = standard({ color: color.clone().multiplyScalar(0.3), emissive: color, emissiveIntensity: 2.4, roughness: 0.3 });
+    this.glass = { lit: glass, out: standard({ color: color.clone().multiplyScalar(0.3), emissive: color, emissiveIntensity: 0.35, roughness: 0.3 }) };
     const tube = new THREE.Mesh(new THREE.CylinderGeometry(radius, radius, length, 10), glass);
+    this.tube = tube;
     tube.rotation.z = Math.PI / 2;
     tube.position.z = standoff;
     tube.castShadow = false;
@@ -48,6 +55,7 @@ export class NeonTube extends Prop {
     halo.rotation.z = Math.PI / 2;
     halo.position.z = standoff;
     halo.castShadow = false;
+    this.halo = halo;
     this.add(halo);
     // Brackets every metre or so, and one at each end.
     const count = Math.max(2, Math.round(length / 1.2) + 1);
@@ -64,5 +72,11 @@ export class NeonTube extends Prop {
       light.castShadow = false;
       this.add(light);
     }
+  }
+
+  /** Lit as usual, or flickered out for a moment (the arcade's celebrations blink the tubes); its light, if any, is left alone. */
+  setLit(lit: boolean): void {
+    this.tube.material = lit ? this.glass.lit : this.glass.out;
+    this.halo.visible = lit;
   }
 }

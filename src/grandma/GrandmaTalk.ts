@@ -32,6 +32,8 @@ export class GrandmaTalk {
   private readonly chatBag: LineBag;
   /** The last bus mentioned this visit. */
   private busSaid = false;
+  /** More of her chat from the visit's features (her hints toward the next photo…), read at each reshuffle. */
+  private readonly more: (() => readonly string[])[] = [];
 
   constructor(private readonly visits: GrandmaVisits) {
     this.chatBag = new LineBag(() => this.chatLines());
@@ -65,6 +67,11 @@ export class GrandmaTalk {
     return this.chatBag.next();
   }
 
+  /** Lines of a visit's feature mixed into her chat from now on (read afresh at each reshuffle). */
+  addLines(source: () => readonly string[]): void {
+    this.more.push(source);
+  }
+
   /** Her thanks for `gift` (`title`: the game shown). */
   thanks(gift: GrandmaGift, title: string): string {
     let bag = this.gifts.get(gift);
@@ -86,6 +93,7 @@ export class GrandmaTalk {
     if (this.visits.hasSeen('sale')) lines.push(...chat.sale);
     if (this.visits.hasSeen('keys')) lines.push(...chat.keys);
     for (const heard of this.visits.news().slice(0, 3)) lines.push(news[heard]);
+    for (const source of this.more) lines.push(...source());
     return lines;
   }
 }

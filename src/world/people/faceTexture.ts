@@ -1,9 +1,11 @@
 import * as THREE from 'three';
 import { createCanvas, toTexture } from '@/covers/generated/canvasUtils';
 import { gaussian, ramp } from '@/math/scalar';
-import { beardCover } from './hair';
-import type { PersonLook } from './looks';
+import { beardCover, hairlineAt } from './hair';
+import { faceTraitsOf, type PersonLook } from './looks';
+import { eyeSurface, faceShapeOf, lowerLipAt, partingAt, upperLipAt, type FaceShape, type MouthLine } from './head';
 import { cachedTexture } from './textureCache';
+import { absorb, absorbInto } from './skinTone';
 import { lcg } from '@/random';
 
 /*
@@ -11,7 +13,7 @@ import { lcg } from '@/random';
  * geometry (`radialSurface`): x is the azimuth with the face in the middle and +x to the right, y
  * the polar angle from the crown (top) to under the chin (bottom), 1 radian = W / 2pi pixels both
  * ways. Painted in the same angles the head is sculpted in (`au`, `fv`): the flush of the cheeks
- * and nose, shade in the eye sockets and under the jaw, stubble, freckles, then the eyes as seen
+ * and nose, shade in the eye sockets, under the jaw and under the hairline, stubble, freckles, then the eyes as seen
  * from afar, the brows, the lips and the nostrils.
  */
 
@@ -20,9 +22,14 @@ const H = 512;
 
 type RGB = [number, number, number];
 
+/** How dark the hair leaves the skin just under its edge, by style (none round a bald head's horseshoe). */
+const HAIR_SHADE: Record<PersonLook['hairStyle'], number> = { long: 0.16, curly: 0.14, bun: 0.1, ponytail: 0.1, short: 0.1, buzz: 0.05, bald: 0 };
+
 /** The head's skin for `look`, shared by every look with the same values for it (`cachedTexture`). */
 export function paintFace(look: PersonLook): THREE.CanvasTexture {
-  const key = ['face', look.skin, look.hair, Math.round(look.nose * 100), look.beard ?? '', look.freckles, look.brows, look.smile, look.eyes].join('|');
+  const t = faceTraitsOf(look);
+  const lines = [t.eye, t.noseTilt, t.corner, t.lips].map((v) => Math.round(v * 100));
+  const key = ['face', look.skin, look.hair, look.hairStyle, Math.round(look.nose * 100), look.beard ?? '', look.freckles, look.brows, look.eyes, look.age ?? '', shavenShadow(look), ...lines].join('|');
   return cachedTexture(key, () => paint(look));
 }
 
@@ -40,54 +47,138 @@ function paint(look: PersonLook): THREE.CanvasTexture {
   const y0 = Math.floor(H * (0.5 - 0.8 / Math.PI));
   const image = ctx.getImageData(x0, y0, x1 - x0, H - y0);
   const data = image.data;
-  const flush: RGB = [196, 92, 84];
   const d = new THREE.Vector3();
   const stubble = look.beard !== undefined;
-  // Soft features, each a bell across (u) times a bell up (v), precomputed per column and row.
+  const shadow = !stubble && shavenShadow(look);
+  const child = look.age === 'child';
+  const elder = look.age === 'elder';
+  // Soft features, each a bell across (u) times a bell up (v), precomputed per column and row: shade,
+  // blood (a flush: more haemoglobin, red at any tone, `absorb`) and melanin (darker, browner).
   const shades = [
     [-0.12, 0.34, 0.15, 0.2, 0.12], // eye sockets
     [-0.06, 0.2, -0.46, 0.12, 0.05], // the fold from nose to mouth
+    [-0.04, 0.38, 0.07, 0.13, 0.04], // under the eyes
   ] as const;
-  const flushes = [
-    [0.13, 0.55, -0.22, 0.17, 0.14], // cheeks
-    [0.1, 0, -0.3, 0.06, 0.07], // tip of the nose
-    [0.05, 0, -0.9, 0.18, 0.1], // chin
-    [0.05, 0.34, 0.2, 0.2, 0.1], // eyelids
+  const bloods = [
+    [child ? 0.42 : elder ? 0.26 : 0.32, 0.55, -0.22, 0.17, 0.14], // cheeks
+    [0.28, 0, -0.3, 0.06, 0.07], // tip of the nose
+    [0.22, 0.15, -0.36, 0.05, 0.04], // the nose's wings
+    [0.12, 0, -0.9, 0.18, 0.1], // chin
+    [0.18, 0.34, 0.2, 0.2, 0.1], // eyelids
+  ] as const;
+  const melanins = [
+    [child ? 0.04 : elder ? 0.3 : 0.16, 0.38, 0.07, 0.14, 0.045], // under the eyes
+    [0.06, 0.18, -0.56, 0.22, 0.08], // round the mouth
   ] as const;
   const columns = (list: ReadonlyArray<readonly number[]>): Float32Array[] =>
     list.map(([, u0, , su]) => Float32Array.from({ length: x1 - x0 }, (_, i) => gaussian(Math.abs(((x0 + i) / W - 0.5) * 2 * Math.PI), u0!, su!)));
   const rows = (list: ReadonlyArray<readonly number[]>): Float32Array[] =>
     list.map(([, , v0, , sv]) => Float32Array.from({ length: H - y0 }, (_, i) => gaussian((0.5 - (y0 + i) / H) * Math.PI, v0!, sv!)));
+  const sum = (list: ReadonlyArray<readonly number[]>, cols: Float32Array[], rws: Float32Array[], col: number, row: number): number => {
+    let total = 0;
+    for (let f = 0; f < list.length; f++) total += list[f]![0]! * cols[f]![col]! * rws[f]![row]!;
+    return total;
+  };
   const shadeCols = columns(shades);
   const shadeRows = rows(shades);
-  const flushCols = columns(flushes);
-  const flushRows = rows(flushes);
-  for (let py = y0; py < H; py++) {
-    const fv = (0.5 - py / H) * Math.PI;
-    const row = py - y0;
+  const bloodCols = columns(bloods);
+  const bloodRows = rows(bloods);
+  const melaninCols = columns(melanins);
+  const melaninRows = rows(melanins);
+  // Faint blotches of colour: a few waves at odd angles, never a pattern.
+  const phase = [random(), random(), random(), random()].map((p) => p * Math.PI * 2);
+  // Each wave, sin(cu * fu + cv * fv + p), from a column's part and a row's part (sin(a + b) = sin a cos b +
+  // cos a sin b): no sine per pixel (the painter runs over a quarter of a million of them per face).
+  const wave = (cu: number, cv: number, p: number): ((col: number, row: number) => number) => {
+    const across = (i: number): number => cu * ((x0 + i) / W - 0.5) * 2 * Math.PI + p;
+    const up = (i: number): number => cv * (0.5 - (y0 + i) / H) * Math.PI;
+    const sc = Float64Array.from({ length: x1 - x0 }, (_, i) => Math.sin(across(i)));
+    const cc = Float64Array.from({ length: x1 - x0 }, (_, i) => Math.cos(across(i)));
+    const sr = Float64Array.from({ length: H - y0 }, (_, i) => Math.sin(up(i)));
+    const cr = Float64Array.from({ length: H - y0 }, (_, i) => Math.cos(up(i)));
+    return (col, row) => sc[col]! * cr[row]! + cc[col]! * sr[row]!;
+  };
+  const waveA = wave(23, 7, phase[0]!);
+  const waveB = wave(-5, 19, phase[1]!);
+  const waveC = wave(41, 37, phase[2]!);
+  const waveD = wave(13, -17, phase[3]!);
+  const blotch = (col: number, row: number): number => (waveA(col, row) * waveB(col, row) + waveC(col, row) * 0.5) / 1.5;
+  const tone: RGB = [0, 0, 0];
+  const shaved: RGB = mix(mix(hair, [0, 0, 0], 0.45), [70, 78, 88], 0.5);
+  // The hair shades the skin just under its edge (more under a long or thick head of hair), and the
+  // roots tint the hairline itself; per column, the hairline's elevation there (`hairlineAt`).
+  const hairShade = HAIR_SHADE[look.hairStyle];
+  const hairline = Float32Array.from({ length: x1 - x0 }, (_, i) => hairlineAt(look, Math.abs(((x0 + i) / W - 0.5) * 2 * Math.PI)));
+  const sinFu = Float64Array.from({ length: x1 - x0 }, (_, i) => Math.sin(((x0 + i) / W - 0.5) * 2 * Math.PI));
+  const cosFu = Float64Array.from({ length: x1 - x0 }, (_, i) => Math.cos(((x0 + i) / W - 0.5) * 2 * Math.PI));
+  // The smooth part (tone, shade, flush, the hair's shade, the beard's cover) at every other pixel both ways,
+  // then each pixel from the four round it with its own grain: a quarter of the work, and nothing here is
+  // finer than about five pixels across.
+  const cols = x1 - x0;
+  const rowCount = H - y0;
+  const gw = (cols >> 1) + 2;
+  const gh = (rowCount >> 1) + 2;
+  const grid = new Float32Array(gw * gh * 4);
+  const beard = stubble || shadow;
+  for (let gj = 0; gj < gh; gj++) {
+    const row = Math.min(rowCount - 1, gj * 2);
+    const fv = (0.5 - (y0 + row) / H) * Math.PI;
+    const sinFv = Math.sin(fv);
+    const cosFv = Math.cos(fv);
     const jaw = ramp(fv, -0.9, -1.2);
-    for (let px = x0; px < x1; px++) {
-      const col = px - x0;
-      let shade = 1 - 0.2 * jaw;
-      for (let f = 0; f < shades.length; f++) shade += shades[f]![0] * shadeCols[f]![col]! * shadeRows[f]![row]!;
-      shade *= 1 + (random() - 0.5) * 0.04;
-      let redden = 0;
-      for (let f = 0; f < flushes.length; f++) redden += flushes[f]![0] * flushCols[f]![col]! * flushRows[f]![row]!;
-      let r = THREE.MathUtils.lerp(skin[0], flush[0], redden) * shade;
-      let gr = THREE.MathUtils.lerp(skin[1], flush[1], redden) * shade;
-      let b = THREE.MathUtils.lerp(skin[2], flush[2], redden) * shade;
-      if (stubble) {
-        const fu = (px / W - 0.5) * 2 * Math.PI;
-        d.set(Math.cos(fv) * Math.sin(fu), Math.sin(fv), Math.cos(fv) * Math.cos(fu));
-        const cover = beardCover(d);
-        if (cover > 0) {
-          const k = cover * (look.beard === 'full' ? 0.6 : 0.42) * (0.45 + 0.55 * random());
-          r = THREE.MathUtils.lerp(r, hair[0] * 0.8, k);
-          gr = THREE.MathUtils.lerp(gr, hair[1] * 0.8, k);
-          b = THREE.MathUtils.lerp(b, hair[2] * 0.8, k);
-        }
+    for (let gi = 0; gi < gw; gi++) {
+      const col = Math.min(cols - 1, gi * 2);
+      const underHair = hairShade * ramp(fv, hairline[col]! - 0.24, hairline[col]! + 0.02);
+      const shade = 1 - 0.2 * jaw + sum(shades, shadeCols, shadeRows, col, row) - underHair;
+      const spot = blotch(col, row);
+      const blood = sum(bloods, bloodCols, bloodRows, col, row) + 0.06 * spot;
+      const melanin = sum(melanins, melaninCols, melaninRows, col, row) + 0.03 * waveD(col, row);
+      absorbInto(tone, skin, melanin, blood);
+      const g = (gj * gw + gi) * 4;
+      grid[g] = tone[0] * shade;
+      grid[g + 1] = tone[1] * shade;
+      grid[g + 2] = tone[2] * shade;
+      // The beard never reaches above the cheekbones (`beardCover` is nothing past about 0.05 up).
+      if (beard && fv < 0.3) {
+        d.set(cosFv * sinFu[col]!, sinFv, cosFv * cosFu[col]!);
+        grid[g + 3] = beardCover(d);
       }
-      const i = (row * (x1 - x0) + col) * 4;
+    }
+  }
+  const strength = look.beard === 'full' ? 0.6 : stubble ? 0.42 : 0.12;
+  const to: RGB = stubble ? [hair[0] * 0.8, hair[1] * 0.8, hair[2] * 0.8] : shaved;
+  for (let row = 0; row < rowCount; row++) {
+    const fv = (0.5 - (y0 + row) / H) * Math.PI;
+    const gj = row >> 1;
+    const ty = (row & 1) * 0.5;
+    for (let col = 0; col < cols; col++) {
+      const gi = col >> 1;
+      const tx = (col & 1) * 0.5;
+      const a = (gj * gw + gi) * 4;
+      const c = a + gw * 4;
+      // Bilinear between the four nodes round the pixel (each channel, then the cover).
+      const w00 = (1 - tx) * (1 - ty);
+      const w10 = tx * (1 - ty);
+      const w01 = (1 - tx) * ty;
+      const w11 = tx * ty;
+      const grain = 1 + (random() - 0.5) * 0.04;
+      let r = (grid[a]! * w00 + grid[a + 4]! * w10 + grid[c]! * w01 + grid[c + 4]! * w11) * grain;
+      let gr = (grid[a + 1]! * w00 + grid[a + 5]! * w10 + grid[c + 1]! * w01 + grid[c + 5]! * w11) * grain;
+      let b = (grid[a + 2]! * w00 + grid[a + 6]! * w10 + grid[c + 2]! * w01 + grid[c + 6]! * w11) * grain;
+      const cover = grid[a + 3]! * w00 + grid[a + 7]! * w10 + grid[c + 3]! * w01 + grid[c + 7]! * w11;
+      if (cover > 0) {
+        const k = cover * strength * (0.45 + 0.55 * random());
+        r = THREE.MathUtils.lerp(r, to[0], k);
+        gr = THREE.MathUtils.lerp(gr, to[1], k);
+        b = THREE.MathUtils.lerp(b, to[2], k);
+      }
+      if (hairShade > 0) {
+        const roots = 0.3 * ramp(fv, hairline[col]! - 0.04, hairline[col]! + 0.06);
+        r = THREE.MathUtils.lerp(r, hair[0], roots);
+        gr = THREE.MathUtils.lerp(gr, hair[1], roots);
+        b = THREE.MathUtils.lerp(b, hair[2], roots);
+      }
+      const i = (row * cols + col) * 4;
       data[i] = r;
       data[i + 1] = gr;
       data[i + 2] = b;
@@ -106,17 +197,36 @@ function paint(look: PersonLook): THREE.CanvasTexture {
     }
   }
 
-  farEyes(ctx, look, skin);
+  // Age spots: a few faint brown patches on the temples, cheeks and forehead.
+  if (look.age === 'elder') {
+    for (let i = 0; i < 12; i++) {
+      const u = (random() < 0.5 ? -1 : 1) * (0.35 + random() * 0.6);
+      const v = -0.25 + random() * 0.85;
+      ctx.fillStyle = css(absorb(skin, 0.5 + random() * 0.3, 0), 0.35);
+      ctx.beginPath();
+      ctx.ellipse(...P(u, v), 1.6 + random() * 2.4, 1.2 + random() * 1.8, random() * 3, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
+
+  const shape = faceShapeOf(look);
+  farEyes(ctx, look, skin, shape);
   brows(ctx, look, hair, random);
-  lips(ctx, look, skin);
-  // Nostrils, on the underside of the tip.
-  ctx.fillStyle = css(mix(skin, [30, 15, 12], 0.7), 0.85);
+  lips(ctx, skin, shape.mouth);
+  // Nostrils, on the underside of the tip (sunk in the skin there too), leaning with the nose.
+  const lean = shape.traits.noseTilt * 0.022;
+  ctx.fillStyle = css(mix(skin, [30, 15, 12], 0.7), 0.75);
   for (const side of [-1, 1]) {
     ctx.beginPath();
-    ctx.ellipse(...P(side * 0.075, -0.385), 4.5, 2.2, side * 0.3, 0, Math.PI * 2);
+    ctx.ellipse(...P(side * 0.075 + lean, -0.385), 4.5, 2.2, side * 0.3, 0, Math.PI * 2);
     ctx.fill();
   }
   return toTexture(canvas, 'facing');
+}
+
+/** A man's shaved jaw (no beard, short hair, a grown-up): the beard still shows faintly under the skin. */
+function shavenShadow(look: PersonLook): boolean {
+  return look.beard === undefined && look.figure === 'straight' && look.age !== 'child' && look.age !== 'teen' && look.hairStyle !== 'long' && look.hairStyle !== 'ponytail' && look.hairStyle !== 'bun';
 }
 
 /** Canvas pixel of the face angles (`u` across, +x to the right; `v` up). */
@@ -129,9 +239,10 @@ function P(u: number, v: number): [number, number] {
  * The balls and lids hide it close up; past the distance where they dither out (`PersonModel`'s
  * details) it keeps the face from going blank.
  */
-function farEyes(ctx: CanvasRenderingContext2D, look: PersonLook, skin: RGB): void {
-  for (const side of [-1, 1]) {
-    const [x, y] = P(side * 0.39, 0.148);
+function farEyes(ctx: CanvasRenderingContext2D, look: PersonLook, skin: RGB, shape: FaceShape): void {
+  for (const side of [-1, 1] as const) {
+    const eye = eyeSurface(side, shape);
+    const [x, y] = P(Math.atan2(eye.x, eye.z), Math.asin(eye.y / eye.length()));
     ctx.fillStyle = css(mix(skin, [48, 34, 30], 0.5));
     ctx.beginPath();
     ctx.ellipse(x, y, 20, 6, side * -0.08, 0, Math.PI * 2);
@@ -176,52 +287,81 @@ function brows(ctx: CanvasRenderingContext2D, look: PersonLook, hair: RGB, rando
   }
 }
 
-/** Cupid's bow, the fuller lower lip, the dark line between; the corners turn up for a smile. */
-function lips(ctx: CanvasRenderingContext2D, look: PersonLook, skin: RGB): void {
+/**
+ * The lips on the face's own lines (`MouthLine`, which the skin's vermilion and the jaw follow):
+ * the cupid's bow, the fuller lower lip, the dark line between, a fine light roll along the upper
+ * lip's border. Neutral for everyone (a smile is the face's morph); the colour fades a little into
+ * the corners rather than ending like paint.
+ */
+function lips(ctx: CanvasRenderingContext2D, skin: RGB, m: MouthLine): void {
   const base = mix(skin, [176, 86, 82], 0.34);
-  const corner = look.smile ? -0.55 : -0.578;
-  const middle = look.smile ? -0.595 : -0.58;
-  const cu = look.smile ? 0.28 : 0.26;
-  const mouth = (): void => {
-    ctx.moveTo(...P(-cu, corner));
-    ctx.quadraticCurveTo(...P(0, middle * 2 - corner), ...P(cu, corner));
+  const STEPS = 28;
+  const trace = (line: (u: number) => number, from: number, to: number): void => {
+    for (let i = 0; i <= STEPS; i++) {
+      const u = from + ((to - from) * i) / STEPS;
+      ctx.lineTo(...P(u, line(u)));
+    }
   };
-  // Upper lip.
-  ctx.fillStyle = css(mix(base, [0, 0, 0], 0.16));
+  const parting = (u: number): number => partingAt(m, u);
+  const upper = (u: number): number => upperLipAt(m, u);
+  const lower = (u: number): number => lowerLipAt(m, u);
+  const [left] = P(-m.half, 0);
+  const [right] = P(m.half, 0);
+  const fade = (c: RGB): CanvasGradient => {
+    const gradient = ctx.createLinearGradient(left, 0, right, 0);
+    gradient.addColorStop(0, css(c, 0.3));
+    gradient.addColorStop(0.16, css(c));
+    gradient.addColorStop(0.84, css(c));
+    gradient.addColorStop(1, css(c, 0.3));
+    return gradient;
+  };
+  // Upper lip, then lower lip.
+  ctx.fillStyle = fade(mix(base, [0, 0, 0], 0.16));
   ctx.beginPath();
-  mouth();
-  ctx.quadraticCurveTo(...P(0.16, -0.5), ...P(0.055, -0.505));
-  ctx.lineTo(...P(0, -0.522));
-  ctx.lineTo(...P(-0.055, -0.505));
-  ctx.quadraticCurveTo(...P(-0.16, -0.5), ...P(-cu, corner));
+  trace(parting, -m.half, m.half);
+  trace(upper, m.half, -m.half);
   ctx.fill();
-  // Lower lip.
-  ctx.fillStyle = css(base);
+  ctx.fillStyle = fade(base);
   ctx.beginPath();
-  mouth();
-  ctx.quadraticCurveTo(...P(0.17, -0.668), ...P(0, -0.668));
-  ctx.quadraticCurveTo(...P(-0.17, -0.668), ...P(-cu, corner));
+  trace(parting, -m.half, m.half);
+  trace(lower, m.half, -m.half);
   ctx.fill();
+  // Fine creases across the lower lip, and its sheen.
+  ctx.lineWidth = 0.8;
+  ctx.strokeStyle = css(mix(base, [40, 12, 12], 0.4), 0.18);
+  for (let i = 1; i < 12; i++) {
+    const u = -m.half * 0.7 + (m.half * 1.4 * i) / 12;
+    ctx.beginPath();
+    ctx.moveTo(...P(u, parting(u) - 0.006)); // convention-ok: radians on the face canvas, not a 3D offset
+    ctx.lineTo(...P(u * 1.04, lower(u) + 0.008)); // convention-ok: radians on the face canvas, not a 3D offset
+    ctx.stroke();
+  }
   ctx.fillStyle = 'rgba(255,255,255,0.12)';
   ctx.beginPath();
-  ctx.ellipse(...P(0, -0.64), 10, 3, 0, 0, Math.PI * 2);
+  ctx.ellipse(...P(0, (m.middle + m.bottom) / 2 - 0.006), 10, 3, 0, 0, Math.PI * 2); // convention-ok: radians on the face canvas, not a 3D offset
   ctx.fill();
-  // The line between them, deepest at the corners: a soft shadow, then the dark parting (the jaw stretches it open, `addJaw`).
+  // The upper lip's border: a fine light roll just above it.
   ctx.lineCap = 'round';
+  ctx.strokeStyle = css(mix(skin, [255, 244, 236], 0.35), 0.35);
+  ctx.lineWidth = 1.4;
+  ctx.beginPath();
+  trace((u) => upper(u) + 0.006, -m.half * 0.85, m.half * 0.85); // convention-ok: radians on the face canvas, not a 3D offset
+  ctx.stroke();
+  // The line between them, deepest at the corners: a soft shadow, then the dark parting (the jaw stretches it open, `jawTarget`).
   ctx.strokeStyle = css(mix(base, [20, 8, 8], 0.45), 0.5);
   ctx.lineWidth = 4;
   ctx.beginPath();
-  mouth();
+  trace(parting, -m.half, m.half);
   ctx.stroke();
   ctx.strokeStyle = css(mix(base, [20, 8, 8], 0.7));
   ctx.lineWidth = 2.2;
   ctx.beginPath();
-  mouth();
+  trace(parting, -m.half, m.half);
   ctx.stroke();
   ctx.fillStyle = css(mix(base, [20, 8, 8], 0.5), 0.6);
   for (const side of [-1, 1]) {
     ctx.beginPath();
-    ctx.arc(...P(side * cu, corner), 2.2, 0, Math.PI * 2);
+    ctx.arc(...P(side * m.half, parting(side * m.half)), 2.2, 0, Math.PI * 2);
     ctx.fill();
   }
 }

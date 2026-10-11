@@ -15,7 +15,27 @@ import { FlowerChiller } from '../shop/florist/FlowerChiller';
 import { AquariumWall } from '../shop/pets/AquariumWall';
 import { RugRolls } from '../shop/RugRolls';
 import { DisplayTable } from '../shop/DisplayTable';
-import { buildStreetBase, buildStreetFronts, type AddScenery } from '../street/streetScenery';
+import { buildStreetBase, buildStreetFixtures, buildStreetFronts, type AddScenery } from '../street/streetScenery';
+import { STREET_PLAN, WAYFINDING } from '../street/streetPlan';
+import { STREET_PLACES } from '../street/streetPlacesPlan';
+import { StreetTraffic } from '../street/traffic/StreetTraffic';
+import { StreetGround } from '../street/StreetGround';
+import { Terraces } from '../street/life/Terraces';
+import { StreetChristmas } from '../street/StreetChristmas';
+import { Snowman } from '../street/Snowman';
+import { STREET_TREES } from '../city/trees';
+import { groundHeight } from '../street/relief/ground';
+import { SignalHeads } from '../street/traffic/SignalHeads';
+import { StreetDetails } from '../street/details/StreetDetails';
+import { StreetFixtures } from '../street/details/StreetFixtures';
+import { StreetClutter } from '../street/clutter/StreetClutter';
+import { ShopSpill } from '../street/shopfronts/ShopSpill';
+import { Signpost } from '../street/wayfinding/Signpost';
+import { StreetPlanBoard } from '../street/wayfinding/StreetPlanBoard';
+import { StreetClock } from '../street/wayfinding/StreetClock';
+import { BusStopPole } from '../street/wayfinding/BusStopPole';
+import { PostBox } from '../street/wayfinding/PostBox';
+import { PhoneBox } from '../street/wayfinding/PhoneBox';
 import { FACADES } from '@/world/city/facades';
 import { DayNight } from '../props/DayNight';
 import { Room, type RoomOptions } from '../Room';
@@ -30,6 +50,9 @@ import { SALEROOM_PLAN } from '../saleroom/saleroomPlan';
 import { ANNEX_PLAN } from '../annex/annexPlan';
 import { SELLER_FLAT_PLAN } from '../sellerFlat/sellerFlatPlan';
 import { GRANDMA_FLAT_PLAN } from '../grandma/grandmaFlatPlan';
+import { LINDEN_LANDING_PLAN } from '../linden/lindenLandingPlan';
+import { LindenStop } from '../linden/LindenStop';
+import { WorksFences } from '../linden/WorksFences';
 import { PhotoAlbum } from '../grandma/PhotoAlbum';
 import { grandmaDressingSample } from '../grandma/dressingSample';
 import { MARKET_PLAN } from '../market/marketPlan';
@@ -60,6 +83,8 @@ interface ZFightSubject {
   viewDistance: number;
   /** A room subject's shell options (scene-lint judges where its plan put things against them); absent for a prop on its own. */
   room?: RoomOptions;
+  /** An outdoor subject's ground height at world (x, z) (scene-lint judges where its things stand on it); absent indoors. */
+  ground?: (x: number, z: number) => number;
   build(): THREE.Object3D;
 }
 
@@ -93,6 +118,7 @@ const ROOMS: Record<string, { room: RoomOptions; decor: readonly DecorEntry[] }>
   annex: ANNEX_PLAN,
   sellerFlat: SELLER_FLAT_PLAN,
   grandmaFlat: GRANDMA_FLAT_PLAN,
+  lindenLanding: LINDEN_LANDING_PLAN,
   market: MARKET_PLAN,
   kitchen: KITCHEN_PLAN,
 };
@@ -122,6 +148,9 @@ const PIECES: Record<string, () => unknown> = {
   aquariumWall: () => new AquariumWall(),
   rugRolls: () => new RugRolls(),
   displayTable: () => new DisplayTable(),
+  // Linden Avenue's own things (`world/linden`): line 38's shelter and pole, the works' fences, the bollards.
+  lindenStop: () => new LindenStop({ width: 3.2, pole: [-2.7, -2.05], line: '38', towards: 'Front Street' }),
+  worksFences: () => new WorksFences(4, -3, 3),
   // The walked courtyard's own things (in the street's frame, as the yard places them), and a bulky-waste pile's every model in a row.
   yardDressing: () => new YardDressing((clock ??= new DayNight())),
   bulkyPile: () => bulkyPileSample(),
@@ -238,6 +267,53 @@ export function zfightSubjects(): ZFightSubject[] {
       clock ??= new DayNight();
       const { buildings } = buildStreetBase(add, { dayNight: clock, facades: FACADES, detailScale: 1.35, shopGoods: null, walkable: true });
       buildStreetFronts(add, buildings.fronts, clock);
+      return group;
+    },
+  });
+  // What stands in the street besides its facades (as `furnishStreet` places it, at high quality): the lamps, trees,
+  // parked cars, benches, bins, shelter, railings; the works, drains, hydrants, cabinets, signs and fountain; the bags
+  // and bins put out, what the shops put out, the signals, the wayfinding, the post and phone boxes, a pop-up's board.
+  subjects.push({
+    name: 'street:fixtures',
+    viewDistance: STREET_DISTANCE,
+    ground: groundHeight,
+    build: () => {
+      const group = new THREE.Group();
+      const add: AddScenery = (item) => {
+        group.add(item as unknown as THREE.Object3D);
+        return item;
+      };
+      const at = <T extends THREE.Object3D>(item: T, [x, z]: readonly [number, number], yaw = 0, y = 0): T => {
+        item.position.set(x, y, z);
+        item.rotation.y = yaw;
+        group.add(item);
+        return item;
+      };
+      clock ??= new DayNight();
+      const plan = STREET_PLAN;
+      const viewer = new THREE.Object3D();
+      const traffic = new StreetTraffic(clock);
+      // The ground under them, so a foot or a base pressed on the road or the pavement is known to be unseen.
+      add(new StreetGround(clock, 1)).userData.ground = true;
+      buildStreetFixtures(add, { dayNight: clock, viewer, traffic, lampLights: 0 });
+      add(new StreetDetails(1, clock));
+      add(new StreetFixtures());
+      add(new StreetClutter(clock, { trees: plan.trees, bins: plan.bins, benches: plan.benches, binHours: plan.binLorry.hours, viewer }));
+      add(new ShopSpill(clock, { spots: plan.shopSpill, board: plan.chalkBoard }));
+      add(new SignalHeads(traffic, clock, plan.signals.posts));
+      const { signpost, planBoard, clock: pillar } = WAYFINDING;
+      at(new Signpost(signpost.at, signpost.arms, 1), signpost.at);
+      at(new StreetPlanBoard({ at: planBoard.at, width: planBoard.width, height: planBoard.height, places: signpost.arms, far: () => false }, 1), planBoard.at, planBoard.yaw, planBoard.y);
+      at(new StreetClock(clock, pillar.height, () => null), pillar.at, pillar.yaw);
+      const pole = plan.busRide.pole;
+      at(new BusStopPole({ line: plan.bus.line, towards: 'TOWN', stops: 'the town', fare: plan.busRide.fare, every: plan.bus.every, nightEvery: plan.bus.nightEvery, dueIn: () => 60, dayNight: clock }), pole.at, pole.yaw);
+      at(new PostBox(() => {}), STREET_PLACES.postBox.at, STREET_PLACES.postBox.yaw);
+      at(new PhoneBox(clock, { price: 1, call: () => {} }), STREET_PLACES.phoneBox.at, STREET_PLACES.phoneBox.yaw);
+      // The terraces' tables and chairs (their customers are people: not here), December's bulbs, the snowman.
+      const collisions = { add: () => {}, remove: () => {} };
+      add(new Terraces(clock, { terraces: plan.terraces, viewer, collisions, toWorld: (p) => p, place: () => {}, talk: () => '', weekday: () => 2, season: 'summer', drawDistance: 0, fade: 0, maxCustomers: 0 }));
+      add(new StreetChristmas(clock, { trees: STREET_TREES }));
+      at(new Snowman({ viewer }), plan.snowman.at, plan.snowman.yaw);
       return group;
     },
   });

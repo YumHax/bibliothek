@@ -221,6 +221,8 @@ export function decal(width: number, height: number, material: THREE.Material, l
  * geometry is `opaque`; everything transparent picks a band here, never a bare number.
  */
 export const RENDER_ORDER = {
+  /** Something that draws nothing, its hook first of its scene (it sets what that scene's shaders read: the shelters). */
+  first: -100,
   /** Contact shadows: under whatever stands in them. */
   contactShadow: -1,
   opaque: 0,

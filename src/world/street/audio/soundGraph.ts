@@ -7,6 +7,11 @@ import { random } from '@/random';
 
 /** One-shots a graph keeps sounding or scheduled at once at most (a shutter's rattle is ~70, the hammer's tenth 4). */
 const MAX_SHOTS = 160;
+/**
+ * Positioned legs kept for one-shots (`shot`): a leg whose sound is over is set to the next one's place instead of a new
+ * filter, panner and gain each footfall. Past this many sounding at once, a leg is made for the one shot and let go.
+ */
+const SHOT_LEGS = 48;
 
 /**
  * One street sound's Web Audio graph, kept so it can be let go whole: a master gain into the
@@ -22,6 +27,9 @@ export class SoundGraph {
   readonly master: GainNode;
   private readonly running: AudioScheduledSourceNode[] = [];
   private readonly legs: SpatialOut[] = [];
+  private readonly parts = new Set<SoundPart>();
+  /** The one-shots' legs, each with the context time its last sound is over. */
+  private readonly shotLegs: { leg: SpatialOut; until: number }[] = [];
   /** When each one-shot still sounding or scheduled ends (context time), pruned as they pass. */
   private shotEnds: number[] = [];
   private stopped = false;
@@ -97,11 +105,30 @@ export class SoundGraph {
     return leg;
   }
 
-  /** A positioned input into the master for a one-off sound, let go `seconds` later. */
+  /**
+   * A positioned input into the master for a one-off sound lasting `seconds`: a kept leg whose last sound is over, set
+   * to `spatial` at once, else a new one (kept while fewer than `SHOT_LEGS`, else let go after the sound).
+   */
   shot(spatial: Spatial, seconds: number): AudioNode {
+    const now = this.ctx.currentTime;
+    const until = now + seconds + 0.1;
+    const free = this.shotLegs.find((s) => s.until <= now);
+    if (free) {
+      free.leg.set(spatial.pan, spatial.walls, true, spatial.rear ?? 0);
+      free.until = until;
+      return free.leg.input;
+    }
     const leg = new SpatialOut(this.ctx, this.master, spatial);
-    window.setTimeout(() => leg.disconnect(), (seconds + 0.5) * 1000);
+    if (this.shotLegs.length < SHOT_LEGS) this.shotLegs.push({ leg, until });
+    else window.setTimeout(() => leg.disconnect(), (seconds + 0.5) * 1000);
     return leg.input;
+  }
+
+  /** A set of sources and legs started for one voice, stopped on its own (`SoundPart.release`) or with the graph. */
+  part(): SoundPart {
+    const part = new SoundPart(this, () => this.parts.delete(part));
+    this.parts.add(part);
+    return part;
   }
 
   /** A burst of the noise into `out`: up to `level` in a few ms, dying over `length` s, from `at` (context time). */
@@ -149,8 +176,83 @@ export class SoundGraph {
       source.disconnect();
     }
     this.running.length = 0;
+    for (const part of [...this.parts]) part.release();
     for (const leg of this.legs) leg.disconnect();
     this.legs.length = 0;
+    for (const { leg } of this.shotLegs) leg.disconnect();
+    this.shotLegs.length = 0;
     this.master.disconnect();
+  }
+}
+
+/**
+ * What one voice of a graph started (its looping noise, its oscillators, its leg), kept apart so the voice can let it go
+ * while the graph plays on (a car slot nobody drives costs nothing), and let go with the graph anyway.
+ */
+export class SoundPart {
+  private readonly running: AudioScheduledSourceNode[] = [];
+  private readonly nodes: AudioNode[] = [];
+  private readonly legs: SpatialOut[] = [];
+  private released = false;
+
+  constructor(private readonly g: SoundGraph, private readonly onRelease: () => void) {}
+
+  /** A looping source of `buffer` (the graph's white noise by default), from a random point. */
+  loop(buffer: AudioBuffer = this.g.noise): AudioBufferSourceNode {
+    const source = this.g.ctx.createBufferSource();
+    source.buffer = buffer;
+    source.loop = true;
+    source.start(0, random() * buffer.duration);
+    this.running.push(source);
+    return source;
+  }
+
+  /** An oscillator started now. */
+  oscillator(type: OscillatorType, frequency: number): OscillatorNode {
+    const osc = this.g.ctx.createOscillator();
+    osc.type = type;
+    osc.frequency.value = frequency;
+    osc.start();
+    this.running.push(osc);
+    return osc;
+  }
+
+  /** A filter, disconnected with the part. */
+  filter(type: BiquadFilterType, frequency: number, q = 1): BiquadFilterNode {
+    return this.own(this.g.filter(type, frequency, q));
+  }
+
+  /** A gain node, disconnected with the part. */
+  gain(value = 0): GainNode {
+    return this.own(this.g.gain(value));
+  }
+
+  /** A positioned leg into the graph's master, disconnected with the part. */
+  leg(spatial?: Spatial): SpatialOut {
+    const leg = new SpatialOut(this.g.ctx, this.g.master, spatial);
+    this.legs.push(leg);
+    return leg;
+  }
+
+  private own<T extends AudioNode>(node: T): T {
+    this.nodes.push(node);
+    return node;
+  }
+
+  /** Stops and disconnects everything of this part. */
+  release(): void {
+    if (this.released) return;
+    this.released = true;
+    for (const source of this.running) {
+      try {
+        source.stop();
+      } catch {
+        // Already stopped.
+      }
+      source.disconnect();
+    }
+    for (const node of this.nodes) node.disconnect();
+    for (const leg of this.legs) leg.disconnect();
+    this.onRelease();
   }
 }

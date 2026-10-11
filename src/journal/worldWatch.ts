@@ -22,6 +22,9 @@ interface WatchSources {
   date: Date;
   /** The arcade's Saturday tournament (`economy/ArcadeTournament`). */
   tournament?: { readonly isOn: boolean; view(): { entered: boolean; out: boolean; wins: number } };
+  /** The arcade's weekly league and the gold tokens in the pocket (`economy/ArcadeLeague`), the wheel's jackpot. */
+  league?: { readonly tickets: number; readonly tokens: number; readonly week: { daysLeft: number }; standings(): readonly { you?: boolean }[] };
+  jackpot?: { readonly newsworthy: boolean };
   /** A small ad's seller expecting the player (`classifieds/Classifieds.booking`). */
   booking?: { ad: { name: string; flat: string; hours: readonly [number, number] }; day: number } | null;
   /** Copies held at the stalls today, and orders due on a stall (`economy/MarketLedger`). */
@@ -38,7 +41,8 @@ interface WatchSources {
 }
 
 /**
- * What else has a date or is waiting, for the journal's "to do, to watch": the arcade's tournament, the co-owners'
+ * What else has a date or is waiting, for the journal's "to do, to watch": the arcade's tournament (and its league's last
+ * day, a gold token to spend, a jackpot grown huge), the co-owners'
  * meeting, the estate sale (once only), the neighbours' party, a seller expecting the player, copies held and orders
  * due at the stalls, and what waits at home (the parcel, a carton, a console to mend, a reward). Today's lines first,
  * a few words each in the player's words; the day is a number beside the line (`inDays`), never in the words.
@@ -60,6 +64,14 @@ export function upcomingWorld(s: WatchSources): Upcoming[] {
       break;
     }
   }
+  // The league's last day, a gold token waiting for a free play, the wheel's jackpot grown big.
+  const league = s.league;
+  if (league && league.tickets > 0 && league.week.daysLeft === 0) {
+    const place = league.standings().findIndex((e) => e.you);
+    today.push({ kind: 'arcade', text: place === 0 ? 'The arcade’s league ends tonight: you are top, hold on' : 'The arcade’s league ends tonight: a last push for the pennant', inDays: 0 });
+  }
+  if (league && league.tokens > 0) today.push({ kind: 'arcade', text: league.tokens === 1 ? 'A gold token for a free play at the arcade' : 'Gold tokens for free plays at the arcade' });
+  if (s.jackpot?.newsworthy) today.push({ kind: 'arcade', text: 'The arcade’s wheel jackpot is huge', inDays: 0 });
 
   // A seller from the small ads, expecting the player at Park Corner Mansions.
   const booking = s.booking;

@@ -1,5 +1,6 @@
 import { KEYS, PersistedStore } from '@/persistence';
 import { DailyTally } from '@/time/DailyTally';
+import { streetDayMark } from '@/time/streetDay';
 import { SCRATCH } from '@/economy/pricing';
 
 /*
@@ -8,7 +9,7 @@ import { SCRATCH } from '@/economy/pricing';
  * average: the house wins), then the symbols are laid to show it.
  */
 
-/** How many cards the tabac sells one player in a (real) day (`SCRATCH` in pricing.ts; the price is the tabac's offer). */
+/** How many cards the tabac sells one player in a game day (`SCRATCH` in pricing.ts; the price is the tabac's offer). */
 export const SCRATCH_PER_DAY = SCRATCH.perDay;
 
 /** A symbol and the coins three of them pay. */
@@ -72,7 +73,7 @@ export function drawCard(random: () => number): ScratchCard {
 }
 
 /** `{ day, cards }` under `KEYS.scratch` (without storage, private mode, the limit does not hold). */
-const bought = new DailyTally(KEYS.scratch, 'cards');
+const bought = new DailyTally(KEYS.scratch, 'cards', streetDayMark);
 
 /** Cards bought today (remembered across reloads). */
 export function cardsToday(): number {

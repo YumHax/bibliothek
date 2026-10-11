@@ -8,7 +8,7 @@ import type { PaintedFront } from '../Buildings';
 import { isShopOpen } from '../shops/shopHours';
 import { nightnessOf } from '../streetAir';
 import { STREET_PLAN, type ShopKind, type Vec2 } from '../streetPlan';
-import { FRONT, KERB_HEIGHT, PARK_STREET, WALKABLE } from '@/world/measures/street';
+import { FRONT, KERB_HEIGHT, PARK_STREET, STREET_ENDS, WALKABLE } from '@/world/measures/street';
 import { FacadeFrame } from './facadeFrame';
 import { groundHeight } from './ground';
 import { GROUND, RENDER_ORDER, onSurface } from '../../surface/layers';
@@ -16,9 +16,14 @@ import { LAMP_LIGHT } from '../../lighting/lampColours';
 import { envBoost } from '../../materials/envBoost';
 import type { MovingLamp } from '../StreetCars';
 import { additive, additiveOne } from '@/world/materials/blend';
+import { afterChunk, patchShader } from '../../materials/shaderPatch';
 import { lcg } from '@/random';
 import wetGroundVertex from './WetGround.vert.glsl?raw';
 import wetGroundFragment from './WetGround.frag.glsl?raw';
+import { RIPPLE_GLSL, rippled, type RippleUniforms } from '../waterRipples';
+import { STREET_WIND } from '../wind';
+import { damp } from '@/math/damp';
+import { assemble } from '@/graphics/glslAssemble';
 
 interface WetGroundOptions {
   fronts: readonly PaintedFront[];
@@ -55,10 +60,12 @@ const mirrorArea = (): { x0: number; x1: number; z0: number; z1: number } => ({ 
 const MIRROR_TEXTURE = 512;
 /** The mirror renders every other frame, unless the view has turned more than this (cos of the angle) since its last render. */
 const MIRROR_TURN = Math.cos(THREE.MathUtils.degToRad(0.6));
+/** The water running in the gutters while it rains: how wide a strip along each kerb (m), how fast it runs (m/s). */
+const RUNOFF = { width: 0.24, speed: 0.9 };
 
 type Source = { kind: 'lamp' | 'neon' | 'shop' | 'car'; top: THREE.Vector3; foot: THREE.Vector3; color: THREE.Color; width: number; shop?: ShopKind; car?: MovingLamp };
 
-interface Puddle {
+export interface Puddle {
   at: Vec2;
   y: number;
   sx: number;
@@ -103,6 +110,10 @@ export class WetGround extends THREE.Group implements Furniture, Updatable {
   private readonly lastLook = new THREE.Vector3();
   private mirrorFresh = false;
   private readonly hidden: THREE.Object3D[] = [];
+  /** The rain on the water (the puddles', the gutters' and the mirror's rings) and the wind's waves. */
+  private readonly ripples: RippleUniforms = { time: { value: 0 }, wind: { value: 0.3 }, rain: { value: 0 } };
+  private readonly runoff: THREE.Mesh;
+  private readonly runoffMaterial: THREE.MeshStandardMaterial;
 
   constructor(private readonly dayNight: DayNight, private readonly options: WetGroundOptions) {
     super();
@@ -170,6 +181,8 @@ export class WetGround extends THREE.Group implements Furniture, Updatable {
       GROUND.puddle,
       { depthWrite: false },
     );
+    // Rings where the rain falls in, the wind's ripples: the sky and the lamps they give back break up.
+    rippled(this.puddleMaterial, this.ripples, 'puddle', 0.45);
     this.puddles = new THREE.InstancedMesh(new THREE.PlaneGeometry(1, 1).rotateX(-Math.PI / 2), this.puddleMaterial, this.puddleSpots.length);
     this.puddles.receiveShadow = true;
     this.puddles.castShadow = false;
@@ -178,6 +191,15 @@ export class WetGround extends THREE.Group implements Furniture, Updatable {
     this.add(this.puddles);
     this.layPuddles(1);
     this.puddles.computeBoundingSphere();
+
+    this.runoffMaterial = runoffMaterial(this.ripples);
+    this.runoff = new THREE.Mesh(runoffGeometry(), this.runoffMaterial);
+    this.runoff.name = 'GutterRunoff';
+    this.runoff.receiveShadow = true;
+    this.runoff.castShadow = false;
+    this.runoff.renderOrder = RENDER_ORDER.groundGlow;
+    this.runoff.visible = false;
+    this.add(this.runoff);
 
     this.mirror = options.mirror ? this.buildMirror() : null;
   }
@@ -189,6 +211,13 @@ export class WetGround extends THREE.Group implements Furniture, Updatable {
   update(dt: number): void {
     const s = this.dayNight.state;
     this.frame++;
+    this.ripples.time.value = (this.ripples.time.value + dt) % 1000;
+    this.ripples.wind.value = STREET_WIND.value.z;
+    this.ripples.rain.value = damp(this.ripples.rain.value, s.rain, 1, dt);
+    // The gutters run while it rains and a little after, the water seen to flow towards the drains.
+    const running = Math.min(1, s.rain * 1.4 + 0.4 * THREE.MathUtils.smoothstep(s.wetness, 0.6, 1)) * (1 - s.snowCover);
+    this.runoffMaterial.opacity = 0.8 * running;
+    this.runoff.visible = running > 0.03;
     this.weatherClock += dt;
     if (this.weatherClock >= WEATHER_EVERY) {
       this.weatherClock = 0;
@@ -291,6 +320,9 @@ export class WetGround extends THREE.Group implements Furniture, Updatable {
     const material = onSurface(mirror.material as THREE.ShaderMaterial, GROUND.mirror, { depthWrite: false });
     material.uniforms.strength = this.mirrorStrength;
     material.uniforms.mask!.value = mask;
+    material.uniforms.rippleTime = this.ripples.time;
+    material.uniforms.rippleWind = this.ripples.wind;
+    material.uniforms.rippleRain = this.ripples.rain;
     material.transparent = true;
     additiveOne(material);
     mirror.receiveShadow = false;
@@ -321,7 +353,7 @@ export class WetGround extends THREE.Group implements Furniture, Updatable {
 }
 
 /** Where the puddles lie (seeded): in the gutters of Front Street and Park Street, a few in the lanes, on the pavements' low spots. */
-function puddleSpots(): Puddle[] {
+export function puddleSpots(): Puddle[] {
   const random = lcg(6061);
   const out: Puddle[] = [];
   const add = (x: number, z: number, big: number): void => {
@@ -381,10 +413,79 @@ function mirrorShader(mask: THREE.Texture) {
       textureMatrix: { value: null },
       strength: { value: 0 },
       mask: { value: mask },
+      rippleTime: { value: 0 },
+      rippleWind: { value: 0 },
+      rippleRain: { value: 0 },
     },
     vertexShader: wetGroundVertex,
-    fragmentShader: wetGroundFragment,
+    fragmentShader: assemble(wetGroundFragment, { chunks: { ripples: RIPPLE_GLSL } }),
   };
+}
+
+/**
+ * The gutters' strips of running water, one along the road's side of every kerb of Front Street and Park Street,
+ * uvs in metres (u along, v across from the kerb), laid as standing water (`GROUND.puddle`).
+ */
+function runoffGeometry(): THREE.BufferGeometry {
+  const y = -KERB_HEIGHT + GROUND.puddle.lift;
+  const w = RUNOFF.width;
+  const positions: number[] = [];
+  const uvs: number[] = [];
+  const normals: number[] = [];
+  const runsAlongZ: number[] = [];
+  const strip = (x0: number, z0: number, x1: number, z1: number, along: 'x' | 'z'): void => {
+    const corners: [number, number][] = [[x0, z0], [x1, z0], [x1, z1], [x0, z0], [x1, z1], [x0, z1]];
+    for (const [x, z] of corners) {
+      positions.push(x, y, z);
+      normals.push(0, 1, 0);
+      uvs.push(along === 'x' ? x : z, along === 'x' ? z : x);
+      runsAlongZ.push(along === 'z' ? 1 : 0);
+    }
+  };
+  strip(PARK_STREET.nearKerb, FRONT.nearKerb, STREET_ENDS.east, FRONT.nearKerb + w, 'x');
+  strip(PARK_STREET.farKerb, FRONT.farKerb - w, STREET_ENDS.east, FRONT.farKerb, 'x');
+  strip(PARK_STREET.nearKerb - w, STREET_ENDS.south, PARK_STREET.nearKerb, FRONT.nearKerb, 'z');
+  strip(PARK_STREET.farKerb, STREET_ENDS.south, PARK_STREET.farKerb + w, FRONT.farKerb, 'z');
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+  g.setAttribute('normal', new THREE.Float32BufferAttribute(normals, 3));
+  g.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2));
+  // Which way each strip runs (Park Street's along z): its ripples flow that way.
+  g.setAttribute('runAlongZ', new THREE.Float32BufferAttribute(runsAlongZ, 1));
+  return g;
+}
+
+/**
+ * Running water: dark and glossy, its surface a ripple running along the gutter (u) towards the drains, fading out at
+ * its edges across (v), the rain's rings on it; transparent, its opacity the rain's (`update`).
+ */
+function runoffMaterial(ripples: RippleUniforms): THREE.MeshStandardMaterial {
+  const material = onSurface(
+    envBoost(new THREE.MeshStandardMaterial({ color: 0x0e1214, roughness: 0.04, metalness: 0, transparent: true, opacity: 0 }), 1.3),
+    GROUND.puddle,
+    { depthWrite: false },
+  );
+  return patchShader(material, 'gutterRunoff', (shader) => {
+    shader.uniforms.rippleTime = ripples.time;
+    shader.uniforms.rippleRain = ripples.rain;
+    shader.vertexShader = 'attribute float runAlongZ;\nvarying vec2 vRunoff;\nvarying float vRunAlongZ;\n' + afterChunk(shader.vertexShader, 'uv_vertex', 'vRunoff = uv;\nvRunAlongZ = runAlongZ;');
+    shader.fragmentShader =
+      'varying vec2 vRunoff;\nvarying float vRunAlongZ;\nuniform float rippleTime;\nuniform float rippleRain;\n' +
+      RIPPLE_GLSL +
+      afterChunk(shader.fragmentShader, 'normal_fragment_maps', /* glsl */ `
+        {
+          // The flow: wavelets running along (u) at the water's pace, broken across, with the rain's rings.
+          float runT = rippleTime * ${RUNOFF.speed.toFixed(2)};
+          vec2 q = vec2(vRunoff.x * 3.0 - runT * 3.0, vRunoff.y * 9.0);
+          vec3 flow = normalize(vec3(0.12 * sin(q.x * 2.1 + sin(q.y * 1.7)) + 0.06 * sin(q.x * 5.3 - q.y), 1.0, 0.08 * cos(q.x * 3.1 + q.y * 2.0)));
+          vec3 rings = rippleNormal(vRunoff, rippleTime, 0.0, rippleRain, 0.35);
+          // Worked out along (x) and across (z) the strip: a strip running along z swaps the two.
+          vec3 runNormal = normalize(flow + rings - vec3(0.0, 1.0, 0.0));
+          if (vRunAlongZ > 0.5) runNormal = runNormal.zyx;
+          normal = normalize((viewMatrix * vec4(runNormal, 0.0)).xyz);
+        }
+      `) ;
+  });
 }
 
 /** A streak of light on wet asphalt: a soft band across, bright around its middle along, broken into ripples. */

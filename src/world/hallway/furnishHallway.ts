@@ -41,7 +41,7 @@ const KEYS_SAID_TIMES = 2;
  * way home, the parcel under the console (there while bought games wait in it), the runner (or the
  * kilim, once bought) and the shop poster (once bought), then the decor.
  */
-export function furnishHallway(zone: Zone, ctx: Pick<BuildContext, 'sky' | 'listener' | 'acoustics' | 'building' | 'collection' | 'market' | 'today' | 'arcade' | 'home' | 'panels' | 'story' | 'memories'>): ZoneHandle {
+export function furnishHallway(zone: Zone, ctx: Pick<BuildContext, 'sky' | 'listener' | 'acoustics' | 'building' | 'collection' | 'market' | 'today' | 'arcade' | 'home' | 'panels' | 'story' | 'memories' | 'grandmaHints'>): ZoneHandle {
   const { sky, listener, building, collection: { deliveries }, market: { stock: market, day: marketDay }, today, arcade: { daily: arcadeDaily }, home: { upgrades } } = ctx;
   const plan = HALLWAY_PLAN;
   const room = furnishShell(zone, sky, plan.room, { leafColor: plan.leafColor });
@@ -74,7 +74,7 @@ export function furnishHallway(zone: Zone, ctx: Pick<BuildContext, 'sky' | 'list
         keys.jingle();
         // Unless it was taken from our flap in the entrance hall on the way up (`building/postCollected`).
         if (collectPost(today.gameDay)) {
-          mail.deliver(mailFor(today.gameDay, { arcadeDaily, market, marketDay, story: ctx.story }));
+          mail.deliver(mailFor(today.gameDay, { arcadeDaily, market, marketDay, story: ctx.story, grandma: ctx.grandmaHints }));
         }
         // A mail order whose round came while the player was out: the concierge took it in.
         const posted = building?.post?.deliver().length ?? 0;

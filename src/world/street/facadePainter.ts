@@ -1,11 +1,12 @@
 import type { FacadeSpec, FlatFront, ShopKind, ShopSpec } from './streetPlan';
 import { GROUND_FLOOR, STOREY } from '@/world/measures/street';
 import { LETTERING, SHOP_LOOKS, letteringFont } from '../city/shopLooks';
-import { balconyRows, facadeBays, facadeStyle, onBalcony, windowWidth, type FacadeStyle, type WindowHead } from '../city/facadeStyle';
+import { balconyRows, facadeBays, facadeStyle, onBalcony, storeyLayout, windowHeightOn, windowWidth, type FacadeStyle, type StoreyLayout, type WallKind, type WindowHead } from '../city/facadeStyle';
 import type { RoofFurniture } from '../city/roofFurniture';
 import { shade } from '../city/colour';
 import type { FlatRoomId } from '../city/flatWindows';
 import { awningOut, frontVariant, pilasterWidth } from './shopfronts/shopfrontPlan';
+import { POSTER, paintPoster } from './relief/posterArt';
 import { lcg, pick } from '@/random';
 
 /** What a lit window shows of its room at night, drawn on the night map over its light (`Buildings`). Shares of the light's rect. */
@@ -83,8 +84,8 @@ export interface FacadeFeatures {
   balconies: { s0: number; s1: number; y: number }[];
   casements: Casement[];
   windows: { s0: number; s1: number; y0: number; y1: number; kind: ShopKind; light: string; palette: readonly string[] }[];
-  /** `step`: a stone step before a residents' door. */
-  doors: { s: number; width: number; height: number; color: string; shop: boolean; step?: boolean }[];
+  /** `step`: a stone step before a residents' door; `leaf`: its paint (a residents' door's leaves are built in 3D on a near front). */
+  doors: { s: number; width: number; height: number; color: string; shop: boolean; step?: boolean; leaf?: string }[];
   shopfronts: { s0: number; s1: number; kind: ShopKind; light: string; awning: boolean; name?: string }[];
   /**
    * The names on the fascias of the fronts built in 3D (`shopfronts/fasciaLettering`: sharp, not in the atlas): the
@@ -95,6 +96,20 @@ export interface FacadeFeatures {
   downpipe: number | null;
   /** The cornice's underside over the street. */
   cornice: number;
+  /** Each upper floor's foot over the pavement (its string course, where the front has them; the cables run along it). */
+  floors: number[];
+  /** The fly-posters on a near front, pasted as sheets of their own (`relief/WallPosters`, sharp); a far one keeps them painted. */
+  posters: PosterSpot[];
+}
+
+/** A fly-poster on a wall or a shut shop's shutter: where (facade metres), which print (`posterArt`), torn at a corner or not. */
+interface PosterSpot {
+  s0: number;
+  s1: number;
+  y0: number;
+  y1: number;
+  print: number;
+  torn: boolean;
 }
 
 /**
@@ -122,13 +137,13 @@ export interface Casement {
   flowers: string[] | null;
 }
 
-/** One painted facade: its night lights, its panes of glass, its relief, what stands out of it, and whether its wall is brick. */
+/** One painted facade: its night lights, its panes of glass, its relief, what stands out of it, and what its wall is (the shader lays brick courses and stone joints). */
 interface PaintedFacade {
   lights: NightLight[];
   glass: GlassPane[];
   relief: ReliefRect[];
   features: FacadeFeatures;
-  brick: boolean;
+  wall: WallKind;
 }
 
 /** Where a facade sits in the atlases: its top-left corner (colour-atlas pixels) and its scale. */
@@ -160,8 +175,9 @@ const FLOWERS = ['#d9383a', '#e0567a', '#f0f0e8', '#b04ac0', '#f09a3a'];
 const GLASS = '#2f3d48';
 const HOME_LIGHTS = ['#ffcf8a', '#ffd9a0', '#ffc070', '#fff0d0'];
 const TV_LIGHT = '#9ab8ff';
-const POSTER_PAPERS = ['#f0e8d0', '#f6d23a', '#e8e8e8', '#ff6a3a', '#9ad0e8'];
-const TAG_COLORS = ['#e83a8a', '#3ae8c8', '#f0e03a', '#8a4af0'];
+const TAG_COLORS = ['#e83a8a', '#3ae8c8', '#f0e03a', '#8a4af0', '#f0f0ea', '#3a8ae8'];
+/** What the taggers write: crews' names, sprayed in fat letters. */
+const TAGS = ['ZEK', 'MOAB', 'KRAY', 'OBY', 'SNEK', 'PIXL', 'RUSO', 'DEMZ', 'KOI', 'VAPE', 'TOXIK', 'NEON'];
 
 /** How each kind of shop looks: joinery, fascia, lettering, awning, what fills the window, its light and when it shuts. */
 interface ShopLook {
@@ -221,12 +237,15 @@ export function paintFacade(ctx: CanvasRenderingContext2D, spec: FacadeSpec, wid
   // The building's look is the neighbourhood's (`city/facadeStyle`): the window view paints the same front.
   const style = facadeStyle(spec.seed);
   const height = facadeHeight(spec.storeys);
+  // Its floors as its style stacks them (our own building's regular: the flat's floor is where the stairs put it).
+  const layout = storeyLayout(style, spec.storeys, !!spec.flat);
   const cornice = height - style.parapet;
   const p = new Brush(ctx, slot, height, spec.seed);
   p.framed = framed;
   p.features.wall = style.wall;
   p.features.trim = style.trim;
   p.features.cornice = cornice - 0.16;
+  p.features.floors = layout.foot.slice(1);
 
   paintWall(p, random, style, width, height);
   paintCrown(p, style, width, height, cornice);
@@ -236,10 +255,10 @@ export function paintFacade(ctx: CanvasRenderingContext2D, spec: FacadeSpec, wid
   const winW = windowWidth(style, bay);
   // None in a light well (a face a bay or two wide): they would run into the next wall's.
   const balconies = width < MIN_BALCONY_FRONT ? [] : balconyRows(style, spec.storeys, bays);
-  for (let storey = 1; storey < spec.storeys; storey++) paintStorey(p, random, style, spec, { width, bays, bay, winW }, balconies, storey);
+  for (let storey = 1; storey < spec.storeys; storey++) paintStorey(p, random, style, spec, { width, bays, bay, winW }, balconies, layout, storey);
   if (spec.flat) paintFlat(p, style, spec.flat);
   paintGroundFloor(p, random, style, spec, width, bays, goods);
-  return { lights: p.lights, glass: p.panes, relief: p.reliefs, features: p.features, brick: style.kind === 'brick' };
+  return { lights: p.lights, glass: p.panes, relief: p.reliefs, features: p.features, wall: style.kind };
 }
 
 /** How a front's bays are laid out: its width, bays per storey, the pitch of a bay and a window's width. */
@@ -297,15 +316,15 @@ function paintCrown(p: Brush, style: FacadeStyle, width: number, height: number,
  * balconies themselves are built in 3D, `relief/FacadeRelief`), then a window per bay. Our flat's floor paints its own
  * windows where they really are (`paintFlat`), nothing here.
  */
-function paintStorey(p: Brush, random: () => number, style: FacadeStyle, spec: FacadeSpec, { width, bays, bay, winW }: Bays, balconies: ReturnType<typeof balconyRows>, storey: number): void {
-  const floorY = GROUND_FLOOR + (storey - 1) * STOREY;
+function paintStorey(p: Brush, random: () => number, style: FacadeStyle, spec: FacadeSpec, { width, bays, bay, winW }: Bays, balconies: ReturnType<typeof balconyRows>, layout: StoreyLayout, storey: number): void {
+  const floorY = layout.foot[storey] ?? GROUND_FLOOR + (storey - 1) * STOREY;
   if (style.courses) {
     p.rect(0, floorY - 0.06, width, floorY + 0.1, shade(style.trim, 0.96));
     p.relief(0, floorY - 0.06, width, floorY + 0.1, RELIEF.trim, ROUGH.stone);
   }
   if (spec.flat && storey === spec.storeys - 1) return;
   const y0 = floorY + style.windows.sill;
-  const y1 = y0 + style.windows.height;
+  const y1 = y0 + windowHeightOn(style, layout.height[storey] ?? STOREY);
   for (const row of balconies) {
     if (row.floor !== storey) continue;
     const s0 = row.from * bay + bay * 0.08;
@@ -446,7 +465,7 @@ class Brush {
   readonly lights: NightLight[] = [];
   readonly panes: GlassPane[] = [];
   readonly reliefs: ReliefRect[] = [];
-  readonly features: FacadeFeatures = { wall: '#888888', trim: '#dddddd', awnings: [], balconies: [], casements: [], windows: [], doors: [], shopfronts: [], downpipe: null, cornice: 0 };
+  readonly features: FacadeFeatures = { wall: '#888888', trim: '#dddddd', awnings: [], balconies: [], casements: [], windows: [], doors: [], shopfronts: [], downpipe: null, cornice: 0, floors: [], posters: [] };
   /** The weather's marks (rain run off the sills): a draw of their own, so the facade's other details stay where they were. */
   readonly weather: () => number;
   /** The windows are built in 3D (`Casement`): only their glass and what hangs behind it is painted. */
@@ -758,8 +777,7 @@ export function paintRoof(ctx: CanvasRenderingContext2D, style: FacadeStyle, wid
   const random = lcg(style.seed * 31 + 5);
   p.rect(0, 0, width, depth, style.roofColor);
   const mansard = style.roof === 'mansard';
-  if (mansard) for (let s = 0.4; s < width; s += 0.5) p.rect(s, 0, s + 0.04, depth, 'rgba(255,255,255,0.08)');
-  else for (let y = 0.25; y < depth; y += 0.3) p.rect(0, y, width, y + 0.06, 'rgba(0,0,0,0.14)');
+  // The slates' and tiles' courses are the facade shader's (`Buildings`, in world metres, at any distance); here the weathering.
   for (let i = 3 + Math.floor(random() * 6); i > 0; i--) {
     const s = random() * (width - 0.6);
     p.rect(s, depth * (0.1 + random() * 0.5), s + 0.15 + random() * 0.35, depth, mansard ? 'rgba(20,24,30,0.12)' : 'rgba(60,70,30,0.12)');
@@ -791,7 +809,7 @@ export function paintRoof(ctx: CanvasRenderingContext2D, style: FacadeStyle, wid
  * the bell panel beside it.
  */
 function paintEntrance(p: Brush, style: FacadeStyle, at: number): void {
-  p.features.doors.push({ s: at, width: 1.4, height: 2.7, color: '#d8ccb8', shop: false, step: true });
+  p.features.doors.push({ s: at, width: 1.4, height: 2.7, color: '#d8ccb8', shop: false, step: true, leaf: style.door });
   p.rect(at - 0.95, 0, at + 0.95, 3.5, '#e6dccb');
   p.relief(at - 0.95, 0, at + 0.95, 3.5, RELIEF.trim, ROUGH.stone);
   p.rect(at - 0.7, 0.05, at + 0.7, 2.7, style.door);
@@ -861,39 +879,62 @@ function paintNamePlate(p: Brush, at: number, name: string): void {
   p.relief(at - w / 2, y0, at + w / 2, y1, RELIEF.plate, ROUGH.enamel);
 }
 
-/** Fly-posters pasted on a wall or over a shut shop's shutter: gig bills and a games fair, torn at the corners. */
+/**
+ * Fly-posters pasted on a wall or over a shut shop's shutter, side by side in a row (now and then a second row over
+ * it): gig bills, the games fair, a lost cat (`posterArt`), some torn. A near front pastes them as sheets of their own
+ * (`features.posters`, sharp); a far one paints them into its atlas.
+ */
 function paintFlyPosters(p: Brush, random: () => number, s0: number, s1: number): void {
-  const count = 2 + Math.floor(random() * 3);
-  for (let i = 0; i < count; i++) {
-    const w = 0.5 + random() * 0.3;
-    const h = w * 1.4;
-    const a = s0 + 0.2 + random() * Math.max(0, s1 - s0 - w - 0.4);
-    const y = 1.0 + random() * 1.2;
-    p.rect(a, y, a + w, y + h, pick(random, POSTER_PAPERS));
-    p.rect(a + 0.05, y + h * 0.72, a + w - 0.05, y + h * 0.9, pick(random, ['#1a1a22', '#8a2a2a', '#2a3f8a']));
-    for (let l = 0; l < 4; l++) p.rect(a + 0.07, y + h * (0.2 + l * 0.11), a + w * (0.5 + random() * 0.4), y + h * (0.2 + l * 0.11) + 0.025, 'rgba(0,0,0,0.5)');
-    // A torn corner.
-    p.rect(a + w - 0.12, y, a + w, y + 0.1, 'rgba(120,120,116,0.9)');
+  const w = POSTER.width * (0.9 + random() * 0.2);
+  const h = w * (POSTER.height / POSTER.width);
+  const room = Math.floor((s1 - s0 - 0.3) / (w + 0.03));
+  const count = Math.min(room, 2 + Math.floor(random() * 3));
+  if (count < 1) return;
+  const rows = random() < 0.35 && count >= 2 ? 2 : 1;
+  const a0 = s0 + 0.15 + random() * Math.max(0, s1 - s0 - 0.3 - count * (w + 0.03));
+  const y0 = 0.95 + random() * (rows === 2 ? 0.2 : 0.9);
+  const first = Math.floor(random() * 1000);
+  for (let row = 0; row < rows; row++) {
+    for (let i = 0; i < count; i++) {
+      const a = a0 + i * (w + 0.03);
+      const y = y0 + row * (h + 0.03);
+      // The same bill twice or three times in a row, as the posting crews paste them.
+      const print = first + (random() < 0.45 ? 0 : i + row * 3);
+      const torn = random() < 0.3;
+      if (p.framed) p.features.posters.push({ s0: a, s1: a + w, y0: y, y1: y + h, print, torn });
+      else paintPoster(p.ctx, print, p.x(a), p.y(y + h), w * p.slot.k, h * p.slot.k, torn);
+    }
   }
 }
 
-/** A spray-painted tag: a few fat looping strokes with a dark outline. */
+/** A spray-painted tag: a crew's name in fat leaning letters, a dark outline, a fill, and the odd drip running down. */
 function paintGraffiti(p: Brush, random: () => number, s0: number, s1: number): void {
   const { ctx, slot } = p;
-  const x0 = s0 + 0.3 + random() * Math.max(0.1, (s1 - s0) * 0.4);
-  const y0 = 0.5 + random() * 0.4;
-  const len = Math.min(2.4, (s1 - s0) * 0.6);
-  const points: [number, number][] = [];
-  for (let i = 0; i <= 8; i++) points.push([x0 + (i / 8) * len, y0 + 0.2 + Math.sin(i * 1.7 + random() * 2) * 0.22]);
-  for (const [width, color] of [[0.12, '#141418'], [0.07, pick(random, TAG_COLORS)]] as const) {
-    ctx.strokeStyle = color;
-    ctx.lineWidth = Math.max(1, width * slot.k);
-    ctx.lineCap = 'round';
-    ctx.lineJoin = 'round';
-    ctx.beginPath();
-    points.forEach(([s, y], i) => (i ? ctx.lineTo(p.x(s), p.y(y)) : ctx.moveTo(p.x(s), p.y(y))));
-    ctx.stroke();
-  }
+  const word = pick(random, TAGS);
+  const size = 0.32 + random() * 0.3;
+  const x = s0 + 0.3 + random() * Math.max(0.1, (s1 - s0) * 0.45);
+  const y = 0.45 + random() * 0.5;
+  const px = Math.max(6, Math.round(size * slot.k));
+  const fill = pick(random, TAG_COLORS);
+  const lean = -0.18 - random() * 0.2;
+  ctx.save();
+  ctx.translate(p.x(x), p.y(y));
+  ctx.transform(1, 0, lean, 1, 0, 0);
+  ctx.rotate((random() - 0.5) * 0.18);
+  ctx.font = letteringFont(random() < 0.5 ? LETTERING.condensed : LETTERING.sans, px);
+  ctx.textAlign = 'left';
+  ctx.textBaseline = 'alphabetic';
+  ctx.lineJoin = 'round';
+  ctx.strokeStyle = '#141418';
+  ctx.lineWidth = Math.max(1.5, px * 0.22);
+  ctx.strokeText(word, 0, 0);
+  ctx.fillStyle = fill;
+  ctx.fillText(word, 0, 0);
+  // Drips under the letters.
+  const across = ctx.measureText(word).width;
+  ctx.fillStyle = fill;
+  for (let i = Math.floor(random() * 4); i > 0; i--) ctx.fillRect(random() * across, 0, Math.max(1, px * 0.06), px * (0.2 + random() * 0.7));
+  ctx.restore();
 }
 
 /** The faded adverts painted long ago on blind walls. */

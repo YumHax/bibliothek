@@ -2,8 +2,9 @@
 // A splash: each point is a ring on the ground that grows and fades over `period`, then turns up
 // elsewhere (its spot re-drawn from its seed and the cycle's number), wrapped into the square
 // around the camera. The ground is a kerb lower on the road (`roadY` inside the road's rectangles,
-// in zone-local metres: `origin` is the zone's world position). The ring is squashed by the view's
-// slant so it lies on the ground.
+// in zone-local metres: `origin` is the zone's world position); under a shelter (an awning, the bus
+// shelter's roof, the kiosk's) the drop lands on its top instead. The ring is squashed by the view's
+// slant so it lies on the surface.
 #include <shelter>
 attribute vec2 extra;
 uniform float time;
@@ -27,10 +28,12 @@ void main() {
   vec2 w = corner + mod(seed * box - corner, vec2(box));
   vec2 local = w - origin.xz;
   float y = origin.y + (onRoad(local) ? roadY : 0.0) + 0.01;
+  float roof = shelterTop(w);
+  if (roof > y) y = roof + 0.015;
   vec4 view = viewMatrix * vec4(w.x, y, w.y, 1.0);
   gl_Position = projectionMatrix * view;
   vec3 toEye = normalize(cameraPosition - vec3(w.x, y, w.y));
   vSquash = max(abs(toEye.y), 0.12);
   gl_PointSize = size * pointScale / max(-view.z, 0.5);
-  if (extra.y > amount || sheltered(vec3(w.x, y, w.y))) gl_Position = vec4(2.0, 2.0, 2.0, 1.0);
+  if (extra.y > amount) gl_Position = vec4(2.0, 2.0, 2.0, 1.0);
 }

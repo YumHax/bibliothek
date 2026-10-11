@@ -114,5 +114,7 @@ held, the paper's account, the photos.
   console's built-in list) lights its neon over the bookcases (`collector/HonourNeons`, `ROOM_PLAN.honours`); from the
   day after, in the afternoon (`club.from`..`until`), Mrs Albers rings, stands at the shelf under it, looks up at it
   (`Honour:<id>` in the room's zone), says a word, leaves `club.gift` coins. Unanswered, she comes another day.
+- **Mémé** (`MemeVisit`, `memeVisitPlan.ts`): her Saturday at the flat, planned at hers, then a drop-in now and then; the
+  shelves, the window, an armchair, her photo for the album (docs/grandma.md "The end of the story").
 
 Testing: `?gamesnight`, `?openhouse`, `?clubvisit` start that gathering as soon as the player is home.

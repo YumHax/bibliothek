@@ -2,6 +2,8 @@ import type { PersonCard } from '../types';
 
 /** Mémé's id in the social layer (her standing, her page in the book, her number in the phone). */
 export const MEME_ID = 'meme';
+/** Gaspard's, Félix's elder brother (docs/grandma.md "The end of the story"). */
+export const GASPARD_ID = 'gaspard';
 
 /*
  * The family (docs/story.md "Mémé", docs/social.md "Mémé"): Odette Aubry, Félix's mother, across town at the end of
@@ -42,5 +44,35 @@ export const FAMILY_PEOPLE: readonly PersonCard[] = [
     startTrust: 50,
     listed: 'always',
     family: true,
+  },
+  {
+    // Félix's elder brother (docs/grandma.md "The end of the story"): at her Sunday table now and then once the row is
+    // seen in her album. Not family as Mémé is: he can go cold, and stay there.
+    id: GASPARD_ID,
+    name: 'Gaspard Aubry',
+    short: 'Gaspard',
+    role: 'your uncle, Félix’s elder brother',
+    group: 'friends',
+    whereabouts: 'At Mémé’s Sunday table some weeks, from lunch until he remembers the traffic',
+    intro: 'Gaspard. Your uncle, if anyone ever told you. Sit, you’re blocking Maman’s light.',
+    traits: ['proud', 'competitive', 'grumpy'],
+    likes: ['coffee'],
+    dislikes: ['plush', 'scrap'],
+    birthday: 41,
+    look: { seed: 1958, role: 'shopper' },
+    facts: [
+      { id: 'garage', text: 'Sells second-hand cars out by the ring road', says: 'Aubry Motors, by the ring road. Forty cars on the forecourt, thirty-nine of them honest.' },
+      { id: 'watch', text: 'Checks his watch more than he looks at people', says: 'Time is money. Félix never understood that. He thought time was time.', from: 'friendly' },
+    ],
+    lines: {
+      hello: ['Ah. You.', 'Still here? Good. Maman likes the company.'],
+      cold: ['Hm.', 'I’m eating.'],
+      talkGames: ['Plastic and nostalgia. There’s a market for it, I’ll give you that.', 'Félix had a cupboard of those. You know how that ended.'],
+      compliment: ['Nice try. I sell cars, I know a pitch.'],
+      joke: ['Ha. Félix’s sense of humour. It skipped me.'],
+    },
+    startWarmth: 0,
+    startTrust: 10,
+    listed: 'met',
   },
 ];

@@ -23,6 +23,7 @@ import { BedroomChair } from './BedroomChair';
 import { SideTable } from '../props/SideTable';
 import { ReadingLamp } from './ReadingLamp';
 import { Phone, duskDarkness } from './Phone';
+import { placeMemeRing, type MemeRing } from './memeRing';
 import { UnseenSwap } from './UnseenSwap';
 import { NightLight } from './NightLight';
 import { placeLeaves, placeWith, floorPointsToWorld } from '../zone/attach';
@@ -42,6 +43,10 @@ import { BOOKCASE_PRICE } from '@/economy/pricing';
 import { PrizeShelf } from '../prizes/PrizeShelf';
 import { ArcadePoster } from '../prizes/ArcadePoster';
 import { MoodLamp } from '../prizes/MoodLamp';
+import { LavaLampPrize } from '../prizes/LavaLampPrize';
+import { HangingToy } from '../prizes/HangingToy';
+import { BedPlushes } from '../prizes/BedPlushes';
+import { RocketMobile } from '../prizes/RocketMobile';
 import { NeighbourVoices } from '@/audio/flatSounds';
 import { BEDROOM_PLAN } from './bedroomPlan';
 import { placeHomeArcade, type HomeArcade } from '../homeArcade/placeHomeArcade';
@@ -69,7 +74,7 @@ interface BedroomHandle extends ZoneHandle {
  * the reading corner, the bought bookcases (or the kit to buy one), the shelf of arcade prizes,
  * then the rug, pictures and plant. The clock unmakes the bed until noon and lights the glows at night.
  */
-export function furnishBedroom(zone: Zone, ctx: Pick<BuildContext, 'sky' | 'cssLayer' | 'covers' | 'listener' | 'acoustics' | 'input' | 'collection' | 'home' | 'arcade' | 'today'>): BedroomHandle {
+export function furnishBedroom(zone: Zone, ctx: Pick<BuildContext, 'sky' | 'cssLayer' | 'covers' | 'listener' | 'acoustics' | 'input' | 'collection' | 'home' | 'arcade' | 'today' | 'grandmaHints' | 'social' | 'memories'>): BedroomHandle {
   const { sky, cssLayer, covers, collection: { overflow }, home: { upgrades, furnishings }, arcade: { prizes }, today } = ctx;
   const plan = BEDROOM_PLAN;
   const room = furnishShell(zone, sky, plan.room);
@@ -179,8 +184,27 @@ export function furnishBedroom(zone: Zone, ctx: Pick<BuildContext, 'sky' | 'cssL
   );
 
   const shelving = overflow && upgrades ? furnishBookcases(zone, covers, overflow, upgrades, ctx.collection, furnishings, ctx.home.shelfLabels) : null;
-  // What the arcade paid out, on the bare right wall.
-  if (prizes) zone.placeAt(new PrizeShelf({ prizes, width: plan.prizeShelf.width }), plan.prizeShelf.at);
+  // What the arcade paid out, on the bare right wall: the trophy row, the lava lamp lighting it, the yo-yo and the keyring under it.
+  if (prizes) {
+    const shelf = zone.placeAt(new PrizeShelf({ prizes, width: plan.prizeShelf.width }), plan.prizeShelf.at);
+    const lamp = new LavaLampPrize({ prizes, wallBehind: shelf.lavaSpot.z });
+    lamp.position.copy(shelf.lavaSpot);
+    placeWith(zone, shelf, lamp);
+    const hanging = shelf.hangingSpots;
+    for (const prizeId of ['yoyo', 'keyring'] as const) {
+      const toy = new HangingToy({ prizes, prizeId });
+      toy.position.copy(hanging[prizeId]);
+      placeWith(zone, shelf, toy);
+    }
+    // The soft toys on the bed (on the mattress till the bed is bought), the rocket turning over it.
+    const plushes = new BedPlushes({ prizes, top: bed.sheetTop, row: plan.plushes });
+    frame.placeWith(bed, plushes);
+    if (mattress) {
+      const onMattress = placeWith(zone, mattress, new BedPlushes({ prizes, top: mattress.sheetTop, row: plan.plushes }));
+      frame.onOwned(() => zone.remove(onMattress));
+    }
+    zone.placeAt(new RocketMobile({ prizes, drop: plan.rocketMobile.drop }), plan.rocketMobile.at);
+  }
   // Prizes that live at home, hidden until won: the arcade poster on the wall, the mood lamp on the dresser's books.
   if (prizes) {
     zone.placeAt(new ArcadePoster({ prizes, width: plan.arcadePoster.width, height: plan.arcadePoster.height }), plan.arcadePoster.at);
@@ -189,7 +213,8 @@ export function furnishBedroom(zone: Zone, ctx: Pick<BuildContext, 'sky' | 'cssL
     drawers.placeWith(dresser, moodLamp);
   }
 
-  if (household) furnishBedroomLife(zone, household, { stands, nightstands, phone, wardrobe });
+  // Mémé rings it when a photo of her album is ready (docs/grandma.md "Hints toward the next memory").
+  if (household) furnishBedroomLife(zone, household, { stands, nightstands, phone, wardrobe, ring: placeMemeRing(zone, ctx, phone, () => stands.owned) });
   furnishDecor(zone, ctx, plan.decor);
   // The neighbours through the party wall, talking now and then (rarely at night).
   zone.placeAt(pointSound(ctx, new NeighbourVoices({ night: () => sky.dayNight.state.night }), { maxDistance: 6 }), plan.neighbours);
@@ -258,7 +283,7 @@ function furnishBookcases(
  * night ends at) and the phone on the nightstands, once they stand; the wardrobe's rail behind its doors
  * (what to wear). The reading chair is the chair's own click.
  */
-function furnishBedroomLife(zone: Zone, household: HouseholdContext, parts: { stands: Placer; nightstands: readonly Nightstand[]; phone: Phone; wardrobe: Wardrobe }): void {
+function furnishBedroomLife(zone: Zone, household: HouseholdContext, parts: { stands: Placer; nightstands: readonly Nightstand[]; phone: Phone; wardrobe: Wardrobe; ring: MemeRing | null }): void {
   const { life, notices } = household;
   const { alarm: alarmAt, phoneSpot, rail } = BEDROOM_PLAN.household;
   const { stands, nightstands } = parts;
@@ -286,8 +311,11 @@ function furnishBedroomLife(zone: Zone, household: HouseholdContext, parts: { st
     if (rang > 0) zone.after(rang + 0.12, () => playAlarmButton(0.08));
   });
 
-  const call = new ClickSpot({ size: phoneSpot, label: () => 'Phone · make a call', onClick: () => undefined });
-  call.activate = (session) => session.openPanel(household.phone);
+  const { ring } = parts;
+  const call = new ClickSpot({ size: phoneSpot, label: () => ring?.label() ?? 'Phone · make a call', onClick: () => undefined });
+  call.activate = (session) => {
+    if (!ring?.answer(session)) session.openPanel(household.phone);
+  };
   const { phone } = parts;
   stands.placeWith(nightstands[BEDROOM_PLAN.phone.stand]!, call, phone.position.clone().setY(phone.position.y + phoneSpot[1] / 2));
 

@@ -7,6 +7,7 @@ import { StockItem } from '@/economy/StockItem';
 import { gameFrom } from '@/economy/stockDraws';
 import { marketPrice } from '@/economy/pricing';
 import { dressCopy, drawBootleg } from '@/economy/copyTraits';
+import { felixCopy, felixLotFor } from '@/economy/felixLots';
 import { brokenOf, type FaultId } from '@/repair/consoles';
 import type { Ad } from './ads';
 import { SELLERS, sellerCondition } from './rules';
@@ -55,7 +56,7 @@ export async function drawLot(ad: Ad, deps: SellerLotDeps, bought: readonly stri
   // `count` of them the player did not already own, a copy bought from this seller keeping its place (so buying one and
   // coming back never brings another out of the box).
   const games = ad.scripted?.games
-    ? scriptedGames(ad.scripted.games)
+    ? scriptedGames(ad.scripted.games, ad.scripted.felix === true)
     : (await drawGames(platforms, count, deps, rng)).filter((g) => gone.has(g.id) || !deps.owns(g.id)).slice(0, count);
   if (ad.kind === 'loft' && !ad.scripted?.games && rng() < LOFT_BOOTLEG) {
     const bootleg = drawBootleg(frozenRng(`${ad.seed}:bootleg`), platforms[0], { condition: 'noManual' });
@@ -116,7 +117,11 @@ async function drawGames(platforms: readonly PlatformId[], count: number, deps: 
   return games;
 }
 
-/** A scripted lot's games, from the built-in list (an unknown id is skipped). */
-function scriptedGames(ids: readonly string[]): Game[] {
-  return ids.map((id) => SEED_GAMES.find((g) => g.id === id)).filter((g): g is Game => !!g).map((g) => ({ ...g, status: 'owned' as const }));
+/** A scripted lot's games, from the built-in list (an unknown id is skipped); `felix`: his copies, his sticker on the back. */
+function scriptedGames(ids: readonly string[], felix: boolean): Game[] {
+  const games = ids.map((id) => SEED_GAMES.find((g) => g.id === id)).filter((g): g is Game => !!g);
+  return games.map((g) => {
+    const lot = felix ? felixLotFor(g.id) : null;
+    return { ...((lot && felixCopy(lot)) ?? g), status: 'owned' as const };
+  });
 }

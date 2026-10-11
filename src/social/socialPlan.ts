@@ -171,6 +171,8 @@ export const COIN_GIFT = 5;
 
 /** The odds and warmth of a game given, by how well it fits their tastes (`gifts.gameFit`, 0..1). */
 export const GAME_GIFT = { base: 0.5, fit: 1.2 } as const;
+/** A game given in the Christmas stall's paper and ribbon (`holidays/giftWrap`) means this much more. */
+export const WRAPPED_GIFT = 1.35;
 
 /** The building's opinion of the player: the average warmth of the residents met (`reputation.ts`). */
 export const BUILDING_NAMES: readonly { from: number; name: string }[] = [

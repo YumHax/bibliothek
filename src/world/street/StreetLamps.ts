@@ -17,6 +17,8 @@ import streetLampsFragment from './StreetLamps.frag.glsl?raw';
 import { random as liveRandom, unitOf } from '@/random';
 import { loudness } from '@/audio/hearing';
 import { LampWash, WASH_SLOTS } from './lampWash';
+import { LAMP_MIST_ORDER, lampMistGeometry, lampMistMaterial } from './LampMist';
+import { LAMP_FIELD_SLOTS, STREET_LAMP_FIELD, drivesLampField } from './lampField';
 
 interface StreetLampsOptions {
   lamps: readonly { at: Vec2; yaw: number; design?: LampDesign }[];
@@ -80,6 +82,8 @@ interface LampSlot {
   poolAt: number;
   halo: THREE.InstancedMesh | null;
   haloAt: number;
+  mist: THREE.InstancedMesh;
+  mistAt: number;
 }
 
 /**
@@ -136,6 +140,10 @@ export class StreetLamps extends THREE.Group implements Furniture, Updatable, Oc
   private fresh = true;
   private readonly tint = new THREE.Color();
   private readonly haloTint = new THREE.Color();
+  /** How thick the air is round the lamps at night (fog, rain, falling snow): their cones and glows (`LampMist`). */
+  private readonly mist = { value: 0 };
+  private readonly mistMeshes: THREE.InstancedMesh[] = [];
+  private readonly fieldAt = new THREE.Vector3();
 
   constructor(private readonly dayNight: DayNight, private readonly options: StreetLampsOptions) {
     super();
@@ -169,6 +177,8 @@ export class StreetLamps extends THREE.Group implements Furniture, Updatable, Oc
     };
     const poolGeometry = new THREE.PlaneGeometry(2, 2).rotateX(-Math.PI / 2).translate(0, GROUND.lampPool.lift, 0);
     const haloGeometry = new THREE.PlaneGeometry(1, 1);
+    const mistGeometry = lampMistGeometry();
+    const mistMaterial = lampMistMaterial(this.mist);
 
     // Group the lamps by stretch and by kind: one mesh of poles and one of lenses per group, one of pools (and halos) per stretch.
     const white = new THREE.Color(1, 1, 1);
@@ -184,6 +194,12 @@ export class StreetLamps extends THREE.Group implements Furniture, Updatable, Oc
       pool.renderOrder = RENDER_ORDER.groundGlow;
       const halo = haloMaterial ? this.instanced(haloGeometry, haloMaterial, members.length) : null;
       if (halo) halo.renderOrder = RENDER_ORDER.sheen;
+      // Shaped round the head in its vertex shader (the instance is the head, not the quad): never culled by its box.
+      const mist = this.instanced(mistGeometry, mistMaterial, members.length);
+      mist.renderOrder = LAMP_MIST_ORDER;
+      mist.frustumCulled = false;
+      mist.visible = false;
+      this.mistMeshes.push(mist);
       for (const design of Object.keys(LAMP_DESIGNS) as LampDesign[]) {
         const ofKind = members.filter((i) => designOf(i) === design);
         if (ofKind.length === 0) continue;
@@ -197,7 +213,7 @@ export class StreetLamps extends THREE.Group implements Furniture, Updatable, Oc
           poles.setMatrixAt(n, m);
           lens.setMatrixAt(n, m);
           lens.setColorAt(n, white);
-          this.slots[i] = { lens, lensAt: n, pool, poolAt: members.indexOf(i), halo, haloAt: members.indexOf(i) };
+          this.slots[i] = { lens, lensAt: n, pool, poolAt: members.indexOf(i), halo, haloAt: members.indexOf(i), mist, mistAt: members.indexOf(i) };
         });
       }
       members.forEach((i, n) => {
@@ -210,6 +226,9 @@ export class StreetLamps extends THREE.Group implements Furniture, Updatable, Oc
           halo.setMatrixAt(n, m.makeScale(d.halo, d.halo, d.halo).setPosition(hx, lensY(designOf(i)), hz));
           halo.setColorAt(n, new THREE.Color(0, 0, 0));
         }
+        // The mist's cone: from the lens down to the ground, its foot as wide as the pool.
+        mist.setMatrixAt(n, m.makeScale(d.pool * 0.55, lensY(designOf(i)), 1).setPosition(hx, lensY(designOf(i)), hz));
+        mist.setColorAt(n, new THREE.Color(0, 0, 0));
       });
     }
     for (const mesh of this.meshes) {
@@ -272,6 +291,9 @@ export class StreetLamps extends THREE.Group implements Furniture, Updatable, Oc
     const nightness = nightnessOf(s);
     const night = THREE.MathUtils.smoothstep(nightness, 0.25, 0.6);
     this.pools.opacity = 0.55 * (1 - 0.5 * s.snowCover);
+    // The air round the lamps: fog most, then falling snow, then rain; only once they are lit.
+    this.mist.value = night * Math.min(1.4, 1.1 * s.fog + 0.45 * s.rain + 0.6 * s.snow);
+    for (const mesh of this.mistMeshes) mesh.visible = this.mist.value > 0.01;
     this.stutter(dt, night);
     this.warm(dt, nightness, s.fog);
     // A light leaving its lamp fades out over `HANDOVER`, moves (unseen, at 0) and fades in under the new one.
@@ -300,6 +322,7 @@ export class StreetLamps extends THREE.Group implements Furniture, Updatable, Oc
 
   /** The wash's slots: the lamps after the real lights' (nearest first, as `choose` last sorted them), world space. */
   private feedWash(): void {
+    this.feedField();
     const slots = this.wash.uniforms.lampWash.value;
     strikeColour(1, WARM, this.wash.uniforms.lampWashColor.value);
     for (let k = 0; k < WASH_SLOTS; k++) {
@@ -312,6 +335,23 @@ export class StreetLamps extends THREE.Group implements Furniture, Updatable, Oc
       this.localToWorld(this.washAt.copy(this.spots[lamp]!));
       const level = lampLevel(this.lampWarm[lamp]!) * (lamp === this.flickering ? this.flicker : 1);
       slot.set(this.washAt.x, this.washAt.y, this.washAt.z, level);
+    }
+  }
+
+  /** The rain's lamps (`STREET_LAMP_FIELD`): the nearest few, real lights' included, world space (one writer a frame). */
+  private feedField(): void {
+    if (!drivesLampField(this)) return;
+    const slots = STREET_LAMP_FIELD.lampField.value;
+    strikeColour(1, WARM, STREET_LAMP_FIELD.lampFieldColor.value);
+    for (let k = 0; k < LAMP_FIELD_SLOTS; k++) {
+      const lamp = this.order[k];
+      const slot = slots[k]!;
+      if (lamp === undefined) {
+        slot.w = 0;
+        continue;
+      }
+      this.localToWorld(this.fieldAt.copy(this.headPoints[lamp]!));
+      slot.set(this.fieldAt.x, this.fieldAt.y, this.fieldAt.z, lampLevel(this.lampWarm[lamp]!) * (lamp === this.flickering ? this.flicker : 1));
     }
   }
 
@@ -390,6 +430,7 @@ export class StreetLamps extends THREE.Group implements Furniture, Updatable, Oc
       strikeColour(after, WHITE, this.tint).multiplyScalar(level);
       slot.pool.setColorAt(slot.poolAt, this.tint);
       if (slot.halo) slot.halo.setColorAt(slot.haloAt, this.haloTint.copy(this.tint).multiplyScalar(halo));
+      slot.mist.setColorAt(slot.mistAt, this.tint);
       // The head: the lens by day, glowing as the lamp warms.
       const day = HEAD_DAY / HEAD_LIT;
       this.tint.multiplyScalar(1 - day).addScalar(day);

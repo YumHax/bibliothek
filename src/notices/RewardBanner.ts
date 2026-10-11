@@ -2,6 +2,7 @@ import { reduceMotion } from '@/settings/motion';
 import { moneyChips } from './chips';
 import { playNoticeSound } from '@/audio/noticeSounds';
 import { readMs } from './readingTime';
+import { closeOnPress, dismissHint, followDismissHints } from './dismissHint';
 import type { RewardNotice } from './types';
 
 const MIN_MS = 3200;
@@ -14,7 +15,8 @@ const QUEUE_MAX = 4;
 /**
  * THE REWARD: something gained, in the middle of the screen, big: the title in the display font,
  * a line under it, the coins and tickets as chips (`chips`), and a fanfare. One at a time; the rest queue,
- * so two rewards in a row are both seen. A big one (a milestone, a prize, a tournament) has rays.
+ * so two rewards in a row are both seen. A big one (a milestone, a prize, a tournament) has rays. Put away like a card
+ * (docs/notices.md): the pill at its foot says how ("Close" and the key), a click or a tap closes it too.
  */
 export class RewardBanner {
   private readonly root: HTMLDivElement;
@@ -30,6 +32,7 @@ export class RewardBanner {
     this.root.setAttribute('role', 'status');
     this.root.setAttribute('aria-live', 'polite');
     container.appendChild(this.root);
+    followDismissHints(this.root);
   }
 
   show(reward: RewardNotice): void {
@@ -97,6 +100,13 @@ export class RewardBanner {
     }
     const chips = moneyChips(reward.coins, reward.tickets, 'reward__chips');
     if (chips) el.appendChild(chips);
+    const foot = document.createElement('div');
+    foot.className = 'notice-foot';
+    foot.appendChild(dismissHint('close'));
+    el.appendChild(foot);
+    closeOnPress(el, () => {
+      if (this.current === el) this.left = 0;
+    });
     this.root.appendChild(el);
     this.current = el;
     this.left = Math.max(MIN_MS, readMs(`${reward.title} ${reward.detail ?? ''}`) + 600) + (reward.big ? BIG_EXTRA_MS : 0);

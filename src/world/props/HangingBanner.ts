@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { createCanvas, toTexture } from '@/covers/generated/canvasUtils';
+import { createCanvas, fitFontSize, toTexture } from '@/covers/generated/canvasUtils';
 import { cylinderMesh } from '../meshUtils';
 import { Prop } from './Prop';
 import { PROUD } from './joinery';
@@ -84,11 +84,14 @@ function paintBanner(options: HangingBannerOptions, width: number, height: numbe
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
   ctx.fillStyle = hex(options.ink ?? 0xffe23a);
-  ctx.font = `900 ${Math.round(H * 0.42)}px "Arial Black", Impact, sans-serif`;
-  ctx.fillText(options.title ?? 'NEW!', W / 2, H * (options.line ? 0.4 : 0.5));
+  // Inside the speed stripes at either end.
+  const room = Math.max(W * 0.5, W - 2 * 110);
+  const title = options.title ?? 'NEW!';
+  fitFontSize(ctx, title, room, Math.round(H * 0.42), Math.round(H * 0.2), '"Arial Black", Impact, sans-serif', '900');
+  ctx.fillText(title, W / 2, H * (options.line ? 0.4 : 0.5));
   if (options.line) {
     ctx.fillStyle = '#ffffff';
-    ctx.font = `bold ${Math.round(H * 0.16)}px sans-serif`;
+    fitFontSize(ctx, options.line, room, Math.round(H * 0.16), Math.round(H * 0.1), 'sans-serif');
     ctx.fillText(options.line, W / 2, H * 0.78);
   }
   return toTexture(canvas, 'facing');

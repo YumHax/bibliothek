@@ -26,6 +26,7 @@ import { BEZEL_BORDER, COIN_LAMP, DEPTH, FRONT_Z, SCREEN_HEIGHT, SCREEN_Y, SCREE
 import { HoverGlint } from '../props/hoverGlint';
 import { PooledLight } from '../lighting/LightPool';
 import { random } from '@/random';
+import { playExtras } from './games/runGoals';
 
 interface ArcadeCabinetOptions {
   /** Colour of the side panels. */
@@ -70,6 +71,9 @@ const STAND_DISTANCE = 0.6;
 /** How well a regular plays, and how long they wait between two games. */
 const REGULAR_SKILL = 0.65;
 const REGULAR_PAUSE = 2.5;
+/** Redraws of the initials (their letter blinks) and of an end card done counting (its lines blink at 4 Hz), a second. */
+const INITIALS_FPS = 12;
+const COUNTED_FPS = 8;
 /** The ticket slot on the base's front. */
 const SLOT = new THREE.Vector3(0.2, 0.45, -0.02 + DEPTH / 2);
 
@@ -140,6 +144,13 @@ export class ArcadeCabinet extends RunMachine implements Furniture, Interactable
   /** The screen glow's breathing while a game runs, on the machine's time (seconds ticked), not the wall clock's. */
   private pulse = 0;
   private partnerName: string | null = null;
+  /** How well the regular at the controls plays (theirs, `occupy`). */
+  private regularSkill = REGULAR_SKILL;
+  /** Seconds since the initials or the counted end card were last drawn. */
+  private cardClock = 1;
+  /** Held still: seconds of it, and the PAUSED blink last drawn. */
+  private pausedClock = 0;
+  private pausedPhase = -1;
 
   constructor(game: ArcadeGame, input: Input, options: ArcadeCabinetOptions) {
     super();
@@ -153,7 +164,7 @@ export class ArcadeCabinet extends RunMachine implements Furniture, Interactable
     this.lean = options.attachment?.lean ?? 0.12;
     const twoPlayer = typeof game.setOpponent === 'function';
 
-    const { body, marquee, marqueeMesh, coinLamps } = buildCabinetBody(this, { color, glow: glowColor, wear: options.wear ?? 0.5, title: game.title, hint: game.hint, twoPlayer });
+    const { body, marquee, marqueeMesh, coinLamps } = buildCabinetBody(this, { color, glow: glowColor, wear: options.wear ?? 0.5, title: game.title, hint: () => game.hint, twoPlayer });
     this.body = body;
     this.marquee = marquee;
     this.coinLamps = coinLamps;
@@ -161,12 +172,13 @@ export class ArcadeCabinet extends RunMachine implements Furniture, Interactable
     this.controls = new CabinetControls(this, twoPlayer);
     this.glint = HoverGlint.of(...this.controls.grips);
     const price = (): { free: boolean; text: string } => ({ free: this.run.free, text: this.run.priceText() });
-    const info = { scores: options.scores, pointsPerTicket: this.pointsPerTicket, price, accent: glowColor,...(options.payout === 'none' ? { home: true } : {}), ...(options.medals ? { medals: options.medals } : {}), ...(options.challenge ? { challenge: options.challenge } : {}) };
+    const info = { scores: options.scores, price, accent: glowColor, ...(options.payout === 'none' ? { home: true } : {}), ...(options.medals ? { medals: options.medals } : {}), ...(options.challenge ? { challenge: options.challenge } : {}) };
     this.screens = new CabinetScreens(game, info, options.listener, this);
     const { screen } = this.screens;
     this.add(screen);
     // The medal lamps on the speaker board between the marquee and the screen.
-    this.medalRow = options.medals ? new MedalRow(options.medals, game.id) : null;
+    // A medal won there and then: the lamp flashes and the cabinet plays its win sting.
+    this.medalRow = options.medals ? new MedalRow(options.medals, game.id, () => this.speaker.play('win')) : null;
     if (this.medalRow) {
       this.medalRow.position.set(0, (SCREEN_Y + SCREEN_HEIGHT / 2 + BEZEL_BORDER + TOTAL_H - 0.18) / 2 + 0.01, FRONT_Z + 0.002);
       this.add(this.medalRow);
@@ -237,6 +249,7 @@ export class ArcadeCabinet extends RunMachine implements Furniture, Interactable
           this.partnerName = name;
           this.game.setOpponent?.(name ?? 'CPU', name ? 0.55 : 0.7);
         },
+        tally: () => (this.game.tally ? { ...this.game.tally } : null),
       };
       this.game.setOpponent?.('CPU', 0.7);
     }
@@ -249,10 +262,12 @@ export class ArcadeCabinet extends RunMachine implements Furniture, Interactable
 
   /** Starts a paid play (recorded, when the game can replay); `onOver` is told the result once. */
   start(onOver: (result: ArcadeResult) => void): void {
+    const extras = playExtras(this.game.id, this.options.scores, this.options.medals, !this.run.free && this.pointsPerTicket > 0);
+    this.attract.leave();
     this.run.start(onOver);
     this.coinFlare = 1;
     const seed = Math.floor(random() * 0x100000000);
-    this.runner.reset({ best: this.options.scores.bestOf(this.game.id), pointsPerTicket: this.pointsPerTicket, seed }, this.game.demoable !== false);
+    this.runner.reset({ best: this.options.scores.bestOf(this.game.id), pointsPerTicket: this.pointsPerTicket, seed, ...extras }, this.game.demoable !== false);
   }
 
   /** The player walked away: a running game is lost without payout; initials half-entered are signed as they stand. */
@@ -262,8 +277,10 @@ export class ArcadeCabinet extends RunMachine implements Furniture, Interactable
     this.attract.enter();
   }
 
-  occupy(performer?: Performer): boolean {
+  occupy(performer?: Performer, skill = REGULAR_SKILL): boolean {
     if (this.game.demoable === false || !this.run.occupy()) return false;
+    this.attract.leave();
+    this.regularSkill = skill;
     this.speaker.play('coin');
     this.resetDemo();
     this.options.attachment?.perform?.(performer ?? null);
@@ -323,9 +340,18 @@ export class ArcadeCabinet extends RunMachine implements Furniture, Interactable
 
   update(dt: number): void {
     this.speaker.follow();
-    // The pointer went free mid-play: the game holds still, its frame on the glass, until it is locked again.
-    if (this.run.paused) return;
+    // The pointer went free mid-play: the game holds still, PAUSED blinking over its frame, until it is locked again.
+    if (this.run.paused) {
+      this.pausedClock += dt;
+      const phase = Math.floor(this.pausedClock * 2);
+      if (phase !== this.pausedPhase) this.screens.drawPaused(phase);
+      this.pausedPhase = phase;
+      return;
+    }
+    this.pausedClock = 0;
+    this.pausedPhase = -1;
     this.strip.update(dt);
+    this.medalRow?.update(dt);
     let controls = this.run.update(dt);
     let poolLevel = 0.55;
     this.pulse += dt;
@@ -342,11 +368,12 @@ export class ArcadeCabinet extends RunMachine implements Furniture, Interactable
       case 'initials':
         // The gun stays where it pointed last.
         if (this.game.gun) controls = { ...controls, aim: this.frameAim };
-        this.screens.drawInitials(this.run.entry);
+        if (this.cardDue(dt, INITIALS_FPS)) this.screens.drawInitials(this.run.entry);
         poolLevel = 0.8;
         break;
       case 'over':
-        this.screens.drawGameOver(this.run);
+        // Every frame while it counts; once counted only its blinks change.
+        if (!this.run.countDone || this.cardDue(dt, COUNTED_FPS)) this.screens.drawGameOver(this.run);
         poolLevel = 0.75;
         break;
       case 'demo':
@@ -373,6 +400,8 @@ export class ArcadeCabinet extends RunMachine implements Furniture, Interactable
   }
 
   dispose(): void {
+    this.attract.leave();
+    this.run.dispose();
     this.speaker.dispose();
     this.medalRow?.dispose();
     this.options.attachment?.dispose?.();
@@ -385,11 +414,19 @@ export class ArcadeCabinet extends RunMachine implements Furniture, Interactable
       this.run.regularResult(this.game.score);
       if (this.run.regularPause(dt, REGULAR_PAUSE)) this.resetDemo();
     } else {
-      controls = this.runner.step(dt, () => this.game.autopilot(REGULAR_SKILL));
+      controls = this.runner.step(dt, () => this.game.autopilot(this.regularSkill));
       this.speaker.playAll(this.game.takeSounds());
     }
     this.screens.paintGame(dt);
     return controls;
+  }
+
+  /** Whether the initials or the counted end card are due a redraw at `fps` (they only blink: no need for every frame). */
+  private cardDue(dt: number, fps: number): boolean {
+    this.cardClock += dt;
+    if (this.cardClock < 1 / fps) return false;
+    this.cardClock = 0;
+    return true;
   }
 
   private resetDemo(): void {

@@ -70,6 +70,8 @@ export class ProgramPlay implements KeyRoute {
 
   onKey(code: string): boolean {
     if (!this.holding) return false;
+    // X is no button of the pad: it goes on to `NoticeDismiss`, a banner or a card closed without putting the pad down.
+    if (isAction(code, 'dismissNotice')) return false;
     if (isAction(code, 'walkAway')) {
       if (this.arming.press('putDown')) this.leave();
       else this.host.react(`${actionKeyLabel('walkAway')} again to put the pad down.`);

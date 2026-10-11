@@ -5,7 +5,7 @@ import { Walker } from '../people/Walker';
 import { childNineLook, felixLook, gaspardLook, memeThenLook } from './familyLooks';
 import { GRANDMA_FLAT_PLAN as PLAN } from './grandmaFlatPlan';
 import { ColdSupper } from './memoryProps';
-import { beats, hideNamed, holdHandheld, tableTop, turnedTo, type HeldHandheld } from './memoryStage';
+import { backInTheRoom, beats, hideNamed, holdHandheld, tableTop, turnedTo, type HeldHandheld } from './memoryStage';
 import type { Present } from './albumWiring';
 
 /** Where a seated head is at the table (m over the floor), and in the armchair (the child's). */
@@ -28,8 +28,9 @@ function childTenLook(): PersonLook {
  * THE ROW (`MEMORIES` row, docs/story.md "Mémé"): Mémé's dining room on a Sunday evening in 1999, the supper gone
  * cold. Gaspard says the cartridges are money asleep; Félix stands up and says they are the kid's; the child of ten
  * in the armchair, Game Boy up, hears it all without looking up, then does; Mémé between them, eyes on her plate.
- * One scene in her flat, the curtains drawn and the lamp on; the score in a minor key. Back in the room the player
- * stands by the table, turned to her.
+ * One scene in her flat, the curtains drawn and the lamp on; the score in a minor key. The film waits on the player
+ * there (its cue): the child looks up at Félix if the player does, else keeps their eyes on the game. Back in the room
+ * the player stands by the table, turned to her, and she is shaken before she speaks.
  */
 export function rowReel(present: Present): MemoryReel {
   const plan = PLAN.row;
@@ -81,6 +82,15 @@ export function rowReel(present: Present): MemoryReel {
           child.sit(PLAN.armchair.yaw, PLAN.seatHeight, 'play', gameBoy.screen, gameBoy.hands);
           cast = { gaspard, felix, felixUp, meme, child, childHead: set.world(ax, ARMCHAIR_HEAD, az), felixHead: set.world(fx, STANDING_HEAD, fz) };
         },
+        cues: [
+          {
+            at: plan.lookUpCueAt,
+            prompt: 'Look up from the game',
+            wait: 4.5,
+            // Looked up, the child's eyes go to Félix on his feet; let pass, they never leave the screen.
+            done: (byPlayer) => (byPlayer ? beat.now('up', () => cast?.child.setFocus(cast.felixHead)) : beat.skip('up')),
+          },
+        ],
         beat: (t) => {
           gameBoy?.tick(Math.max(0, t - last));
           last = t;
@@ -113,10 +123,6 @@ export function rowReel(present: Present): MemoryReel {
       },
     ],
     after: { zone: 'grandmaFlat', at: after, yaw: turnedTo(present, after) },
-    returned: () => {
-      present.meme.setPresent(true);
-      present.reseat();
-      present.meme.speak(present.afterLine);
-    },
+    returned: () => backInTheRoom(present, 'hard'),
   };
 }

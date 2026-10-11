@@ -1,5 +1,6 @@
 import type { ArmAngles } from '../poses';
 import { smooth } from '@/math/scalar';
+import type { TouchSpot } from './touch';
 
 /*
  * Gestures: short keyframed moves, pose to pose, as an animator blocks them. A key sets, at a
@@ -17,10 +18,30 @@ type ArmKey = readonly [ux: number, uz: number, lx: number, ly: number, lz?: num
 
 export interface FaceKey {
   smile?: number;
+  /** One corner of the mouth up, the person's own side (a half smile, scepticism, irony). */
+  smirk?: number;
   browsUp?: number;
   frown?: number;
   squint?: number;
   jaw?: number;
+  /** The brows' inner ends up, the corners of the mouth down. */
+  sad?: number;
+  /** The lips pressed thin. */
+  press?: number;
+  /** The nose wrinkled (distaste). */
+  sneer?: number;
+  /** The eyes wide open (surprise, alarm). */
+  wide?: number;
+  /** The cheeks blown out (a long breath out, "phew"). */
+  puff?: number;
+}
+
+/** Every channel of a face, in one order (the gesture frame fills them, the face reads them). */
+export const FACE_CHANNELS = ['smile', 'smirk', 'browsUp', 'frown', 'squint', 'jaw', 'sad', 'press', 'sneer', 'wide', 'puff'] as const satisfies readonly (keyof FaceKey)[];
+
+/** A face with every channel at 0. */
+export function blankFace(): Required<FaceKey> {
+  return { smile: 0, smirk: 0, browsUp: 0, frown: 0, squint: 0, jaw: 0, sad: 0, press: 0, sneer: 0, wide: 0, puff: 0 };
 }
 
 interface Key {
@@ -44,6 +65,10 @@ interface Key {
   /** Head pitch (down +), yaw, roll, on top of the gaze. */
   head?: readonly [number, number, number];
   face?: FaceKey;
+  /** How far the hands are on their `touches` spots (0 the arm's own goal .. 1 on the body), both or each. */
+  touch?: number | readonly [number, number];
+  /** The touching hand rubbed across its spot (metres, outwards for each side). */
+  rub?: number;
 }
 
 interface Gesture {
@@ -52,6 +77,8 @@ interface Gesture {
   readonly keys: readonly Key[];
   /** The eyes follow the head's own turn rather than the gaze (looking at a watch, round the room). */
   readonly ownGaze?: boolean;
+  /** Where on the body each hand goes (`touch` says how far, the arm solved to it): the -x hand, the +x hand. */
+  readonly touches?: { readonly l?: TouchSpot; readonly r?: TouchSpot };
 }
 
 const POCKET: ArmKey = [0.1, 0.02, -0.5, 0, -0.35, 0, 0, 0.5];
@@ -81,8 +108,8 @@ export const GESTURES = {
   handsOnHead: {
     length: 1.9,
     keys: [
-      { at: 0.28, both: [-2.35, 0.85, -2.2, -0.35, 0, 0.2, 0, -0.2], spine: -0.1, head: [-0.18, 0, 0], face: { browsUp: 1, jaw: 0.45 } },
-      { at: 0.8, both: [-2.4, 0.85, -2.25, -0.35, 0, 0.2, 0, -0.1], spine: -0.12, head: [-0.12, 0.12, 0.05], face: { browsUp: 0.8, frown: 0.3, jaw: 0.3 } },
+      { at: 0.28, both: [-2.35, 0.85, -2.2, -0.35, 0, 0.2, 0, -0.2], spine: -0.1, head: [-0.18, 0, 0], face: { browsUp: 1, jaw: 0.45, wide: 0.9 } },
+      { at: 0.8, both: [-2.4, 0.85, -2.25, -0.35, 0, 0.2, 0, -0.1], spine: -0.12, head: [-0.12, 0.12, 0.05], face: { browsUp: 0.8, frown: 0.3, jaw: 0.3, wide: 0.5 } },
       { at: 1.35, both: [-2.35, 0.85, -2.2, -0.35, 0, 0.2, 0, -0.2], spine: -0.06, head: [0.05, -0.1, 0], face: { browsUp: 0.5, frown: 0.4 } },
     ],
   },
@@ -91,8 +118,8 @@ export const GESTURES = {
     length: 1.8,
     keys: [
       { at: 0.32, r: [-1.15, 0.1, -2.45, -0.55, 0, 0.35, 0.2, -0.3], head: [0.3, 0, 0.05], spine: 0.1, face: { frown: 0.8, squint: 0.8 } },
-      { at: 0.7, r: [-1.15, 0.1, -2.45, -0.55, 0, 0.35, 0.2, -0.3], head: [0.32, 0.1, 0.05], face: { frown: 0.8, squint: 1 } },
-      { at: 1.0, r: [-1.15, 0.1, -2.45, -0.55, 0, 0.35, 0.2, -0.3], head: [0.32, -0.1, 0.05], face: { frown: 0.7, squint: 1 } },
+      { at: 0.7, r: [-1.15, 0.1, -2.45, -0.55, 0, 0.35, 0.2, -0.3], head: [0.32, 0.1, 0.05], face: { frown: 0.8, squint: 1, press: 0.6 } },
+      { at: 1.0, r: [-1.15, 0.1, -2.45, -0.55, 0, 0.35, 0.2, -0.3], head: [0.32, -0.1, 0.05], face: { frown: 0.7, squint: 1, press: 0.5 } },
       { at: 1.3, r: [-1.1, 0.1, -2.4, -0.55, 0, 0.3, 0.2, -0.3], head: [0.25, 0, 0], face: { frown: 0.5, squint: 0.6 } },
     ],
   },
@@ -101,8 +128,8 @@ export const GESTURES = {
     length: 1.1,
     keys: [
       { at: 0.15, head: [0.06, 0.28, 0], face: { frown: 0.8 } },
-      { at: 0.35, head: [0.08, -0.28, 0], face: { frown: 0.9 } },
-      { at: 0.55, head: [0.1, 0.22, 0], face: { frown: 0.9 } },
+      { at: 0.35, head: [0.08, -0.28, 0], face: { frown: 0.9, press: 0.5 } },
+      { at: 0.55, head: [0.1, 0.22, 0], face: { frown: 0.9, press: 0.5 } },
       { at: 0.75, head: [0.1, -0.16, 0], face: { frown: 0.7 } },
     ],
   },
@@ -110,8 +137,8 @@ export const GESTURES = {
   shrug: {
     length: 1.4,
     keys: [
-      { at: 0.3, both: [-0.2, 0.35, -1.35, 0.45, 0, -0.2, 1.3, -0.6], shrug: 0.14, head: [0, 0, 0.12], face: { browsUp: 0.8, frown: 0.2 } },
-      { at: 0.75, both: [-0.2, 0.35, -1.35, 0.45, 0, -0.2, 1.3, -0.6], shrug: 0.12, head: [0.02, 0, 0.14], face: { browsUp: 0.7 } },
+      { at: 0.3, both: [-0.2, 0.35, -1.35, 0.45, 0, -0.2, 1.3, -0.6], shrug: 0.14, head: [0, 0, 0.12], face: { browsUp: 0.8, frown: 0.2, smirk: 0.6, press: 0.3 } },
+      { at: 0.75, both: [-0.2, 0.35, -1.35, 0.45, 0, -0.2, 1.3, -0.6], shrug: 0.12, head: [0.02, 0, 0.14], face: { browsUp: 0.7, smirk: 0.5 } },
     ],
   },
   /** Four claps in front of the chest. */
@@ -134,15 +161,15 @@ export const GESTURES = {
     keys: [
       { at: 0.22, r: [-1.1, 0.15, -1.75, -0.2, 0, 0, 0, 1], spine: -0.04, face: { frown: 1, squint: 0.4 } },
       { at: 0.36, r: [-0.75, 0.12, -0.55, -0.15, 0, -0.2, 0, 1], spine: 0.12, crouch: 0.06, face: { frown: 1, squint: 0.8, jaw: 0.3 } },
-      { at: 0.62, r: [-0.72, 0.12, -0.6, -0.15, 0, -0.2, 0, 1], spine: 0.1, face: { frown: 0.8 } },
+      { at: 0.62, r: [-0.72, 0.12, -0.6, -0.15, 0, -0.2, 0, 1], spine: 0.1, face: { frown: 0.8, press: 0.6 } },
     ],
   },
   /** A flinch: the head back and aside, the shoulders up (hands stay where they are). */
   wince: {
     length: 0.7,
     keys: [
-      { at: 0.1, spine: -0.07, head: [-0.12, 0.12, 0.06], shrug: 0.1, face: { squint: 1, frown: 0.7 } },
-      { at: 0.3, spine: -0.03, head: [-0.04, 0.05, 0.02], shrug: 0.04, face: { squint: 0.5, frown: 0.5 } },
+      { at: 0.1, spine: -0.07, head: [-0.12, 0.12, 0.06], shrug: 0.1, face: { squint: 1, frown: 0.7, sneer: 0.6 } },
+      { at: 0.3, spine: -0.03, head: [-0.04, 0.05, 0.02], shrug: 0.04, face: { squint: 0.5, frown: 0.5, sneer: 0.3 } },
     ],
   },
   /** A breath in and a long breath out, the shoulders dropping, eyes down: the game is over. */
@@ -150,8 +177,8 @@ export const GESTURES = {
     length: 2.2,
     keys: [
       { at: 0.5, shrug: 0.14, spine: -0.07, head: [-0.08, 0, 0], face: { browsUp: 0.3 } },
-      { at: 1.2, shrug: -0.06, spine: 0.08, head: [0.25, 0, 0.06], face: { frown: 0.4, squint: 0.3 } },
-      { at: 1.7, shrug: -0.04, spine: 0.06, head: [0.2, 0, 0.04], face: { frown: 0.3 } },
+      { at: 1.2, shrug: -0.06, spine: 0.08, head: [0.25, 0, 0.06], face: { frown: 0.2, squint: 0.3, sad: 0.5, puff: 0.6 } },
+      { at: 1.7, shrug: -0.04, spine: 0.06, head: [0.2, 0, 0.04], face: { frown: 0.2, sad: 0.4 } },
     ],
   },
   /** Hands rubbed together: here we go. */
@@ -201,7 +228,7 @@ export const GESTURES = {
   coverMouth: {
     length: 1.5,
     keys: [
-      { at: 0.25, r: [-0.85, 0.04, -2.35, -0.55, 0, 0.3, 0.3, -0.3], spine: -0.05, face: { browsUp: 1, jaw: 0.3 } },
+      { at: 0.25, r: [-0.85, 0.04, -2.35, -0.55, 0, 0.3, 0.3, -0.3], spine: -0.05, face: { browsUp: 1, jaw: 0.3, wide: 1 } },
       { at: 0.95, r: [-0.85, 0.04, -2.35, -0.55, 0, 0.3, 0.3, -0.3], face: { browsUp: 0.6, frown: 0.3 } },
     ],
   },
@@ -293,6 +320,109 @@ export const GESTURES = {
       { at: 0.7, spine: -0.06, shrug: 0.02 },
     ],
   },
+  // --- Self-contact: a hand on the body (`touches`, the arm solved onto the spot) -----------------
+  /** The chin on the knuckles a while: thinking it over, listening. */
+  chinRest: {
+    length: 4.8,
+    touches: { r: 'chin' },
+    keys: [
+      { at: 0.8, touch: [0, 1], head: [0.06, 0, 0.05] },
+      { at: 3.8, touch: [0, 1], head: [0.08, 0, 0.07] },
+    ],
+  },
+  /** Fingers along the cheek and the jaw. */
+  touchCheek: {
+    length: 2.4,
+    touches: { r: 'cheek' },
+    keys: [
+      { at: 0.55, touch: [0, 1], head: [0.03, 0, 0.06] },
+      { at: 0.95, rub: 0.007 },
+      { at: 1.35, rub: -0.004 },
+      { at: 1.7, touch: [0, 1], rub: 0, head: [0.04, 0, 0.07] },
+    ],
+  },
+  /** A quick rub of the nose. */
+  rubNose: {
+    length: 1.5,
+    touches: { r: 'nose' },
+    keys: [
+      { at: 0.4, touch: [0, 1], head: [0.06, 0, 0] },
+      { at: 0.52, rub: 0.007 },
+      { at: 0.64, rub: -0.006 },
+      { at: 0.76, rub: 0.005 },
+      { at: 0.9, touch: [0, 1], rub: 0, head: [0.05, 0, 0] },
+    ],
+  },
+  /** A scratch at the back of the neck, the head bowed into it. */
+  scratchNape: {
+    length: 2.5,
+    touches: { r: 'nape' },
+    keys: [
+      { at: 0.6, touch: [0, 1], head: [0.16, 0, 0.06], face: { squint: 0.2 } },
+      { at: 0.8, rub: 0.012 },
+      { at: 1.0, rub: -0.008 },
+      { at: 1.2, rub: 0.01 },
+      { at: 1.4, rub: -0.006 },
+      { at: 1.7, touch: [0, 1], rub: 0, head: [0.12, 0, 0.04] },
+    ],
+  },
+  /** The hands joined in front, a while: waiting, listening. */
+  claspHands: {
+    length: 6.5,
+    touches: { l: 'clasp', r: 'clasp' },
+    keys: [
+      { at: 0.8, touch: 1 },
+      { at: 5.6, touch: 1 },
+    ],
+  },
+  /** One hand in the front pocket a while. */
+  pocketHand: {
+    length: 7,
+    keys: [
+      { at: 0.7, r: POCKET },
+      { at: 6.2, r: POCKET },
+    ],
+  },
+  /** A sip from what is in the hand (a cup): up to the lips, the head back a little, down again. */
+  sip: {
+    length: 2.4,
+    touches: { r: 'lips' },
+    keys: [
+      { at: 0.6, touch: [0, 1], head: [0.04, 0, 0] },
+      { at: 1.0, touch: [0, 1], head: [-0.16, 0, 0], face: { press: 0.2, squint: 0.15 } },
+      { at: 1.5, touch: [0, 1], head: [-0.05, 0, 0] },
+      { at: 1.9, touch: [0, 0.3], face: { smile: 0.15 } },
+    ],
+  },
+  /** A draw on a cigarette, then the smoke let out of the side of the mouth. */
+  smokePuff: {
+    length: 3,
+    touches: { r: 'lips' },
+    keys: [
+      { at: 0.6, touch: [0, 1], face: { press: 0.4, squint: 0.3 } },
+      { at: 1.2, touch: [0, 1], shrug: 0.05, face: { press: 0.5, squint: 0.4 } },
+      { at: 1.6, touch: [0, 0.2], head: [-0.08, 0.12, 0], face: { puff: 0.5, jaw: 0.15, smirk: 0.4 } },
+      { at: 2.3, touch: [0, 0], head: [-0.03, 0.05, 0], face: { jaw: 0.08 } },
+    ],
+  },
+  /** A photo: the camera up to the eye in both hands, held still a moment, then down to look at it. */
+  takePhoto: {
+    length: 3.2,
+    keys: [
+      { at: 0.5, both: [-1.2, 0.12, -1.9, -0.55, 0, 0.25, 0.35, 0.4], head: [0.02, 0, 0], face: { squint: 0.4 } },
+      { at: 1.6, both: [-1.2, 0.12, -1.92, -0.55, 0, 0.25, 0.35, 0.45], head: [0.02, 0, 0], face: { squint: 0.6 } },
+      { at: 2.3, r: [-0.7, 0.1, -1.7, -0.4, 0, 0.2, 0.2, 0.5], head: [0.35, 0, 0], face: { smile: 0.5 } },
+    ],
+    ownGaze: true,
+  },
+  /** The head a little on one side, the brows up: listening. */
+  listenTilt: {
+    length: 2.2,
+    keys: [
+      { at: 0.6, head: [0.03, 0.04, 0.1], face: { browsUp: 0.3, smile: 0.12 } },
+      { at: 1.5, head: [0.04, 0.03, 0.11], face: { browsUp: 0.2, smile: 0.1 } },
+    ],
+  },
 } satisfies Record<string, Gesture>;
 
 export type GestureName = keyof typeof GESTURES;
@@ -309,6 +439,14 @@ interface GestureFrame {
   head: [number, number, number];
   face: Required<FaceKey>;
   ownGaze: boolean;
+  /** Per hand (-x, +x): the spot on the body it goes to, how far (0..1), the rub across it (metres). */
+  touch: [TouchFrame, TouchFrame];
+}
+
+interface TouchFrame {
+  spot: TouchSpot | null;
+  weight: number;
+  rub: number;
 }
 
 /** A gesture under way: `sample` its frame at its own time; done once past its length. */
@@ -327,8 +465,12 @@ export class GesturePlayer {
     hips: 0,
     shrug: [0, 0],
     head: [0, 0, 0],
-    face: { smile: 0, browsUp: 0, frown: 0, squint: 0, jaw: 0 },
+    face: blankFace(),
     ownGaze: false,
+    touch: [
+      { spot: null, weight: 0, rub: 0 },
+      { spot: null, weight: 0, rub: 0 },
+    ],
   };
   private readonly armScratch: [ArmAngles, ArmAngles] = [blankArm(), blankArm()];
 
@@ -361,8 +503,12 @@ export class GesturePlayer {
       f.spine = f.twist = f.crouch = f.rise = f.hips = 0;
       f.shrug[0] = f.shrug[1] = 0;
       f.head[0] = f.head[1] = f.head[2] = 0;
-      f.face.smile = f.face.browsUp = f.face.frown = f.face.squint = f.face.jaw = 0;
+      for (const name of FACE_CHANNELS) f.face[name] = 0;
       f.ownGaze = false;
+      for (const touch of f.touch) {
+        touch.spot = null;
+        touch.weight = touch.rub = 0;
+      }
       return f;
     }
     const t = this.time;
@@ -377,15 +523,22 @@ export class GesturePlayer {
     f.shrug[0] = channel(keys, t, length, (k) => (k.shrug === undefined ? undefined : typeof k.shrug === 'number' ? k.shrug : k.shrug[0]));
     f.shrug[1] = channel(keys, t, length, (k) => (k.shrug === undefined ? undefined : typeof k.shrug === 'number' ? k.shrug : k.shrug[1]));
     for (let i = 0; i < 3; i++) f.head[i] = channel(keys, t, length, (k) => k.head?.[i]);
-    f.face.smile = channel(keys, t, length, (k) => k.face?.smile);
-    f.face.browsUp = channel(keys, t, length, (k) => k.face?.browsUp);
-    f.face.frown = channel(keys, t, length, (k) => k.face?.frown);
-    f.face.squint = channel(keys, t, length, (k) => k.face?.squint);
-    f.face.jaw = channel(keys, t, length, (k) => k.face?.jaw);
+    for (const name of FACE_CHANNELS) f.face[name] = faceChannel(keys, t, length, name);
     for (let side = 0; side < 2; side++) f.arms[side] = armAt(keys, t, side, this.armScratch[side]!);
+    const touches = this.gesture.touches;
+    for (let side = 0; side < 2; side++) {
+      const touch = f.touch[side]!;
+      touch.spot = (side ? touches?.r : touches?.l) ?? null;
+      touch.weight = touch.spot ? channel(keys, t, length, TOUCH_OF[side]!) : 0;
+      touch.rub = touch.spot ? channel(keys, t, length, rubOf) : 0;
+    }
     return f;
   }
 }
+
+/** A key's touch weight for the -x hand and the +x hand; its rub. */
+const TOUCH_OF = [(k: Key): number | undefined => (k.touch === undefined ? undefined : typeof k.touch === 'number' ? k.touch : k.touch[0]), (k: Key): number | undefined => (k.touch === undefined ? undefined : typeof k.touch === 'number' ? k.touch : k.touch[1])] as const;
+const rubOf = (k: Key): number | undefined => k.rub;
 
 function blankArm(): ArmAngles {
   return { ux: 0, uz: 0, lx: 0, ly: 0, lz: 0, wf: 0, tw: 0, curl: 0 };
@@ -397,6 +550,20 @@ function channel(keys: readonly Key[], t: number, length: number, read: (k: Key)
   let prev = 0;
   for (const k of keys) {
     const v = read(k);
+    if (v === undefined) continue;
+    if (t <= k.at) return prev + (v - prev) * smooth((t - prevAt) / Math.max(1e-3, k.at - prevAt));
+    prevAt = k.at;
+    prev = v;
+  }
+  return prev * (1 - smooth((t - prevAt) / Math.max(1e-3, length - prevAt)));
+}
+
+/** `channel` for one of the face's channels (no closure per frame and channel). */
+function faceChannel(keys: readonly Key[], t: number, length: number, name: keyof FaceKey): number {
+  let prevAt = 0;
+  let prev = 0;
+  for (const k of keys) {
+    const v = k.face?.[name];
     if (v === undefined) continue;
     if (t <= k.at) return prev + (v - prev) * smooth((t - prevAt) / Math.max(1e-3, k.at - prevAt));
     prevAt = k.at;

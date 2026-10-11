@@ -49,6 +49,8 @@ interface WatchedLeague {
   readonly playedToday: boolean;
   readonly streakDays: number;
   readonly pennants: number;
+  /** The regular's card's colour (null before the first). */
+  readonly card: { readonly tier: string | null };
   subscribe(cb: () => void): () => void;
 }
 
@@ -88,11 +90,14 @@ export function watchForJournal(journal: Journal, sources: JournalSources): () =
   if (league) {
     let played = league.playedToday;
     let pennants = league.pennants;
+    let tier = league.card.tier;
     stops.push(league.subscribe(() => {
       if (league.playedToday && !played) journal.note('arcade', league.streakDays >= 2 ? `Arcade, day ${league.streakDays} in a row` : 'Arcade', { weight: 'note' });
       if (league.pennants > pennants) journal.note('arcade', 'Won the week’s league: the pennant is home', { weight: 'headline' });
+      if (league.card.tier && league.card.tier !== tier) journal.note('arcade', `Arcade card: ${league.card.tier.toLowerCase()}`, { weight: 'line' });
       played = league.playedToday;
       pennants = league.pennants;
+      tier = league.card.tier;
     }));
   }
 

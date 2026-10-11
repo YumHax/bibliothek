@@ -12,6 +12,7 @@ import { CRUISE } from '../../city/traffic';
 import { LampMaterial } from './lampMaterial';
 import { WheelMaterial } from './wheelSpin';
 import { VEHICLES } from '../../city/vehicles';
+import type { Weekday } from '@/time/wakefulness';
 
 interface Common {
   traffic: StreetTraffic;
@@ -20,11 +21,31 @@ interface Common {
   route: readonly Vec2[];
   stopFor: number;
   collisions?: CollisionSet;
+  /** The day of the week (none: every day alike): the rounds keep to their days (`ROUND_DAYS`). */
+  weekday?: () => Weekday;
 }
+
+/**
+ * The days each round runs (Monday 0 .. Sunday 6), its first window then its later ones: the bakery's crates and the
+ * parcels Monday to Saturday morning, their afternoon rounds on weekdays only; the bins every morning but Sunday, the
+ * recycling on Mondays and Thursdays. Nothing on a Sunday.
+ */
+const ROUND_DAYS = {
+  crates: [[0, 1, 2, 3, 4, 5], [0, 1, 2, 3, 4]],
+  parcel: [[0, 1, 2, 3, 4, 5], [0, 1, 2, 3, 4]],
+  lorry: [[0, 1, 2, 3, 4, 5], [0, 3]],
+} as const satisfies Record<string, readonly (readonly Weekday[])[]>;
 
 /** Which of `windows` game hour `h` is inside ([from, to)), or -1. */
 function windowAt(h: number, windows: readonly (readonly [number, number])[]): number {
   return windows.findIndex(([from, to]) => h >= from && h < to);
+}
+
+/** Whether window `index`'s round runs on `weekday` (`days`: per window, the last for any further ones). */
+function runsOn(days: readonly (readonly Weekday[])[], index: number, weekday: Weekday | undefined): boolean {
+  if (weekday === undefined) return true;
+  const today = days[Math.min(index, days.length - 1)] ?? [];
+  return today.includes(weekday);
 }
 
 /** Splices a stop off the lane into a route's straight stretch along Front Street (like the bus's pull-in). */
@@ -53,14 +74,15 @@ interface DeliveryVanOptions extends Common {
 
 /** What each kind of delivery carries in, how many trips, the van's paint, its band's and the load's colour. */
 const CARGO = {
-  crates: { trips: 2, size: { w: 0.5, h: 0.32, d: 0.36 }, body: 0xeeeae2, band: 0xb8862f, load: 0x9a6a3a, y: 1.0, seed: 991 },
-  parcel: { trips: 1, size: { w: 0.42, h: 0.3, d: 0.32 }, body: 0x2f4a3a, band: 0xd9b44a, load: 0xb08a5a, y: 1.05, seed: 977 },
+  crates: { trips: 2, size: { w: 0.5, h: 0.32, d: 0.36 }, body: 0xeeeae2, band: 0xb8862f, load: 0x9a6a3a, seed: 991 },
+  parcel: { trips: 1, size: { w: 0.42, h: 0.3, d: 0.32 }, body: 0x2f4a3a, band: 0xd9b44a, load: 0xb08a5a, seed: 977 },
 } as const;
 
 /**
- * The bakery's morning delivery: a white panel van comes up the street during `hours`, double-
- * parks outside the bakery with its hazards blinking (solid while it stands, and an obstacle the
- * cars and bikes go round), opens its back doors, and the driver (`people/Walker`) carries a
+ * The bakery's morning delivery: a white panel van comes up the street during `hours` (on its days:
+ * `ROUND_DAYS`), double-parks outside the bakery half in the lane with its hazards blinking (solid
+ * while it stands, and an obstacle the cars swing out round once nothing comes the other way, the
+ * impatient ones tooting), opens its back doors, and the driver (`people/Walker`) carries a
  * couple of crates across the pavement into the shop, then drives off. Once per morning window
  * (a player arriving in the middle of it finds it already on its way).
  */
@@ -89,7 +111,7 @@ export class DeliveryVan extends ScriptedVehicle {
     this.lamps = new LampMaterial();
     const wheels = new WheelMaterial(false);
     this.lampFace = this.lamps;
-    this.wheelFace = { material: wheels, radius: VEHICLES.van.wheelRadius };
+    this.wheelFace = { material: wheels, radius: VEHICLES.van.wheelRadius, base: 3.15 };
     this.hazard = new THREE.MeshBasicMaterial({ color: 0x331800 });
     this.add(
       shade(new THREE.Mesh(g.body, snowCovered(new THREE.MeshStandardMaterial({ color: this.cargo.body, roughness: 0.35 })))),
@@ -128,7 +150,8 @@ export class DeliveryVan extends ScriptedVehicle {
     });
     const { w, h, d } = this.cargo.size;
     this.crate = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), paint(this.cargo.load, 0.85));
-    this.crate.position.set(0, this.cargo.y, 0.36);
+    // Hidden in the driver's tree between trips (so it goes with them), in their arms while carried.
+    this.crate.visible = false;
     this.driver.add(this.crate);
     this.driver.setPresent(false);
   }
@@ -140,7 +163,7 @@ export class DeliveryVan extends ScriptedVehicle {
 
   protected schedule(): void {
     const window = windowAt(this.dayNight.state.hours, this.windows);
-    if (window >= 0 && window !== this.lastWindow && !this.active) {
+    if (window >= 0 && window !== this.lastWindow && !this.active && runsOn(ROUND_DAYS[this.van.cargo ?? 'crates'], window, this.van.weekday?.())) {
       this.trips = 0;
       this.job = 'none';
       this.depart();
@@ -168,6 +191,8 @@ export class DeliveryVan extends ScriptedVehicle {
     this.blink = (this.blink + dt) % 0.9;
     if (standing && this.blink < 0.45) this.hazard.color.setRGB(2.4, 1.2, 0.1);
     else this.hazard.color.setRGB(0.2, 0.1, 0);
+    // Standing in the lane, its indicators blink with the hazards.
+    this.signalOverride = standing ? 'hazards' : null;
     this.doorsOpen = THREE.MathUtils.clamp(this.doorsOpen + ((standing && this.job !== 'done') || (standing && this.driver.isWalking) ? dt : -dt) / 0.9, 0, 1);
     for (const door of this.rearDoors) door.rotation.y = (door.userData.side as number) * 1.9 * this.doorsOpen;
     if (standing) this.work(dt);
@@ -190,19 +215,21 @@ export class DeliveryVan extends ScriptedVehicle {
         if (this.jobClock < 1.5 || this.doorsOpen < 1) return;
         this.driver.setPresent(true, rear);
         this.crate.visible = true;
+        this.driver.carry(this.crate, this.cargo.size);
         this.driver.walk([...way, door], () => {
           this.job = 'inside';
           this.jobClock = 0;
           this.driver.setPresent(false);
         });
-        this.driver.setPose('crossed');
         this.job = 'toDoor';
         return;
       case 'inside':
         if (this.jobClock < 3) return;
         this.trips++;
         this.driver.setPresent(true, door);
+        this.driver.carry(null);
         this.crate.visible = false;
+        this.driver.add(this.crate);
         this.driver.walk([...way].reverse().concat(rear), () => {
           this.jobClock = 0;
           if (this.trips >= this.cargo.trips) {
@@ -241,7 +268,7 @@ export class BinLorry extends ScriptedVehicle {
   private lastWindow = -1;
   private spin = 0;
 
-  constructor(private readonly dayNight: DayNight, lorry: BinLorryOptions) {
+  constructor(private readonly dayNight: DayNight, private readonly lorry: BinLorryOptions) {
     const bins = [...lorry.bins].sort((a, b) => a[0] - b[0]);
     // A stop on the lane level with each bin (in the order the lorry meets them, west to east).
     const lane = lorry.route.find(([x]) => x === 0)?.[1] ?? 1.6;
@@ -252,7 +279,7 @@ export class BinLorry extends ScriptedVehicle {
     this.lamps = new LampMaterial();
     const wheels = new WheelMaterial(false);
     this.lampFace = this.lamps;
-    this.wheelFace = { material: wheels, radius: VEHICLES.lorry.wheelRadius };
+    this.wheelFace = { material: wheels, radius: VEHICLES.lorry.wheelRadius, base: 6.6 };
     this.beacon = new THREE.MeshBasicMaterial({ color: 0x331800 });
     this.add(
       shade(new THREE.Mesh(g.body, snowCovered(new THREE.MeshStandardMaterial({ color: 0x3f7a4f, roughness: 0.45 })))),
@@ -269,7 +296,7 @@ export class BinLorry extends ScriptedVehicle {
 
   protected schedule(): void {
     const window = windowAt(this.dayNight.state.hours, this.windows);
-    if (window >= 0 && window !== this.lastWindow && !this.active) this.depart();
+    if (window >= 0 && window !== this.lastWindow && !this.active && runsOn(ROUND_DAYS.lorry, window, this.lorry.weekday?.())) this.depart();
     this.lastWindow = window;
   }
 

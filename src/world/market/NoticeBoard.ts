@@ -162,7 +162,8 @@ function paintCard(ctx: CanvasRenderingContext2D, card: NoticeCard, cx: number, 
   ctx.font = `${size}px ${HAND}`;
   const maxLines = Math.floor((h * 0.66) / (size * 1.25));
   const wrapped = card.lines.flatMap((line) => wrapLines(ctx, line, w * 0.86)).slice(0, maxLines);
-  wrapped.forEach((line, i) => ctx.fillText(line, 0, titleY + h * 0.2 + i * size * 1.25));
+  // A single word longer than the card is squeezed, not spilt.
+  wrapped.forEach((line, i) => ctx.fillText(line, 0, titleY + h * 0.2 + i * size * 1.25, w * 0.86));
   // The pin: a red head with a highlight and its shadow.
   ctx.fillStyle = 'rgba(0,0,0,0.35)';
   ctx.beginPath();

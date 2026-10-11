@@ -11,6 +11,7 @@ import { ZoneManager, PortalCuller } from '@/world/zone';
 import { StreetAhead } from '@/world/airlock/StreetAhead';
 import { ClosingTime } from '@/world/shop/ClosingTime';
 import { groundHeight } from '@/world/street/relief/ground';
+import { onWalkedGround } from '@/world/measures/street';
 import { WORLD_PLAN, inFlat, zonePlan } from '@/world/worldPlan';
 import type { ZoneId } from '@/world/zoneIds';
 import { bindBuilder } from '@/world/layout';
@@ -18,6 +19,21 @@ import type { BuildContext } from '@/world/buildContext';
 import type { Late } from './late';
 import type { Services } from './services';
 import type { GameWorld } from './world';
+
+/**
+ * Whether a world floor point (x, z) is the street's walked ground (`measures/street.onWalkedGround`, the works where
+ * they stand on today's market day), inside its zone's box or beyond it: the zone manager's claim and the remembered
+ * spot (`PositionMemory.walked`) read it.
+ */
+export function streetGround(world: GameWorld, gameDay: () => number): (x: number, z: number) => boolean {
+  const local = new Vector3();
+  return (x, z) => {
+    const street = world.zone('street');
+    street.group.updateWorldMatrix(true, false);
+    street.toLocal(local.set(x, 0, z));
+    return onWalkedGround(local.x, local.z, gameDay());
+  };
+}
 
 /**
  * Every zone of `WORLD_PLAN` declared, each built from its plan on first activation (docs/zones.md), the furniture
@@ -50,7 +66,9 @@ interface StreamingParts {
 export function streamZones(services: Services, engine: Engine, world: GameWorld, parts: StreamingParts): ZoneManager<ZoneId> {
   const { sky, market, wallet, collection, deliveries, prizes, firstDay } = services;
   const { graphics, notices, session, activity, zones } = parts;
-  const manager = zones.set(new ZoneManager<ZoneId>(world.zones, engine.camera, { start: WORLD_PLAN.start }));
+  // Past the street's box (the park's gardens, the stretch its works opened) the street stays the player's zone.
+  const onStreet = streetGround(world, () => services.today.gameDay);
+  const manager = zones.set(new ZoneManager<ZoneId>(world.zones, engine.camera, { start: WORLD_PLAN.start, claim: (p) => (onStreet(p.x, p.z) ? 'street' : null) }));
   engine.addUpdatable(manager);
   manager.current.setOccupied(true);
   graphics.setLook(zonePlan(manager.current.id).look, true);
@@ -88,7 +106,7 @@ export function streamZones(services: Services, engine: Engine, world: GameWorld
 }
 
 /** Where the player walks at full pace; everywhere else (the flat, the shops, the halls) at `INDOOR_PACE` of it. */
-const BRISK_ZONES: ReadonlySet<ZoneId> = new Set<ZoneId>(['street', 'stairwell', 'courtyard', 'roof']);
+const BRISK_ZONES: ReadonlySet<ZoneId> = new Set<ZoneId>(['street', 'stairwell', 'courtyard', 'roof', 'lindenAvenue']);
 /** 2 m/s of the walk's 2.5 indoors: a 4 m room is not crossed in a second and a half while reading the shelves. */
 const INDOOR_PACE = 0.8;
 

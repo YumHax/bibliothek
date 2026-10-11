@@ -8,6 +8,7 @@ import type { Season } from '@/time/season';
 import type { Vec2 } from '../streetPlan';
 import type { DoorGaps } from './DoorGaps';
 import { Figure } from './Figure';
+import { rainGear, umbrellaWeather } from './streetLook';
 import type { TalkRole } from './streetTalk';
 import { random, within } from '@/random';
 
@@ -76,6 +77,8 @@ export class ShopQueue extends THREE.Group implements Furniture, Updatable {
   readonly contactShadow = false;
   private readonly queues: Queue[] = [];
   private readonly eye = new THREE.Vector3();
+  /** It rained hard enough for umbrellas when last looked. */
+  private wet = false;
   private checkClock = CHECK_EVERY;
 
   constructor(private readonly dayNight: DayNight, private readonly options: ShopQueueOptions) {
@@ -125,6 +128,12 @@ export class ShopQueue extends THREE.Group implements Furniture, Updatable {
     this.checkClock += dt;
     const check = this.checkClock >= CHECK_EVERY;
     if (check) this.checkClock = 0;
+    // The weather turned: umbrellas up (or down) along the queue.
+    const wet = umbrellaWeather(this.dayNight.state);
+    if (wet !== this.wet) {
+      this.wet = wet;
+      for (const q of this.queues) for (const queuer of q.queuers) if (queuer.figure.shown) rainGear(queuer.figure.walker, this.dayNight.state, null);
+    }
     for (const q of this.queues) {
       const open = hours >= q.spec.hours[0] && hours < q.spec.hours[1];
       if (check) this.tend(q, open);
@@ -180,12 +189,14 @@ export class ShopQueue extends THREE.Group implements Furniture, Updatable {
     const side = Math.sign(q.spec.z);
     const from = new THREE.Vector3(at.x + q.spec.dir * COME_FROM, 0, side * LANE_Z);
     queuer.figure.show(from);
+    rainGear(walker, this.dayNight.state, null);
     queuer.place = { kind: 'coming', spot };
     walker.walk([new THREE.Vector3(at.x + q.spec.dir * 0.8, 0, side * LANE_Z), at.clone()], () => this.settle(q, queuer, spot));
   }
 
   private settle(q: Queue, queuer: Queuer, spot: number): void {
     queuer.place = { kind: 'queued', spot };
+    rainGear(queuer.figure.walker, this.dayNight.state, null);
     // Facing the door, along the wall.
     queuer.figure.walker.stand(q.spec.dir < 0 ? Math.PI / 2 : -Math.PI / 2, spot % 2 ? 'pockets' : 'stand');
   }

@@ -3,6 +3,7 @@ import { createCanvas, roundRect, toTexture, repeatTexture } from '@/covers/gene
 import type { PersonLook } from './looks';
 import { cachedTexture } from './textureCache';
 import { fnv1a, lcg } from '@/random';
+import { smooth } from '@/math/scalar';
 
 /*
  * The one canvas a person wears: the torso's texture, painted once from the look. The trunk's
@@ -24,16 +25,22 @@ export function paintTorso(look: PersonLook, waistV: number): THREE.CanvasTextur
   return cachedTexture(key, () => torso(look, waistV, lcg(fnv1a(key))));
 }
 
+/** Where an untucked top ends on the trunk (its v, the texture's height from the bottom), a third of the way from the waist down to the hips. */
+export function untuckedHemV(waistV: number): number {
+  return 0.65 * waistV;
+}
+
 function torso(look: PersonLook, waistV: number, random: () => number): THREE.CanvasTexture {
   const [canvas, ctx] = createCanvas(W, H);
   const waistY = (1 - waistV) * H;
   // Trousers and belt first: an untucked top is painted over them below.
   paintTrousers(ctx, look, waistY);
   const tucked = look.top === 'shirt' || look.top === 'jacket';
-  const hemY = tucked ? waistY - 1 : waistY + 0.35 * (H - waistY);
+  const hemY = tucked ? waistY - 1 : (1 - untuckedHemV(waistV)) * H;
   TOPS[look.top](ctx, hemY, { look, base: css(look.topColor), accent: css(look.topAccent), shade: css(darken(look.topColor, 0.75)) });
-  // The hem shadow of an untucked top.
+  // An untucked top's hem: its stitching or ribbed band (the hem's own band stands over it, `garmentEdges`), and its shadow.
   if (!tucked) {
+    paintHem(ctx, look, hemY);
     ctx.fillStyle = 'rgba(0,0,0,0.35)';
     ctx.fillRect(0, hemY, W, 6);
   }
@@ -69,6 +76,40 @@ function paintTrousers(ctx: CanvasRenderingContext2D, look: PersonLook, waistY: 
   ctx.moveTo(1, waistY + 4);
   ctx.lineTo(1, H);
   ctx.stroke();
+  // Stitching beside each seam (gold on jeans), and the back pockets on the seat.
+  stitch(ctx, isDenim(look.trousers) ? 'rgba(214,150,62,0.85)' : thread(look.trousers), () => {
+    ctx.moveTo(0, waistY + 8);
+    ctx.lineTo(W, waistY + 8);
+    ctx.moveTo(W * 0.5 + 17, waistY + 9);
+    ctx.lineTo(W * 0.5 + 17, waistY + (H - waistY) * 0.52);
+    ctx.quadraticCurveTo(W * 0.5 + 15, waistY + (H - waistY) * 0.7, W * 0.5 + 2, waistY + (H - waistY) * 0.74);
+    for (const side of [-1, 1]) {
+      ctx.moveTo(W * (0.5 + side * 0.13) + side * 6, waistY + 9);
+      ctx.quadraticCurveTo(W * (0.5 + side * 0.15) + side * 5, waistY + (H - waistY) * 0.3 - 4, W * (0.5 + side * 0.24), waistY + (H - waistY) * 0.36 - 7);
+    }
+    for (const u of [0.25, 0.75]) {
+      ctx.moveTo(W * u + 4, waistY + 9);
+      ctx.lineTo(W * u + 4, H);
+    }
+  });
+  for (const u of [0.085, 0.915]) {
+    const x = W * u;
+    const top = waistY + 16;
+    const pocket = (inset: number): void => {
+      ctx.moveTo(x - 26 + inset, top + inset);
+      ctx.lineTo(x + 26 - inset, top + inset);
+      ctx.lineTo(x + 24 - inset, top + 50 - inset);
+      ctx.lineTo(x, top + 58 - inset * 1.4);
+      ctx.lineTo(x - 24 + inset, top + 50 - inset);
+      ctx.closePath();
+    };
+    ctx.strokeStyle = css(darken(look.trousers, 0.68));
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    pocket(0);
+    ctx.stroke();
+    stitch(ctx, isDenim(look.trousers) ? 'rgba(214,150,62,0.85)' : thread(look.trousers), () => pocket(4));
+  }
 }
 
 /** The look and its colours as CSS, for a top's painter. */
@@ -106,6 +147,10 @@ function paintTee(ctx: CanvasRenderingContext2D, hemY: number, { look, base, acc
     roundRect(ctx, W * 0.4, H * 0.3, W * 0.2, H * 0.09, 8);
     ctx.fill();
   }
+  // The print worn by the wash: specks of the tee showing through it.
+  const random = lcg(look.topColor ^ (look.topAccent << 1));
+  ctx.fillStyle = withAlpha(look.topColor, 0.55);
+  for (let i = 0; i < 260; i++) ctx.fillRect(W * (0.4 + random() * 0.2), H * (0.27 + random() * 0.14), 1 + random() * 1.5, 1 + random());
 }
 
 /** Horizontal stripes in the accent. */
@@ -157,7 +202,7 @@ function paintHoodie(ctx: CanvasRenderingContext2D, hemY: number, { base, shade 
 }
 
 /** A jacket open over a shirt: the shirt shows in a strip down the middle, the jacket's edges and lapels frame it. */
-function paintJacket(ctx: CanvasRenderingContext2D, hemY: number, { base, accent, shade }: TopPaint): void {
+function paintJacket(ctx: CanvasRenderingContext2D, hemY: number, { look, base, accent, shade }: TopPaint): void {
   ctx.fillStyle = accent;
   ctx.fillRect(0, 0, W, hemY);
   ctx.fillStyle = base;
@@ -180,25 +225,51 @@ function paintJacket(ctx: CanvasRenderingContext2D, hemY: number, { base, accent
   ctx.fillStyle = shade;
   ctx.fillRect(W * 0.43 - 3, 0, 6, hemY);
   ctx.fillRect(W * 0.57 - 3, 0, 6, hemY);
+  // The front edges stitched, and down the lapels.
+  stitch(ctx, thread(look.topColor), () => {
+    ctx.moveTo(W * 0.43 - 9, H * 0.32);
+    ctx.lineTo(W * 0.43 - 9, hemY);
+    ctx.moveTo(W * 0.57 + 9, H * 0.32);
+    ctx.lineTo(W * 0.57 + 9, hemY);
+    ctx.moveTo(W * 0.43 - 4, H * 0.3);
+    ctx.lineTo(W * 0.355 + 4, 0);
+    ctx.moveTo(W * 0.57 + 4, H * 0.3);
+    ctx.lineTo(W * 0.645 - 4, 0);
+  });
 }
 
 /** A buttoned shirt: the placket, its buttons, a breast pocket. */
-function paintShirt(ctx: CanvasRenderingContext2D, hemY: number, { base, shade }: TopPaint): void {
+function paintShirt(ctx: CanvasRenderingContext2D, hemY: number, { look, base, shade }: TopPaint): void {
   ctx.fillStyle = base;
   ctx.fillRect(0, 0, W, hemY);
   ctx.fillStyle = shade;
   ctx.fillRect(W / 2 - 10, 0, 20, hemY);
   ctx.fillStyle = base;
   ctx.fillRect(W / 2 - 6, 0, 12, hemY);
-  ctx.fillStyle = '#e9e4d8';
+  // Buttons: a shadow under each, the face, two holes.
   for (let y = H * 0.12; y < hemY - 12; y += H * 0.11) {
+    ctx.fillStyle = 'rgba(0,0,0,0.28)';
+    ctx.beginPath();
+    ctx.arc(W / 2 + 0.8, y + 1.2, 4.8, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = '#e9e4d8';
     ctx.beginPath();
     ctx.arc(W / 2, y, 4.5, 0, Math.PI * 2);
     ctx.fill();
+    ctx.fillStyle = 'rgba(60,50,40,0.55)';
+    ctx.fillRect(W / 2 - 2, y - 0.6, 1.2, 1.2);
+    ctx.fillRect(W / 2 + 0.8, y - 0.6, 1.2, 1.2);
   }
   ctx.strokeStyle = shade;
   ctx.lineWidth = 4;
   ctx.strokeRect(W * 0.6, H * 0.24, W * 0.12, H * 0.12);
+  stitch(ctx, thread(look.topColor), () => {
+    ctx.rect(W * 0.6 + 5, H * 0.24 + 5, W * 0.12 - 10, H * 0.12 - 10);
+    ctx.moveTo(W / 2 - 12, 0);
+    ctx.lineTo(W / 2 - 12, hemY);
+    ctx.moveTo(W / 2 + 12, 0);
+    ctx.lineTo(W / 2 + 12, hemY);
+  });
 }
 
 /** The stallholder's apron over the top: bib, the skirt below the waist, the straps up to the neck, the waist ties round the back, a pocket and a wear line. */
@@ -221,13 +292,77 @@ function paintApron(ctx: CanvasRenderingContext2D, colour: number, waistY: numbe
   ctx.strokeRect(W * 0.4, H * 0.62, W * 0.2, H * 0.14);
 }
 
+/** An untucked top's hem: a hoodie's ribbed waistband, or a twin row of stitching above a turned hem. */
+function paintHem(ctx: CanvasRenderingContext2D, look: PersonLook, hemY: number): void {
+  if (look.top === 'hoodie') {
+    const band = 34;
+    for (let x = 0; x < W; x += 4) {
+      ctx.fillStyle = 'rgba(0,0,0,0.13)';
+      ctx.fillRect(x, hemY - band, 1.5, band);
+      ctx.fillStyle = 'rgba(255,255,255,0.05)';
+      ctx.fillRect(x + 2, hemY - band, 1, band);
+    }
+    seam(ctx, hemY - band);
+    return;
+  }
+  stitch(ctx, thread(look.topColor), () => {
+    for (const y of [hemY - 13, hemY - 17]) {
+      ctx.moveTo(0, y);
+      ctx.lineTo(W, y);
+    }
+  });
+}
+
+/** A row of stitches along whatever `path` draws (a fine dashed thread). */
+function stitch(ctx: CanvasRenderingContext2D, colour: string, path: () => void): void {
+  ctx.save();
+  ctx.strokeStyle = colour;
+  ctx.lineWidth = 1.3;
+  ctx.setLineDash([4, 2.5]);
+  ctx.lineCap = 'butt';
+  ctx.beginPath();
+  path();
+  ctx.stroke();
+  ctx.restore();
+}
+
+/** A sewn seam across at `y`: the shadowed fold and the light catching the ridge beside it. */
+function seam(ctx: CanvasRenderingContext2D, y: number): void {
+  ctx.fillStyle = 'rgba(0,0,0,0.2)';
+  ctx.fillRect(0, y - 1, W, 2);
+  ctx.fillStyle = 'rgba(255,255,255,0.08)';
+  ctx.fillRect(0, y + 1, W, 2);
+}
+
+/** The thread a garment of `color` is sewn with: its own colour, a shade lighter, half seen. */
+function thread(color: number): string {
+  const r = (color >> 16) & 255;
+  const g = (color >> 8) & 255;
+  const b = color & 255;
+  const lift = (c: number): number => Math.min(255, Math.round(c * 1.3 + 22));
+  return `rgba(${lift(r)},${lift(g)},${lift(b)},0.45)`;
+}
+
 /**
  * What makes paint read as cloth: side seams and a neckline, soft folds where the fabric bunches
  * (at the waist, under the arms), and a fine weave of noise over everything.
  */
 function finish(ctx: CanvasRenderingContext2D, ribbedNeck: boolean, random: () => number): void {
-  ctx.fillStyle = 'rgba(0,0,0,0.18)';
-  for (const u of [0.25, 0.75]) ctx.fillRect(W * u - 1, 0, 2, H);
+  // Side seams: the fold in shadow, the ridge beside it catching the light.
+  for (const u of [0.25, 0.75]) {
+    ctx.fillStyle = 'rgba(0,0,0,0.18)';
+    ctx.fillRect(W * u - 1, 0, 2, H);
+    ctx.fillStyle = 'rgba(255,255,255,0.06)';
+    ctx.fillRect(W * u + 1, 0, 2, H);
+  }
+  // Worn paler where it rubs: the front of the chest and belly, across the shoulder blades.
+  for (const [u, v, r] of [[0.5, 0.32, 0.16], [0.5, 0.62, 0.12], [0.08, 0.25, 0.1], [0.92, 0.25, 0.1]] as const) {
+    const wear = ctx.createRadialGradient(W * u, H * v, 0, W * u, H * v, W * r);
+    wear.addColorStop(0, 'rgba(255,255,255,0.045)');
+    wear.addColorStop(1, 'rgba(255,255,255,0)');
+    ctx.fillStyle = wear;
+    ctx.fillRect(0, 0, W, H);
+  }
   if (ribbedNeck) {
     ctx.fillStyle = 'rgba(0,0,0,0.22)';
     ctx.fillRect(0, 0, W, 5);
@@ -248,12 +383,25 @@ function finish(ctx: CanvasRenderingContext2D, ribbedNeck: boolean, random: () =
   }
   const image = ctx.getImageData(0, 0, W, H);
   const data = image.data;
+  // Cloth is never one even tone: a soft blotchy unevenness over it (a coarse grid of values, eased between, wrapping round the back's seam).
+  const G = 8;
+  const tone = Array.from({ length: G * (G + 1) }, () => random() * 2 - 1);
+  const toneAt = (x: number, y: number): number => {
+    const gx = (x / W) * G;
+    const gy = (y / H) * G;
+    const x0 = Math.floor(gx);
+    const y0 = Math.min(G - 1, Math.floor(gy));
+    const fx = smooth(gx - x0);
+    const fy = smooth(gy - y0);
+    const at = (cx: number, cy: number): number => tone[(cy % (G + 1)) * G + (cx % G)]!;
+    return (at(x0, y0) * (1 - fx) + at(x0 + 1, y0) * fx) * (1 - fy) + (at(x0, y0 + 1) * (1 - fx) + at(x0 + 1, y0 + 1) * fx) * fy;
+  };
   for (let i = 0; i < data.length; i += 4) {
     const p = i / 4;
     const x = p % W;
     const y = (p - x) / W;
-    // A twill: diagonal ribs plus a little random fleck.
-    const weave = ((x + y) % 4 < 2 ? 1.025 : 0.975) * (0.97 + random() * 0.06);
+    // A twill: diagonal ribs plus a little random fleck, over the unevenness.
+    const weave = ((x + y) % 4 < 2 ? 1.025 : 0.975) * (0.97 + random() * 0.06) * (1 + 0.035 * toneAt(x, y));
     data[i] = Math.min(255, data[i]! * weave);
     data[i + 1] = Math.min(255, data[i + 1]! * weave);
     data[i + 2] = Math.min(255, data[i + 2]! * weave);

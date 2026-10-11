@@ -148,6 +148,11 @@ export class Bathtub extends THREE.Group implements Furniture, Interactable, Upd
     this.rim = new THREE.Vector3(0, height, 0);
   }
 
+  /** Tub-local height of the water's surface, or null while there is too little to float anything (the arcade's duck). */
+  get waterSurface(): number | null {
+    return this.water.depth * this.capacity > 0.05 ? BASIN_FLOOR + this.water.depth * this.capacity : null;
+  }
+
   /** No water in it and none running: dry enough for a cat. */
   get isEmpty(): boolean {
     return this.water.depth <= 0 && !this.water.running;

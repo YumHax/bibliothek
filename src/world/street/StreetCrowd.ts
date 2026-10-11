@@ -10,7 +10,7 @@ import { Dog } from './life/Dog';
 import { Lead } from './life/Lead';
 import { distanceFade } from './life/fade';
 import type { CastMember } from './life/crowdCast';
-import { besideStart, besideSteps, planTrip, stopsOnRoute, type CrowdRoute, type RouteStop, type Step, type Stop } from './life/crowdTrips';
+import { besideStart, besideSteps, planTrip, stopsOnRoute, stretchRoutes, type CrowdRoute, type RouteStop, type Step, type Stop, type StopKind } from './life/crowdTrips';
 import type { DoorGaps } from './life/DoorGaps';
 import type { TalkRole } from './life/streetTalk';
 import { isShopOpen } from './shops/shopHours';
@@ -19,8 +19,12 @@ import { STREET_PLAN, type ShopDoor, type ShopKind, type Vec2 } from './streetPl
 import { FRONT, KERB_HEIGHT, PARK_STREET } from '@/world/measures/street';
 import { shopDoors } from '@/world/city/facades';
 import { atCrossing, groundHeight } from './relief/ground';
-import { random, within } from '@/random';
+import { fnv1a, pick, random, within } from '@/random';
 import { smooth } from '@/math/scalar';
+import type { SocialServices } from '@/social/talk';
+import { shortName } from '@/social/people';
+import { metName } from '../people/socialHook';
+import { greets, knownFaceHook, outNow, personOf } from './townsfolk/knownFaces';
 
 interface StreetCrowdOptions {
   /** Where the passers-by go: they appear at a route's first point and vanish at its last. */
@@ -60,8 +64,18 @@ interface StreetCrowdOptions {
    * go out (up to `lateBy` game hours late), home on `back` before the hour they come back (between `backBefore`'s
    * hours before it). `day` is the game day (once each a day).
    */
-  residents?: { out: CrowdRoute; back: CrowdRoute; lateBy: number; backBefore: readonly [number, number] };
+  residents?: { outs: readonly CrowdRoute[]; backs: readonly CrowdRoute[]; lateBy: number; backBefore: readonly [number, number] };
   day?: () => number;
+  /** The people the player can know (docs/social.md): the residents and the regulars who keep hours open a conversation (`townsfolk/knownFaces`). */
+  social?: SocialServices;
+  /** What the player owns (a regular's lead is about a copy they lack). */
+  owns?: (id: string) => boolean;
+  /** The Grand Flea Fair is on today: some come for it, a visitor or two photographs the bunting. */
+  fairDay?: () => boolean;
+  /** The busker is between two songs (those listening clap). */
+  buskerResting?: () => boolean;
+  /** Places a dog in the zone (so it can be patted); without it the dogs are only the crowd's children. */
+  placeDog?: (dog: Dog) => void;
 }
 
 /** Seconds a passer-by takes to come out of a door, or to go in. */
@@ -90,8 +104,16 @@ const LEAD_HAND = new THREE.Vector3(-0.22, 0.86, 0.22);
 /** A walked dog barks every this many seconds or so, and at once at a pigeon or the cat this close; it pulls towards them. */
 const BARK_EVERY = [40, 110] as const;
 const BAIT = { within: 4.5, pull: 0.45 };
-/** Commuters in the rush: this much quicker. */
+/** Commuters in the rush: this much quicker; now and then one late, running for it. */
 const RUSH_PACE = 1.2;
+const LATE = { chance: 0.08, pace: 2.5 };
+/** Caught out in a downpour (no umbrella, no hood) some run for it; on the road when the green man goes, they hurry across. */
+const DOWNPOUR = { above: 0.5, runs: 0.6, pace: 2.3 };
+const HURRY_ACROSS = 1.9;
+/** Of a morning a commuter has a coffee to go or the paper; an elder a walking stick now and then; a visitor a camera. */
+const MORNING_UNTIL = 10.5;
+const CANE = 0.3;
+const PRAM = 0.05;
 /** Someone walking with a friend: beside them, this far to the right; a word between them every few seconds. */
 const BESIDE = 0.42;
 const CHAT_EVERY = [3, 8] as const;
@@ -101,12 +123,34 @@ const NIGHT = { from: 21, to: 4 };
 const CHILD_HOURS = [8, 20] as const;
 /** A shop's painted door is within this of the plan's (the painter places doors along the front). */
 const SNAP = 3.5;
+/** Two regulars (or residents) who cross this close stop for a word (this often), these seconds; or a wave in passing. */
+const MEET = { within: 1.9, chance: 0.35, seconds: [5, 10] as const, wave: 0.4 };
+/** Listening to the busker: a nod with the beat every few seconds; a clap at the end of a song, most of them. */
+const NOD_EVERY = [1.4, 2.8] as const;
+const CLAP = 0.7;
+/** Where the busker stands (the ring of listeners is round him, a step apart). */
+const BUSKER_AT = STREET_PLAN.busker.at;
+const RING = [0, -0.45, 0.45, -0.9, 0.9];
+/** On the Fair's day this share of passers-by come for it; a visitor with a camera now and then (weekends too). */
+const FAIR_GOERS = 0.45;
+const TOURISTS = 0.12;
+/** Out of RETRO GAMES (or the arcade's prize counter) with a bag, this often. */
+const RETRO_BAG = 0.6;
+/** A walked dog strains towards another dog or the player this close, and stops to sniff now and then. */
+const DOG_GREET = 2.6;
+const PLAYER_DOG = 2.2;
+const SNIFF = 0.5;
+/** What a dog's walker says when someone pats it. */
+const PAT_LINES = ['He likes you! He doesn’t like everyone.', 'Careful, he’ll follow you home.', 'She’s a softie, that one.', 'Say thank you to the nice person. … He won’t.'];
+/** Pairs going home from the bars: what carries over the street (a laugh, a song). */
+const NIGHT_BANTER = ['Ha! No, listen, listen…', '…and then he says…!', 'Shh! People are sleeping!', 'One more song!', 'You’re hopeless!'];
 
 type State =
   | { kind: 'away'; wait: number }
   | { kind: 'walking' }
   | { kind: 'waiting'; crossing: number; look: number }
-  | { kind: 'pausing'; left: number }
+  | { kind: 'pausing'; left: number; what: StopKind; nod: number }
+  | { kind: 'meeting'; left: number; other: Passer; chat: number }
   | { kind: 'entering'; left: number };
 
 class Obstacle implements RoadObstacle {
@@ -145,6 +189,19 @@ interface Passer {
   wet: boolean;
   /** Where their eyes go in a word with their companion (world). */
   eyesOn: THREE.Vector3;
+  /** The points of the walk they are on (to take it up again after stopping for a word). */
+  walkPoints: THREE.Vector3[];
+  /** Stopped for a word (or waved) with someone they know on this trip already. */
+  met: boolean;
+  /** On a night route home from the bars. */
+  night: boolean;
+  /** A known face (`townsfolk/knownFaces`) nodded or waved to the player on this trip already. */
+  greeted: boolean;
+  /** What they set out with in the hand (a phone, a coffee, a camera), and their pace on this trip. */
+  hand: Held | null;
+  pace: number;
+  /** Hurrying across the road as the lights change (their pace stepped up until the far kerb). */
+  hurrying: boolean;
 }
 
 /**
@@ -161,7 +218,12 @@ interface Passer {
  * lights for the green man, at the plain zebra for a look both ways (drivers give way to anyone waiting there or on
  * it: while on the road or at its kerb a passer-by is a `RoadObstacle`). Shops they go in and out of are open
  * (`isShopOpen`). Dogs on leads pull towards the pigeons and the stray cat and bark at them. They glance at the
- * player brushing past and stop to say a word when clicked (`talk`, by role). People are the costliest meshes here
+ * player brushing past and stop to say a word when clicked (`talk`, by role: home from the bars, out of a shop with a
+ * bag, window-shopping, walking the dog, at the Fair, a visitor taking pictures). Two regulars (or residents) crossing
+ * stop for a word now and then, or wave in passing; pairs laugh, point things out, and late at night carry on loud.
+ * Those listening to the busker stand in a ring, nod along and clap at the end of a song. The dogs sniff about,
+ * greet each other and the player, and take a pat (their walker has a word). Residents go out on their errand of the
+ * day; on the stretch the works opened (once moved on) routes run between its doors. People are the costliest meshes here
  * (about thirty draw calls each): they cast no shadow of their own (their blob does), are not drawn once faded, and
  * the street's `PeopleBudget` draws only the nearest few.
  */
@@ -185,13 +247,23 @@ export class StreetCrowd extends THREE.Group implements Furniture, Updatable {
   private readonly residentsDone = new Set<string>();
   /** Reached on the next update after activation: a few walkers put mid-route (the street is never empty on arrival). */
   private prewarm = true;
+  /** The residents' ways out (indices in `routes`), and back the same way. */
+  private readonly residentOuts: number[] = [];
+  private readonly residentBacks: number[] = [];
+  /** The next place in the ring round the busker, and whether he was between songs when last looked. */
+  private ring = 0;
+  private buskerRested = false;
 
   constructor(private readonly dayNight: DayNight, private readonly options: StreetCrowdOptions) {
     super();
     this.name = 'StreetCrowd';
-    this.routes = options.routes.map((r) => this.snapRoute(r));
+    // The plan's routes, and those on the stretch the works opened once they moved on (`stretchRoutes`).
+    this.routes = [...options.routes, ...stretchRoutes(this.doors)].map((r) => this.snapRoute(r));
     this.general = this.routes.length;
-    if (options.residents) this.routes.push(options.residents.out, options.residents.back);
+    if (options.residents) {
+      for (const out of options.residents.outs) this.residentOuts.push(this.routes.push(out) - 1);
+      for (const back of options.residents.backs) this.residentBacks.push(this.routes.push(back) - 1);
+    }
     this.routeStops = this.routes.map((r, i) => (i < this.general ? stopsOnRoute(r, options.stops ?? []) : []));
     options.cast.forEach((member, i) => {
       const obstacle = new Obstacle();
@@ -199,10 +271,10 @@ export class StreetCrowd extends THREE.Group implements Furniture, Updatable {
       const passer: Passer = {
         member, walker: null, state: { kind: 'away', wait: member.resident ? Infinity : 3 + 5 * i }, door: 1, obstacle, dog: null, lead: null, bark: null,
         steps: [], end: [0, 0], role: 'passer', carry: null, companion: null, leader: null, chat: 4, looking: 0, pauseFocus: null, wet: false,
-        eyesOn: new THREE.Vector3(),
+        eyesOn: new THREE.Vector3(), walkPoints: [], met: false, night: false, greeted: false, hand: null, pace: 1, hurrying: false,
       };
-      if (member.dog) this.addDog(passer, member.seed);
       this.passers.push(passer);
+      if (member.dog) this.addDog(passer, member.seed);
     });
     options.cast.forEach((member, i) => {
       if (member.companion === null) return;
@@ -233,8 +305,10 @@ export class StreetCrowd extends THREE.Group implements Furniture, Updatable {
     }
     // As many out as the hour and the day make busy, fewer in the rain.
     const rain = Math.min(1, this.dayNight.state.rain * 1.5);
-    const busy = streetBusyAt(hours, this.options.weekday()) * (this.options.boost?.() ?? 1);
-    const allowed = Math.max(1, Math.min(this.options.count, Math.round(this.options.count * busy * (1 - (1 - RAIN_SHARE) * rain))));
+    const boost = this.options.boost?.() ?? 1;
+    const busy = streetBusyAt(hours, this.options.weekday()) * boost;
+    // A busier day than usual (the Fair, a new stock day) raises the most out at once too, not only the share of it.
+    const allowed = Math.max(1, Math.min(Math.round(this.options.count * boost), Math.round(this.options.count * busy * (1 - (1 - RAIN_SHARE) * rain))));
     let out = 0;
     for (const passer of this.passers) if (passer.state.kind !== 'away' && !passer.leader) out++;
     // Whoever has waited longest past their time goes out first (the looks take turns); companions go with theirs.
@@ -244,7 +318,8 @@ export class StreetCrowd extends THREE.Group implements Furniture, Updatable {
       const state = passer.state;
       if (state.kind !== 'away') continue;
       state.wait -= dt;
-      if (passer.leader || passer.member.resident) continue;
+      // A regular who keeps hours (`townsfolk/regularsPlan`) stays in outside them.
+      if (passer.leader || passer.member.resident || !outNow(passer.member, hours)) continue;
       if (state.wait <= longest) {
         longest = state.wait;
         next = passer;
@@ -264,23 +339,111 @@ export class StreetCrowd extends THREE.Group implements Furniture, Updatable {
       if (state.kind === 'waiting') this.wait(passer, state, dt);
       else if (state.kind === 'pausing') {
         state.left -= dt;
+        // Listening to the busker: nodding along while he plays.
+        if (state.what === 'busker' && !this.buskerRested && (state.nod -= dt) <= 0) {
+          state.nod = within(random, NOD_EVERY);
+          passer.walker?.nod();
+        }
         if (state.left <= 0) this.next(passer);
-      } else if (state.kind === 'entering') {
+      } else if (state.kind === 'meeting') this.meeting(passer, state, dt);
+      else if (state.kind === 'entering') {
         state.left -= dt;
         passer.door = Math.max(0, state.left / DOOR_FADE);
         if (state.left <= 0) this.leave(passer);
       } else if (passer.door < 1) passer.door = Math.min(1, passer.door + dt / DOOR_FADE);
       this.follow(passer, dt);
     }
+    this.applause();
     this.cullClock += dt;
     if (this.cullClock >= CULL_EVERY) {
       this.cullClock = 0;
       this.cull();
+      this.meetings();
       this.residentsOut(hours);
     }
   }
 
-  /** A resident due out (their hour, a little late at most) or due home (a while before theirs) sets off. */
+  /** The busker finished a song: those listening clap (most of them). */
+  private applause(): void {
+    const resting = this.options.buskerResting?.() ?? false;
+    if (resting && !this.buskerRested) {
+      for (const p of this.passers) if (p.state.kind === 'pausing' && p.state.what === 'busker' && random() < CLAP) p.walker?.gesture('clap');
+    }
+    this.buskerRested = resting;
+  }
+
+  /**
+   * Two of the regulars or residents (people who know each other) crossing on the pavement: now and then they stop for
+   * a word, facing each other, one waving as they meet; or they wave in passing. Once a trip each.
+   */
+  private meetings(): void {
+    for (const a of this.passers) {
+      if (!this.canMeet(a)) continue;
+      const wa = a.walker!;
+      for (const b of this.passers) {
+        if (b === a || !this.canMeet(b)) continue;
+        const wb = b.walker!;
+        if (wa.position.distanceTo(wb.position) > MEET.within) continue;
+        // Coming towards each other (not one overtaking the other).
+        if (Math.cos(wa.facingYaw - wb.facingYaw) > -0.3) continue;
+        a.met = true;
+        b.met = true;
+        if (random() < MEET.chance) this.meet(a, b);
+        else if (random() < MEET.wave) {
+          wa.gesture('wave');
+          wb.nod();
+        }
+        break;
+      }
+    }
+  }
+
+  /** Someone who may stop for a word: a regular or a resident, walking alone on the pavement, not met anyone this trip. */
+  private canMeet(p: Passer): boolean {
+    if (p.met || p.state.kind !== 'walking' || p.companion || p.leader || p.dog || p.door < 1) return false;
+    if (p.member.stranger && !p.member.resident) return false;
+    const w = p.walker;
+    return !!w && w.isPresent && w.drawn && !roadAt(w.position);
+  }
+
+  /** The two stop and face each other; one waves; they talk a while, then each goes on their way. */
+  private meet(a: Passer, b: Passer): void {
+    const seconds = within(random, MEET.seconds);
+    for (const [me, other] of [[a, b], [b, a]] as const) {
+      const w = me.walker!;
+      me.state = { kind: 'meeting', left: seconds, other, chat: 0.6 + random() };
+      other.walker!.getWorldPosition(me.eyesOn);
+      me.eyesOn.y += other.member.look.height * 0.92;
+      w.stand(Math.atan2(other.walker!.position.x - w.position.x, other.walker!.position.z - w.position.z), random() < 0.5 ? 'stand' : 'pockets', me.eyesOn.clone());
+      w.react('good');
+    }
+    a.walker!.gesture('wave');
+  }
+
+  /** A word between two who met: by turns; then back onto the rest of the walk they were on. */
+  private meeting(passer: Passer, state: Extract<State, { kind: 'meeting' }>, dt: number): void {
+    const walker = passer.walker!;
+    state.left -= dt;
+    state.chat -= dt;
+    if (state.chat <= 0 && passer.member.seed < state.other.member.seed) {
+      // The one with the lower seed keeps the clock for both: one of them talks.
+      state.chat = 1.6 + random() * 1.8;
+      const talker = random() < 0.5 ? passer : state.other;
+      talker.walker?.talkAlong(state.chat * 0.85);
+    }
+    if (state.left > 0) return;
+    passer.state = { kind: 'walking' };
+    if (random() < 0.5) walker.gesture('wave');
+    const rest = passer.walkPoints.slice(walker.pointsPassed);
+    passer.walkPoints = rest;
+    if (rest.length) walker.walk(rest, () => this.next(passer));
+    else this.next(passer);
+  }
+
+  /**
+   * A resident due out (their hour, a little late at most) or due home (a while before theirs) sets off: their errand
+   * of the day (the park, the bakery, the grocer's, down Park Street: drawn per resident and game day), home the same way.
+   */
   private residentsOut(hours: number): void {
     const plan = this.options.residents;
     if (!plan) return;
@@ -290,12 +453,15 @@ export class StreetCrowd extends THREE.Group implements Furniture, Updatable {
       if (!r || passer.state.kind !== 'away') continue;
       const outKey = `${r.key}:out:${day}`;
       const backKey = `${r.key}:back:${day}`;
-      if (!this.residentsDone.has(outKey) && inHours(hours, [r.out, r.out + plan.lateBy])) {
+      const way = fnv1a(`${r.key}:${day}`) % Math.max(1, this.residentOuts.length);
+      const out = this.residentOuts[way];
+      const back = this.residentBacks[way] ?? this.residentBacks[0];
+      if (out !== undefined && !this.residentsDone.has(outKey) && inHours(hours, [r.out, r.out + plan.lateBy])) {
         this.residentsDone.add(outKey);
-        this.send(passer, this.general, 0);
-      } else if (!this.residentsDone.has(backKey) && hours >= r.back - plan.backBefore[0] && hours < r.back - plan.backBefore[1]) {
+        this.send(passer, out, 0);
+      } else if (back !== undefined && !this.residentsDone.has(backKey) && hours >= r.back - plan.backBefore[0] && hours < r.back - plan.backBefore[1]) {
         this.residentsDone.add(backKey);
-        this.send(passer, this.general + 1, 0);
+        this.send(passer, back, 0);
       }
     }
   }
@@ -400,12 +566,30 @@ export class StreetCrowd extends THREE.Group implements Furniture, Updatable {
     }
   }
 
+  /**
+   * Makes the walkers of the first `count` of the cast ahead of need, one per step (a person costs a good tenth of a
+   * second to build): run between the street's build steps, so nobody is built in a frame of the walk.
+   */
+  *prebuild(count: number): Generator<void, void, void> {
+    let made = 0;
+    for (const passer of this.passers) {
+      if (made >= count) return;
+      if (passer.walker) continue;
+      this.ensure(passer);
+      made++;
+      yield;
+    }
+  }
+
   /** The walker for `passer`, made the first time they go out. */
   private ensure(passer: Passer): Walker {
     if (passer.walker) return passer.walker;
     const m = passer.member;
     const resident = m.resident;
-    const walker = new Walker({
+    // Someone the player can know (a resident, a regular who keeps hours): a click is the conversation, their name once met.
+    const person = personOf(m);
+    const social = knownFaceHook(m, () => walker, this.options.social, this.options.owns ?? (() => false));
+    const walker: Walker = new Walker({
       viewer: this.options.viewer,
       seed: m.seed,
       look: m.look,
@@ -413,13 +597,14 @@ export class StreetCrowd extends THREE.Group implements Furniture, Updatable {
       // A resident says their own lines, under their name.
       talk: resident ? undefined : () => this.options.talk(passer.role),
       lines: resident?.lines,
-      speaker: resident?.name,
+      speaker: person && social ? metName(person, resident?.name ?? shortName(person)) : resident?.name,
       label: resident ? `${resident.name} · say hello` : m.age === 'child' ? 'Child · say hi' : 'Passer-by · say hello',
       labelWithin: LABEL_WITHIN,
       corners: CORNER_RADIUS,
       fade: true,
       crowd: this.options.crowd,
       stopsToTalk: true,
+      social,
     });
     walker.traverse((o) => {
       o.castShadow = false;
@@ -441,12 +626,29 @@ export class StreetCrowd extends THREE.Group implements Furniture, Updatable {
     const m = passer.member;
     if (m.resident) return { role: 'passer', stops: 0, pace: 1, hand: null };
     if (passer.leader) return { role: m.age === 'child' ? 'child' : m.age === 'elder' ? 'elder' : 'passer', stops: 0, pace: 1, hand: null };
-    if (m.age === 'elder') return { role: 'elder', stops: random() < 0.6 ? 1 : 2, pace: 1, hand: null };
-    const rush = rushAt(hours, this.options.weekday());
-    if (!m.dog && !passer.companion && random() < rush * 0.75) return { role: 'commuter', stops: 0, pace: RUSH_PACE, hand: random() < 0.35 ? 'phone' : null };
+    if (m.age === 'elder') return { role: 'elder', stops: random() < 0.6 ? 1 : 2, pace: 1, hand: random() < CANE ? 'cane' : random() < 0.15 ? 'newspaper' : null };
+    const weekday = this.options.weekday();
+    const rush = rushAt(hours, weekday);
+    if (!m.dog && !passer.companion && random() < rush * 0.75) {
+      // Late: running for the bus, the office.
+      if (random() < LATE.chance) return { role: 'commuter', stops: 0, pace: LATE.pace, hand: null };
+      const morning = hours < MORNING_UNTIL;
+      const r = random();
+      const hand: Held | null = morning && r < 0.3 ? 'cup' : morning && r < 0.45 ? 'newspaper' : r < 0.7 ? 'phone' : null;
+      return { role: 'commuter', stops: 0, pace: RUSH_PACE, hand };
+    }
     const r = random();
     const stops = r < 0.4 ? 0 : r < 0.85 ? 1 : 2;
-    const hand: Held | null = m.dog || passer.companion ? null : random() < 0.1 ? 'phone' : random() < 0.04 ? 'book' : null;
+    if (m.dog) return { role: 'dog', stops: Math.min(stops, 1), pace: 1, hand: null };
+    const fair = this.options.fairDay?.() ?? false;
+    // A visitor taking in the street (the Fair's day, weekends): phone out for pictures, in no hurry.
+    if (m.stranger && !passer.companion && (fair || weekday >= 5) && random() < TOURISTS) return { role: 'tourist', stops: 2, pace: 0.85, hand: random() < 0.5 ? 'camera' : 'phone' };
+    if (fair && random() < FAIR_GOERS) return { role: 'fair', stops, pace: 1.05, hand: null };
+    // A teenager is on their phone more often than not.
+    const phone = m.age === 'teen' ? 0.45 : 0.1;
+    // Now and then a grown-up pushing a pram, in no hurry.
+    if (!passer.companion && m.age === 'adult' && random() < PRAM) return { role: 'passer', stops: Math.min(stops, 1), pace: 0.85, hand: 'pram' };
+    const hand: Held | null = passer.companion ? null : random() < phone ? 'phone' : random() < 0.04 ? 'book' : random() < 0.06 ? 'cup' : null;
     return { role: 'passer', stops, pace: 1, hand };
   }
 
@@ -456,15 +658,23 @@ export class StreetCrowd extends THREE.Group implements Furniture, Updatable {
     const kind = this.shopAt(start);
     if (kind === 'bakery') return hours < 13 && random() < 0.7 ? 'baguette' : 'shopping';
     if (kind === 'florist') return 'flowers';
+    if (kind === 'tabac' && random() < 0.5) return 'newspaper';
+    if (kind === 'cafe' && hours < 12 && random() < 0.5) return 'cup';
     if (kind === 'grocer' || kind === 'butcher' || kind === 'pharmacy' || kind === 'books' || kind === 'tabac' || kind === 'pets') return random() < 0.75 ? 'shopping' : null;
+    // Out of RETRO GAMES (the flea market behind it) with a find in the shop's bag, or the arcade's prize.
+    if (kind === 'retro') return random() < RETRO_BAG ? 'gamebag' : null;
+    if (kind === 'arcade') return random() < RETRO_BAG / 2 ? 'gamebag' : null;
     return null;
   }
 
-  /** The stops worth taking on `route` now, `count` of them at most (open hours, dry weather). */
-  private chooseStops(index: number, count: number, hours: number): RouteStop[] {
+  /** The stops worth taking on `route` now, `count` of them at most (open hours, dry weather; a picture only for a visitor on the Fair's day). */
+  private chooseStops(index: number, count: number, hours: number, role: TalkRole): RouteStop[] {
     if (count <= 0) return [];
     const wet = this.dayNight.state.rain > 0.05 || this.dayNight.state.snow > 0.1;
-    const open = this.routeStops[index]!.filter(({ stop }) => (!stop.dry || !wet) && (!stop.hours || (hours >= stop.hours[0] && hours < stop.hours[1])));
+    const fair = this.options.fairDay?.() ?? false;
+    const open = this.routeStops[index]!.filter(
+      ({ stop }) => (!stop.dry || !wet) && (!stop.hours || (hours >= stop.hours[0] && hours < stop.hours[1])) && (stop.kind !== 'photo' || (role === 'tourist' && (!stop.fair || fair))),
+    );
     const chosen: RouteStop[] = [];
     while (chosen.length < count && open.length) chosen.push(open.splice(Math.floor(random() * open.length), 1)[0]!);
     return chosen;
@@ -479,10 +689,21 @@ export class StreetCrowd extends THREE.Group implements Furniture, Updatable {
     const b = route.path[from + 1] ?? a;
     const start: Vec2 = [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t];
     const how = this.castRole(passer, hours);
-    passer.role = how.role;
-    const steps = planTrip(route, from, t, this.chooseStops(index, how.stops, hours), (x) => this.crossingAt(x), (stop) => within(random, stop.seconds));
+    const chosen = this.chooseStops(index, how.stops, hours, how.role);
+    const steps = planTrip(route, from, t, chosen, (x) => this.crossingAt(x), (stop) => within(random, stop.seconds));
+    this.ringBusker(steps);
     passer.end = route.path[route.path.length - 1]!;
+    passer.greeted = false;
     passer.carry = from === 0 && t === 0 ? this.carried(start, hours) : null;
+    passer.met = false;
+    passer.night = route.night === true;
+    // Who they are on this trip, for what they say: home from the bars, out of a shop with their bag, window-shopping.
+    let role = how.role;
+    if (passer.night && role !== 'child') role = 'night';
+    else if (role === 'passer' && passer.carry) role = 'shopper';
+    else if (role === 'passer' && chosen.some((c) => c.stop.kind === 'window')) role = 'window';
+    passer.role = role;
+    if (passer.dog) passer.dog.setSniffing(random() < SNIFF);
     this.setOff(passer, walker, new THREE.Vector3(start[0], 0, start[1]), steps, from === 0 && t === 0 && this.isDoor(start), how);
     // Their companion beside them (a child only by day), on the same trip a step to the right.
     const companion = passer.companion;
@@ -494,6 +715,31 @@ export class StreetCrowd extends THREE.Group implements Furniture, Updatable {
       companion.end = passer.end;
       companion.carry = null;
       this.setOff(companion, cw, besideStart(there, steps, BESIDE), besideSteps(steps, there, BESIDE), passer.door === 0, { ...role, pace: how.pace * (passer.member.speed / companion.member.speed) });
+      // A child walks hand in hand with their grown-up.
+      const hand = (companion.member.age === 'child') !== (passer.member.age === 'child');
+      walker.holdHand(hand ? cw : null);
+      cw.holdHand(hand ? walker : null);
+    }
+  }
+
+  /**
+   * Listeners at the busker stand in a ring round him, each a step along it from the last (not all on one spot): the
+   * walk up to the stop ends at the next free place.
+   */
+  private ringBusker(steps: Step[]): void {
+    for (let k = 1; k < steps.length; k++) {
+      const step = steps[k]!;
+      const before = steps[k - 1]!;
+      if (step.kind !== 'pause' || step.what !== 'busker' || before.kind !== 'walk') continue;
+      const spot = before.points[before.points.length - 1]!;
+      const angle = RING[this.ring++ % RING.length]!;
+      const dx = spot.x - BUSKER_AT[0];
+      const dz = spot.z - BUSKER_AT[1];
+      const c = Math.cos(angle);
+      const sn = Math.sin(angle);
+      spot.set(BUSKER_AT[0] + dx * c - dz * sn, 0, BUSKER_AT[1] + dx * sn + dz * c);
+      // Facing him from there.
+      step.yaw = Math.atan2(BUSKER_AT[0] - spot.x, BUSKER_AT[1] - spot.z);
     }
   }
 
@@ -507,8 +753,14 @@ export class StreetCrowd extends THREE.Group implements Furniture, Updatable {
     passer.looking = 0;
     passer.pauseFocus = null;
     // Dressed for the weather they set out in: an umbrella up (half of them) and a quicker step in the rain, hoods up in the snow.
+    passer.hand = how.hand;
+    passer.hurrying = false;
     this.dress(passer, true, how.hand);
-    walker.setPace((passer.wet ? RAIN_PACE : 1) * how.pace);
+    // Caught in a downpour with nothing over the head, most run for it.
+    const sky = this.dayNight.state;
+    const soaked = passer.wet && sky.rain > DOWNPOUR.above && !passer.member.umbrella && !passer.leader && !passer.companion && !passer.dog && random() < DOWNPOUR.runs;
+    passer.pace = soaked ? DOWNPOUR.pace : (passer.wet ? RAIN_PACE : 1) * how.pace;
+    walker.setPace(passer.pace);
     this.next(passer);
   }
 
@@ -540,16 +792,30 @@ export class StreetCrowd extends THREE.Group implements Furniture, Updatable {
     if (step.kind === 'walk') {
       passer.state = { kind: 'walking' };
       passer.pauseFocus = null;
+      passer.walkPoints = step.points;
       walker.walk(step.points, () => this.next(passer));
     } else if (step.kind === 'kerb') {
       passer.state = { kind: 'waiting', crossing: step.crossing, look: LOOK_BOTH_WAYS };
       walker.stand(walker.rotation.y, 'stand');
     } else {
-      passer.state = { kind: 'pausing', left: step.seconds };
+      passer.state = { kind: 'pausing', left: step.seconds, what: step.what, nod: within(random, NOD_EVERY) };
       passer.pauseFocus = this.localToWorld(step.focus.clone());
+      if (step.what === 'photo') {
+        // A picture: the camera up to the eye, or the phone held up at it.
+        if (passer.hand === 'camera') {
+          walker.stand(step.yaw, 'stand', passer.pauseFocus);
+          walker.gesture('takePhoto');
+          return;
+        }
+        walker.stand(step.yaw, 'phone', passer.pauseFocus);
+        walker.hold('phone');
+        return;
+      }
       walker.stand(step.yaw, passer.carry || passer.dog ? 'stand' : random() < 0.5 ? 'pockets' : 'stand', passer.pauseFocus);
-      // A coin for the busker, now and then.
-      if (step.gesture && random() < 0.35) walker.gesture(step.gesture);
+      // A coin for the busker now and then; a look at the watch after the clock's.
+      if (step.gesture && (step.what === 'clock' || random() < 0.35)) walker.gesture(step.gesture);
+      // Two walking together: one points something out in the window.
+      if (step.what === 'window' && passer.companion?.walker && random() < 0.5) walker.gesture('point');
     }
   }
 
@@ -567,10 +833,29 @@ export class StreetCrowd extends THREE.Group implements Furniture, Updatable {
     if (go) this.next(passer);
   }
 
+  /**
+   * On the road at the lights as the green man goes (flashing, or red already): a quicker step, a run for the young,
+   * until the far kerb; then their own pace again.
+   */
+  private hurryAcross(passer: Passer, walker: Walker): void {
+    const onRoad = walker.isPresent && walker.isWalking && roadAt(walker.position);
+    if (passer.hurrying && !onRoad) {
+      passer.hurrying = false;
+      walker.setPace(passer.pace);
+      return;
+    }
+    if (!onRoad || passer.hurrying || passer.dog) return;
+    const crossing = STREET_PLAN.crossings[this.crossingAt(walker.position.x)];
+    if (!crossing?.signals || (this.options.traffic.walkersGreen && !this.options.traffic.walkersFlashing)) return;
+    passer.hurrying = true;
+    walker.setPace(Math.max(passer.pace, 1) * (passer.member.age === 'elder' ? 1.25 : HURRY_ACROSS));
+  }
+
   private leave(passer: Passer): void {
     passer.walker?.setPresent(false);
     passer.walker?.setFade(0);
     passer.dog?.setFade(0);
+    passer.dog?.putAway();
     passer.lead?.setFade(0);
     passer.steps = [];
     passer.state = { kind: 'away', wait: 6 + random() * 16 };
@@ -587,6 +872,7 @@ export class StreetCrowd extends THREE.Group implements Furniture, Updatable {
     if (!walker) return;
     // Down a kerb onto the road while crossing it (a step eased over a few centimetres either side of the kerb's edge).
     if (walker.isPresent) walker.position.y = kerbY(walker.position);
+    this.hurryAcross(passer, walker);
     obstacle.position.copy(walker.position);
     obstacle.wantsToCross = state.kind === 'waiting' ? state.crossing : null;
     obstacle.active = walker.isPresent && (roadAt(walker.position) || obstacle.wantsToCross !== null);
@@ -595,14 +881,17 @@ export class StreetCrowd extends THREE.Group implements Furniture, Updatable {
     if (!dog || !walker.isPresent) return;
     const target = this.scratch.copy(DOG_OFFSET).applyAxisAngle(Y, walker.rotation.y).add(walker.position);
     const bark = passer.bark!;
-    // Straining towards a pigeon or the cat.
-    if (bark.bait) {
-      const dx = bark.bait.x - target.x;
-      const dz = bark.bait.z - target.z;
+    // Straining towards a pigeon or the cat; to another dog (tails going); up to the player close by.
+    const friend = this.dogNear(dog);
+    const pull = bark.bait ?? friend?.position ?? (Math.hypot(this.eye.x - dog.position.x, this.eye.z - dog.position.z) < PLAYER_DOG ? this.eye : null);
+    if (pull) {
+      const dx = pull.x - target.x;
+      const dz = pull.z - target.z;
       const d = Math.hypot(dx, dz);
       if (d > 1e-3) target.set(target.x + (dx / d) * Math.min(BAIT.pull, d), 0, target.z + (dz / d) * Math.min(BAIT.pull, d));
+      if (!bark.bait) dog.excite(0.5);
     }
-    dog.update(dt, target, walker.isWalking);
+    dog.trot(dt, target, walker.isWalking);
     dog.position.y = kerbY(dog.position);
     bark.clock -= dt;
     if (bark.clock <= 0) {
@@ -637,9 +926,11 @@ export class StreetCrowd extends THREE.Group implements Furniture, Updatable {
     const seconds = 1.2 + random() * 2;
     talker.walker!.talkAlong(seconds);
     talker.looking = seconds;
-    // The other looks back, mostly.
+    // The other looks back, mostly; laughs now and then. Home from the bars, a word carries over the street.
     const listener = talker === passer ? other : passer;
     if (random() < 0.7) listener.looking = seconds * 0.8;
+    if (random() < 0.3) listener.walker?.react('good');
+    if (passer.night && random() < 0.35) talker.walker!.say(pick(random, NIGHT_BANTER), 1.8);
   }
 
   /** How much of each passer-by shows (their door's fade times the distance's), the weather they walk in, what their dog sees. */
@@ -658,8 +949,20 @@ export class StreetCrowd extends THREE.Group implements Furniture, Updatable {
       passer.dog?.setFade(amount * walker.shownShare);
       passer.lead?.setFade(amount * walker.shownShare);
       this.dress(passer, false);
+      // A known face passing the player: a nod, a wave from a friend (once a trip).
+      if (!passer.greeted && passer.door >= 1 && greets(passer.member, walker, this.eye)) passer.greeted = true;
       if (passer.bark && bait) this.eyeOnBait(passer, bait);
     }
+  }
+
+  /** Another walked dog close by `dog` (they greet each other), or null. */
+  private dogNear(dog: Dog): Dog | null {
+    if (!dog.visible) return null;
+    for (const other of this.dogs) {
+      if (other === dog || !other.visible) continue;
+      if (Math.hypot(other.position.x - dog.position.x, other.position.z - dog.position.z) < DOG_GREET) return other;
+    }
+    return null;
   }
 
   /** A walked dog spots a pigeon or the cat close by: it barks at once (once per sighting) and strains after it. */
@@ -685,7 +988,12 @@ export class StreetCrowd extends THREE.Group implements Furniture, Updatable {
   private addDog(passer: Passer, seed: number): void {
     const dog = new Dog(seed);
     dog.setFade(0);
-    this.add(dog);
+    if (this.options.placeDog) this.options.placeDog(dog);
+    else this.add(dog);
+    // After placing (which sets its position): out of the crosshair's way until its walker sets off.
+    dog.putAway();
+    // A pat: its walker has a word (and stops a moment, if walking past).
+    dog.onPat = () => passer.walker?.say(pick(random, PAT_LINES), 2.6);
     const lead = new Lead(0x8a2a2a);
     lead.setFade(0);
     this.add(lead);

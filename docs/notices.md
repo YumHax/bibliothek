@@ -26,10 +26,11 @@ release of a tap, so a look-drag starting on a notice leaves it; Esc too when th
 holding the keyboard: the card being read only, then the pause menu): a press
 turns the page of the card being read (or a postcard's picture side) while pages are left, else puts it down at once,
 read or not, and the next waiting one comes out; a second press within 0.45 s puts every waiting card away too. With no card up, a press skips the reward banner, the slip and takes the newest tip
-down, wherever it is (twice: every tip, every waiting banner). Any press clears the subtitle strip. Alerts never go this
-way (their button), nor prompts (state, not a message). A card shows how on the pill hanging off its foot ("Put down"
-or "Turn over" with the key for the device in hand: `dismissHint`); a click (the pointer free) or a tap on a card, a
-slip, a tip or a pill puts it away (or turns it) as well. X goes to a
+down, wherever it is (twice: every tip, every waiting banner), at an arcade machine and with the pad of a program on the TV
+in hand too (X is no game's key: `ArcadePlay` and `ProgramPlay` let it through). Any press clears the subtitle strip. Alerts never go this
+way (their button), nor prompts (state, not a message). A card and a reward banner show how on the pill hanging off their
+foot (`notice-foot`: "Put down", "Turn over" or, on a banner, "Close", with the key for the device in hand: `dismissHint`);
+a click (the pointer free) or a tap on a card, a banner, a slip, a tip or a pill puts it away (or turns it) as well. X goes to a
 piece of furniture carried (put away) and to a market copy in hand (swap) first.
 
 Sounds: the chime is for a new tip card only (a tip replacing one of the same id is silent, the fold into the tray too);

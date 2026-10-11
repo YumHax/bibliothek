@@ -364,6 +364,7 @@ function tagBand(item: StockItem): { text: string; color: string } | null {
   if (item.source === 'keptAside') return { text: 'KEPT FOR YOU', color: '#3f7a4a' };
   if (item.source === 'upgrade') return { text: 'UPGRADE YOUR COPY', color: '#8a2a1a' };
   if (item.source === 'grail') return { text: '★ GRAIL ★', color: '#6b1f5a' };
+  if (item.game.felixLot !== undefined) return { text: `F.A. · LOT ${item.game.felixLot}`, color: '#5a3a1e' };
   if (item.sale < 1) return { text: `CLEARANCE −${Math.round((1 - item.sale) * 100)}%`, color: '#c8342a' };
   if (item.game.variant === 'sealed') return { text: 'SEALED', color: '#1f5f7a' };
   if (item.game.variant === 'misprint') return { text: 'MISPRINT', color: '#7a1f6b' };

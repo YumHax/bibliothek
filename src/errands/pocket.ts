@@ -2,7 +2,7 @@ import { dayKey } from '@/economy/calendar';
 import { KEYS, PersistedStore } from '@/persistence';
 import type { ErrandId } from './errands';
 
-const IDS: readonly ErrandId[] = ['croissant', 'scrap', 'treats', 'bunch'];
+const IDS: readonly ErrandId[] = ['croissant', 'scrap', 'treats', 'bunch', 'coffee', 'cake', 'basket'];
 
 interface PocketState {
   /** What is carried, by errand. */

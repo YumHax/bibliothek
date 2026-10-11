@@ -47,6 +47,7 @@ npm run scene-lint  # the same subjects: light budgets, sunk / floating / overla
 | Box sizes, cases, cartridges and discs, how boxes open, putting a game in its console, programs on the TV (`src/onscreen/`, the NES emulator, homebrew carts) | `docs/media.md` |
 | New key, click behaviour, feature, HUD element | skill `add-interaction` |
 | A new room, corridor, the outside (zones, loading/unloading) | skill `add-room` (+ `docs/zones.md`) |
+| Front Street's life and places (traffic, taxis, the warden, the crowd's reactions, the park, the bars' nights, events, secrets, post and phone box, REPLAY across town) | `docs/zones.md` "The street" |
 | Money, prices, arcade cabinets and their games, market stalls, going out (teleport); copies (variants, provenance, bootlegs, region lock), the saleroom, sealed cartons, the rival collector, small ads and the seller's flat | `docs/economy.md` |
 | Dressing a walk-in shop's interior (plans per shop, props by name, signs, lights, budgets) | `docs/shops.md` |
 | Anything else: folder map, layers, key patterns, data sources | `docs/architecture.md` |
@@ -56,6 +57,7 @@ npm run scene-lint  # the same subjects: light budgets, sunk / floating / overla
 | Friends who visit, borrow and return games; games nights, open houses, the collectors' club's visit (gatherings) | `docs/visitors.md` |
 | The building's life (neighbours, friendship, notice board, concierge, co-owners' vote, power cut, noise, Mrs Roux's move, estate sale, party, treasure hunt) | `docs/building.md` (+ `docs/zones.md` for its places) |
 | The story's frame (uncle Félix's flat, the goal, the acts) and the opening cutscene (`src/intro/`); Mémé across town by bus (the ride, `src/ui/busRide/`) and her album's memories (`src/grandma/`, `src/memories/`); the lost prototype's trail (clues by channel, the grey cart, its demo on the TV), the press reviews card, sharing the collection, the save file | `docs/story.md` (+ `docs/architecture.md` data sources) |
+| Mémé's visits in depth (her presence, tea, cards, the quiz, Sunday lunch, favours, hints toward the next memory, keepsakes, Félix's lots, the album's other photos, Gaspard, her visit to the flat, Linden Avenue) | `docs/grandma.md` |
 | What the kitchen, bathroom and bedroom are for (cleaning boxes, the bath, cake, radio, manuals, outfits, phone, dreams); the home arcade, the turntable, repairing a console | `docs/household.md` |
 | Moving boxes to any shelf spot, moving the flat's furniture (right-click, grid, planning view, storage), the player's shelf arrangement, making a piece movable; displays (case, pedestal), shelf labels, tipping a box out | `docs/furnishing.md` |
 | Telling the player something (speech bubbles, reactions, slips, rewards, tips, prompts with key caps, cards to read: letters, postcards, flyers); no toasts | `docs/notices.md` |

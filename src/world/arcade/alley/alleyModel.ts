@@ -6,7 +6,7 @@ import { drawText } from '../games/ArcadeGame';
 import { TicketStrip } from '../TicketStrip';
 import { layMesh, WALL } from '../../surface/layers';
 import { CHROME, type MachineDisplay, displayScreen, outOfOrderNote, paintMarquee } from '../machineParts';
-import { BALLS, BALL_R, BOARD_BACK, BOARD_FRONT, BOARD_V, BOARD_W, LANE_FAR, LANE_NEAR, LANE_W, POCKETS, POCKET_R, RINGS, RING_CENTRE } from './AlleySim';
+import { BALLS, BALL_R, BOARD_BACK, BOARD_FRONT, BOARD_NORMAL, BOARD_V, BOARD_W, HOLES, LANE_FAR, LANE_NEAR, LANE_W, POCKETS, POCKET_R, RINGS, RING_CENTRE, boardPoint } from './AlleySim';
 
 /** The cabinet round the lane: its width, and the backboard's z and top. */
 export const WIDTH = 0.8;
@@ -27,7 +27,13 @@ export interface AlleyModel {
   readonly trough: readonly THREE.Mesh[];
   readonly strip: TicketStrip;
   readonly hitbox: THREE.Mesh;
+  /** A lamp ring round each corner pocket (left, right): bright round the pocket lit for this ball. */
+  readonly pocketLamps: readonly THREE.MeshBasicMaterial[];
 }
+
+/** A pocket's lamp ring, off and on. */
+export const POCKET_LAMP_OFF = 0x4a3a10;
+export const POCKET_LAMP_ON = 0xffe680;
 
 /**
  * Builds a ball alley into `root` (origin on the floor under the middle of the lane, +z the
@@ -69,6 +75,16 @@ export function buildAlleyModel(root: THREE.Group, color: number, title: string)
   board.rotation.x = -Math.PI / 2 + Math.atan2(BOARD_BACK.y - BOARD_FRONT.y, BOARD_FRONT.z - BOARD_BACK.z);
   board.receiveShadow = true;
   root.add(board);
+  // A lamp ring round each pocket, standing a little proud of the board (a ring of tube, so nothing lies in its plane).
+  const pocketLamps = POCKETS.map((p) => {
+    const lamp = new THREE.MeshBasicMaterial({ color: POCKET_LAMP_OFF });
+    const ring = new THREE.Mesh(new THREE.TorusGeometry(POCKET_R + 0.012, 0.004, 6, 24), lamp);
+    ring.position.copy(boardPoint(p.u, p.v)).addScaledVector(BOARD_NORMAL, 0.004);
+    ring.rotation.x = board.rotation.x;
+    ring.castShadow = false;
+    root.add(ring);
+    return lamp;
+  });
   root.add(boxMesh(BOARD_W, BOARD_BACK.y - 0.2, 0.04, BLACK, { y: (BOARD_BACK.y - 0.2) / 2 + 0.2, z: BOARD_BACK.z - 0.03 }));
   // The backboard: marquee, the score display, and a mesh screen in front of the rings.
   root.add(boxMesh(WIDTH, BACK_H - BOARD_BACK.y, 0.06, body, { y: BOARD_BACK.y + (BACK_H - BOARD_BACK.y) / 2, z: BACK_Z }));
@@ -114,10 +130,10 @@ export function buildAlleyModel(root: THREE.Group, color: number, title: string)
     const mesh = obj as THREE.Mesh;
     if (mesh.isMesh && mesh !== net) mesh.receiveShadow = true;
   });
-  return { marquee: marqueeMat, display, note, ball, trough, strip, hitbox };
+  return { marquee: marqueeMat, display, note, ball, trough, strip, hitbox, pocketLamps };
 }
 
-/** The board: concentric rings round the 50, the numbers, the two 100 pockets in the top corners. */
+/** The board: concentric rings round the 50, each ring's hole at the bottom of its band, the numbers, the gutter along the front, the two 100 pockets in the top corners. */
 function paintBoard(): THREE.Texture {
   const PX = 700;
   const W = Math.round(BOARD_W * PX);
@@ -135,11 +151,22 @@ function paintBoard(): THREE.Texture {
     ctx.arc(cx, cy, ring.within * PX, 0, Math.PI * 2);
     ctx.fill();
   });
-  ctx.fillStyle = '#111';
-  ctx.beginPath();
-  ctx.arc(cx, cy, 0.03 * PX, 0, Math.PI * 2);
-  ctx.fill();
-  RINGS.forEach((ring, i) => drawText(ctx, `${ring.points}`, cx, cy - (i === 0 ? 0.035 : (ring.within - 0.025)) * PX, 18, i % 2 ? '#e8e2d0' : '#1b3a6b'));
+  // The holes the balls drop through, dark, with a shadowed rim at the top where the ball rolls in.
+  for (const hole of HOLES) {
+    const [hx, hy] = at(hole.u, hole.v);
+    ctx.fillStyle = 'rgba(0,0,0,0.35)';
+    ctx.beginPath();
+    ctx.arc(hx, hy - 2, hole.r * PX + 3, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = '#0b0b0e';
+    ctx.beginPath();
+    ctx.arc(hx, hy, hole.r * PX, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  // The gutter along the front edge, where a 10 drops.
+  ctx.fillStyle = '#0b0b0e';
+  ctx.fillRect(0, H - 0.025 * PX, W, 0.025 * PX);
+  RINGS.forEach((ring, i) => drawText(ctx, `${ring.points}`, cx, cy - (i === 0 ? 0.042 : (ring.within - 0.025)) * PX, 18, i % 2 ? '#e8e2d0' : '#1b3a6b'));
   for (const p of POCKETS) {
     const [px, py] = at(p.u, p.v);
     ctx.fillStyle = '#ffd23a';
@@ -152,7 +179,7 @@ function paintBoard(): THREE.Texture {
     ctx.fill();
     drawText(ctx, '100', px, py - POCKET_R * PX - 16, 16, '#ffd23a');
   }
-  drawText(ctx, '10', W / 2, H - 22, 18, '#e8e2d0');
+  drawText(ctx, '10', W / 2, H - 0.025 * PX - 16, 18, '#e8e2d0');
   return toTexture(canvas, 'facing');
 }
 

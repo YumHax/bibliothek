@@ -81,7 +81,7 @@ export class RainOnRoofs {
 }
 
 /** A Poisson draw with mean `mean` (small means: Knuth's). */
-function poisson(mean: number): number {
+export function poisson(mean: number): number {
   if (mean <= 0) return 0;
   const limit = Math.exp(-mean);
   let k = 0;

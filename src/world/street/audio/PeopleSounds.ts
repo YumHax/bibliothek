@@ -2,13 +2,15 @@ import * as THREE from 'three';
 import type { Updatable } from '@/core/Engine';
 import { playFootfall } from '@/audio/footfall';
 import type { FootSurface } from '@/audio/footSurface';
+import { playMurmur } from '@/audio/murmur';
+import { onLineShown } from '@/notices';
 import type { SpatialOut } from '@/audio/spatial';
 import type { Furniture, OccupancyAware } from '../../Furniture';
 import type { ActivityAware } from '../../zone/lifecycle';
 import type { DayNight } from '../../props/DayNight';
 import type { Walker } from '../../people/Walker';
 import { SoundGraph } from './soundGraph';
-import { StreetEar } from './streetEar';
+import { StreetEar, falloff } from './streetEar';
 import { random } from '@/random';
 import { loudness } from '@/audio/hearing';
 
@@ -30,7 +32,23 @@ const JUMP = 1.5;
 /** The murmur: people within this (m) count, and its level when there are this many or more. */
 const MURMUR_WITHIN = 14;
 const MURMUR_FULL = 5;
-const FORMANTS = [480, 690, 900, 1150];
+/** Voices in the murmur: each a voiced throat (its own pitch, Hz) through two formants hopping from vowel to vowel. */
+const BABBLE = { voices: 6, pitch: [95, 250] as const, syllable: [0.09, 0.22] as const };
+/** Vowels' first and second formants (Hz): a, e, i, o, u, and the schwa. */
+const VOWELS: readonly (readonly [number, number])[] = [[730, 1090], [530, 1840], [300, 2250], [570, 840], [320, 900], [500, 1500]];
+/** A line said over someone's head in the street is heard as a murmur this loud at the mouth, half at `halfAt` m. */
+const SPEECH = { level: 0.35, halfAt: 3.5, within: 22 };
+
+interface BabbleVoice {
+  gain: GainNode;
+  throat: OscillatorNode;
+  f1: BiquadFilterNode;
+  f2: BiquadFilterNode;
+  pitch: number;
+  phrase: number;
+  syllable: number;
+  talking: boolean;
+}
 
 interface Gait {
   last: THREE.Vector3;
@@ -41,14 +59,18 @@ interface Gait {
 /**
  * The people of the street heard as well as seen: the footsteps of whoever walks by close
  * (`playFootfall`, on the paving, the asphalt or the grass where they are, wet or snowy as the
- * ground is; heels and soles a little different from one walker to the next), and a soft murmur
- * of voices that swells with how many people are about. Only while the player is in the street;
+ * ground is; heels and soles a little different from one walker to the next), a soft murmur
+ * of voices that swells with how many people are about (voiced babble: each voice its own pitch,
+ * syllables hopping from vowel to vowel), and each line said over someone's head as it shows
+ * (`notices.onLineShown`), murmured in their own voice from where they stand. Only while the player is in the street;
  * let go while the zone is dormant.
  */
 export class PeopleSounds extends THREE.Group implements Furniture, Updatable, OccupancyAware, ActivityAware {
   readonly contactShadow = false;
   private graph: SoundGraph | null = null;
-  private murmur: { gain: GainNode; leg: SpatialOut; voices: { gain: GainNode; phrase: number; talking: boolean }[] } | null = null;
+  private murmur: { gain: GainNode; leg: SpatialOut; voices: BabbleVoice[] } | null = null;
+  private stopListening: (() => void) | null = null;
+  private readonly pitches = new WeakMap<Walker, number>();
   private occupied = false;
   private active = true;
   private readonly ear: StreetEar;
@@ -60,7 +82,7 @@ export class PeopleSounds extends THREE.Group implements Furniture, Updatable, O
   constructor(private readonly dayNight: DayNight, private readonly options: PeopleSoundsOptions) {
     super();
     this.name = 'PeopleSounds';
-    this.ear = new StreetEar(options.listener);
+    this.ear = new StreetEar(options.listener, this);
   }
 
   get footprint(): THREE.Box3 {
@@ -70,6 +92,11 @@ export class PeopleSounds extends THREE.Group implements Furniture, Updatable, O
   setOccupied(occupied: boolean): void {
     this.occupied = occupied;
     this.graph?.setLevel(occupied ? MASTER : 0, 0.4);
+    if (occupied && !this.stopListening) this.stopListening = onLineShown((anchor, text) => this.voice(anchor, text));
+    else if (!occupied) {
+      this.stopListening?.();
+      this.stopListening = null;
+    }
   }
 
   setZoneActive(active: boolean): void {
@@ -83,6 +110,32 @@ export class PeopleSounds extends THREE.Group implements Furniture, Updatable, O
 
   dispose(): void {
     this.setZoneActive(false);
+    this.stopListening?.();
+    this.stopListening = null;
+  }
+
+  /** A line just shown over the head of someone of the street: their murmur, from where they stand. */
+  private voice(anchor: THREE.Object3D, text: string): void {
+    const g = this.graph;
+    if (!g || !this.occupied || !this.active) return;
+    const walker = this.options.walkers.find((w) => w.speechAnchor === anchor);
+    if (!walker || !walker.visible) return;
+    this.ear.update();
+    this.localToWorld(this.world.copy(walker.position));
+    this.world.y += 1.6;
+    const d = this.ear.distance(this.world);
+    if (d > SPEECH.within) return;
+    playMurmur(text, SPEECH.level * falloff(d, SPEECH.halfAt), this.ear.spatial(this.world), this.pitchOf(walker), g.master);
+  }
+
+  /** A walker's voice: deep to light, their own for as long as they walk the street. */
+  private pitchOf(walker: Walker): number {
+    let pitch = this.pitches.get(walker);
+    if (pitch === undefined) {
+      pitch = 0.1 + random() * 0.8;
+      this.pitches.set(walker, pitch);
+    }
+    return pitch;
   }
 
   update(dt: number): void {
@@ -149,15 +202,29 @@ export class PeopleSounds extends THREE.Group implements Furniture, Updatable, O
     m.gain.gain.setTargetAtTime(level, g.now, 0.8);
     if (crowd > 0) {
       const side = this.ear.spatial(this.centre.divideScalar(crowd));
-      m.leg.set(side.pan * 0.5, 0, false, side.rear ?? 0);
+      m.leg.set(side.pan * 0.5, side.walls, false, side.rear ?? 0);
     }
     if (level < 0.002) return;
+    const now = g.now;
     for (const voice of m.voices) {
       voice.phrase -= dt;
-      if (voice.phrase > 0) continue;
-      voice.talking = !voice.talking && random() < 0.3 + crowd / MURMUR_FULL;
-      voice.phrase = voice.talking ? 0.6 + random() * 2 : 0.8 + random() * 3;
-      voice.gain.gain.setTargetAtTime(voice.talking ? 0.4 + random() * 0.6 : 0, g.now, 0.12);
+      if (voice.phrase <= 0) {
+        voice.talking = !voice.talking && random() < 0.3 + crowd / MURMUR_FULL;
+        voice.phrase = voice.talking ? 0.6 + random() * 2.2 : 0.8 + random() * 3;
+        if (!voice.talking) voice.gain.gain.setTargetAtTime(0, now, 0.08);
+      }
+      if (!voice.talking) continue;
+      voice.syllable -= dt;
+      if (voice.syllable > 0) continue;
+      // A syllable: a vowel's formants, the voice's pitch lilting, a little stress now and then.
+      voice.syllable = BABBLE.syllable[0] + random() * (BABBLE.syllable[1] - BABBLE.syllable[0]);
+      const [f1, f2] = VOWELS[Math.floor(random() * VOWELS.length)]!;
+      voice.f1.frequency.setTargetAtTime(f1, now, 0.025);
+      voice.f2.frequency.setTargetAtTime(f2, now, 0.025);
+      voice.throat.frequency.setTargetAtTime(voice.pitch * (0.9 + random() * 0.25), now, 0.05);
+      const stress = random() < 0.25 ? 1 : 0.55 + random() * 0.3;
+      voice.gain.gain.setTargetAtTime(stress, now, 0.02);
+      voice.gain.gain.setTargetAtTime(stress * 0.35, now + voice.syllable * 0.6, 0.03);
     }
   }
 
@@ -168,10 +235,18 @@ export class PeopleSounds extends THREE.Group implements Furniture, Updatable, O
     const leg = g.leg();
     const gain = g.gain();
     gain.connect(g.filter('lowpass', 1600, 0.6)).connect(leg.input);
-    const voices = FORMANTS.map((f) => {
+    const voices = Array.from({ length: BABBLE.voices }, (): BabbleVoice => {
+      const pitch = BABBLE.pitch[0] + random() * (BABBLE.pitch[1] - BABBLE.pitch[0]);
+      const throat = g.oscillator('sawtooth', pitch);
+      const f1 = g.filter('bandpass', 600, 6);
+      const f2 = g.filter('bandpass', 1400, 8);
       const v = g.gain();
-      g.loop().connect(g.filter('bandpass', f * (0.92 + random() * 0.16), 3.5)).connect(v).connect(gain);
-      return { gain: v, phrase: random() * 2, talking: false };
+      throat.connect(f1).connect(v);
+      throat.connect(f2).connect(g.gain(0.6)).connect(v);
+      // Breath and consonants over the voice.
+      g.loop().connect(g.filter('bandpass', 2600 + random() * 1600, 2)).connect(g.gain(0.12)).connect(v);
+      v.connect(gain);
+      return { gain: v, throat, f1, f2, pitch, phrase: random() * 2, syllable: 0, talking: false };
     });
     this.murmur = { gain, leg, voices };
     return g;

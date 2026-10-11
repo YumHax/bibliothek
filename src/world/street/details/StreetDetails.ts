@@ -11,13 +11,13 @@ import { FRONT, KERB_HEIGHT, PARK_STREET } from '@/world/measures/street';
 import { groundHeight } from '../relief/ground';
 import { TriBuilder } from '../relief/TriBuilder';
 import { closures, closureBox, type Closure } from './roadworks';
+import { DRAINS } from './drains';
 import { GROUND, onSurface } from '../../surface/layers';
 import { lcg } from '@/random';
 
 /* Where the little things stand: the street's plan (`STREET_PLAN.details`, which the window view paints too). */
 const { manholes: MANHOLES, hydrants: HYDRANTS, bollards: BOLLARDS, column: { at: COLUMN, ...COLUMN_SIZE } } = STREET_PLAN.details;
-/** Gutter drains along the kerbs every so many metres. */
-const DRAIN_EVERY = 13;
+
 /** A manhole cover's radius, and its cast-iron frame round it (outer radius, how far it stands proud). */
 const COVER = 0.34;
 const FRAME = { outer: 0.42, proud: 0.012 };
@@ -86,16 +86,7 @@ export class StreetDetails extends THREE.Group implements Furniture, Updatable {
       for (let i = 0; i < uv.count; i++) uv.setX(i, 0.5 + uv.getX(i) * 0.5);
       covers.push(g);
     };
-    for (const side of [-1, 1]) {
-      for (let x = PARK_STREET.farKerb + 4; x < 100; x += DRAIN_EVERY) {
-        if (STREET_PLAN.crossings.some((c) => x > c.from - 1 && x < c.to + 1)) continue;
-        grate(x, side * (FRONT.farKerb - 0.2), 0);
-      }
-    }
-    for (let z = -20; z > -90; z -= DRAIN_EVERY) {
-      grate(PARK_STREET.nearKerb - 0.2, z, Math.PI / 2);
-      grate(PARK_STREET.farKerb + 0.2, z - 6, Math.PI / 2);
-    }
+    for (const { at: [x, z], yaw } of DRAINS) grate(x, z, yaw);
     this.addMesh(merge(covers), onSurface(bareMetal({ map: ironMap, roughness: 0.6 }, 0.22), GROUND.grate), false);
 
     // Hydrants: a red pillar on its flange, a domed bonnet with the operating nut, two hose nozzles and the pumper's

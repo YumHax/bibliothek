@@ -24,6 +24,8 @@ export interface MirrorBallOptions {
 export class MirrorBall extends Prop implements Updatable {
   private readonly ball: THREE.Mesh;
   private readonly speed: number;
+  /** How many times its usual speed it turns (a celebration spins it up, `setSpin`). */
+  private spin = 1;
 
   constructor(options: MirrorBallOptions = {}) {
     super();
@@ -42,7 +44,12 @@ export class MirrorBall extends Prop implements Updatable {
   }
 
   update(dt: number): void {
-    this.ball.rotation.y += this.speed * dt;
+    this.ball.rotation.y += this.speed * this.spin * dt;
+  }
+
+  /** Turns at `times` its usual speed (1: as usual); the arcade's celebrations spin it up. */
+  setSpin(times: number): void {
+    this.spin = Math.max(0, times);
   }
 }
 

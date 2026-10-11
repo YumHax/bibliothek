@@ -1,0 +1,67 @@
+/* What the player does with Mémé (docs/grandma.md "Things to do with her"): the quiz, the crossword, the cards, the wool. */
+@layer tokens, base, components, panels;
+@layer panels {
+  .meme-pastime {
+    --mp-felt: #2f5a3c;
+    --mp-card: #f6f1e4;
+    --mp-red: #b3262e;
+    --mp-black: #1d1a17;
+    --mp-back: #7a2a2e;
+    --mp-yarn: #c0503a;
+    --mp-yarn-taut: #e8301e;
+    --mp-skin: #e2b48e;
+    --mp-show: #1a2a8a;
+    --mp-show-light: #ffe070;
+  }
+  .meme-pastime .ui-panel__card { width: min(var(--card-w-md), 100%); }
+  /* Her words: a fixed height, so a longer line never pushes the buttons. */
+  .meme-pastime__her { min-height: 3.2em; margin: var(--sp-3) 0 0; font-family: var(--ui-font-hand); font-size: var(--fs-6); line-height: 1.35; color: var(--ui-text); }
+
+  /* The quiz: the show's colours behind the question. */
+  .meme-quiz .ui-panel__body { background: linear-gradient(var(--mp-show), var(--ui-panel)); border-radius: var(--ui-radius-sm); padding: var(--sp-3); }
+  .meme-quiz__count { margin: 0; color: var(--mp-show-light); font-size: var(--fs-4); letter-spacing: 0.08em; text-transform: uppercase; }
+  .meme-quiz__question { margin: var(--sp-2) 0 var(--sp-3); font-size: var(--fs-7); font-weight: 600; min-height: 2.6em; }
+  .meme-quiz__answers { display: grid; grid-template-columns: 1fr 1fr; gap: var(--sp-2); }
+  .meme-quiz__answer { position: relative; min-height: 2.8em; text-align: left; }
+  .meme-quiz__answer--right { border-color: var(--ui-success); background: var(--ui-success-soft); }
+  .meme-quiz__answer--wrong { border-color: var(--ui-danger); background: var(--ui-danger-soft); }
+  .meme-quiz__answer:disabled { opacity: 1; }
+  .meme-quiz__hers { position: absolute; top: calc(-1 * var(--sp-2)); right: var(--sp-2); padding: 0 var(--sp-1); border-radius: var(--ui-radius-pill); background: var(--mp-show-light); color: var(--mp-black); font-size: var(--fs-2); }
+
+  /* The crossword: the word's squares on the paper. */
+  .meme-crossword__clue { margin: 0 0 var(--sp-3); font-family: var(--ui-font-serif); font-size: var(--fs-6); }
+  .meme-crossword__squares { display: flex; flex-wrap: wrap; gap: 0; justify-content: center; }
+  .meme-crossword__square { display: grid; place-items: center; width: 2.2em; height: 2.2em; border: 2px solid var(--ink-black); margin-left: -2px; background: var(--paper-news); color: var(--ui-info-text); font-family: var(--ui-font-hand); font-size: var(--fs-7); }
+  .meme-crossword__square--given { color: var(--ink-black); }
+  .meme-crossword__squares--inked .meme-crossword__square { color: var(--ink-black); }
+  .meme-crossword__letters { display: flex; flex-wrap: wrap; gap: var(--sp-1); justify-content: center; margin-top: var(--sp-3); }
+  .meme-crossword__letter { min-width: 2em; padding: var(--sp-1); }
+  .meme-crossword__rub { min-width: auto; }
+
+  /* The cards: her hand, the pile, the player's hand on the felt. */
+  .meme-cards__table { display: flex; flex-direction: column; gap: var(--sp-3); padding: var(--sp-3); border-radius: var(--ui-radius-md); background: var(--mp-felt); }
+  .meme-cards__hand { display: flex; flex-wrap: wrap; justify-content: center; gap: var(--sp-1); min-height: 4.6em; }
+  .meme-cards__middle { display: flex; align-items: center; justify-content: center; gap: var(--sp-3); }
+  .meme-cards__card { position: relative; display: inline-grid; place-items: center; width: 3.2em; height: 4.6em; padding: 0; border: 1px solid var(--ui-border-strong); border-radius: var(--ui-radius-xs); background: var(--mp-card); color: var(--mp-black); font: inherit; box-shadow: var(--ui-shadow); }
+  button.meme-cards__card { cursor: pointer; transition: transform var(--dur-hover) var(--ui-ease); }
+  button.meme-cards__card:not(:disabled):hover, .meme-cards__card--lifted { transform: translateY(-0.4em); }
+  .meme-cards__card--hearts, .meme-cards__card--diamonds { color: var(--mp-red); }
+  .meme-cards__card--back { background: repeating-linear-gradient(45deg, var(--mp-back) 0 4px, var(--mp-card) 4px 6px); }
+  .meme-cards__card--stock { background: repeating-linear-gradient(45deg, var(--mp-back) 0 4px, var(--mp-card) 4px 6px); color: var(--mp-card); font-size: var(--fs-2); }
+  .meme-cards__rank { position: absolute; top: 0.2em; left: 0.3em; font-size: var(--fs-3); font-weight: 700; }
+  .meme-cards__pip { font-size: var(--fs-8); }
+  .meme-cards__asked { color: var(--mp-card); font-family: var(--ui-font-hand); font-size: var(--fs-5); }
+  .meme-cards__suits { display: flex; flex-wrap: wrap; gap: var(--sp-2); justify-content: center; margin-top: var(--sp-2); }
+  .meme-cards__suit--hearts, .meme-cards__suit--diamonds { color: var(--mp-red); }
+  .meme-cards__tally { margin: var(--sp-1) 0 0; color: var(--ui-text-dim); font-family: var(--ui-font-hand); font-size: var(--fs-4); }
+
+  /* The wool: the skein over the player's hands, the yarn to her needles, the knitting growing. */
+  .meme-wool__view { display: block; width: 100%; height: auto; }
+  .meme-wool__hand { fill: var(--mp-skin); }
+  .meme-wool__skein { fill: none; stroke: var(--mp-yarn); stroke-width: 6; }
+  .meme-wool__yarn { fill: none; stroke: var(--mp-yarn); stroke-width: 2.5; transition: stroke var(--dur-quick) var(--ui-ease); }
+  .meme-wool__yarn--taut { stroke: var(--mp-yarn-taut); stroke-width: 1.6; }
+  .meme-wool__needle { stroke: var(--ui-text-dim); stroke-width: 2.5; stroke-linecap: round; }
+  .meme-wool__knitting { height: 1.2em; margin-top: var(--sp-2); border-radius: var(--ui-radius-xs); background: var(--ui-fill); overflow: hidden; }
+  .meme-wool__rows { display: block; width: 0; height: 100%; background: repeating-linear-gradient(90deg, var(--mp-yarn) 0 6px, var(--mp-yarn-taut) 6px 7px); }
+}

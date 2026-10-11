@@ -1,22 +1,35 @@
 import * as THREE from 'three';
 import { rearOf, stereoPan, type Spatial } from '@/audio/spatial';
 import { loudness } from '@/audio/hearing';
+import { blockedBetween } from './streetBlocks';
+
+/**
+ * The air takes the highs off a sound with distance: this many metres is one "wall" of `SpatialOut`'s low-pass (at 60 m,
+ * half a wall: the cutoff down to ~8 kHz; a car at the far end of the street is a rumble, not a hiss).
+ */
+const AIR_PER_WALL = 120;
+/** A sound round a corner or over a roof (`streetBlocks`): this many walls (a cutoff near 2 kHz, the corner's shadow). */
+const ROUND_A_CORNER = 1.4;
 
 /**
  * The listener as every sound of the street hears it (one helper instead of a pan worked out
  * again in each class): where the ears are, how far a source is, and where it comes from: its
- * side (`stereoPan`) and whether it is behind the head (`rearOf`: a little duller and quieter,
- * the one front/back cue a stereo pair has). Feed `spatial` to a `SpatialOut` (`soundGraph`).
- * Call `update` once a frame before asking.
+ * side (`stereoPan`), whether it is behind the head (`rearOf`: a little duller and quieter,
+ * the one front/back cue a stereo pair has), how much air is between (duller far off) and, given
+ * the street's `frame` (the zone's origin), whether a block stands between (round a corner: much
+ * duller). Feed `spatial` to a `SpatialOut` (`soundGraph`). Call `update` once a frame before asking.
  */
 export class StreetEar {
   readonly at = new THREE.Vector3();
   private readonly spot: Spatial = { pan: 0, walls: 0, rear: 0 };
+  private readonly earLocal = new THREE.Vector3();
+  private readonly sourceLocal = new THREE.Vector3();
 
-  constructor(readonly listener: THREE.Object3D) {}
+  constructor(readonly listener: THREE.Object3D, private readonly frame?: THREE.Object3D) {}
 
   update(): void {
     this.listener.getWorldPosition(this.at);
+    if (this.frame) this.frame.worldToLocal(this.earLocal.copy(this.at));
   }
 
   /** Metres from the ears to `world`. */
@@ -24,10 +37,21 @@ export class StreetEar {
     return this.at.distanceTo(world);
   }
 
-  /** Side and rear of a source at `world` (a shared object: read it before asking again). */
+  /** Where the ears are in the street's frame (zone-local; the world point without a `frame`). */
+  get local(): THREE.Vector3 {
+    return this.frame ? this.earLocal : this.at;
+  }
+
+  /** Side, rear and the walls (air, a block between) of a source at `world` (a shared object: read it before asking again). */
   spatial(world: THREE.Vector3): Spatial {
     this.spot.pan = stereoPan(this.listener, world);
     this.spot.rear = rearOf(this.listener, world);
+    let walls = this.at.distanceTo(world) / AIR_PER_WALL;
+    if (this.frame) {
+      this.frame.worldToLocal(this.sourceLocal.copy(world));
+      if (blockedBetween(this.earLocal.x, this.earLocal.z, this.sourceLocal.x, this.sourceLocal.z)) walls += ROUND_A_CORNER;
+    }
+    this.spot.walls = walls;
     return this.spot;
   }
 }

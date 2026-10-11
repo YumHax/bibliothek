@@ -129,6 +129,13 @@ export const BEDROOM_PLAN = {
   /** The arcade's mood lamp once won: on the dresser's pile of books (dresser-local x, height above its top). */
   moodLamp: { along: 0.21, above: 0.06 },
   /**
+   * The arcade's other prizes at home (docs/household.md): the plush in a row in front of the pillows (bed-local: from
+   * the headboard, across the bed), the tin rocket hung as a mobile over the foot of the bed (0.9 m under the ceiling,
+   * clear of the pendant at the centre).
+   */
+  plushes: { z: 0.56, span: 1.25 },
+  rocketMobile: { at: { ceiling: [0.45, -0.55] } as Placement, drop: 0.9 },
+  /**
    * The home arcade cabinet once bought (`world/homeArcade`, the TV repair shop): against the front wall between the
    * light switch and the dresser (x -0.44..0.22, z 1.01..1.79), its screen to the bed; 0.66 x 0.78 m, its origin the
    * base's centre. Between its front-left corner and the wardrobe's end stays 0.7 m, the way in for the player (0.6 m

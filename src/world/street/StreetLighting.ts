@@ -7,7 +7,10 @@ import type { DayNight } from '../props/DayNight';
 import { airColor, airDensity } from './streetAir';
 import { ShadowRefresh } from '../lighting/shadowRefresh';
 import { snapDirection } from '../props/shadowTexels';
-import { farShadowUniforms, type FarShadowUniforms } from './shadowFade';
+import { STREET_SUN_TAG, farShadowUniforms, type FarShadowUniforms } from './shadowFade';
+import { SunCascadeShadow } from './SunCascadeShadow';
+import { advanceWind } from './wind';
+import { advanceClouds } from './cloudShadow';
 import { dampFactor } from '@/math/damp';
 
 interface StreetLightingOptions {
@@ -19,6 +22,11 @@ interface StreetLightingOptions {
   shadowRefreshHz?: number;
   /** The street's ground under the rig (zone-local y; default 0): the roof's street lies far below it, and the mist with it. */
   groundY?: number;
+  /**
+   * Half the side (m) of a finer square of the sun's shadow round the player, drawn in the same map beside the whole
+   * one (`SunCascadeShadow`: railings, window bars and bench slats sharp underfoot, no second shadow map); none if unset.
+   */
+  nearReach?: number;
 }
 
 /** The light's distance from the patch of street it shadows, and its shadow camera's depth. */
@@ -27,6 +35,8 @@ const SHADOW_FAR = 150;
 /** The sun's share of the `SkyState` light (tuned for the windows' beams, too strong for a whole street). */
 const SUN_SHARE = 0.75;
 const GROUND_BOUNCE = new THREE.Color(0x6a6560);
+/** What lying snow throws back up (the undersides of awnings, balconies and cornices brighten over it). */
+const SNOW_BOUNCE = new THREE.Color(0xc8ccd4);
 const GLOW = new THREE.Color(0xffb070);
 /** Per second: the sky's ambient comes and goes this fast as the player steps out of the sas or back in (no pop). */
 const SKY_RATE = 3;
@@ -41,6 +51,8 @@ const CASTER_HEIGHT = 8;
  * shadows reach further down the street they see (behind them, only the square's back part).
  */
 const LOOK_AHEAD = 0.55;
+/** The near square is laid this share of its own half-side ahead (the ground just in front matters most). */
+const NEAR_LOOK_AHEAD = 0.3;
 
 /**
  * The outdoor lighting rig, instead of a `Room`'s: a shadow-casting `DirectionalLight` for the sun
@@ -78,6 +90,9 @@ export class StreetLighting extends THREE.Group implements Furniture, Updatable,
   /** The scene's haze, found the first time the street is occupied (null outside a scene with one). */
   private haze: Haze | null = null;
   private readonly groundY: number;
+  /** Where the near square of the sun's shadow is centred (world), when there is one. */
+  private readonly nearCentre = new THREE.Vector3();
+  private readonly nearReach: number;
 
   constructor(
     private readonly dayNight: DayNight,
@@ -89,8 +104,12 @@ export class StreetLighting extends THREE.Group implements Furniture, Updatable,
     this.name = 'StreetLighting';
     this.reach = options.shadowReach ?? 28;
     this.groundY = options.groundY ?? 0;
+    this.nearReach = options.nearReach ?? 0;
     this.sun = new THREE.DirectionalLight(0xffffff, 0);
+    if (this.nearReach > 0) this.sun.shadow = new SunCascadeShadow({ farReach: this.reach, nearReach: this.nearReach, nearCentre: this.nearCentre }, this.far.sunCascade.value);
     this.sun.castShadow = true;
+    // PCF soft never reads it: it tells the street's sun from any other light in the shaders (`shadowFade`).
+    this.sun.shadow.radius = STREET_SUN_TAG;
     this.sun.shadow.mapSize.set(options.shadowMapSize, options.shadowMapSize);
     const cam = this.sun.shadow.camera;
     cam.left = -this.reach;
@@ -101,7 +120,8 @@ export class StreetLighting extends THREE.Group implements Furniture, Updatable,
     cam.far = SHADOW_FAR;
     cam.updateProjectionMatrix();
     this.sun.shadow.bias = -0.0004;
-    this.sun.shadow.normalBias = 0.05;
+    // A finer near square needs less push off the surfaces (its texels are a third as wide).
+    this.sun.shadow.normalBias = this.nearReach > 0 ? 0.035 : 0.05;
     this.sun.target = this.target;
     this.add(this.target, this.sun);
     this.sunShadow = new ShadowRefresh(this.sun, options.shadowRefreshHz);
@@ -141,6 +161,9 @@ export class StreetLighting extends THREE.Group implements Furniture, Updatable,
   update(dt: number): void {
     this.sunShadow.update(dt);
     const s = this.dayNight.state;
+    // The wind and the clouds' drift everything out here shares (one rig drives them a frame).
+    advanceWind(this, dt, s);
+    advanceClouds(this, dt, s);
     // The sun (or moon), shining at the patch of street around the player.
     this.lightDirection(this.rawDir);
     const texel = (2 * this.reach) / this.sun.shadow.mapSize.x;
@@ -152,7 +175,14 @@ export class StreetLighting extends THREE.Group implements Furniture, Updatable,
       this.parent.getWorldPosition(this.far.farOrigin.value);
     }
     this.look.y = 0;
-    if (this.look.lengthSq() > 1e-6) this.eye.addScaledVector(this.look.normalize(), this.reach * LOOK_AHEAD);
+    if (this.look.lengthSq() > 1e-6) this.look.normalize();
+    if (this.nearReach > 0) {
+      // The near square: round the player's feet, a little ahead (world space, as the shadow camera works in).
+      this.nearCentre.copy(this.eye).addScaledVector(this.look, this.nearReach * NEAR_LOOK_AHEAD);
+      this.nearCentre.y = this.groundY;
+      if (this.parent) this.parent.localToWorld(this.nearCentre);
+    }
+    this.eye.addScaledVector(this.look, this.reach * LOOK_AHEAD);
     this.eye.y = 0;
     this.snapToTexels(this.eye);
     this.far.farSun.value.copy(this.dir).normalize();
@@ -167,7 +197,7 @@ export class StreetLighting extends THREE.Group implements Furniture, Updatable,
     const ease = dampFactor(SKY_RATE, dt);
     if (this.occupied) {
       this.sky.color.copy(s.ambient).lerp(s.zenith, 0.25);
-      this.sky.groundColor.copy(GROUND_BOUNCE).lerp(GLOW, 0.2 * (1 - s.daylight));
+      this.sky.groundColor.copy(GROUND_BOUNCE).lerp(SNOW_BOUNCE, 0.85 * s.snowCover).lerp(GLOW, 0.2 * (1 - s.daylight));
       const steady = 0.14 + 1.05 * s.daylight;
       const flash = 1.4 * s.lightning;
       this.skyLevel += (steady - this.skyLevel) * ease;

@@ -417,7 +417,7 @@ function features(g: G, look: PersonLook, old: boolean): void {
   g.quadraticCurveTo(53 + nose, 49 + nose * 1.5, 50.5, 51 + nose * 1.5);
   g.quadraticCurveTo(49, 51.6 + nose * 1.5, 47.8, 50.6 + nose * 1.5);
   g.stroke();
-  // Mouth: lips a shade of the skin, a smile or a straight line.
+  // Mouth: lips a shade of the skin; a smiley person (`look.smile`, a temper: the 3D face rests with a little smile) smiles for the portrait, others keep a straight line.
   g.strokeStyle = rgb(skin, 0.55);
   g.fillStyle = 'rgba(160,70,70,0.55)';
   g.lineWidth = 1.2;

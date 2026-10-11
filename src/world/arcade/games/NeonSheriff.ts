@@ -1,30 +1,27 @@
 import { clamp } from '@/math/scalar';
 import { type ArcadeControls, NO_CONTROLS, SCREEN_H, SCREEN_W, drawText } from './ArcadeGame';
-import { BaseGame, PLAY_TOP } from './BaseGame';
+import { BaseGame } from './BaseGame';
 import { random } from '@/random';
 import { Sprite } from './sprite';
 import { arcadeHint } from '../arcadeHint';
+import { SHERIFF_SCENES, type SheriffScene, type SheriffSpot } from './sheriffScenes';
 
 /* The heads popping up (hat or bonnet, face, bandana or collar; the body is the coat's rectangle under it) and the gun sight's ring. */
 const BANDIT = new Sprite([['........xxxxxxxx........', '.......xxxxxxxxxx.......', '.......xxxxxxxxxx.......', '.......xxxxxxxxxx.......', '.......bbbbbbbbbb.......', '.......bbbbbbbbbb.......', '.......xxxxxxxxxx.......', 'xxxxxxxxxxxxxxxxxxxxxxxx', 'xxxxxxxxxxxxxxxxxxxxxxxx', '.xxxxxxxxxxxxxxxxxxxxxx.', '......ssssssssssss......', '......sseesssseess......', '......sseesssseess......', '......ssssssssssss......', '......ssssssssssss......', '......rrrrrrrrrrrr......', '......rrrrrrrrrrrr......', '......rrrrrrrrrrrr......', '.......rrrrrrrrrr.......', '........rrrrrrrr........']]);
 const TOWNSFOLK = new Sprite([['......xxxxxxxxxxxx......', '....xxxxxxxxxxxxxxxx....', '...xxxxxxxxxxxxxxxxxx...', '...xx.ssssssssssss.xx...', '...xx.ssssssssssss.xx...', '......sseesssseess......', '......ssssssssssss......', '......ssssssssssss......', '......sssslllllsss......', '......ssssssssssss......', '.......ssssssssss.......', '........ssssssss........', '.......cccccccccc.......', '......cccccccccccc......', '......cccccccccccc......']]);
+const BOTTLE = new Sprite([['..xx..', '..xx..', '..xx..', '.xxxx.', 'xxoxxx', 'xxoxxx', 'xxoxxx', 'xxxxxx', 'xxxxxx', 'xxxxxx', 'xxxxxx', '.xxxx.']]);
+const STAR_BADGE = new Sprite([['.......x.......', '......xxx......', '......xox......', 'xxxxxxxoxxxxxxx', '.xxxxoooooxxxx.', '..xxoooooooxx..', '...xxoooooxx...', '...xxxoooxxx...', '..xxxxxxxxxxx..', '..xxx.....xxx..', '.xx.........xx.', '.x...........x.']]);
 const SIGHT = new Sprite([['.....xxxxx.....', '...xx.....xx...', '..x.........x..', '.x...........x.', '.x...........x.', 'x.............x', 'x.............x', 'x.............x', 'x.............x', 'x.............x', '.x...........x.', '.x...........x.', '..x.........x..', '...xx.....xx...', '.....xxxxx.....']]);
 
 const ROUND_SECONDS = 15;
 const MAGAZINE = 6;
 /** Below this line (the strip with the magazine, under the crates) the gun is out of the play: it reloads, as off the glass. */
 const RELOAD_LINE = 214;
-/** Where targets pop up: the saloon's windows, its doors, the barrels and the crates in front. */
-const SPOTS: { x: number; y: number; w: number; h: number }[] = [
-  { x: 52, y: 64, w: 34, h: 30 },
-  { x: 143, y: 64, w: 34, h: 30 },
-  { x: 234, y: 64, w: 34, h: 30 },
-  { x: 86, y: 128, w: 36, h: 52 },
-  { x: 198, y: 128, w: 36, h: 52 },
-  { x: 24, y: 190, w: 34, h: 30 },
-  { x: 143, y: 196, w: 34, h: 26 },
-  { x: 262, y: 190, w: 34, h: 30 },
-];
+/** Stages a street lasts before the gunfight moves on to the next (`SHERIFF_SCENES`). */
+const STAGES_PER_SCENE = 2;
+/** A regular's gun hand: how far off it fires now and then, how often, and when it reloads with shots left (none in sight). */
+const PILOT_WOBBLE = 10;
+const PILOT_RELOAD_AT = 2;
 type Kind = 'bandit' | 'quick' | 'townsfolk' | 'bottle' | 'badge';
 const POINTS: Record<Kind, number> = { bandit: 50, quick: 80, townsfolk: 0, bottle: 30, badge: 0 };
 /** A bandit left standing this long fires back (seconds, at the first stage; shorter later). */
@@ -50,8 +47,9 @@ interface Target {
 }
 
 /**
- * NEON SHERIFF: the light-gun cabinet. Bandits pop up in the saloon's windows and doors and behind
- * the barrels; shoot them before they draw (a slow one pays 50, a quick one 80, chaining the
+ * NEON SHERIFF: the light-gun cabinet. Bandits pop up in the windows and doors of the street's
+ * front and behind what stands before it (the saloon first, then every two stages the bank, the
+ * station, the gold mine: `sheriffScenes`); shoot them before they draw (a slow one pays 50, a quick one 80, chaining the
  * combo), or they fire back and a second goes. Townsfolk wander into the line of fire too:
  * shooting one costs two seconds and the combo. Bottles pay a little, the sheriff's star three
  * seconds. Six shots, then point out of the play (off the glass, or down at the magazine's strip) to
@@ -69,6 +67,8 @@ export class NeonSheriff extends BaseGame {
   readonly gun = true;
 
   private targets: Target[] = [];
+  /** Which street the gunfight is in. */
+  private sceneIndex = 0;
   private spawnIn = 0;
   private ammo = MAGAZINE;
   private bandits = 0;
@@ -85,6 +85,7 @@ export class NeonSheriff extends BaseGame {
 
   protected begin(): void {
     this.targets = [];
+    this.sceneIndex = 0;
     this.spawnIn = 0.3;
     this.ammo = MAGAZINE;
     this.bandits = 0;
@@ -144,27 +145,31 @@ export class NeonSheriff extends BaseGame {
   }
 
   protected paint(ctx: CanvasRenderingContext2D): void {
-    // Night sky, the saloon's front in neon outline, the boardwalk.
-    const sky = ctx.createLinearGradient(0, PLAY_TOP, 0, SCREEN_H);
-    sky.addColorStop(0, '#12051f');
-    sky.addColorStop(1, '#2a0c2c');
-    ctx.fillStyle = sky;
+    // Night sky, the street's front in neon outline, the ground.
+    const scene = this.scene;
+    ctx.fillStyle = scene.sky[1];
     ctx.fillRect(0, 0, SCREEN_W, SCREEN_H);
-    ctx.fillStyle = '#1b0f1f';
+    ctx.fillStyle = scene.sky[0];
+    for (let y = 0; y < 100; y += 4) {
+      ctx.globalAlpha = 1 - y / 100;
+      ctx.fillRect(0, y, SCREEN_W, 4);
+    }
+    ctx.globalAlpha = 1;
+    ctx.fillStyle = scene.front;
     ctx.fillRect(20, 40, SCREEN_W - 40, 150);
-    ctx.strokeStyle = '#ff2fa0';
+    ctx.strokeStyle = scene.neon;
     ctx.lineWidth = 2;
     ctx.strokeRect(20, 40, SCREEN_W - 40, 150);
-    drawText(ctx, 'SALOON', SCREEN_W / 2, 36, 9, '#ffd23a');
-    ctx.fillStyle = '#3a2418';
+    drawText(ctx, scene.sign, SCREEN_W / 2, 36, 9, '#ffd23a');
+    ctx.fillStyle = scene.ground;
     ctx.fillRect(0, 182, SCREEN_W, SCREEN_H - 182);
-    SPOTS.forEach((s, i) => {
-      ctx.fillStyle = i < 3 ? '#0b0612' : i < 5 ? '#140a0e' : '#5a3a20';
+    for (const s of scene.spots) {
+      ctx.fillStyle = s.kind === 'window' ? '#0b0612' : s.kind === 'door' ? '#140a0e' : scene.cover;
       ctx.fillRect(s.x - s.w / 2, s.y - s.h / 2, s.w, s.h);
-      ctx.strokeStyle = i < 5 ? 'rgba(51,224,255,0.55)' : 'rgba(0,0,0,0.5)';
+      ctx.strokeStyle = s.kind === 'cover' ? 'rgba(0,0,0,0.5)' : 'rgba(51,224,255,0.55)';
       ctx.lineWidth = 1;
       ctx.strokeRect(s.x - s.w / 2, s.y - s.h / 2, s.w, s.h);
-    });
+    }
     for (const t of this.targets) this.paintTarget(ctx, t);
     this.drawStage(ctx, `STAGE ${this.stage}`);
     // The magazine, bottom left.
@@ -198,26 +203,32 @@ export class NeonSheriff extends BaseGame {
     }
   }
 
-  /** Swings the gun towards the nearest threat (a lesser shot slower and wider), fires once on it, points off screen to reload when empty. */
+  /**
+   * Swings the gun towards the nearest threat (a lesser shot slower and wider), fires once on it with the hand's own
+   * wobble (a lesser hand misses more), points off screen to reload when empty, and a good one reloads early in a lull.
+   */
   autopilot(skill: number): ArcadeControls {
     const out: ArcadeControls = { ...NO_CONTROLS, aim: { ...this.pilotAim } };
     if (this.counting) return out;
-    if (this.ammo === 0) {
+    const threats = this.targets.filter((t) => t.down === 0 && t.kind !== 'townsfolk');
+    if (this.ammo === 0 || (this.ammo <= PILOT_RELOAD_AT && !threats.length && random() < skill * 0.05)) {
       // A regular takes a moment to notice and swing the gun away.
       if (random() < 0.2) out.aim = null;
       return out;
     }
-    const threats = this.targets.filter((t) => t.down === 0 && t.kind !== 'townsfolk');
     threats.sort((a, b) => b.age / b.life - a.age / a.life);
     const target = threats[0];
     if (!target) return out;
-    const s = SPOTS[target.spot]!;
+    const s = this.spots[target.spot]!;
     const speed = 1.5 + skill * 3; // pixels a step (120 a second)
     this.pilotAim.x += clamp(s.x - this.pilotAim.x, -speed, speed);
     this.pilotAim.y += clamp(s.y - this.pilotAim.y, -speed, speed);
-    out.aim = { ...this.pilotAim };
     const close = Math.hypot(s.x - this.pilotAim.x, s.y - this.pilotAim.y) < 6 + (1 - skill) * 8;
-    out.fire = out.firePressed = close && random() < 0.25 + skill * 0.4;
+    const fire = close && random() < 0.25 + skill * 0.4;
+    // The trigger pulls the hand a little: now and then wide of the mark.
+    const wobble = fire && random() < 0.35 * (1 - skill) + 0.05 ? PILOT_WOBBLE * (1.5 - skill) : 0;
+    out.aim = { x: this.pilotAim.x + (random() - 0.5) * 2 * wobble, y: this.pilotAim.y + (random() - 0.5) * 2 * wobble };
+    out.fire = out.firePressed = fire;
     return out;
   }
 
@@ -225,10 +236,28 @@ export class NeonSheriff extends BaseGame {
     return Math.floor(this.bandits / BANDITS_PER_STAGE) + 1;
   }
 
+  private get scene(): SheriffScene {
+    return SHERIFF_SCENES[this.sceneIndex % SHERIFF_SCENES.length]!;
+  }
+
+  private get spots(): readonly SheriffSpot[] {
+    return this.scene.spots;
+  }
+
+  /** On to the next street: the heads still up go, a word says where, a breath before the first pops up. */
+  private moveOn(): void {
+    this.sceneIndex += 1;
+    this.targets = [];
+    this.spawnIn = 0.7;
+    this.fx.pop(`ON TO THE ${this.scene.sign}!`, SCREEN_W / 2, SCREEN_H / 2 + 6, this.scene.neon, 10);
+    this.fx.flash(this.scene.neon, 0.12);
+    this.sound('stage');
+  }
+
   private spawn(): void {
     const stage = this.stage;
     const busy = new Set(this.targets.map((t) => t.spot));
-    const free = SPOTS.map((_, i) => i).filter((i) => !busy.has(i));
+    const free = this.spots.map((_, i) => i).filter((i) => !busy.has(i));
     const most = Math.min(5, 2 + Math.floor(stage / 2));
     this.spawnIn = Math.max(0.28, 0.75 - stage * 0.06) * (0.6 + this.rand() * 0.8);
     if (!free.length || this.targets.length >= most) return;
@@ -243,14 +272,14 @@ export class NeonSheriff extends BaseGame {
   private targetAt(x: number, y: number): Target | null {
     for (const t of this.targets) {
       if (t.down !== 0) continue;
-      const s = SPOTS[t.spot]!;
+      const s = this.spots[t.spot]!;
       if (Math.abs(x - s.x) <= s.w / 2 && Math.abs(y - s.y) <= s.h / 2) return t;
     }
     return null;
   }
 
   private shoot(t: Target): void {
-    const s = SPOTS[t.spot]!;
+    const s = this.spots[t.spot]!;
     t.down = 0.35;
     switch (t.kind) {
       case 'townsfolk':
@@ -278,6 +307,7 @@ export class NeonSheriff extends BaseGame {
         if (this.bandits % BANDITS_PER_STAGE === 0) {
           this.fx.pop(`STAGE ${this.stage}`, SCREEN_W / 2, SCREEN_H / 2 - 24, '#ffffff', 12);
           this.addTime(Math.max(STAGE_MIN, STAGE_SECONDS - STAGE_FADE * (this.stage - 2)), SCREEN_W / 2, SCREEN_H / 2);
+          if (Math.floor((this.stage - 1) / STAGES_PER_SCENE) > this.sceneIndex) this.moveOn();
         }
       }
     }
@@ -285,7 +315,7 @@ export class NeonSheriff extends BaseGame {
 
   /** A bandit got his shot off. */
   private shotAt(t: Target): void {
-    const s = SPOTS[t.spot]!;
+    const s = this.spots[t.spot]!;
     this.hitFlash = 0.3;
     this.breakCombo();
     this.sound('bang', 0.7);
@@ -295,7 +325,7 @@ export class NeonSheriff extends BaseGame {
   }
 
   private paintTarget(ctx: CanvasRenderingContext2D, t: Target): void {
-    const s = SPOTS[t.spot]!;
+    const s = this.spots[t.spot]!;
     // Rises into its spot, sinks when shot.
     const rise = t.down > 0 ? t.down / 0.35 : Math.min(1, t.age / 0.12);
     const h = s.h * 0.9 * rise;
@@ -326,19 +356,10 @@ export class NeonSheriff extends BaseGame {
         TOWNSFOLK.draw(ctx, cx - 12, top - 4, { x: '#f2e6c8', s: '#d8a878', e: '#1a1010', l: '#b0605a', c: '#f2e6c8' });
         break;
       case 'bottle':
-        ctx.fillStyle = '#39ff9e';
-        ctx.fillRect(cx - 4, s.y + s.h / 2 - h * 0.7, 8, h * 0.7);
-        ctx.fillRect(cx - 2, s.y + s.h / 2 - h * 0.9, 4, h * 0.2);
+        BOTTLE.draw(ctx, cx - BOTTLE.width / 2, s.y + s.h / 2 - BOTTLE.height * rise - 1, { x: '#39ff9e', o: '#c8ffe0' });
         break;
       case 'badge':
-        ctx.fillStyle = '#ffd23a';
-        ctx.beginPath();
-        for (let i = 0; i < 10; i++) {
-          const a = (i / 10) * Math.PI * 2 - Math.PI / 2;
-          const d = i % 2 ? 5 : 11;
-          ctx.lineTo(cx + Math.cos(a) * d, s.y + Math.sin(a) * d + (1 - rise) * s.h);
-        }
-        ctx.fill();
+        STAR_BADGE.drawCentred(ctx, cx, s.y + (1 - rise) * s.h, Math.floor(this.elapsed * 8) % 2 ? { x: '#ffd23a', o: '#fff2a8' } : { x: '#ffb347', o: '#ffd23a' });
         break;
     }
     ctx.restore();

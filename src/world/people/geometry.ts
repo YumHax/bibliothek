@@ -36,7 +36,15 @@ export interface LimbOptions {
   bottom?: number;
   radial?: number;
   rows?: number;
+  /**
+   * A hem at the far end (a sleeve's, a trouser leg's): the cloth turned up into a rim this much
+   * thicker (metres) over its last centimetre and a half; the end is then cut flat (`bottom` 0).
+   */
+  hem?: number;
 }
+
+/** Length (metres) of a hem's turned-up rim. */
+const HEM_L = 0.015;
 
 /**
  * A limb hanging from its joint along -y: a lathe whose radius follows `radius` (t = 0 at the joint,
@@ -44,18 +52,27 @@ export interface LimbOptions {
  * the knee or elbow.
  */
 export function limbGeometry(length: number, radius: Keys, options: LimbOptions = {}): THREE.BufferGeometry {
-  const { top = 1, bottom = 1, radial = 16, rows = 12 } = options;
+  const { radial = 16, rows = 12, hem = 0 } = options;
+  const top = options.top ?? 1;
+  const bottom = hem > 0 ? 0 : (options.bottom ?? 1);
+  // The rim: a rolled edge, fullest just above the cut.
+  const rim = (t: number): number => (hem > 0 ? hem * THREE.MathUtils.smoothstep(t, 1 - HEM_L / length, 1 - (0.4 * HEM_L) / length) : 0);
   const rTop = spline(radius, 0);
-  const rBottom = spline(radius, 1);
+  const rBottom = spline(radius, 1) + rim(1);
   const cap = 5;
   const points: THREE.Vector2[] = [];
   for (let k = 0; k <= cap; k++) {
     const a = -Math.PI / 2 + (k / cap) * (Math.PI / 2);
     points.push(new THREE.Vector2(Math.max(1e-4, rBottom * Math.cos(a)), -length + bottom * rBottom * Math.sin(a) - (k === 0 && bottom === 0 ? 1e-4 : 0)));
   }
-  for (let i = rows - 1; i >= 1; i--) {
-    const t = i / rows;
-    points.push(new THREE.Vector2(spline(radius, t), -t * length));
+  // Rows down the limb, with a few more over a hem so its rim is round.
+  const ts: number[] = [];
+  for (let i = rows - 1; i >= 1; i--) ts.push(i / rows);
+  if (hem > 0) for (const f of [0.15, 0.4, 0.7, 1.05]) ts.push(1 - (f * HEM_L) / length);
+  ts.sort((a, b) => b - a);
+  for (const t of ts) {
+    if (t <= 0 || t >= 1) continue;
+    points.push(new THREE.Vector2(spline(radius, t) + rim(t), -t * length));
   }
   for (let k = 0; k <= cap; k++) {
     const a = (k / cap) * (Math.PI / 2);
@@ -174,6 +191,67 @@ export function filterTriangles(geometry: THREE.BufferGeometry, keep: (a: number
     if (keep(a, b, c)) kept.push(a, b, c);
   }
   geometry.setIndex(kept);
+}
+
+/**
+ * An indexed geometry with morph targets split in two: the triangles any target moves (with the
+ * targets) and the ones none does (without). Three's morph texture holds every vertex of a geometry
+ * for every target, so a head whose expressions only move the face keeps them for the face alone.
+ * The two share their seam's vertices unmoved, with the same normals: no crack. `still` is null when
+ * every triangle moves.
+ */
+export function splitStill(geometry: THREE.BufferGeometry): { moving: THREE.BufferGeometry; still: THREE.BufferGeometry | null } {
+  const index = geometry.getIndex();
+  const targets = geometry.morphAttributes.position;
+  const position = geometry.getAttribute('position');
+  if (!index || !targets?.length) return { moving: geometry, still: null };
+  const moves = new Uint8Array(position.count);
+  for (const target of targets) {
+    for (let i = 0; i < position.count; i++) {
+      if (moves[i]) continue;
+      // Ten microns: below anything a pixel shows (the tails of the expressions' bells reach round the whole head).
+      if (Math.abs(target.getX(i) - position.getX(i)) + Math.abs(target.getY(i) - position.getY(i)) + Math.abs(target.getZ(i) - position.getZ(i)) > 1e-5) moves[i] = 1;
+    }
+  }
+  const moving: number[] = [];
+  const still: number[] = [];
+  for (let i = 0; i < index.count; i += 3) {
+    const a = index.getX(i);
+    const b = index.getX(i + 1);
+    const c = index.getX(i + 2);
+    (moves[a] || moves[b] || moves[c] ? moving : still).push(a, b, c);
+  }
+  if (!still.length) return { moving: geometry, still: null };
+  /** The triangles `tris` (old indices) as a geometry of their own vertices, every attribute (and the targets, `morph`) carried over. */
+  const part = (tris: number[], morph: boolean): THREE.BufferGeometry => {
+    const remap = new Int32Array(position.count).fill(-1);
+    const used: number[] = [];
+    for (const i of tris) if (remap[i] === -1) remap[i] = used.push(i) - 1;
+    /** `attribute` at the used vertices; a target (`rest`: the attribute it moves, null when relative) keeps the still ones at rest exactly. */
+    const pick = (attribute: THREE.BufferAttribute | THREE.InterleavedBufferAttribute, rest?: THREE.BufferAttribute | THREE.InterleavedBufferAttribute | null): THREE.BufferAttribute => {
+      const size = attribute.itemSize;
+      const array = new Float32Array(used.length * size);
+      used.forEach((old, j) => {
+        const from = rest === undefined || moves[old] ? attribute : rest;
+        for (let k = 0; k < size; k++) array[j * size + k] = from ? from.getComponent(old, k) : 0;
+      });
+      return new THREE.BufferAttribute(array, size);
+    };
+    const out = new THREE.BufferGeometry();
+    for (const [name, attribute] of Object.entries(geometry.attributes)) out.setAttribute(name, pick(attribute));
+    out.setIndex(tris.map((i) => remap[i]!));
+    if (morph) {
+      for (const [name, list] of Object.entries(geometry.morphAttributes)) {
+        const rest = geometry.morphTargetsRelative ? null : geometry.getAttribute(name);
+        out.morphAttributes[name] = list.map((target) => pick(target, rest));
+      }
+      out.morphTargetsRelative = geometry.morphTargetsRelative;
+    }
+    return out;
+  };
+  const result = { moving: part(moving, true), still: part(still, false) };
+  geometry.dispose();
+  return result;
 }
 
 /** A transform for `Parts.add`: position, Euler rotation (XYZ) and scale. */

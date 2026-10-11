@@ -7,6 +7,7 @@ import type { MarketStanding } from './MarketStanding';
 import { appliesTo, themeOf, type MarketDayTheme } from './marketDays';
 import { eventsOn } from './marketEvents';
 import { grailGame, isGrail } from './grails';
+import { felixCopy, felixLotOn, type FelixLot } from './felixLots';
 import {
   BARGAIN_PRICE, BIN_GEM_ODDS, BOOTLEG, EDITION_ODDS, HOMEBREW, IMPORT, LOYALTY, MARKET_DISCOUNT, MARKET_STOCK, REPRO_CAUGHT,
   REPRO_ODDS, REPUTATION, UPGRADE_ODDS,
@@ -86,6 +87,8 @@ class DayDraw {
   /** The day's events: a grail on its stall, a stall clearing out (its ordinary copies cheaper, no haggling). */
   private readonly grail: ReturnType<typeof eventsOn>['grail'];
   private readonly clearance: ReturnType<typeof eventsOn>['clearance'];
+  /** Now and then one of Félix's copies, his sticker on the back (`felixLots`), on its platform's stall. */
+  private readonly felix: FelixLot | null;
 
   constructor(
     readonly day: number,
@@ -106,6 +109,7 @@ class DayDraw {
     const { grail, clearance } = eventsOn(day);
     this.grail = grail;
     this.clearance = clearance;
+    this.felix = felixLotOn(day, 'stall', (id) => collection.owns(id));
   }
 
   /** A stream of the day's own for `slot`: what one step draws never moves another. */
@@ -137,6 +141,7 @@ class DayDraw {
     });
     this.placeOrders(stall);
     this.placeGrail(stall);
+    this.placeFelix(stall);
     if (p === 'nes') this.placeHomebrew(stall);
     const unowned = this.placeShowpieces(stall);
     this.placeKeptAside(stall, unowned);
@@ -173,6 +178,12 @@ class DayDraw {
       if (agreed !== undefined) item.setHaggle(agreed);
       stall.push(item);
     }
+  }
+
+  /** One of Félix's copies, on the day one turns up: complete, his sticker on the back, at an ordinary copy's price. */
+  private placeFelix(stall: Stall): void {
+    const copy = this.felix && felixCopy(this.felix);
+    if (copy?.platform === stall.platform) stall.offer(copy, 'complete', 'stall');
   }
 
   /** A homebrew cart now and then on the NES stall (`emulator/homebrew`: it really plays on the TV), new, at its own price. */

@@ -5,9 +5,9 @@ import { boxMesh, cylinderMesh, eyePoseAt, invisibleHitbox } from '../meshUtils'
 import { layMesh, WALL } from '../surface/layers';
 import { basic, paint, standard } from '../materials/palette';
 import { actionKeyLabel } from '@/ui/keys';
-import { keyOrUse } from '@/ui/verb';
 import { type ArcadeControls, NO_CONTROLS, drawText } from './games/ArcadeGame';
 import { TicketMachine, type TicketMachineWiring } from './TicketMachine';
+import type { MachineRunOptions } from './MachineRun';
 import { TicketStrip } from './TicketStrip';
 import { type MachineDisplay, displayScreen, outOfOrderNote, paintMarquee } from './machineParts';
 import { random } from '@/random';
@@ -22,7 +22,7 @@ export interface WheelSlice {
 export interface TicketWheelOptions {
   slices: readonly WheelSlice[];
   /** The progressive jackpot: its value, growing with every spin, back to its start when hit. */
-  jackpot: { readonly value: number; grow(): void; hit(): number; subscribe(cb: () => void): () => void };
+  jackpot: { readonly value: number; grow(): void; hit(byPlayer?: boolean): number; subscribe(cb: () => void): () => void };
   title?: string;
   color?: number;
 }
@@ -38,6 +38,9 @@ const STAND_Z = 1.15;
 /** The spin: a fling at this speed (radians a second, plus up to `SPIN_EXTRA` of luck), braked by friction and the pegs. */
 const SPIN_SPEED = 9;
 const SPIN_EXTRA = 7;
+/** Winding it up: a full wind takes this long and adds this much to the start (the luck still spans many turns). */
+const WIND_SECONDS = 0.8;
+const WIND_EXTRA = 4;
 const FRICTION = 0.6;
 const DRAG = 0.45;
 const PEG_BRAKE = 0.012;
@@ -46,13 +49,16 @@ const SLICE_COLORS = ['#e8303a', '#ffd23a', '#2f6bd8', '#39c26a', '#ff7a1a', '#b
 
 /**
  * The ticket wheel on the wall: a big painted wheel of sixteen slices ringed by chasing bulbs,
- * with a flapper at the top and a podium with a button under it. A coin, then Space (or a click
- * on it) spins it; it slows on friction and the pegs, the flapper ticking over them, and pays the
- * slice it stops on in tickets (score = tickets). The slices are as wide as their odds, so what
- * you see is what you get; one thin gold slice is the progressive JACKPOT (on the podium's
- * display), which every spin anyone takes feeds and a hit empties. Pure luck: it keeps no table.
- * Regulars spin it too, jackpot and all. Wall-standing: origin on the floor at the wall, +z into
- * the room.
+ * with a flapper at the top and a podium with a button under it. A coin, then fire held winds it
+ * up (the button sinks, the bulbs race) and let go flings it (a click on it shoves it); it slows on
+ * friction and the pegs, the flapper ticking over them (higher over the big slices as it slows),
+ * the display reading the slice under the flapper as it goes by, the bulbs slowing with it, and
+ * pays the slice it stops on in tickets (score = tickets) the moment it stops. The slices are as
+ * wide as their odds, so what you see is what you get; however hard it is wound it turns many
+ * times over, so the luck is the same. One thin gold slice is the progressive JACKPOT (on the
+ * podium's display), which every spin anyone takes feeds and a hit empties. Pure luck: it keeps
+ * no table. Regulars spin it too, jackpot and all. Wall-standing: origin on the floor at the
+ * wall, +z into the room.
  */
 export class TicketWheel extends TicketMachine {
   readonly hitboxes: THREE.Object3D[];
@@ -82,6 +88,10 @@ export class TicketWheel extends TicketMachine {
   private lastPeg = 0;
   private flap = 0;
   private waitClock = 0;
+  /** How far the player has wound it (0..1), and how long a regular winds it this time (s). */
+  private wind = 0;
+  private demoWind = 0.4;
+  private bulbPhase = 0;
   private displayClock = 0;
   private dirty = true;
 
@@ -91,7 +101,7 @@ export class TicketWheel extends TicketMachine {
     this.options = options;
     const title = options.title ?? 'TICKET WHEEL';
     // Read when shown (the first play's tip): the words follow the device in hand.
-    this.game = { id: 'wheel', title, get hint() { return `${keyOrUse(actionKeyLabel('fire'))} to spin · the slice under the flapper pays`; } };
+    this.game = { id: 'wheel', title, get hint() { return `Hold ${actionKeyLabel('fire')} to wind it up, let go to spin · the slice under the flapper pays`; } };
     const total = options.slices.reduce((sum, s) => sum + s.weight, 0);
     this.edges = [0];
     for (const s of options.slices) this.edges.push(this.edges[this.edges.length - 1]! + (s.weight / total) * Math.PI * 2);
@@ -205,6 +215,8 @@ export class TicketWheel extends TicketMachine {
     this.landed = null;
     this.won = 0;
     this.waitClock = 0;
+    this.wind = 0;
+    this.demoWind = 0.2 + random() * 0.6;
     this.dirty = true;
   }
 
@@ -213,58 +225,80 @@ export class TicketWheel extends TicketMachine {
   }
 
   protected override playingLabel(): string {
-    return this.spinning || this.landed !== null ? 'Round and round it goes…' : `${this.game.title} · ${keyOrUse(actionKeyLabel('fire'))} to spin · ${actionKeyLabel('walkAway')} walks away`;
+    return this.spinning || this.landed !== null ? 'Round and round it goes…' : `${this.game.title} · hold ${actionKeyLabel('fire')} to wind it up, let go to spin · ${actionKeyLabel('walkAway')} walks away`;
   }
 
-  /** A click on the wheel mid-play pulls it. */
+  /** The Space (or click) that paid for the play only counts once let go: the next hold winds the wheel. */
+  protected override runOptions(): Pick<MachineRunOptions, 'fireAfterRelease'> {
+    return { fireAfterRelease: true };
+  }
+
+  /** A click on the wheel mid-play gives it a good shove. */
   protected override clickWhilePlaying(): boolean {
-    if (!this.spinning && this.landed === null) this.fling();
+    if (!this.spinning && this.landed === null) this.fling(0.6);
     return true;
   }
 
+  /**
+   * Fire held winds the wheel back (the button goes down, the bulbs crawl faster), let go flings it:
+   * the harder the wind, the faster it starts. The luck is the same whatever the wind (it always turns
+   * many times over), the feel is the player's. Over the moment it stops: the slice pays at once.
+   */
   protected play(dt: number, controls: ArcadeControls): boolean {
     if (!this.spinning && this.landed === null) {
       this.waitClock += dt;
-      if (controls.firePressed) this.fling();
+      if (controls.fire) this.wind = Math.min(1, this.wind + dt / WIND_SECONDS);
+      else if (this.wind > 0) this.fling(this.wind);
       return false;
     }
     if (this.spinning) {
       this.spin -= (FRICTION + DRAG * this.spin) * dt;
       this.angle += this.spin * dt;
-      // The flapper over a peg: a tick, a little brake.
+      // The flapper over a peg: a tick, a little brake; the ticks ring higher over the big slices as it slows.
       const peg = this.pegIndex();
       if (peg !== this.lastPeg) {
         this.lastPeg = peg;
         this.flap = 1;
+        this.dirty = true;
         this.spin = Math.max(0, this.spin - PEG_BRAKE * (1 + 3 / Math.max(0.5, this.spin)));
-        this.speaker.play('tick', 0.9 + random() * 0.2);
+        const slice = this.options.slices[peg]!;
+        const big = slice.tickets === 'jackpot' || slice.tickets >= 100;
+        this.speaker.play('tick', (big && this.spin < SPIN_SPEED / 2 ? 1.35 : 0.9) + random() * 0.2);
       }
-      if (this.spin <= STOP_BELOW) this.land();
+      if (this.spin <= STOP_BELOW) {
+        this.land();
+        return true;
+      }
       return false;
     }
     this.waitClock += dt;
     return this.waitClock > 1.2;
   }
 
+  /** A regular winds it for a moment, then lets go. */
   protected demoControls(): ArcadeControls {
-    return { ...NO_CONTROLS, fire: this.waitClock > 1.5, firePressed: this.waitClock > 1.5 && !this.spinning && this.landed === null };
+    const winding = !this.spinning && this.landed === null && this.waitClock > 1.5 && this.waitClock < 1.5 + this.demoWind;
+    return { ...NO_CONTROLS, fire: winding };
   }
 
   /** A regular hit the jackpot: it is theirs, and it starts again. */
   protected override regularFinished(): void {
-    if (this.landed !== null && this.options.slices[this.landed]!.tickets === 'jackpot') this.options.jackpot.hit();
+    if (this.landed !== null && this.options.slices[this.landed]!.tickets === 'jackpot') this.options.jackpot.hit(false);
   }
 
   protected paint(dt: number): void {
     this.wheel.rotation.z = this.angle;
     this.flap = Math.max(0, this.flap - dt * 12);
     this.flapper.rotation.z = this.flap * 0.5 * Math.sign(this.spin || 1);
-    this.button.position.y = PODIUM.h + 0.05 - (this.spinning && this.spin > SPIN_SPEED ? 0.012 : 0);
-    // The bulbs chase while it spins, blink on a win, crawl when idle.
-    const rate = this.spinning ? 18 : this.landed !== null ? 0 : 4;
-    const phase = Math.floor(this.clock * rate);
+    // The button goes down as it is wound, and stays down while the fling is fresh.
+    this.button.position.y = PODIUM.h + 0.05 - (this.wind > 0 ? 0.004 + this.wind * 0.01 : this.spinning && this.spin > SPIN_SPEED ? 0.012 : 0);
+    // The bulbs chase as fast as the wheel turns (slowing with it, so the last slices crawl by), race while it is wound, blink on a win, crawl when idle.
+    const rate = this.spinning ? 2 + this.spin * 1.4 : this.wind > 0 ? 6 + this.wind * 14 : this.landed !== null ? 0 : 4;
+    this.bulbPhase += dt * rate;
+    const phase = Math.floor(this.bulbPhase);
     const winBlink = this.landed !== null && Math.floor(this.clock * 6) % 2 === 0;
     this.bulbs.forEach((b, i) => (b.material = (this.landed !== null ? winBlink : (i + phase) % 4 === 0) ? BULB_ON : BULB_OFF));
+    if (this.wind > 0) this.dirty = true;
     this.displayClock += dt;
     if (this.dirty || this.displayClock > 0.2) {
       this.displayClock = 0;
@@ -273,12 +307,14 @@ export class TicketWheel extends TicketMachine {
     }
   }
 
-  private fling(): void {
+  /** Lets it go at `wind` (0..1): a faster start for a harder wind, plus the luck of the fling. */
+  private fling(wind: number): void {
     this.spinning = true;
-    this.spin = SPIN_SPEED + random() * SPIN_EXTRA;
+    this.spin = SPIN_SPEED + wind * WIND_EXTRA + random() * SPIN_EXTRA;
+    this.wind = 0;
     this.lastPeg = this.pegIndex();
     this.options.jackpot.grow();
-    this.speaker.play('launch');
+    this.speaker.play('launch', 0.9 + wind * 0.3);
   }
 
   private land(): void {
@@ -313,14 +349,25 @@ export class TicketWheel extends TicketMachine {
     if (this.state === 'over' || (this.landed !== null && this.state !== 'attract')) {
       const shown = this.state === 'over' ? this.shownTotal : this.won;
       const jack = this.landed !== null && this.options.slices[this.landed]!.tickets === 'jackpot';
-      drawText(ctx, jack ? 'JACKPOT!!!' : 'YOU WIN', 128, 28, jack ? 24 : 18, jack ? '#ffd23a' : '#7ee787');
-      drawText(ctx, `${shown} TICKETS`, 128, 66, 20, '#ffe066');
+      const replay = this.state === 'over' && this.canReplay;
+      drawText(ctx, jack ? 'JACKPOT!!!' : 'YOU WIN', 128, replay ? 20 : 28, jack ? 24 : 18, jack ? '#ffd23a' : '#7ee787');
+      drawText(ctx, `${shown} TICKETS`, 128, replay ? 50 : 66, 20, '#ffe066');
+      if (replay) drawText(ctx, this.playAgainLine(), 128, 82, 8, '#ff8a80');
     } else if (this.spinning) {
-      drawText(ctx, 'SPINNING…', 128, 34, 20, '#33e0ff');
-      drawText(ctx, `JACKPOT ${jackpot}`, 128, 70, 14, '#ffd23a');
+      // What is under the flapper right now, big: the wheel's own numbers ticking by as it slows.
+      const { tickets } = this.options.slices[this.sliceUnderFlapper()]!;
+      if (tickets === 'jackpot') drawText(ctx, 'JACKPOT?', 128, 36, 22, '#ffd23a');
+      else drawText(ctx, `${tickets}`, 128, 36, 30, tickets >= 100 ? '#ff8a3a' : '#33e0ff');
+      drawText(ctx, `JACKPOT ${jackpot}`, 128, 76, 12, '#ffd23a');
     } else if (this.state === 'playing' || this.state === 'demo') {
-      drawText(ctx, Math.floor(this.clock * 2) % 2 ? `PRESS ${actionKeyLabel('fire').toUpperCase()}` : 'TO SPIN', 128, 34, 18, '#ff8a80');
-      drawText(ctx, `JACKPOT ${jackpot}`, 128, 70, 14, '#ffd23a');
+      if (this.wind > 0) {
+        drawText(ctx, 'WINDING UP…', 128, 30, 16, '#ff8a80');
+        ctx.fillStyle = '#222233';
+        ctx.fillRect(28, 50, 200, 10);
+        ctx.fillStyle = '#ffd23a';
+        ctx.fillRect(28, 50, 200 * this.wind, 10);
+      } else drawText(ctx, Math.floor(this.clock * 2) % 2 ? `HOLD ${actionKeyLabel('fire').toUpperCase()}` : 'LET GO TO SPIN', 128, 34, 16, '#ff8a80');
+      drawText(ctx, `JACKPOT ${jackpot}`, 128, 76, 12, '#ffd23a');
     } else {
       drawText(ctx, 'JACKPOT', 128, 26, 16, '#ffd23a');
       drawText(ctx, `${jackpot}`, 128, 62, 30, Math.floor(this.clock * 1.5) % 2 ? '#ffe066' : '#ffffff');

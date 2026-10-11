@@ -14,6 +14,7 @@ import { pointSound } from '../build/hearing';
 import { followDaylight } from '../build/follow';
 import { TiledWainscot } from '../props/TiledWainscot';
 import { Bathtub } from './Bathtub';
+import { BathDuck } from '../prizes/BathDuck';
 import { FrostedWindow } from '../props/FrostedWindow';
 import { Washbasin } from './Washbasin';
 import { Toilet } from './Toilet';
@@ -37,7 +38,7 @@ import { rugsUnderfoot } from '../build/rugsUnderfoot';
  * The water works: each fitting's click drives its own `PointSound` (the basin's tap, which also
  * drips when shut; the tub's tap and drain; the flush).
  */
-export function furnishBathroom(zone: Zone, ctx: Pick<BuildContext, 'sky' | 'listener' | 'acoustics' | 'home'>): ZoneHandle {
+export function furnishBathroom(zone: Zone, ctx: Pick<BuildContext, 'sky' | 'listener' | 'acoustics' | 'home' | 'arcade'>): ZoneHandle {
   const { sky } = ctx;
   const plan = BATHROOM_PLAN;
   const household = ctx.home.household;
@@ -62,6 +63,9 @@ export function furnishBathroom(zone: Zone, ctx: Pick<BuildContext, 'sky' | 'lis
     plan.bathtub,
   );
   placeWith(zone, tub, tub.plugSpot);
+  // The arcade's duck, once won: on the rim, afloat when the bath is run.
+  const prizes = ctx.arcade.prizes;
+  if (prizes) placeWith(zone, tub, new BathDuck({ prizes, rim: new THREE.Vector3(...plan.duck.rim), float: new THREE.Vector3(...plan.duck.float), water: () => tub.waterSurface }));
   placeWith(zone, tub, pointSound(ctx, tubWater, { maxDistance: 6 }), tub.tapPoint);
   followDaylight(zone, sky, zone.placeAt(new FrostedWindow(), plan.window));
 

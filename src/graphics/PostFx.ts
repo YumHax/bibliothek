@@ -6,6 +6,7 @@ import type { QualitySettings } from './quality';
 import { NEUTRAL_LOOK, NIGHT_GRADE, displayColor, type Look } from './grade';
 import { whiteBalance } from './whiteBalance';
 import { brightnessStops } from './brightness';
+import { framedLift, framedSubject, setFrameKey } from './framing';
 import { GlassMask } from './glassMask';
 import { AO_FRAGMENT, AO_BLUR_FRAGMENT, DOF_FRAGMENT, LUMINANCE_FRAGMENT, METER_DOWNSAMPLE_FRAGMENT, OUTPUT_FRAGMENT, QUAD_VERTEX } from './postFxShaders';
 import { damp, dampFactor } from '@/math/damp';
@@ -43,6 +44,10 @@ const AO_INTENSITY = 1.15;
 /** Depth of field: blur radius in pixels at full strength, and how fast it comes and goes. */
 const DOF_MAX_RADIUS = 5;
 const DOF_RATE = 3;
+/** The depth of field's share while a conversation frames someone (no box held up): the room behind them a little soft. */
+const CONVERSATION_DOF = 0.45;
+/** The scene luminance shown as middle grey at exposure 1 (`graphics/framing`'s key). */
+const MIDDLE_GREY = 0.18;
 /** Taps of the blur's spiral, and the count past `DOF_WIDE_RADIUS` pixels (photo mode's wide blur). */
 const DOF_TAPS = 16;
 const DOF_MAX_TAPS = 32;
@@ -128,6 +133,8 @@ export class PostFx implements FramePipeline, Updatable {
   private targetLook: Look = NEUTRAL_LOOK;
   private readonly lookColors = { shadows: new THREE.Color(), highlights: new THREE.Color(), targetShadows: new THREE.Color(), targetHighlights: new THREE.Color() };
   private dofAmount = 0;
+  private readonly framedAt = new THREE.Vector3();
+  private readonly eyeAt = new THREE.Vector3();
   /** Photo mode's lens (`setLens`), or null: the focus and the blur are the held box's, the exposure the eye's. */
   private lens: PhotoLens | null = null;
   private time = 0;
@@ -349,8 +356,11 @@ export class PostFx implements FramePipeline, Updatable {
     this.stepLook(dampFactor(LOOK_RATE, dt));
 
     const lens = this.lens;
-    const focus = lens ? lens.focus : this.quality.depthOfField ? (this.options.focus?.() ?? null) : null;
-    const wanted = lens ? (lens.blur > 0 ? 1 : 0) : focus === null ? 0 : 1;
+    const held = this.quality.depthOfField ? (this.options.focus?.() ?? null) : null;
+    // No box held up: a conversation's subject keeps the eye on their face, the room behind a little soft.
+    const framed = !lens && held === null && this.quality.depthOfField ? this.framedDistance() : null;
+    const focus = lens ? lens.focus : (held ?? framed);
+    const wanted = lens ? (lens.blur > 0 ? 1 : 0) : held !== null ? 1 : framed !== null ? CONVERSATION_DOF : 0;
     // A photographer's lens follows its ring at once; the reading eye eases in and out.
     this.dofAmount = lens ? wanted : damp(this.dofAmount, wanted, DOF_RATE, dt);
     if (focus !== null) this.prepMaterial.uniforms.focus!.value = focus;
@@ -360,6 +370,16 @@ export class PostFx implements FramePipeline, Updatable {
     const tau = this.targetExposure < this.exposure ? ADAPT_DARKER_S : ADAPT_BRIGHTER_S;
     this.exposure = damp(this.exposure, this.targetExposure, 1 / tau, dt);
     this.meterTimer += dt;
+    setFrameKey(MIDDLE_GREY / Math.max(1e-3, this.exposure * Math.pow(2, this.look.exposure + brightnessStops())));
+  }
+
+  /** From the eye to the framed subject's face (`graphics/framing`), or null when nothing is framed. */
+  private framedDistance(): number | null {
+    const subject = framedSubject();
+    if (!subject || !this.camera) return null;
+    subject.getWorldPosition(this.framedAt);
+    this.framedAt.y += framedLift();
+    return this.framedAt.distanceTo(this.camera.getWorldPosition(this.eyeAt));
   }
 
   render(scene: THREE.Scene, camera: THREE.Camera): void {

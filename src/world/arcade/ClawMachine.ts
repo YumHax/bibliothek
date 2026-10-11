@@ -47,10 +47,12 @@ const EYE_Z = DEPTH / 2 + 0.33;
  * counts them down), Space drops it; it closes, lifts, goes back over the chute and opens. The
  * rules are the `ClawSim`'s (where it came down, the slips, the pity grip), stepped at the
  * machines' fixed rate; this class feeds it the keys and moves the model, the sounds and the
- * display to match. A plush that makes it down the chute is a prize to take home. A regular
- * playing it (`occupy`) roams, drops and comes up empty, as ever. The coin, the end and
- * out-of-order days go through its `MachineRun` (no table, no tickets). Origin on the floor under
- * its centre, +z faces the room. Collides.
+ * display to match; while the player steers, a red spot on the heap marks where the claw would come
+ * down. A plush that makes it down the chute is a prize to take home; a miss pays the coin back in
+ * tickets, counted on the display and fed out of the slot on the front. A regular playing it
+ * (`occupy`) roams, drops and mostly comes up empty, winning one now and then. The coin, the end
+ * and out-of-order days go through its `MachineRun` (no table). Origin on the floor under its
+ * centre, +z faces the room. Collides.
  */
 export class ClawMachine extends RunMachine implements Furniture, Interactable, Updatable, ArcadeMachineLike, Station {
   readonly hitboxes: THREE.Object3D[];
@@ -73,6 +75,8 @@ export class ClawMachine extends RunMachine implements Furniture, Interactable, 
   private readonly furColors: number[];
   private readonly hands: [THREE.Vector3, THREE.Vector3] = [new THREE.Vector3(), new THREE.Vector3()];
   private readonly speaker: ChipSpeaker;
+  /** The tickets the display last showed on a miss's end card (-1: not showing them). */
+  private shownTickets = -1;
 
   constructor(options: ClawMachineOptions, wiring: ClawWiring) {
     super();
@@ -81,7 +85,6 @@ export class ClawMachine extends RunMachine implements Furniture, Interactable, 
     this.model = buildClawModel(this, options.color ?? 0xd23a6a, this.sim.plush);
     this.furColors = this.sim.plush.map((p) => p.color);
     this.hitboxes = [this.model.hitbox];
-    this.placeClaw();
     this.speaker = new ChipSpeaker(this.model.carriage, wiring.listener, { volume: 0.18 });
     this.run = new MachineRun({
       game: this.game,
@@ -90,8 +93,10 @@ export class ClawMachine extends RunMachine implements Furniture, Interactable, 
       stationEvents: this.stationEvents,
       nextPlayCost: wiring.playCost,
       note: this.model.note,
+      strip: this.model.strip,
       ...(wiring.outOfOrder ? { outOfOrder: wiring.outOfOrder } : {}),
     });
+    this.placeClaw();
     this.paintDisplay('INSERT COIN');
   }
 
@@ -164,6 +169,7 @@ export class ClawMachine extends RunMachine implements Furniture, Interactable, 
     if (this.run.paused) return;
     this.model.chaser.offset.x -= dt * (this.run.state === 'playing' ? 1.6 : 0.6);
     this.speaker.follow();
+    this.model.strip.update(dt);
     this.run.update(dt);
     const mode = this.run.state;
     // The keys are read only while the player steers (reading them takes fire's press edge); the press counts on the first step only.
@@ -177,10 +183,19 @@ export class ClawMachine extends RunMachine implements Furniture, Interactable, 
     this.playSounds();
     const outcome = this.sim.takeOutcome();
     if (outcome) this.run.finish(0, outcome.prize);
+    // A miss pays the coin back in tickets: the display counts them out as the strip feeds, then says so close.
+    if (mode === 'over' && !this.run.last.prize) {
+      const shown = this.run.shownTotal;
+      if (shown !== this.shownTickets) {
+        this.shownTickets = shown;
+        this.paintDisplay(shown > 0 ? `+${shown} TICKETS` : 'SO CLOSE');
+      }
+    } else this.shownTickets = -1;
     this.placeClaw();
   }
 
   dispose(): void {
+    this.run.dispose();
     this.speaker.dispose();
   }
 
@@ -202,6 +217,9 @@ export class ClawMachine extends RunMachine implements Furniture, Interactable, 
     }
     model.stick.rotation.z = sim.stick.z;
     model.stick.rotation.x = sim.stick.x;
+    // While the player steers, a lit spot on the heap straight under the claw.
+    model.marker.visible = this.run.state === 'playing' && sim.aiming;
+    if (model.marker.visible) model.marker.position.set(sim.carriage.x, sim.surfaceAt(sim.carriage.x, sim.carriage.z) + 0.003, sim.carriage.z); // convention-ok: a moving spot over a plush's crown, not a layer on a flat face
     sim.plush.forEach((p, i) => {
       const toy = model.plush[i]!;
       toy.group.position.copy(p.pos);

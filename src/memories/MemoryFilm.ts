@@ -7,7 +7,9 @@ import type { ModalLike } from '@/game/SessionParts';
 import { duckScene } from '@/audio/audioContext';
 import { IntroScore } from '@/audio/introScore';
 import { clamp, lerp, ramp, smooth, triangle } from '@/math/scalar';
+import { isAction } from '@/input/actions';
 import { reduceMotion } from '@/settings/motion';
+import { actionKeyLabel, keyLabel } from '@/ui/keys';
 import { IntroScreen } from '@/ui/intro/IntroScreen';
 import { AlbumPanel } from '@/ui/memories/AlbumPanel';
 import type { Furniture } from '@/world/Furniture';
@@ -15,7 +17,7 @@ import { disposeTree } from '@/world/props/Prop';
 import type { Zone } from '@/world/zone/Zone';
 import type { ZoneId } from '@/world/zoneIds';
 import { MEMORY_LOOK } from './memoryLook';
-import type { MemoryReel, MemoryScene, MemorySet, MemoryShot } from './memoryReel';
+import type { MemoryCue, MemoryReel, MemoryScene, MemorySet, MemoryShot } from './memoryReel';
 import { hideDuring, setPastLight, type WeatherHold } from './pastLight';
 
 /** The player as the film parks and places it (`FirstPersonController` fits). */
@@ -61,6 +63,8 @@ interface MemoryDeps {
   dream(): DreamLike | null;
   /** Renders a frame now and hands back the canvas it is in (`engine.renderFrame`): a still for the album, read at once. */
   frame(): HTMLCanvasElement;
+  /** The player's initials (`playerInitials`): what a cue's letters start from, and where they are kept. */
+  initials?: { suggested(): string; set(text: string): void };
 }
 
 /** The black before the first shot (s), the fade in, the fade out after the last, how long it holds black, the lift. */
@@ -85,6 +89,11 @@ const PREPARE_TIMEOUT_MS = 20000;
 const STILL = { into: FADE_IN + 1.2, width: 360, height: 270, quality: 0.85 } as const;
 /** At least this black, the screen hides a hitch: the dream's covers are uploaded then. */
 const BLACK_ENOUGH = 0.85;
+/** How long a cue waits on the player before it goes on by itself (s): a press, and the initials. */
+const CUE_WAIT = 6;
+const INITIALS_WAIT = 20;
+/** Besides the action key (E), what does a cue's act: the keys anyone tries. */
+const ACT_KEYS = new Set(['Space', 'Enter', 'NumpadEnter']);
 
 /**
  * Plays the memories (docs/story.md "Mémé"): made once by the wiring, handed to the builders as
@@ -150,6 +159,15 @@ interface FilmHooks {
   playing(on: boolean): void;
 }
 
+/** A cue waiting on the player: how long so far, the presses counted, the letters in the boxes (typed or offered). */
+interface Waiting {
+  cue: MemoryCue;
+  waited: number;
+  presses: number;
+  letters: string;
+  typed: boolean;
+}
+
 /** A scene on: its zone, and what puts the present back. */
 interface Staged {
   scene: MemoryScene;
@@ -166,7 +184,9 @@ interface Staged {
  * it is filmed in are built and compiled (the music waits for them), then each scene is staged in its zone as the
  * film reaches it, the camera taking the ZoneManager there, and struck under the black after it; under the last black
  * the player is set down where the reel says and the black lifts on the room as it is, the title over it with the
- * button back. Esc or E asks to skip, twice skips; at the title they end it.
+ * button back. Esc or E asks to skip, twice skips; at the title they end it. At a scene's cue the picture holds on the
+ * moment until the player does what it asks (the action key, a click, or their initials typed) or it goes on by
+ * itself; the music runs on meanwhile.
  */
 class MemoryFilm implements ModalLike, Updatable {
   onOpenChange?: (open: boolean) => void;
@@ -189,6 +209,11 @@ class MemoryFilm implements ModalLike, Updatable {
   private skipArmedAt = -Infinity;
   private fov = 0;
   private drift: number = DRIFT.amount;
+  /** The cue the picture holds on, and those played out this time. */
+  private waiting: Waiting | null = null;
+  private readonly cuesDone = new Set<MemoryCue>();
+  /** Seconds since it opened, held or not: the camera's breath goes on while a cue holds the picture. */
+  private breath = 0;
   private readonly end: number;
   private readonly look: Look;
   private readonly lookAt = new THREE.Vector3();
@@ -237,6 +262,9 @@ class MemoryFilm implements ModalLike, Updatable {
     this.struck = this.titled = this.stillTaken = false;
     this.sceneIndex = -1;
     this.lookedIn = null;
+    this.waiting = null;
+    this.cuesDone.clear();
+    this.breath = 0;
     this.fov = deps.camera.fov;
     this.drift = reduceMotion() ? 0 : DRIFT.amount;
     const screen = new IntroScreen(deps.container, { onSkip: () => this.skip(), onGetUp: () => this.finish() }, { name: reel.title, line: reel.tagline, getUp: reel.back });
@@ -255,6 +283,9 @@ class MemoryFilm implements ModalLike, Updatable {
     for (const id of this.held) deps.zones.hold(id, true);
     this.hooks.playing(true);
     deps.engine.addUpdatable(this);
+    // In the capture phase, ahead of the game's keys (E there arms the skip): a cue's act takes them while it waits.
+    window.addEventListener('keydown', this.onKey, { capture: true });
+    window.addEventListener('mousedown', this.onClick, { capture: true });
     this.emitOpen(true);
     this.update(0);
     // The zones elsewhere built and compiled in the black; the music (and the film's clock) starts once they are.
@@ -299,7 +330,21 @@ class MemoryFilm implements ModalLike, Updatable {
       return;
     }
     const music = this.score?.elapsed() ?? null;
-    this.t = Math.max(this.t, music === null ? this.t + dt : music + this.jump);
+    this.breath += dt;
+    if (this.waiting) {
+      // The picture holds on the moment: the music's clock goes on, the film's waits (it picks up from here).
+      if (music !== null) this.jump = this.t - music;
+      this.waiting.waited += dt;
+      if (this.waiting.waited >= waitOf(this.waiting.cue)) this.resolveCue(false);
+    } else {
+      this.t = Math.max(this.t, music === null ? this.t + dt : music + this.jump);
+      const due = this.t < this.end ? this.dueCue(this.t) : null;
+      if (due) {
+        this.t = due.at;
+        if (music !== null) this.jump = this.t - music;
+        this.startCue(due);
+      }
+    }
     const t = this.t;
     const { reel } = this;
 
@@ -439,8 +484,9 @@ class MemoryFilm implements ModalLike, Updatable {
     const k = lerp(u, smooth(u), 0.6);
     const c = shot.camera;
     zone.toWorld(this.at.set(lerp(c.from[0], c.to[0], k), lerp(c.from[1], c.to[1], k), lerp(c.from[2], c.to[2], k)));
-    this.at.x += Math.sin(t * DRIFT.pace) * this.drift;
-    this.at.y += Math.sin(t * DRIFT.pace * 1.3 + 1) * this.drift * 0.6;
+    const breath = this.breath;
+    this.at.x += Math.sin(breath * DRIFT.pace) * this.drift;
+    this.at.y += Math.sin(breath * DRIFT.pace * 1.3 + 1) * this.drift * 0.6;
     zone.toWorld(this.lookAt.set(lerp(c.lookFrom[0], c.lookTo[0], k), lerp(c.lookFrom[1], c.lookTo[1], k), lerp(c.lookFrom[2], c.lookTo[2], k)));
     camera.position.copy(this.at);
     player.lookAt(this.lookAt);
@@ -495,9 +541,100 @@ class MemoryFilm implements ModalLike, Updatable {
     duckScene(1, 2.5);
   }
 
+  /** The first cue at or before `t` not played out yet (its scene staged by then: cues sit inside their shots). */
+  private dueCue(t: number): MemoryCue | null {
+    for (const scene of this.reel.scenes) for (const cue of scene.cues ?? []) if (!this.cuesDone.has(cue) && t >= cue.at) return cue;
+    return null;
+  }
+
+  /** The picture holds on `cue`: its prompt up (and the letters offered, for the initials). */
+  private startCue(cue: MemoryCue): void {
+    const initials = cue.input === 'initials';
+    const letters = initials ? (this.deps.initials?.suggested() ?? 'AAA') : '';
+    this.waiting = { cue, waited: 0, presses: 0, letters, typed: false };
+    this.screen?.cue({ text: cue.prompt, key: initials ? keyLabel('Enter') : actionKeyLabel('putBack'), letters: initials });
+    if (initials) this.screen?.setCueLetters(letters, false);
+  }
+
+  /** The cue played out (by the player, or by itself): the prompt down, the initials kept, the reel's beat. */
+  private resolveCue(byPlayer: boolean): void {
+    const waiting = this.waiting;
+    if (!waiting) return;
+    this.waiting = null;
+    this.cuesDone.add(waiting.cue);
+    this.screen?.cue(null);
+    if (waiting.cue.input === 'initials') {
+      const { letters, typed } = waiting;
+      this.deps.initials?.set(typed && letters.length === 3 ? letters : (this.deps.initials?.suggested() ?? letters));
+    }
+    waiting.cue.done(byPlayer);
+  }
+
+  /** A press of the act's key (or a click): counted, the act done at the last one. */
+  private pressCue(): void {
+    const waiting = this.waiting;
+    if (!waiting || waiting.cue.input === 'initials') return;
+    waiting.presses += 1;
+    const needed = waiting.cue.input?.presses ?? 1;
+    if (waiting.presses < needed) {
+      waiting.cue.press?.(waiting.presses);
+      this.screen?.pulseCue();
+      // Each press gives the player the wait again.
+      waiting.waited = 0;
+    } else this.resolveCue(true);
+  }
+
+  /** While a cue waits: its act's keys, or the letters of the initials (Backspace, Enter). Esc is left to the skip. */
+  private readonly onKey = (event: KeyboardEvent): void => {
+    const waiting = this.waiting;
+    if (!waiting || event.metaKey || event.ctrlKey || event.altKey || isAction(event.code, 'close')) return;
+    if (waiting.cue.input !== 'initials') {
+      if (!ACT_KEYS.has(event.code) && !isAction(event.code, 'putBack')) return;
+      event.stopImmediatePropagation();
+      event.preventDefault();
+      if (!event.repeat) this.pressCue();
+      return;
+    }
+    event.stopImmediatePropagation();
+    event.preventDefault();
+    if (event.repeat && event.code !== 'Backspace') return;
+    waiting.waited = Math.min(waiting.waited, INITIALS_WAIT - CUE_WAIT);
+    if (event.code === 'Enter' || event.code === 'NumpadEnter') {
+      if (!waiting.typed || waiting.letters.length === 3) this.resolveCue(true);
+      return;
+    }
+    if (event.code === 'Backspace') {
+      waiting.letters = waiting.typed ? waiting.letters.slice(0, -1) : '';
+      waiting.typed = true;
+    } else {
+      // The letter printed on the key on this keyboard (an AZERTY's A is KeyQ).
+      const letter = keyLabel(event.code).toUpperCase();
+      if (!/^[A-Z0-9]$/.test(letter)) return;
+      if (!waiting.typed) waiting.letters = '';
+      waiting.typed = true;
+      if (waiting.letters.length < 3) waiting.letters += letter;
+    }
+    this.screen?.setCueLetters(waiting.letters, true);
+  };
+
+  /** A click anywhere but the Skip button does a waiting cue's act. */
+  private readonly onClick = (event: MouseEvent): void => {
+    if (!this.waiting || this.waiting.cue.input === 'initials' || event.button !== 0) return;
+    if (event.target instanceof Element && event.target.closest('.intro__skip, .intro__get-up')) return;
+    event.stopImmediatePropagation();
+    event.preventDefault();
+    this.pressCue();
+  };
+
   /** Straight to the last black (the room comes back and the title with it). */
   private skip(): void {
     if (this.t >= this.end) return;
+    // A cue waiting is let go: the moment is passed over with the rest (nothing it would have kept is kept).
+    if (this.waiting) {
+      this.waiting = null;
+      this.screen?.cue(null);
+    }
+    for (const scene of this.reel.scenes) for (const cue of scene.cues ?? []) this.cuesDone.add(cue);
     this.skipArmedAt = -Infinity;
     this.screen?.armSkip(false);
     this.screen?.say(null);
@@ -518,6 +655,9 @@ class MemoryFilm implements ModalLike, Updatable {
     if (!this.struck) this.backToNow();
     this.open = false;
     this.deps.engine.removeUpdatable(this);
+    window.removeEventListener('keydown', this.onKey, { capture: true });
+    window.removeEventListener('mousedown', this.onClick, { capture: true });
+    this.waiting = null;
     this.screen?.dispose();
     this.screen = null;
     this.score = null;
@@ -531,6 +671,11 @@ class MemoryFilm implements ModalLike, Updatable {
     this.onOpenChange?.(open);
     this.openListeners.emit(open);
   }
+}
+
+/** How long `cue` waits before it goes on by itself (s). */
+function waitOf(cue: MemoryCue): number {
+  return cue.wait ?? (cue.input === 'initials' ? INITIALS_WAIT : CUE_WAIT);
 }
 
 /** Between two scenes, at cut `b`: the black down before it, held across it, lifting after. */

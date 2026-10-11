@@ -83,8 +83,12 @@ export function block(w: number, h: number, d: number, x: number, y: number, z: 
   return plain(new THREE.BoxGeometry(w, h, d).translate(x, y, z));
 }
 
-/** Colour (vertex colours, linear) and `wheelHub` (the axle a part turns about, or none) on a part of the wheels' mesh. */
-export function trimPart(g: THREE.BufferGeometry, color: THREE.Color, hub: readonly [number, number] | null = null): THREE.BufferGeometry {
+/**
+ * Colour (vertex colours, linear) and `wheelHub` (the axle a part turns about, or none) on a part of the wheels' mesh:
+ * x and y the axle's, z 1 for a wheel that only rolls, `STEERED + z` for a front wheel standing at `steerZ` across
+ * (it also turns about its upright: `traffic/wheelSpin`).
+ */
+export function trimPart(g: THREE.BufferGeometry, color: THREE.Color, hub: readonly [number, number] | null = null, steerZ: number | null = null): THREE.BufferGeometry {
   const count = g.getAttribute('position').count;
   const colors = new Float32Array(count * 3);
   const hubs = new Float32Array(count * 3);
@@ -93,7 +97,7 @@ export function trimPart(g: THREE.BufferGeometry, color: THREE.Color, hub: reado
     if (hub) {
       hubs[i * 3] = hub[0];
       hubs[i * 3 + 1] = hub[1];
-      hubs[i * 3 + 2] = 1;
+      hubs[i * 3 + 2] = steerZ === null ? 1 : STEERED + steerZ;
     }
   }
   g.setAttribute('color', new THREE.BufferAttribute(colors, 3));
@@ -141,6 +145,9 @@ export function spokes(radius: number, width: number, side: 1 | -1): THREE.Buffe
   return g;
 }
 
+/** `wheelHub.z` of a steered wheel's parts: this plus where it stands across (`traffic/wheelSpin` reads it back). */
+export const STEERED = 10;
+
 const TYRE = new THREE.Color(0x151515);
 const RIM = new THREE.Color(0x8d939a);
 const UNDERBODY = new THREE.Color(0x101112);
@@ -159,11 +166,14 @@ function tyres(axles: readonly number[], track: number, radius: number, length: 
   const one = tyre(radius, tyreWidth);
   const outer = spokes(radius, tyreWidth, 1);
   const inner = spokes(radius, tyreWidth, -1);
+  // The front axle (the one furthest forward) steers.
+  const front = Math.max(...axles);
   for (const x of axles) {
     for (const side of [-1, 1] as const) {
       const z = (side * track) / 2;
-      parts.push(trimPart(one.clone().translate(x, radius, z), TYRE, [x, radius]));
-      parts.push(trimPart((side > 0 ? outer : inner).clone().translate(x, radius, z), RIM, [x, radius]));
+      const steer = x === front ? z : null;
+      parts.push(trimPart(one.clone().translate(x, radius, z), TYRE, [x, radius], steer));
+      parts.push(trimPart((side > 0 ? outer : inner).clone().translate(x, radius, z), RIM, [x, radius], steer));
     }
   }
   one.dispose();
@@ -286,13 +296,28 @@ function dress(lamps: LampSet, d: Dressing, lampY: number, tailY: number, grille
   return lamps;
 }
 
-/** Where a driver sits in each shape (left-hand drive: the -z side), for the figure seen through the glass: the seat's x, the belt line. */
-export const DRIVER_SEAT: Record<CarModelId, { x: number; belt: number; z: number }> = {
-  hatch: { x: -0.42, belt: 0.95, z: -0.38 },
-  city: { x: -0.36, belt: 0.97, z: -0.36 },
-  saloon: { x: -0.3, belt: 0.92, z: -0.38 },
-  estate: { x: -0.3, belt: 0.93, z: -0.38 },
-  van: { x: 0.55, belt: 1.2, z: -0.38 },
+/**
+ * Where a driver sits in each shape (left-hand drive: the -z side), for the figure seen through the glass: the seat's
+ * x, the belt line; the back seat's x (none: a van has only the cab).
+ */
+export const DRIVER_SEAT: Record<CarModelId, { x: number; belt: number; z: number; rear: number | null }> = {
+  hatch: { x: -0.42, belt: 0.95, z: -0.38, rear: -1.25 },
+  city: { x: -0.36, belt: 0.97, z: -0.36, rear: -1.0 },
+  saloon: { x: -0.3, belt: 0.92, z: -0.38, rear: -1.1 },
+  estate: { x: -0.3, belt: 0.93, z: -0.38, rear: -1.1 },
+  van: { x: 0.55, belt: 1.2, z: -0.38, rear: null },
+};
+
+/**
+ * Each shape's windscreen, in its side view (x along, y up): its foot and its top, where the wipers lie (two, `wipers`
+ * apart across, parked along its foot).
+ */
+export const WINDSCREEN: Record<CarModelId, { foot: readonly [number, number]; top: readonly [number, number]; wipers: number }> = {
+  hatch: { foot: [0.9, 0.97], top: [0.22, 1.39], wipers: 0.36 },
+  city: { foot: [0.72, 0.97], top: [0.14, 1.41], wipers: 0.34 },
+  saloon: { foot: [0.98, 0.91], top: [0.37, 1.37], wipers: 0.38 },
+  estate: { foot: [0.98, 0.91], top: [0.37, 1.39], wipers: 0.38 },
+  van: { foot: [1.58, 1.22], top: [1.26, 2.0], wipers: 0.42 },
 };
 
 /** Builds a car shape's geometries once; every car of that shape (parked or driving) instances them. */
@@ -302,7 +327,7 @@ export function carGeometries(model: CarModelId = 'hatch'): CarGeometries {
   if (model === 'city') return cityCar();
   if (model === 'van') return van();
   const half = CAR.length / 2;
-  const d: Dressing = { length: CAR.length, width: CAR.width, front: half + 0.05, back: -half - 0.05, bumperY: 0.4, mirror: [0.82, 1.0], seats: [DRIVER_SEAT.hatch.x, -1.25], belt: DRIVER_SEAT.hatch.belt, dash: 0.62, plates: [0.4, 0.62] };
+  const d: Dressing = { length: CAR.length, width: CAR.width, front: half + 0.05, back: -half - 0.05, bumperY: 0.4, mirror: [0.82, 1.0], seats: [DRIVER_SEAT.hatch.x, DRIVER_SEAT.hatch.rear!], belt: DRIVER_SEAT.hatch.belt, dash: 0.62, plates: [0.4, 0.62] };
   const body = prism([[-half, 0.3], [half, 0.3], [half + 0.02, 0.7], [half - 0.18, 0.84], [0.9, 0.96], [-1.78, 1.0], [-half, 0.94]], CAR.width, 0.05);
   const roof = prism([[0.2, 1.38], [-1.14, 1.38], [-1.14, CAR.height], [0.12, CAR.height]], CAR.width - 0.24, 0.02);
   const glass = prism([[0.92, 0.95], [0.2, 1.4], [-1.12, 1.4], [-1.8, 0.98]], CAR.width - 0.18, 0);
@@ -363,8 +388,14 @@ function estate(): CarGeometries {
   const glass = prism([[1.0, 0.89], [0.35, 1.4], [-2.06, 1.4], [-2.22, 0.98]], width - 0.2, 0);
   const lamps = new LampSet();
   for (const z of [-0.6, 0.6]) lamps.add(half + 0.08, 0.64, z, 1, WHITE, 0.34, 0.1).add(-half - 0.06, 0.86, z, -1, RED, 0.14, 0.3);
+  // Roof rails along the roof's edges, on feet.
+  const rails = [-1, 1].flatMap((side) => [
+    block(2.1, 0.03, 0.04, -0.85, height + 0.06, side * (width / 2 - 0.2)),
+    block(0.08, 0.06, 0.04, 0.12, height + 0.03, side * (width / 2 - 0.2)),
+    block(0.08, 0.06, 0.04, -1.82, height + 0.03, side * (width / 2 - 0.2)),
+  ]);
   return finish({
-    body: mergeGeometries([plain(body), plain(roof), ...mirrors(d)])!,
+    body: mergeGeometries([plain(body), plain(roof), ...mirrors(d), ...rails])!,
     glass: plain(glass),
     wheels: tyres([-1.5, 1.45], width - 0.28, VEHICLES.estate.wheelRadius, length, width, 0.22, trimOf(d)),
     lamps: dress(lamps, d, 0.64, 0.86, [0.6, 0.1]).build(),
@@ -403,13 +434,13 @@ export const BUS = {
   doorHeight: 2.35,
   /** The destination board over the windscreen: centre y, width, height. */
   sign: { y: 2.86, width: 1.9, height: 0.26 },
+  /** Where the passengers sit, seen through the glass band: the seats' x along, the two sides across, and the belt line's height (the driver's seat first). */
+  seats: { driver: [4.9, -0.75] as const, rows: [3.2, 2.2, 1.2, -1.2, -2.2, -3.2, -4.2] as const, sides: [-0.7, 0.7] as const, belt: 1.25 },
 } as const;
 
-/** The bus's parts: body (tinted), glass, tyres, lamps (vertex colours), and the livery stripe. */
+/** The bus's parts: body (tinted), glass, tyres (the front pair steering), lamps with its indicators (vertex colours, `LAMP_ROLE`), and the livery stripe. */
 interface BusGeometries extends CarGeometries {
   stripe: THREE.BufferGeometry;
-  /** Indicator lamps on the +z (kerb) side, front and back, lit only while blinking. */
-  indicators: THREE.BufferGeometry;
 }
 
 export function busGeometries(): BusGeometries {
@@ -426,11 +457,13 @@ export function busGeometries(): BusGeometries {
   const stripe = block(length + 0.04, 0.3, width + 0.03, 0, 0.78, 0);
   const lamps = new LampSet();
   for (const z of [-0.95, 0.95]) lamps.add(half + 0.07, 0.62, z, 1, WHITE, 0.3, 0.16).add(-half - 0.06, 0.7, z, -1, RED, 0.2, 0.4);
-  const indicators = new LampSet().add(half + 0.07, 0.62, 1.12, 1, AMBER, 0.14, 0.14).add(-half - 0.06, 1.05, 1.12, -1, AMBER, 0.14, 0.16).build();
+  // Indicators at the four corners, the reversing lamps, the plates.
+  lamps.indicators(half + 0.08, -half - 0.07, 0.62, width / 2 - 0.08, 1.05);
+  for (const z of [-0.55, 0.55]) lamps.add(-half - 0.06, 0.5, z, -1, WHITE, 0.14, 0.1, LAMP_ROLE.reverse);
+  lamps.plate(half + 0.09, 0.42, 1, PLATE_FRONT).plate(-half - 0.08, 0.42, -1, PLATE_BACK);
   return {
     ...finish({ body: plain(body), glass, wheels: tyres([-3.4, 3.9], width - 0.34, VEHICLES.bus.wheelRadius, length, width, 0.32), lamps: lamps.build() }),
     stripe,
-    indicators,
   };
 }
 

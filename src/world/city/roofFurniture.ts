@@ -1,4 +1,4 @@
-import type { FacadeStyle } from './facadeStyle';
+import type { DormerKind, FacadeStyle } from './facadeStyle';
 import { between, integer, lcg } from '@/random';
 
 /*
@@ -22,8 +22,11 @@ export interface Chimney {
 
 export interface RoofFurniture {
   chimneys: Chimney[];
-  /** A dormer per bay of a mansard: its middle and the width of its pane. */
-  dormers: { s: number; width: number; lit: number }[];
+  /**
+   * The dormers of a mansard, one over a bay (the odd bay without, as its style has it): its middle, the width of its
+   * pane, its head (the style's, or a round oeil-de-boeuf between them).
+   */
+  dormers: { s: number; width: number; lit: number; kind: DormerKind | 'oeil' }[];
   /** Windows set in a pitched roof's slope (their left edge, 0.8 m wide, 1.1 m up the slope from 0.8 m over the foot). */
   roofWindows: { s: number; lit: number }[];
   /** A television aerial on its mast. */
@@ -55,7 +58,15 @@ export function roofFurniture(style: FacadeStyle, width: number, bays: number, w
     // Never one stack through another (two faces in one plane): the second is not built. Drawn all the same, so the rest stays put.
     if (!chimneys.some((c) => clash(c.s, c.width, chimney.s, chimney.width))) chimneys.push(chimney);
   }
-  const dormers = style.roof === 'mansard' ? Array.from({ length: bays }, (_, c) => ({ s: (c + 0.5) * pitch, width: winW * 0.7, lit: random() < 0.3 ? random() : 0 })) : [];
+  const all = style.roof === 'mansard' ? Array.from({ length: bays }, (_, c) => ({ s: (c + 0.5) * pitch, width: winW * 0.7, lit: random() < 0.3 ? random() : 0 })) : [];
+  // Which bays go without and which take an oeil-de-boeuf: a draw of its own, so the rest stays where it was.
+  const gaps = lcg(style.seed * 911 + 3);
+  const dormers = all.flatMap((d, c): RoofFurniture['dormers'] => {
+    const skipped = style.dormerSkip >= 0.5 ? c % 2 === 1 && c !== bays - 1 : gaps() < style.dormerSkip;
+    if (skipped && bays > 2) return [];
+    const oeil = style.dormerOeil && c % 2 === 1;
+    return [{ ...d, width: oeil ? Math.min(0.62, d.width) : d.width, kind: oeil ? 'oeil' : style.dormer }];
+  });
   const roofWindows: RoofFurniture['roofWindows'] = [];
   if (style.roof === 'pitched' && random() < 0.5) {
     for (let i = integer(random, 1, 2); i > 0; i--) roofWindows.push({ s: between(random, 1.8, Math.max(2, width - 2.8)), lit: random() < 0.4 ? random() : 0 });

@@ -270,11 +270,19 @@ lot on the table, their console, a scripted ad's note) are laid by a `Visit` pro
 (`Classifieds.host`), the last host's taken away and freed: the zone may wake up dormant (`keepRecent`). No lights in
 the host's things.
 
-## Mémé's flat (`src/world/grandma/`, travelled by bus)
+## Mémé's flat (`src/world/grandma/`, `src/world/linden/`, travelled by bus)
 
-One lazy zone at x 560 (`unlisted`): Mémé's 5.6 x 4.6 m living-dining room across town (docs/story.md "Mémé"),
-reached by bus line 38 from Front Street's stop (`StreetBus`, `STREET_PLAN.busRide`) and left by its landing door, the
-bus back (`STREET_PLAN.arrivals.grandmaFlat`, by the stop's pole); both rides play over the curtain (`interlude`).
+Three lazy zones across town (`unlisted`, docs/grandma.md "Around her flat"): **Linden Avenue** (`lindenAvenue`, x 700,
+`look: 'street'`), where bus line 38 from Front Street's stop (`StreetBus`, `STREET_PLAN.busRide`) lets the player off
+(`LINDEN_PLAN.arrival`, at the stop) and its shelter takes them back (`LindenStop`, `STREET_PLAN.arrivals.lindenAvenue`,
+by Front Street's pole); both rides play over the curtain (`interlude`). Number 14's street door is a travel door up
+to **her landing** (`lindenLanding`), a small `Room` behind her flat's back wall (`WALL_GAP` between them) whose
+doorway is her front door: the landing and **her flat** (`grandmaFlat`, x 560) are each other's `neighbours`, walked
+through (the landing hangs the leaf; it opens into her flat), and the landing's glazed stairs door travels down to the
+avenue (`LINDEN_PLAN.fromLanding`, out of number 14). The avenue is outdoors on the street's rig (`StreetLighting`,
+`SkyDome`, `Precipitation`, `Buildings` from its own `FacadeSpec`s, `StreetTrees`, `StreetLamps` with two real
+lights), its roadway level with the pavements (`LindenGround`: no step, so no ground function), closed at both ends by
+the works' fences (`WorksFences`, the walked stretch x ±18); `StreetBounds` keeps the player off the facades.
 The shell (`GRANDMA_FLAT_PLAN`: pendant, her armchair and the visitor's, the dining table and its chairs) and her
 things (`furnishGrandmaDecor`: the window on Linden Avenue, its own view `LindenView` rather than an outlook, the
 longcase clock, the set, the kitchenette, the photos) are built once; Mémé (`meme.ts`) is moved to her spot for the
@@ -629,35 +637,58 @@ upper floors round it show: our back wall with the bedroom's frosted window and,
 market: `TravelPlan.arrivals` (keyed by the zone left) sets the player down in front of the door they came out of; the
 arcade's and RETRO GAMES' `StreetDoor`s travel straight on (`SessionActions.travel(to)`, no menu; a `guard` may refuse:
 RETRO GAMES keeps `SHOP_HOURS`).
-- **Traffic** (`traffic/`): `StreetTraffic` is what road users agree on (the signalled crossing's cycle, obstacles
-  drivers stop for, vehicles for the queues, `busAtStop`, the `sirens`, the road's `grip` from the weather). The
-  driving rules are `driving.allowedSpeed` (the player, obstacles, the car ahead, red and amber at the lights, giving
-  way at the plain zebra, pulling over for a siren behind; braking distances by `grip`; no closures a frame), shared by
-  `StreetCars` (three car shapes, instanced per shape: one pool for parked and driving cars), `ScriptedVehicle`
-  subclasses (`StreetBus` on a real-time floor, the `DeliveryVan` with its driver carrying crates in the morning and
-  again after lunch, the same class as the parcel van (`cargo: 'parcel'`, `STREET_PLAN.parcels`), the `BinLorry`
-  stopping at the bins morning and afternoon (`later`); standing, they are colliders and obstacles; an
-  `EmergencyVehicle` (`Ambulance`, `PoliceCar`, `FireEngine`, one out at a time) takes either route, crawls through a
-  red light and passes the drivers pulled over for it), `StreetBikes` (riders, racks) and `Motorbikes` (scooters,
-  motorbikes, couriers in the car lanes, leaning into the bends: `twoWheelers.ts`). `SignalHeads` (unlit HDR lamps),
-  `Spray` behind wet wheels.
-  - **The cars** (`StreetCars`): each driver keeps its own pace, more of them in the rush hours (`city/traffic`
-    `rushAt`). Now and then (`traffic.manoeuvres`) a parked car pulls out of its bay (indicator, then into the lane
-    once it is clear) or a driver stops past a free bay, pulled aside so the traffic passes, and reverses in; never the
-    stray cat's car, never with a parked car's middle within 7 m in front. Parked cars are solid through
-    `zone.collisions` (their box comes and goes with them); `PARKED_CARS` stays the day's start, so the window view
-    agrees at load. Taxis pull in at `STREET_PLAN.taxi.stops` to drop off or pick up `cars.fare` (a `Walker` placed
-    by `furnishStreet`). A player standing in the road gets three toots, then a word in a bubble (`speaks`), and the
-    driver swings out and creeps past.
-  - **Lamps and wheels**: every vehicle's lamps are one `traffic/lampMaterial` (role per face from `carModel`'s
+- **Traffic** (`traffic/`): `StreetTraffic` is what road users agree on (the signalled crossing's cycle, cut short by
+  its push button or a walker waiting, `demand`, resting on the cars' green by night; obstacles drivers stop for,
+  vehicles for the queues, `busAtStop`, the `sirens`; from the weather the road's `grip`, the drivers' `pace` and
+  `murk`, lamps on by day in fog or a downpour). The driving rules are `driving.allowedSpeed` (the player, a fright
+  when they step out closer than the driver can stop (`startled`), obstacles, the car ahead, red and amber at the
+  lights, giving way at the plain zebra and at the junctions (`traffic.giveWay`), pulling over for a siren behind or
+  coming the other way; braking distances by `grip`; no closures a frame) and `Horn` (by the driver's `temper`: at the
+  player, someone dawdling on the road, a vehicle standing in the lane, the front of a queue that stands for nothing,
+  read off each road user's `holdUp`; never at the lights, a zebra, a junction or a siren), shared by `StreetCars`
+  (five car shapes, instanced per shape: one pool for parked and driving cars), `ScriptedVehicle` subclasses
+  (`StreetBus` on a real-time floor, the `DeliveryVan` with its driver carrying crates in the morning and again after
+  lunch, the same class as the parcel van (`cargo: 'parcel'`, `STREET_PLAN.parcels`), the `BinLorry` stopping at the
+  bins morning and afternoon (`later`), each round on its days (`ROUND_DAYS`, none on Sunday); standing, they are
+  colliders and obstacles drivers may go round (`passable`, `span`); an `EmergencyVehicle` (`Ambulance`, `PoliceCar`,
+  `FireEngine`, one out at a time) takes either route, crawls through a red light and passes the drivers pulled over
+  for it (left of its line only with nothing coming); now and then its call is here (`STREET_PLAN.emergencyCalls`,
+  `callChance`): siren off, beacons and hazards on, its `crew` in at a door a while; a patrol may pull a driver over
+  (`StreetCars.flagDown`: the car pulls in, the police car stops behind it, the officer has a word at the window)),
+  `StreetBikes` (riders, racks) and `Motorbikes` (scooters, motorbikes, couriers in the car lanes, leaning into the
+  bends, filtering between the lanes past a standing queue: `twoWheelers.ts`). `SignalHeads` (unlit HDR lamps, the push
+  button with its WAIT window, clicked), `Spray` behind wet wheels (and a sheet of water over the kerb at the player by
+  a car tearing through the gutter: `splashes`). `TaxiRank` (`STREET_PLAN.taxi.rank`): hailed, a taxi comes to the
+  stand and waits; got into for `taxi.fare`, it goes wherever line 38 goes (`busRide.destinations`, read at the click;
+  a `ChoicePanel` when more than one is open) at any hour the place is, marked `travel/rideVia` 'taxi' so no bus ride
+  plays over the curtain (the bus marks its own 'bus'). `ParkingWarden` (`STREET_PLAN.warden`): her round along one
+  kerb and back down the other, Monday to Saturday, a ticket under a wiper now and then (`StreetCars.ticket`).
+  - **The cars** (`StreetCars`): each driver keeps its own pace and temper, more of them in the rush hours
+    (`city/traffic` `rushAt(h, weekday)`: none at the weekend, a quiet Sunday). They swing out round a van standing in
+    the lane, a slow rider or a cyclist (given a wide berth) once nothing comes the other way (`oncomingClear`,
+    `clearanceLeft`), back in behind if something comes before they have drawn level. Now and then
+    (`traffic.manoeuvres`) someone walks to a parked car (`traffic/carDrivers`, `cars.people`, placed by
+    `furnishStreet`) and it pulls out of its bay (indicator, then into the lane once it is clear), or a driver stops
+    past a free bay, pulled aside so the traffic passes, reverses in and gets out; never the stray cat's car, never
+    with a parked car's middle within 7 m in front. Parked cars are solid through `zone.collisions` (their box comes
+    and goes with them); `PARKED_CARS` stays the day's start, so the window view agrees at load. Taxis (more late at
+    night, their sign lit while free) pull in at `STREET_PLAN.taxi.stops` to drop off or pick up `cars.fare` (a `Walker`
+    placed by `furnishStreet`), or for the player (`hail`). A player standing in the road gets three toots, then a
+    word in a bubble (`speaks`), and the driver swings out and creeps past once the other side is clear; one stepping
+    out under a nose gets a blast, a skid (`CarVoice.skidding`), a shout and a swerve.
+  - **Lamps, wheels, bodies**: every vehicle's lamps are one `traffic/lampMaterial` (role per face from `carModel`'s
     `LampSet`: head, tail brighter when braking, indicators, reversing, plates and grille unlit), per instance
-    (`lampState`) or one `setState`; tyres and their spoked rims turn about their axles in the vertex shader
-    (`traffic/wheelSpin`). Car glass is tinted and see-through, with the cabin and a driver behind it; the road under
-    each car, parked or driving, is darkened (`StreetCars` shades, `GROUND.carShade`). Instanced vehicles share one live
-    bounding sphere (no `frustumCulled = false`). The bus keeps its own lamps and wheels (its geometry has no lamp roles).
+    (`lampState`) or one `setState`; tyres and their spoked rims turn about their axles in the vertex shader, the front
+    pair steering with the bend (`traffic/wheelSpin`: `wheelHub.z` = `STEERED` + where the wheel stands across), the
+    bus's too. A car's body pitches under braking and rolls out of a bend; wipers sweep in the rain (`WINDSCREEN`);
+    some carry roof bars, the estate its rails; paint fades and grime climbs on a worn car (`carWear`); drivers and
+    passengers of every skin show through the tinted glass, the bus's riders through its band (more by day), its board
+    reading where it goes. The road under each car, parked or driving, is darkened (`StreetCars` shades,
+    `GROUND.carShade`). Instanced vehicles share one live bounding sphere (no `frustumCulled = false`).
   - **For the sound**: every `CarVoice` carries `kind` (`car`, `van`, `bus`, `lorry`, `bike`, `scooter`, `moto`,
-    `courier`, `ambulance`, `police`, `fire`) and a `honks` counter, and may carry `braking`, `reversing`,
-    `doorSlams` (a counter), `siren`, `model` and `taxi`. The cars' voices are a pool lent to whichever cars move.
+    `courier`, `ambulance`, `police`, `fire`) and a `honks` counter, and may carry `braking`, `skidding`, `reversing`,
+    `doorSlams` (a counter: getting in and out, taxis' fares), `siren`, `model` and `taxi`. The cars' voices are a pool
+    lent to whichever cars move.
 - **People and animals** (`StreetCrowd`, `life/`): passers-by from door to door and down Park Street, crossing at the
   lights on the green man or at the zebra (then they are `RoadObstacle`s), fading in and out (alpha hash) at doors and
   over the last `fade` metres of `drawDistance`. Who walks is `life/crowdCast` (the regulars `crowd.seeds`, the game
@@ -677,15 +708,62 @@ RETRO GAMES keeps `SHOP_HOURS`).
   `Terraces` (tables out in opening hours and dry weather, `life/terraceWeather`, stacked otherwise; their colliders come
   and go through `zone.collisions`; customers walk up, are served by the waiter, leave; `seated(i)` for the chatter);
   `Pigeons` that take off (for dogs too) and coo; the dogs pull towards them and the `StrayCat` and bark.
+  Since the street-life pass: everyone is dressed for the season and puts an umbrella up standing in the rain
+  (`life/streetLook`: `streetLook`, `rainGear`); the caller steps in by the wall out of it. Residents go out on their
+  errand of the day (`crowd.residents.outs` / `backs`); passengers off the bus walk off their several ways
+  (`standing.busStop.alights`); `standing.sitters` take the far bench in turns (resting, lunch at noon, reading) and
+  someone sits down beside a player who has sat there a while; the first passenger sometimes waits on the shelter's
+  bench. Stops include the bus timetable, the pillar clock and pictures (a visitor's; the Fair's bunting only on its
+  day). Regulars and residents crossing stop for a word or wave (`StreetCrowd.meetings`); the busker's listeners stand
+  in a ring, nod along and clap between songs (`Busker.betweenSongs`); dogs sniff, greet each other and the player, and
+  take a pat (`Dog` is placed in the zone, `placeDog`). The Fair's `boost` raises the cap, not just the share. Once
+  the works have moved on, `stretchRoutes` (from the shop doors past them), a loiter spot (`stretch`) and a flock
+  (`pigeonsStretch`) fill the stretch. `StreetReactions`: a horn or a bark turns heads and raises brows, a siren draws
+  every eye in reach; a player in someone's way gets a "Pardon", then a sharper word and a frown, then a look back.
+  `ParkLife` (two children at the playground with a parent, a brisk walker, an old man feeding the park's flock by the
+  pond's fence), `SchoolRun` (`schoolRun`: the building's kids to and from school, Lina on her days, Nico into the
+  arcade), `Rendezvous` (someone waiting by the clock for a friend, sometimes stood up), `StreetRounds` (`rounds`:
+  shopkeepers pulling their shutters at closing in the player's sight, the night shift, the dawn sweeper, Rémi's crusts
+  for the pigeons at the PARKSIDE CAFE's closing). Pigeons sit on the lamps' arms and the cornices by day
+  (`life/pigeonPerches`), hop to crumbs under the terraces' occupied tables, and come to whoever feeds them
+  (`Pigeons.feedAt`); the park's flock roosts in the trees. The stray cat hisses at a dog and leaves a low perch for it.
+  The terraces' waiter goes round the tables before they are laid out or stacked in the player's sight. The far
+  figures (`FarWalkers`) carry umbrellas in the rain and wear the season's coats.
+  What the people pass carry and do (docs/people.md): morning commuters with a coffee to go or the paper, one now and
+  then late and running, an elder with a stick, a grown-up pushing a pram (the brisk walker in the park too), a visitor
+  with a camera who takes the picture with it, a bag from RETRO GAMES (`gamebag`), a case on wheels off the bus;
+  teenagers among the day's strangers and on the school run (`schoolRun`'s `teen` walks), the little ones racing home
+  some afternoons; a child holds their grown-up's hand (`Walker.holdHand`); whoever is caught on the road as the green
+  man goes hurries across (`StreetCrowd.hurryAcross`), and in a downpour with nothing over the head most run. Terrace
+  customers sip from their cup once it comes, smokers take a draw, the Sunday concert's chairs clap after each song
+  (and the raffle's keeper at the draw). The playground's swings hang on their own pivots (`StreetParkFeatures`
+  `swings`): a child rides one, pumping it higher, the creak at each end (`cues.swing`), and climbs the slide's ladder
+  to ride down the chute (`cues.slide`). On Halloween's evenings children in costume (a witch, a ghost, a pumpkin, a
+  skeleton, a cat) go round the doors that answer, a grown-up with them, one group per pavement
+  (`events/TrickOrTreaters`). A car braking hard just short of the player makes the eye start back (`player/flinch`,
+  none with reduced motion). The crowd's walkers are built ahead between the street's build steps
+  (`StreetCrowd.prebuild`); far off they are one draw each (`people/proxy`).
 - **Facades in relief** (`relief/`, `details/`): `Buildings.fronts` feeds 3D awnings (wound up at closing and at
-  night: each folds towards its fixing in the vertex shader, its shadow too), balconies with the residents' pots and
-  chairs, door surrounds, the steps before the residents' doors, the downpipes and our balcony as bought
-  (`FacadeRelief`, `HomeUpgrades`), the near facades' windows whole (frames, sills, heads, shutters: `facadeWindows/`), the pharmacy's cross and the newsagent's diamond on brackets (`BladeSigns`), the
+  night: each folds towards its fixing in the vertex shader, its shadow too, and gives a little in the wind, `wind.ts`),
+  balconies with the residents' pots and chairs, door surrounds, the steps before the residents' doors and, on the near
+  fronts, their leaves (panels, brass, the fanlight's bars), the downpipes and our balcony as bought
+  (`FacadeRelief`, `HomeUpgrades`), the near facades' windows whole (frames, sills, heads, shutters: `facadeWindows/`;
+  `FacadeShutters` swings the louvred shutters shut at bedtime, each window its hour, and pulled to on a hot afternoon,
+  and on a hot day swings some casements in, behind the wall, the room's dark showing in the opening), what is fixed to
+  the near walls (`WallMounts`: a lantern over each residents' door, alarm boxes, cables under the first floor's
+  course, the odd air-conditioning unit, pigeon spikes, the fly-posters pasted as sharp sheets, `posterArt`), the
+  pharmacy's cross and the newsagent's diamond on brackets (`BladeSigns`), the
   shopfronts (`shopfronts/Shopfronts`, below), interior-mapped shop windows
   (`ShopInteriors`: two looks per kind, someone inside while open; rooms only on low), roller shutters that roll down at
-  closing (`Shutters`; back from dormancy they snap to the clock, no roll and no rattle), light pools in front of open shops (`ShopGlow`), wet streaks, puddles and, on
+  closing (`Shutters`; back from dormancy they snap to the clock, no roll and no rattle; some tagged or with posters, once
+  each, riding with the slats), light pools in front of open shops (`ShopGlow`), wet streaks, puddles and, on
   `QUALITY.reflections`, a masked `Reflector` hidden while dry (`WetGround`), autumn leaves (`Leaves`), manholes,
-  hydrants, bollards, a Morris column and the roadworks (`StreetDetails`), the flickering lamp's buzz (`LampBuzz`).
+  hydrants, bollards, a Morris column and the roadworks (`StreetDetails`; the gutter drains, each a little off its 13 m,
+  are `details/drains` `DRAINS`), the fixtures (`StreetFixtures`: telecom cabinets, pay stations, bottle banks in the
+  opened stretch, road signs facing their drivers, a drinking fountain by the park), the flickering lamp's buzz
+  (`LampBuzz`), the holidays on the near fronts (`StreetHolidays`: wreaths and sprayed windows at Christmas, pumpkins on
+  the steps and bats in the windows at Halloween), smoke from the chimneys on cold days (`ChimneySmoke`, from
+  `Buildings.chimneyTops`).
   `snowCovered()` (`snowCover.ts`, uniform written by `StreetGround`) whitens up-facing faces of everything.
 - **The shopfront kit** (`shopfronts/Shopfronts`, data in `shopfrontPlan`): every shop on a near or mid facade
   (`FacadeSpec.detail >= KIT_DETAIL`) is built in 3D, one of three variants (`frontVariant`). `plain` (`plainFront`,
@@ -722,22 +800,38 @@ RETRO GAMES keeps `SHOP_HOURS`).
   Crane, the rival collector, some days, with copies taken off the market's stalls: buy, haggle, swap; his state is
   `economy/rivalCollector`). Coins go in through `BuildContext.money.purse`. See `docs/economy.md`.
 - **Sound** (`StreetSound`, `audio/`): every street sound is a `SoundGraph` (its master into `streetBus.streetInput`:
-  `outdoorsInput` plus the facades' faint slapback; every looping source kept, all stopped on dispose and while the zone
-  is dormant, `setZoneActive(false)`, rebuilt on the next update; at most `MAX_SHOTS` one-shots sounding or scheduled
-  at once, past it a new one is dropped) placed by one `StreetEar` (side by `stereoPan`, behind
-  the head duller by `rearOf`, through `SpatialOut`). `StreetSound`: the rumble, rain (giving way under a shelter to
-  `RainOnRoofs`' drumming and drips), wind, sirens far off, church bells on the hour (8:00 to 21:00), the birds by
-  season and hour (`StreetBirds`: dawn chorus, summer swifts, winter robins and crows, none over snow but the hardy),
-  and one `VehicleVoice` per road user (engine by kind and model through its gears, Doppler, wet tyres and puddle
-  splashes; bikes a freewheel and a bell, never an engine; `roles` marks the bus, van and lorry for their air brakes,
-  doors (`traffic.busAtStop`), crates, compactor and bins). `ShopSounds`: the arcade's door, cafés and bars (a jukebox's
-  bass through the bars' doors from 18:00, `BarMusic`), their terraces (`life/terraceWeather`, the tables' own rule;
-  `seated` for who sits there), the laundry, and `ring` for `onDoor` (a shop's bell, a house door's latch and thud).
-  `StreetCues`: wings and coos (`coo`), barks (`barkers`, `barkAt`), the stray's `meow` and `catHiss`, the crossing's
-  beeper, shutters, each siren of `sirens` (own `tones`). `PeopleSounds`: the walkers' footfalls (`playFootfall` on
-  `streetSurfaceAt`) and a murmur by how many are about. `RoadworksSound`: generator, hammer, reversing beeper and
-  shovel in working hours (`weekdayOf`: none on Sunday, Saturday mornings). `BuskerTune`: his own tune plus four of the
-  real day's, a pause between songs (`betweenSongs`).
+  `outdoorsInput` plus the walls' faint answer, which follows the listener: `streetEcho.echoAround` from `StreetSound`
+  every 0.25 s, a canyon on Front Street, one wall on Park Street, nearly dry in the park, a close slap in the corner
+  bay and under a shelter; every looping source kept, all stopped on dispose and while the zone is dormant,
+  `setZoneActive(false)`, rebuilt on the next update; a voice's own sources in a `SoundPart` it lets go while unused;
+  one-shots through pooled legs (`shot`), at most `MAX_SHOTS` sounding or scheduled at once, past it a new one is
+  dropped) placed by one `StreetEar` given the zone as its frame (side by `stereoPan`, behind the head duller by
+  `rearOf`, the air's dulling with distance, and round a corner of `streetBlocks` much duller: the `walls` of
+  `SpatialOut`). `StreetSound`: the rumble (hushed under settled snow and in fog), rain (giving way under a shelter to
+  `RainOnRoofs`' drumming and drips; `RainRunoff`: the gutter along the nearest kerb while wet, a gurgle at the nearest of `details/drains` `DRAINS`, drops
+  on the parked cars), wind, sirens far off, church bells on the hour (8:00 to 21:00), the birds by season and hour
+  from the trees round the listener (`StreetBirds`, `treesNear`: more in the park; dawn chorus, summer swifts over the
+  roofs, winter robins and crows, none over snow but the hardy; a tawny owl at night), and one `VehicleVoice` per road
+  user (its nodes only while a car is lent it; engine by kind and model through its gears, Doppler, wet tyres and
+  puddle splashes; bikes a freewheel and a bell, never an engine; from `CarVoice` the brakes' squeal now and then and a
+  skid on a sudden stop, the gearbox whine and a beeper reversing, a door at each `doorSlams`; `roles` marks the bus,
+  van and lorry for their air brakes, doors (`traffic.busAtStop`), crates, compactor and bins). `ShopSounds`: the
+  arcade's door, cafés and bars (a jukebox's bass through the bars' doors from 18:00, `BarMusic` on the jukebox's
+  stations), their terraces (`life/terraceWeather`, the tables' own rule; `seated` for who sits there), the laundry,
+  every other open shop as `shopInteriors` says (bakery, newsagent, TV REPAIR, pets, RETRO GAMES' demo cart, florist,
+  grocer's radio, butcher, bookshop, pharmacy, furniture), each heard dull through its door's glass and in full while
+  the door stands open after `ring` (`onDoor`: a shop's bell, a house door's latch and thud). `StreetCues`: wings and
+  coos (`coo`), barks (`barkers`, `barkAt`), the stray's `meow` and `catHiss`, the crossing's beeper, shutters, each
+  siren of `sirens` (own `tones`), and for what others place `quack`, `swing`, `slide`, `plop` (`parkCues`),
+  `letterDrop`, `phoneRing`, `coinSlot`, `applause`, `cheer`, `pinball`, `dart` (`townCues`). `ParkSounds`: the
+  fountain in its hours (`audio/water` `RunningWater`, silent with the pond frozen), the pond's ducks by day, the wind
+  in the leaves round the listener by season. `LiveMusic`: a band (`BarMusic` full) through a bar's door or in the open
+  while `playing`, clapped between songs (THE ANCHOR's Thursday gig, `streetShops/bars.gigOn`). `PeopleSounds`: the
+  walkers' footfalls (`playFootfall` on `streetSurfaceAt`: paving, asphalt, the park's gravel paths, the playground's
+  rubber, grass, autumn's leaves, puddles that splash while wet), a voiced babble by how many are about, and each line
+  over a walker's head murmured in their voice as it shows (`notices.onLineShown`). `RoadworksSound`: generator,
+  hammer, reversing beeper and shovel in working hours (`weekdayOf`: none on Sunday, Saturday mornings). `BuskerTune`:
+  his own tune plus four of the real day's, a pause between songs (`betweenSongs`).
 - **Rig instead of a shell** (`StreetLighting`): a shadow-casting `DirectionalLight` from `sky.outdoors.lightDirection`,
   shadow camera a square around the player snapped to texels, its map redrawn at `QUALITY.shadowRefreshHz` while occupied (`lighting/ShadowRefresh`); a `HemisphereLight` only while occupied; it overrides
   the scene's `Haze` fog every frame with the weather's (`streetAir`), and returns `lightLevel` in its handle (what
@@ -756,14 +850,25 @@ RETRO GAMES keeps `SHOP_HOURS`).
   walls' own slots, night windows on a quarter-size emissive atlas, each light repainted alone with its room behind it
   and only its rect uploaded (`city/regionUpload`), curfews as the painted view, shops by `SHOP_HOURS`), what stands on
   the roofs one more (`RoofClutter`, from `city/roofFurniture`; our own roof is `world/roof`'s); lamps, trees, cars are
-  instanced; four point lights move to the lamps nearest the player (never added or removed). People are the costly
-  part (~33 draw calls each): whatever is built, the `PeopleBudget` draws only the nearest `crowd.budgetByQuality`
-  (6 / 10 / 13; every walker placed through `placeWalker` with `fade` joins it, the rest ease out, `Walker.setAllowance`:
-  the crowd, the standing, terraces, queues, loiterers, roadworkers, the vans' drivers, the collector), no shadows of their
-  own, culled once faded beyond 40 m; a faded-out walker is not posed (`Walker.update`). The busker culls himself past
-  40 m. Building the street is steps (`furnishStreetSteps`, a generator yielding between its sections; `furnishStreet`
-  runs them at once): got ready from the stairs (`World.prepareZone` with `between`), `Zone.buildSliced` spreads them over
-  idle moments; an activation meanwhile finishes them.
+  instanced; four point lights move to the lamps nearest the player (never added or removed). A set of facades is
+  painted once (`Buildings.acquireAtlas`, keyed by the facades, scale, anisotropy and frames): every `Buildings` of the
+  same set shares its day atlas and surface mask (`markShared`, counted); the last one gone, it is dropped with its GPU
+  copy (no 80 MB canvas kept), and the street built again paints it ahead, sliced (`paintStreetBase`). An atlas painted
+  ahead waits for its `Buildings` (`IDLE_ATLASES`, two).
+  The big casters (the facades and what stands on them, the relief, shopfronts, wall mounts, the park) have their
+  triangles sorted into 12 m stretches along x (`shadowStretches`): the sun's map draws only the run of stretches its
+  camera sees, each square of the cascade its own (a third to two thirds fewer triangles than the whole street, measured
+  headless). People are the costly part (dozens of draws each near, one past `PersonModel.proxyDistance` as a proxy):
+  whatever is built, the `PeopleBudget` ranks those in the camera's view (or within 5 m) first, then by distance, and
+  lets through `crowd.budgetByQuality` full bodies (6 / 10 / 13), a proxy counting a quarter of one (never more than
+  three times the budget in all; every walker placed through `placeWalker` with `fade` joins it, the rest ease out,
+  `Walker.setAllowance`: the crowd, the standing, terraces, queues, loiterers, roadworkers, the vans' drivers, the
+  collector), no shadows of their own, culled once faded beyond 40 m; a faded-out walker is not posed (`Walker.update`).
+  The busker culls himself past 40 m. Building the street is steps (`furnishStreetSteps`, a generator yielding between
+  its sections; `furnishStreet` runs them at once), the facades' atlas first, a pause every 6 ms of painting
+  (`streetScenery.paintStreetBase`, also before a window's view is built): got ready from the stairs
+  (`World.prepareZone` with `between`, which then uploads a big texture per idle moment), `Zone.buildSliced` spreads them
+  over idle moments; an activation meanwhile finishes them.
 - **One scenery, two scenes** (`streetScenery.ts`): the ground, park, facades (`buildStreetBase`), their relief, landmark
   fronts, bracket signs, shopfronts, shutters and glow (`buildStreetFronts`), the lamps, trees, cars and furniture
   (`buildStreetFixtures`) are built by the same calls in the street (`zone.place`) and behind a window
@@ -776,8 +881,8 @@ RETRO GAMES keeps `SHOP_HOURS`).
   is due from `StreetBus.dueIn`). Line 38 is boarded while its doors stand open (`StreetBus` is `Interactable`: the fare
   through `SessionActions.pay`, then `travel` to the first of `busRide.destinations` on now: Mémé's across town in her
   waking hours (docs/story.md "Mémé"), the one place the player cannot walk to; shut, the caption says when the first
-  bus there runs; its hitbox is only raycast while it has a caption). Back from her flat, the player steps off by the
-  pole (`STREET_PLAN.arrivals.grandmaFlat`). The benches and
+  bus there runs; its hitbox is only raycast while it has a caption). Back from Linden Avenue, the player steps off by
+  the pole (`STREET_PLAN.arrivals.lindenAvenue`). The benches and
   the shelter's bench are `BenchSeat`s (`Seating`; the reader's bench is taken while they sit).
 - **What's on, the Fair** (`events/`): a bill on the Morris column and the shelter's lit poster (`WhatsOnBills`, its `ad`
   handed to `StreetFurniture`) read `whatsOnItems` (the next Grand Flea Fair, today's arcade challenge, the Saturday
@@ -787,8 +892,48 @@ RETRO GAMES keeps `SHOP_HOURS`).
   bandstand, the playground, the willows, the far shrubbery where the lawn ends (`LAWN_REACH`), as the window view paints
   them; in the walkable street (`walkable`) the gardens' fence, trees and playground frames collide.
 - Extras: `Newsstand` (THE GAMING WEEKLY, `ui/NewsPanel` through `openPanel`, tips from `market.peekToday()`),
-  `Busker` (`audio/BuskerTune`, tips via `SessionActions.pay`, 3 a day), `GarageSale` (one day in three, 2 to 4 of
-  today's stock as bin-priced `ForSaleBox`es once the stock is drawn, else a sign pointing to the market).
+  `Busker` (`audio/BuskerTune`, tips via `SessionActions.pay`, 3 a day), `GarageSale` (one day in three, 2 to 4 loft
+  games of its own, `MarketStock.randomGames` seeded by the day, as the loft kept them, bin-priced `ForSaleBox`es; a
+  neighbour selling behind the table, one of four a day, a word when clicked, in the people budget).
+- **The Mansions' bells** (`MansionBell`, `social/street/mansionDoors`): with no seller's visit due, each click rings
+  the next flat down the plate: a word over the intercom or nothing; some days a favour (bring a croissant, a bunch, a
+  coffee or cake to take away, ring again: coins); some days a cupboard cleared, its games put on the step (free
+  `ForSaleBox`es, laid again after a reload that day).
+- **Known people** (`townsfolk/`): the residents and two regulars talkable in the crowd (`knownFaces`, the crowd's
+  `social`), Victor's walk at nine and Lou's break (`TownRounds`), a passer-by's lead (`streetLeads`).
+- **Secrets** (`secrets/`, `SECRETS_PLAN`): the TO LET window under our building on Park Street (GAME OVER in the dust,
+  three clicks: a cartridge fished out through the letterbox), the children's chalk on Park Street's pavement (ten
+  squares, the old code clicked in order pays once), the initials in the park's railing (a card).
+- **Places and events** (`events/placeStreetEvents`, spots in `streetPlacesPlan.ts` `STREET_PLACES`, their days in
+  `events/streetSchedules`): the pillar box (`wayfinding/PostBox`: a card to a friend or family met, once a game week
+  each, warmth, `post/cards`) and the phone box (`wayfinding/PhoneBox`: a coin, then the bedroom phone's panel; now and then it rings by itself,
+  `STREET_PLACES.phoneRings`, and whoever picks up gets a wrong number). In the
+  park's gardens the ducks on the pond's near side (`park/ParkDucks`) and the bank over the hoop fence (`park/PondBank`:
+  a croissant crumbled for them, else a coin tossed for a wish, one a game day; the seventh brings up an arcade token,
+  `park/parkVisits`); Sunday afternoons' concert on a low stage on the lawn (`park/ParkConcert`, `PARK_CONCERT`: Lou's
+  band, listeners on folding chairs, `audio/LiveMusic`; the stage clicked is a while listening, Lou's warmth; the
+  bandstand itself stays across the lawn, out of the gardens); the building's kids at the playground on Sundays (the
+  courtyard's `YardKids` on its frames, `building/kids` `playgroundDay`). On the Grand Flea Fair's day: the overflow stall
+  by the butcher's (a clearance lot, `build/showOnStall` on a `MarketStall`) with the raffle's drum (`events/RaffleDrum`,
+  `fair/raffle`: tickets till six, the number read out, a boxed game waiting for its winner), Roadshow Retro, a dealer who
+  comes only that day (a collector's lot), the crêpe cart (`events/CrepeCart`); both lots are drawn as a small ad's are
+  (`ClassifiedsContext.lot` with an ad of their own). December: the Christmas stall (`events/ChristmasStall`: gift
+  wrapping through `ui/street/WrapPanel`, `holidays/giftWrap`, hot chestnuts). Halloween's evenings: the residents' doors
+  with a pumpkin answer a knock once a year (`events/HalloweenDoors`, `holidays/trickOrTreat`: sweets, coins, at one
+  door an old game on the step). Benches (`details/BenchSeats`, `benchExtras`): seated, a click waits until the next shop
+  opens (or a while) in a fade, and something is overheard after a little while. The What's On bill (`events/whatsOnItems`)
+  adds the coming week: the saleroom, a garage sale, the collector, the concert, the Anchor's gig, the Local's quiz, the
+  greengrocer's market mornings (Wednesday, Saturday), the neighbours' party (five pasted, eight read out). Line 38 has two stops: when both are on, `ui/street/ChoicePanel` asks
+  which (`StreetBus` `ride.choose`).
+
+## REPLAY, across town (`src/world/replay/`, travelled)
+
+A second-hand games shop on Canal Street, line 38's other stop (`STREET_PLAN.busRide`, in `REPLAY_PLAN.hours`): a
+windowless room (`fixedDaylight`), its door the bus back to Front Street (`arrivals.replayShop` by the pole, the ride's
+interlude both ways). Its stock is its own, drawn per game week as small ads' lots are (`ClassifiedsContext.lot`, three
+ads of its own: a mixed bag on the risers by the wall, one console's on the back risers, a collector's in the glass
+case), laid by `build/showOnStall`; Odile behind her counter says a word and buys games (the WE BUY desk). Not
+persistent; never from the menu.
 
 ## What is not done yet
 
@@ -806,10 +951,12 @@ RETRO GAMES keeps `SHOP_HOURS`).
    the cat's purr go silent; any travel also stops the playing screen (`Screens.stopActive` in `GoingOut`).
 5. **Spawn / return.** Done: `player/PositionMemory` saves the zone, the floor point and the look (`bibliothek.position.v1`,
    wiped by New game), restores them on load (`?fresh` starts in the living room); never while seated, travelling or
-   asleep, never onto the stairs, the attic or the roof. Not saved outside a zone's box either: in the park's gardens or
-   Front Street's opened stretch past x 40 the street stays current, but a reload puts the player back at the last
-   spot inside it (growing the street's box there would take in the arcade's and the market's rooms). The keys are not saved: restored outside, they are in the bowl (the front door lets
-   the player in from the landing anyway).
+   asleep, never onto the stairs, the attic or the roof. Past the street's box (the park's gardens, Front Street's opened
+   stretch past x 40) the street's walked ground (`measures/street.onWalkedGround`, the works where they stand on today's
+   market day) is still the street's: the `ZoneManager`'s `claim` keeps it current there (or makes it so on a reload),
+   and `PositionMemory`'s `walked` saves and restores the spot as it is (`bootstrap/worldZones.streetGround`); growing
+   the box would take in the arcade's and the market's rooms. The keys are not saved: restored outside, they are in the
+   bowl (the front door lets the player in from the landing anyway).
 6. **Light count.** Lights change shader programs: any zone reachable on foot must be active whenever its neighbours
    are (a new room of the flat joins `FLAT`), and a light is never added, removed or given `castShadow` at runtime:
    dim it to 0 instead (the collection room hangs a shelf spot over every bookcase slot, `parked` until a bookcase stands

@@ -23,6 +23,10 @@ export class IntroScreen {
   private readonly skip: HTMLButtonElement;
   private readonly skipLabel: HTMLElement;
   private readonly tagline: HTMLElement;
+  private readonly cueBox: HTMLElement;
+  private readonly cueKey: HTMLElement;
+  private readonly cueText: HTMLElement;
+  private readonly cueLetters: HTMLElement;
   private said: string | null = null;
 
   constructor(container: HTMLElement, handlers: IntroScreenHandlers, words: { name: string; line: string; getUp: string }) {
@@ -42,6 +46,10 @@ export class IntroScreen {
           <p class="intro__tagline" data-role="tagline">${words.line}</p>
           <button type="button" class="ui-btn ui-btn--primary intro__get-up" data-role="get-up" data-nav>${words.getUp}</button>
         </div>
+        <div class="intro__cue" data-role="cue">
+          <p class="intro__cue-letters" data-role="cue-letters" hidden>${[0, 1, 2].map(() => html`<span class="intro__cue-letter"></span>`)}</p>
+          <p class="intro__cue-act"><kbd data-role="cue-key"></kbd> <span data-role="cue-text"></span></p>
+        </div>
         <button type="button" class="intro__skip" data-role="skip"><span data-role="skip-label">Skip</span> <kbd data-role="skip-key"></kbd></button>
       `,
     );
@@ -53,6 +61,10 @@ export class IntroScreen {
     this.skip = q<HTMLButtonElement>('skip');
     this.skipLabel = q('skip-label');
     this.tagline = q('tagline');
+    this.cueBox = q('cue');
+    this.cueKey = q('cue-key');
+    this.cueText = q('cue-text');
+    this.cueLetters = q('cue-letters');
     q('skip-key').textContent = actionKeyLabel('close');
     this.skip.addEventListener('click', () => handlers.onSkip());
     this.getUp.addEventListener('click', () => handlers.onGetUp());
@@ -110,6 +122,34 @@ export class IntroScreen {
   armSkip(armed: boolean): void {
     this.skip.classList.toggle('intro__skip--armed', armed);
     this.skipLabel.textContent = armed ? 'Again to skip' : 'Skip';
+  }
+
+  /**
+   * A memory's moment waiting on the player (`MemoryFilm`'s cues): the act and its key over the narration, and three
+   * letter boxes when it is the initials (`letters`); null takes it away.
+   */
+  cue(cue: { text: string; key: string; letters?: boolean } | null): void {
+    this.cueBox.classList.toggle('intro__cue--on', cue !== null);
+    if (!cue) return;
+    this.cueKey.textContent = cue.key;
+    this.cueText.textContent = cue.text;
+    this.cueLetters.hidden = !cue.letters;
+  }
+
+  /** The letters in the boxes (`typed` false: the ones offered, dimmed until the first letter typed replaces them). */
+  setCueLetters(letters: string, typed: boolean): void {
+    this.cueLetters.classList.toggle('intro__cue-letters--offered', !typed);
+    this.cueLetters.querySelectorAll<HTMLElement>('.intro__cue-letter').forEach((box, i) => {
+      box.textContent = letters[i] ?? '';
+      box.classList.toggle('intro__cue-letter--at', typed && i === Math.min(letters.length, 2));
+    });
+  }
+
+  /** A press that counted (a first blow): the prompt nods. */
+  pulseCue(): void {
+    this.cueBox.classList.remove('intro__cue--pulse');
+    void this.cueBox.offsetWidth;
+    this.cueBox.classList.add('intro__cue--pulse');
   }
 
   /** The button that ends the film, for a key that presses it. */

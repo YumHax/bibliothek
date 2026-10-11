@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import type { Furniture } from '../Furniture';
 import { lcg } from '@/random';
 import { currentSeason } from '@/time/season';
+import { windSwayed } from './wind';
 
 /** A strip of ground the tufts grow along (`from` to `to`, street-local x, z), `width` across, at height `y`. */
 export interface TuftStrip {
@@ -26,7 +27,7 @@ const GREENS = {
 /**
  * Tufts of grass where a mower never reaches: along a lawn's curb, a hedge's foot, the edges of a park's paths, the
  * moss line at a wall's foot. One instanced mesh for every strip, a fan of thin blades per tuft (double-sided, lit,
- * no texture), each tuft turned, scaled and tinted from its own seed and the season. Never collides.
+ * no texture), each tuft turned, scaled and tinted from its own seed and the season, bending in the wind. Never collides.
  */
 export class GrassTufts extends THREE.InstancedMesh implements Furniture {
   readonly contactShadow = false;
@@ -48,7 +49,8 @@ export class GrassTufts extends THREE.InstancedMesh implements Furniture {
         spots.push({ x: x0 + (x1 - x0) * t + nx * off, y: strip.y ?? 0, z: z0 + (z1 - z0) * t + nz * off });
       }
     }
-    const material = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.85, side: THREE.DoubleSide, vertexColors: true });
+    // The blades bend with the street's wind (`wind.ts`) from their roots, shivering a little in it.
+    const material = windSwayed(new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.85, side: THREE.DoubleSide, vertexColors: true }), 'grassTufts', { pivotY: 0, give: 3, flutter: 0.01 });
     super(tuftGeometry(), material, Math.max(spots.length, 1));
     this.name = 'GrassTufts';
     const greens = GREENS[currentSeason().name];

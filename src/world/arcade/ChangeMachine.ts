@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import type { Updatable } from '@/core/Engine';
 import { standard } from '../materials/palette';
 import type { Interactable } from '@/interaction/Interactable';
 import type { SessionActions } from '@/game/SessionActions';
@@ -10,7 +11,7 @@ import { drawText } from './games/ArcadeGame';
 
 interface ChangeMachineOptions {
   /** Whether it works today (then the OUT OF ORDER note is gone and its LED is green); the Session pays the change. */
-  working?: boolean;
+  working?: () => boolean;
   /** Paint of the steel body. Default a blue-grey. */
   color?: number;
   /** Whether today's change is still in it (a working machine once emptied says so). */
@@ -25,6 +26,8 @@ const DEPTH = 0.45;
 const PLINTH_H = 0.08;
 const HEADER_H = 0.24;
 const PX_PER_M = 800;
+/** How often it looks whether the day mended it (seconds). */
+const POLL_SECONDS = 3;
 
 const STEEL_DARK = standard({ color: 0x1d1f2a, roughness: 0.5, metalness: 0 });
 const CHROME = standard({ color: 0xb9bcc0, metalness: 1, roughness: 0.25 });
@@ -33,19 +36,25 @@ const CHROME = standard({ color: 0xb9bcc0, metalness: 1, roughness: 0.25 });
  * The change machine every arcade has and nobody trusts: a tall steel box with a lit CHANGE
  * header, a note acceptor, a coin slot and a return cup, and most days a hand-written OUT OF
  * ORDER note taped over the slot. Some days (`working`, drawn by `ArcadeDaily`) the note is gone
- * and a click gets a few coins once (`SessionActions.collectChange` decides). Origin on the floor
- * under its centre, +z faces the room. Collides.
+ * and a click gets a few coins once (`SessionActions.collectChange` decides); the day is looked at
+ * again now and then, so the note comes and goes at midnight with the player in the hall. Origin on
+ * the floor under its centre, +z faces the room. Collides.
  */
-export class ChangeMachine extends THREE.Group implements Furniture, Interactable {
+export class ChangeMachine extends THREE.Group implements Furniture, Interactable, Updatable {
   readonly hitboxes: THREE.Object3D[];
   private readonly header: THREE.MeshBasicMaterial;
-  private readonly working: boolean;
+  private readonly panel: THREE.MeshStandardMaterial;
+  private readonly panelSize: readonly [number, number];
+  private readonly isWorking: () => boolean;
+  private working: boolean;
   private readonly waiting: () => boolean;
+  private poll = 0;
 
   constructor(private readonly options: ChangeMachineOptions = {}) {
     super();
     this.name = 'ChangeMachine';
-    this.working = options.working ?? false;
+    this.isWorking = options.working ?? (() => false);
+    this.working = this.isWorking();
     this.waiting = options.waiting ?? (() => true);
     const steel = standard({ color: options.color ?? 0x3b4258, roughness: 0.45, metalness: 0 });
 
@@ -53,7 +62,9 @@ export class ChangeMachine extends THREE.Group implements Furniture, Interactabl
     this.add(boxMesh(WIDTH, HEIGHT - PLINTH_H, DEPTH, steel, { y: PLINTH_H + (HEIGHT - PLINTH_H) / 2 }));
     // The front panel: everything printed on the machine, painted.
     const panelH = HEIGHT - PLINTH_H - HEADER_H - 0.04;
-    const panel = new THREE.Mesh(new THREE.PlaneGeometry(WIDTH - 0.04, panelH), new THREE.MeshStandardMaterial({ map: paintPanel(WIDTH - 0.04, panelH, this.working), roughness: 0.5, metalness: 0 }));
+    this.panelSize = [WIDTH - 0.04, panelH];
+    this.panel = new THREE.MeshStandardMaterial({ map: paintPanel(WIDTH - 0.04, panelH, this.working), roughness: 0.5, metalness: 0 });
+    const panel = new THREE.Mesh(new THREE.PlaneGeometry(WIDTH - 0.04, panelH), this.panel);
     panel.position.set(0, PLINTH_H + panelH / 2 + 0.01, DEPTH / 2 + WALL.notice.lift);
     layMesh(panel, WALL.notice);
     panel.receiveShadow = true;
@@ -83,6 +94,19 @@ export class ChangeMachine extends THREE.Group implements Furniture, Interactabl
 
   get footprint(): THREE.Box3 {
     return new THREE.Box3(new THREE.Vector3(-WIDTH / 2, 0, -DEPTH / 2), new THREE.Vector3(WIDTH / 2, HEIGHT, DEPTH / 2 + 0.07));
+  }
+
+  /** A new day may mend it or break it again: the note and the LED follow. */
+  update(dt: number): void {
+    this.poll += dt;
+    if (this.poll < POLL_SECONDS) return;
+    this.poll = 0;
+    const working = this.isWorking();
+    if (working === this.working) return;
+    this.working = working;
+    this.panel.map?.dispose();
+    this.panel.map = paintPanel(this.panelSize[0], this.panelSize[1], working);
+    this.panel.needsUpdate = true;
   }
 
   setHovered(hovered: boolean): void {

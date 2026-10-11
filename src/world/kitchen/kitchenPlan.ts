@@ -185,6 +185,12 @@ export const KITCHEN_PLAN = {
     mixingBowl: { wall: 'back', along: 0.05, y: WORKTOP, offset: 0.36 } as Placement,
     treatJar: { wall: 'back', along: 0.93, y: WORKTOP, offset: 0.1 } as Placement,
     catFind: { floor: [-0.55, -0.4], rotationY: 0.4 } as Placement,
+    /**
+     * Mémé's recipes (docs/grandma.md "Sunday lunch, recipes and favours"): her tin against the tiles at the sink run's
+     * window end (its doors, along 0.2..0.5, past the sink), the dish cooked from it out in front of the tin.
+     */
+    recipeTin: { wall: 'left', along: 0.43, y: WORKTOP, offset: 0.08 } as Placement,
+    memeDish: { wall: 'left', along: 0.36, y: WORKTOP, offset: 0.36 } as Placement,
     /** A radio left on gives the morning chronicle when it comes on the air only with the player this near it (m). */
     chronicleEarshot: 5,
   },

@@ -39,6 +39,8 @@ export const LEAVING_MEMORY_PLAN = {
   felixTurnsAt: 9.9,
   felixPointAt: 11,
   playerShyAt: 13,
+  /** The film waits on the player's promise here (the cue), then the nod. */
+  promiseCueAt: 14.1,
   playerNodAt: 14.8,
   felixGlassesAt: 18,
   felixSighAt: 20.6,

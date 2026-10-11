@@ -1,3 +1,5 @@
+import { ChoicePanel } from '@/ui/street/ChoicePanel';
+import { WrapPanel } from '@/ui/street/WrapPanel';
 import { SEED_GAMES } from '@/catalog';
 import { MarketNotices } from '@/economy';
 import { COLLECTOR_SETS } from '@/economy/collectorSets';
@@ -14,6 +16,7 @@ import { CollectionEditor } from '@/ui/CollectionEditor';
 import { CataloguePanel } from '@/ui/CataloguePanel';
 import { SellPanel } from '@/ui/SellPanel';
 import { ScreeningPanel } from '@/ui/ScreeningPanel';
+import { createPastimePanels } from '@/ui/grandma/pastimePanels';
 import { KidSwapPanel } from '@/ui/yard/KidSwapPanel';
 import { HandheldPanel } from '@/ui/yard/HandheldPanel';
 import { partyBuyer } from '@/building/neighboursParty';
@@ -33,11 +36,16 @@ import { WardrobePanel } from '@/ui/household/WardrobePanel';
 import { DreamCard } from '@/ui/household/DreamCard';
 import { HOUSEHOLD } from '@/household';
 import { SHOP_HOURS } from '@/world/street/shops/shopHours';
+import { hallCabinets } from '@/world/arcade/hallCabinets';
 import { upcomingMarketDays, upcomingWorld } from '@/journal';
 import { upcomingSocial } from '@/social/life/startLife';
 import { upcomingGrandma } from '@/social/grandmaSocial';
+import { upcomingGrandmaRituals } from '@/social/grandmaRitualsSocial';
+import { upcomingFamily } from '@/family/upcomingFamily';
 import { TravelMenu } from '@/ui/TravelMenu';
 import { WalletHud } from '@/ui/WalletHud';
+import { prizePhoto } from '@/thumbnails/prizePhotos';
+import { PrizeGoalChip } from '@/ui/PrizeGoalChip';
 import { clockShort } from '@/text/clock';
 import { gameDateLabel } from '@/time/gameDateLabel';
 import { onWorldLoad } from '@/ui/worldLoad';
@@ -49,6 +57,9 @@ import { installMoneyCheat } from '@/cheats/moneyCheat';
 import { unlockAudioOnFirstGesture } from '@/audio/audioContext';
 import { NewsPanel } from '@/ui/NewsPanel';
 import { ScratchCardPanel } from '@/ui/ScratchCardPanel';
+import { CounterPanel } from '@/ui/streetShops/CounterPanel';
+import { PubQuizPanel } from '@/ui/streetShops/PubQuizPanel';
+import { DartsPanel } from '@/ui/streetShops/DartsPanel';
 import { HomeShopPanel } from '@/ui/HomeShopPanel';
 import { ToDoNotePanel } from '@/ui/ToDoNotePanel';
 import { huntFile } from '@/building/hunt/BuildingHunt';
@@ -91,7 +102,9 @@ export function createMarketPanels(services: Services, notices: Notices) {
   const noticeBoard = new NoticeBoardPanel(container, { wallet, collection, market, ledger, standing, notices: new MarketNotices({ fame, ledger }), tx });
   const jobLot = new JobLotPanel(container, { wallet, collection, market, tx }, coverUrl);
   const marketHall: MarketHallServices = { standing, notices: noticeBoard, lot: jobLot };
-  const prizeCounter = new PrizePanel(container, wallet, prizes, tx, { collection, games: SEED_GAMES, worth: (game) => shopPrice(game, fame.peek(game)) }, debug ? null : { has: (what) => services.upgrades.has(what) }, notices);
+  // The back room: this week's offers by the game day, a plate for any of the hall's cabinets with the last initials signed.
+  const backRoom = { today: () => services.today.gameDay, cabinets: hallCabinets, initials: () => services.scores.initials };
+  const prizeCounter = new PrizePanel(container, wallet, prizes, tx, { collection, games: SEED_GAMES, worth: (game) => shopPrice(game, fame.peek(game)) }, debug ? null : { has: (what) => services.upgrades.has(what) }, notices, backRoom, services.prizeGoal);
   return { haggle, trade, marketHall, prizeCounter };
 }
 
@@ -111,18 +124,22 @@ export function createBookPanels(services: Services, late: UiLate, peopleBook: L
         day: services.today.gameDay,
         date: services.today.realDate(),
         tournament: services.tournament,
+        league: services.league,
+        jackpot: services.jackpot,
         booking: services.classifieds.booking,
         held: services.ledger.heldCopies(market.day),
         orders: services.ledger.orders,
         parcel: services.deliveries.count,
         cartons: services.lots.sealed.waiting.length,
-        broken: services.workshop.consoles.filter((c) => !c.fixed).length,
+        broken: services.workshop.consoles.filter((c) => !c.fixed && c.atShop === undefined).length,
         unclaimed: services.milestones.unclaimed,
         games: collection.games,
       }),
       ...upcomingMarketDays(market.day),
       ...upcomingSocial(services.today.gameDay),
-      ...upcomingGrandma({ day: services.today.gameDay, photos: services.grandma.due !== null }),
+      ...upcomingGrandma({ day: services.today.gameDay, photos: services.grandma.due !== null, hint: services.grandmaHints.journal() }),
+      ...upcomingGrandmaRituals({ date: services.today.realDate(), favour: services.grandmaRituals.favour?.id ?? null, ateToday: services.grandmaRituals.ateOn(services.today.gameDay) }),
+      ...upcomingFamily(services.family, services.today.gameDay),
     ],
     balance: () => ({ coins: wallet.coins, tickets: wallet.tickets, games: collection.games.filter((g) => g.status !== 'wishlist').length }),
     file: () => services.story.file(),
@@ -171,6 +188,13 @@ export function createHomePanels(services: Services, notices: Notices, late: UiL
         return true;
       },
     },
+    // At Mémé's (docs/grandma.md "Things to do with her"): the quiz, the crossword, the cards, the wool.
+    memePastimes: createPastimePanels(container),
+    // Front Street's counters (docs/economy.md "Front Street's shops and finds"): the bookshops, the kiosk, the pop-up; THE LOCAL's quiz and darts.
+    streetShops: { counter: new CounterPanel(container), quiz: new PubQuizPanel(container), darts: new DartsPanel(container) },
+    // Front Street's picks (line 38's stops, the pillar box) and the Christmas stall's gift wrapping (docs/zones.md "The street").
+    choice: new ChoicePanel(container),
+    wrap: new WrapPanel(container),
   };
   // What the bedroom opens (docs/household.md): the phone on the nightstand, the wardrobe's rail; and the dream on waking.
   const retro = SHOP_HOURS.retro!;
@@ -255,6 +279,14 @@ export function wireHud(services: Services, player: FirstPersonController, menus
     clock: () => gameDateLabel(services.today.gameDay, services.today.hours),
   });
   engine.addUpdatable(walletHud);
+  // The prize pinned at the counter rides the chip, its picture filling as the tickets come in.
+  walletHud.addItem(new PrizeGoalChip(wallet, services.prizeGoal, prizePhoto).element);
+  // A set of prizes all at home (every claw bunny, the whole glass case, every limited edition): its bonus there and then.
+  const payPrizeSets = (): void => {
+    for (const set of services.prizeSets.claim(services.prizes, wallet)) notices.reward({ title: 'A prize set complete!', detail: `${set.name}: the arcade adds a bonus.`, tickets: set.tickets, big: true });
+  };
+  services.prizes.subscribe(payPrizeSets);
+  payPrizeSets();
   // Typing 5000 (or `bibliothek.coins()` in the console): 5000 coins, only under `?debug` (a player earns them).
   if (debug) installMoneyCheat(input, wallet, notices);
   // Sounds nobody clicked for (the arcade's machines and hum) wait for the first gesture to start the audio.

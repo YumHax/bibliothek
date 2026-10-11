@@ -1,6 +1,7 @@
 import { gameDayRandom } from '@/time/daily';
 import { randomLook, type Age, type Dress, type PersonLook } from '../../people/looks';
 import { fnv1a } from '@/random';
+import { currentSeason } from '@/time/season';
 
 /*
  * Who walks Front Street (`StreetCrowd`): the regulars (the same faces every day, `STREET_PLAN.crowd.seeds`), the
@@ -42,9 +43,9 @@ export interface ResidentCast {
   lines: readonly string[];
 }
 
-/** A resident in the crowd: the face and gait the stairs know them by (`stairwell/Neighbours`), undressed for the season. */
+/** A resident in the crowd: the face and gait the stairs know them by (`stairwell/Neighbours`), a coat on to go out in winter. */
 export function residentMember(r: ResidentCast): CastMember {
-  const look = randomLook(r.seed + 900, 'shopper');
+  const look = randomLook(r.seed + 900, 'shopper', { season: currentSeason().name });
   return { seed: r.seed, look, age: 'adult', speed: 0.75 + (r.seed % 5) * 0.05, dog: false, umbrella: true, companion: null, follows: false, stranger: false, resident: r };
 }
 
@@ -64,6 +65,8 @@ interface CastOptions {
 /** A regular's walking speed (m/s) is about this, a little more or less by person. */
 const PACE = { adult: 1.15, elder: 0.82, spread: 0.3 };
 const ELDER_SHARE = 0.18;
+/** Of the day's strangers, this share are teenagers (after the elders, from the same draw). */
+const TEEN_SHARE = 0.14;
 
 export function castCrowd({ regulars, strangers, companions, dogs, day, season }: CastOptions): CastMember[] {
   const cast: CastMember[] = [];
@@ -78,7 +81,8 @@ export function castCrowd({ regulars, strangers, companions, dogs, day, season }
   const random = gameDayRandom('street-crowd', day);
   for (let i = 0; i < strangers; i++) {
     const seed = 2000 + Math.floor(random() * 1e6);
-    cast.push(member(seed, random() < ELDER_SHARE ? 'elder' : 'adult', true));
+    const age = random();
+    cast.push(member(seed, age < ELDER_SHARE ? 'elder' : age < ELDER_SHARE + TEEN_SHARE ? 'teen' : 'adult', true));
   }
   // The dogs: the regulars' one (the second regular, as ever), then strangers'.
   let dogsLeft = dogs;

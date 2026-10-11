@@ -426,6 +426,7 @@ function panelNote(sale: ForSaleLike, coins: number): string | undefined {
     : item.source === 'ordered' ? 'Your order, waiting for you.'
     : item.source === 'keptAside' ? 'Kept aside for you: a regular’s privilege.'
     : item.source === 'upgrade' ? 'A first print of a game you own: buy it and it replaces your copy (the stallholder takes the old one).'
+    : item.game.felixLot !== undefined ? `A round sticker on the back, F.A. in Félix’s hand, and a saleroom’s lot number: ${item.game.felixLot}.`
     : item.source === 'grail' ? `A grail. ${grailById(item.game.id)?.lore ?? 'Collectors dream of this one.'} The seller will not budge much.`
     : item.sale < 1 ? `Clearance: ${Math.round((1 - item.sale) * 100)}% off. No haggling.`
     : item.gem ? 'In the bargain bin? Someone did not know what they had.'

@@ -48,13 +48,15 @@ export class HoopThrower {
   private readonly error: number;
   private aimFor: number;
 
+  /** `error`: how far off this thrower throws (`throwError` of their skill); a regular who does not say gets one of their own. */
   constructor(
     private readonly sim: HoopSim,
     private readonly machine: THREE.Object3D,
     private readonly body: Performer,
+    error?: number,
   ) {
     this.pace = 0.95 + random() * 0.35;
-    this.error = 0.65 + random() * 0.5;
+    this.error = error ?? 0.65 + random() * 0.5;
     this.aimFor = MOVE_S.aim;
     // Stepping up: turned to the cage and the coin in before the first ball.
     this.pause(START_S);

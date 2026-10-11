@@ -12,7 +12,7 @@ import type { Car, VehicleKind } from './Car';
 /**
  * A moving vehicle, as the street's sound hears it: where it is (zone-local), how fast it goes,
  * what it is, and how many times its driver has sounded the horn (a counter: a new toot when it
- * grows). The rest is optional detail some road users give: braking, reversing, its doors
+ * grows). The rest is optional detail some road users give: braking, skidding, reversing, its doors
  * (`doorSlams`, a counter: a door opened or shut), its siren's service, the car's shape, a taxi.
  */
 export interface CarVoice {
@@ -22,6 +22,8 @@ export interface CarVoice {
   readonly honks: number;
   readonly kind: VehicleKind;
   readonly braking?: boolean;
+  /** Stamping on the brakes (someone stepped out under its nose): the tyres' squeal. */
+  readonly skidding?: boolean;
   readonly reversing?: boolean;
   readonly doorSlams?: number;
   readonly siren?: SirenKind;
@@ -47,6 +49,7 @@ export class VoiceSlot implements CarVoice, MovingLamp {
   yaw = 0;
   length = 4;
   braking = false;
+  skidding = false;
   reversing = false;
   doorSlams = 0;
   model: CarModelId = 'hatch';
@@ -72,6 +75,7 @@ export class VoiceSlot implements CarVoice, MovingLamp {
     this.speed = car.speed;
     this.yaw = car.yaw;
     this.braking = car.braking;
+    this.skidding = car.skid > 0;
     this.reversing = car.reversing;
     this.taxi = car.taxi;
     this.honks += car.horn.honks - this.seenHonks;

@@ -16,9 +16,13 @@ import { YouTubeSearchProvider } from '@/video/YouTubeSearchProvider';
 import { Today } from '@/time/Today';
 import { MarketDay } from '@/economy/MarketDay';
 import { ArcadeDaily, ArcadeLeague, ArcadeMedals, ArcadeScores, CollectorWatch, Fame, MarketCalendar, MarketLedger, MarketStanding, MarketStock, Milestones, PayoutStats, PrizeStore, STARTING_COINS, Transactions, ValueHistory, Wallet } from '@/economy';
+import { HALL_REGULAR_INITIALS } from '@/economy/hallRegulars';
+import { PrizeGoal } from '@/economy/PrizeGoal';
+import { PrizeSets } from '@/economy/PrizeSets';
 import { ArcadeTournament } from '@/economy/ArcadeTournament';
 import { ArcadeHabits } from '@/economy/ArcadeHabits';
 import { Jackpot } from '@/economy/Jackpot';
+import type { ArcadeFacts } from '@/economy/milestoneList';
 import { ReplayStore } from '@/world/arcade/replay/ReplayStore';
 import { HomeScores } from '@/world/homeArcade/HomeScores';
 import { VisitBook } from '@/world/visitors/VisitBook';
@@ -62,10 +66,27 @@ import { ReviewSource } from '@/reviews/Reviews';
 import { PrototypeStory } from '@/story';
 import { FelixNotebook } from '@/story/FelixNotebook';
 import { GrandmaVisits } from '@/grandma/GrandmaVisits';
+import { GrandmaRituals } from '@/grandma/GrandmaRituals';
+import { Keepsakes } from '@/grandma/Keepsakes';
+import { followFelixLots } from '@/story/felixLotsTrail';
+import { marketPrice } from '@/economy/pricing';
+import { FamilyStory } from '@/family/FamilyStory';
+import { AlbumFinds } from '@/grandma/AlbumFinds';
+import { AlbumPrints } from '@/grandma/albumPrints';
+import { PhotoRoll } from '@/photo/photoRoll';
+import { tier as socialTier } from '@/social/standing';
+import { tierRank } from '@/social/tiers';
+import { seasonOf } from '@/time/season';
+import { GrandmaHints } from '@/grandma/GrandmaHints';
+import { GrandmaPresence } from '@/grandma/GrandmaPresence';
+import { BreadErrand } from '@/grandma/breadErrand';
+import { SharedRide } from '@/grandma/sharedRide';
 import { COLLECTOR_SETS, setProgress } from '@/economy/collectorSets';
 import { effect as socialEffect } from '@/social/perks';
 import { MEME_ID } from '@/social/people/family';
 import { pocket } from '@/errands/pocket';
+import { followStreetDays } from '@/time/streetDay';
+import { PlayerInitials, RECORD_OF_2003, recordOf2003 } from '@/memories/playerInitials';
 import { debugWants, unlockDebugProgress } from '@/cheats/progress/debugProgress';
 import { debugSubjects } from './debug';
 
@@ -120,11 +141,21 @@ export function createServices(container: HTMLElement) {
   const wallet = new Wallet(STARTING_COINS);
   // The arcade: its hall of fame, the day's challenge and change machine, the prizes taken home.
   const scores = new ArcadeScores();
-  const arcadeDaily = new ArcadeDaily({ games: TICKET_GAMES });
+  // The initials typed in Mémé's memory "Three letters" (docs/grandma.md "In the films"): the record of 2003 on the
+  // spaceships cabinet's table, and the first letters of the arcade's initials screens while none were signed there.
+  const initials = new PlayerInitials(() => (scores.initials === 'YOU' ? null : scores.initials));
+  const recordOnTable = (letters: string | null): void => scores.setPast(RECORD_OF_2003.game, letters ? recordOf2003(letters) : []);
+  recordOnTable(initials.value);
+  if (initials.value) scores.offerInitials(initials.value);
+  initials.subscribe((letters) => {
+    recordOnTable(letters);
+    scores.offerInitials(letters);
+  });
   const prizes = new PrizeStore();
-  // Medals per machine, the weekly league and the day streak, the balance table (`?payout`), and the big frame LexiPunk plays in.
-  const medals = new ArcadeMedals();
-  const league = new ArcadeLeague();
+  // The prize pinned as the goal (its picture fills by the wallet chip), and the prize sets already paid for.
+  const prizeGoal = new PrizeGoal();
+  const prizeSets = new PrizeSets();
+  // The balance table (`?payout`) and the big frame LexiPunk plays in.
   const payoutStats = new PayoutStats();
   const arcadeScreen = new ArcadeScreenPanel(container);
   const index = new LibretroIndex();
@@ -151,6 +182,8 @@ export function createServices(container: HTMLElement) {
   today.setHoursSource(() => sky.dayNight.state.hours);
   // Front Street's counters sell so many a game day, like the market's own day (`errands/pocket`).
   pocket.followGameDay(() => today.gameDay);
+  // So does everything else along it: the garage sale, the free box, the busker, the coins, the cards (`time/streetDay`).
+  followStreetDays(() => today.gameDay);
   const marketDay = new MarketDay(today, (id) => collection.owns(id));
   const market = new MarketStock({ index, collection, fame, today, ledger, standing, raining: () => sky.weather.state.rain >= HEAVY_RAIN });
   engine.addUpdatable(sky);
@@ -167,7 +200,12 @@ export function createServices(container: HTMLElement) {
   // The cat's name and coat, kept next to the collection (the Settings' Cat tab edits them).
   const catSettings = new CatSettingsStore();
   // The Saturday tournament at the arcade: the hall shows its bracket, the Session's arcade play settles its rounds.
-  const tournament = new ArcadeTournament({ games: ARCADE_PLAN.tournament.games, names: ARCADE_PLAN.crowd.regulars.names, gameDay: () => today.gameDay });
+  const tournament = new ArcadeTournament({ games: ARCADE_PLAN.tournament.games, names: HALL_REGULAR_INITIALS, gameDay: () => today.gameDay });
+  // The arcade's game days (like the tournament's and the market's): the day's challenge, the change machine and the
+  // machine out of order; the medals per machine (platinum, the hall's tour); the weekly league and the regular's card.
+  const medals = new ArcadeMedals(undefined, undefined, { games: TICKET_GAMES, bestOf: (id) => scores.bestOf(id) });
+  const arcadeDaily = new ArcadeDaily({ games: TICKET_GAMES, today: () => `g${today.gameDay}`, gold: (id) => medals.earned(id).includes('gold'), bestOf: (id) => scores.bestOf(id) });
+  const league = new ArcadeLeague({ clock: today.clock, names: HALL_REGULAR_INITIALS });
   // The ticket wheel's progressive pot and the player's best run per cabinet, kept across the hall's loads; the plays per
   // machine (how long the HUD explains the keys, the claw's luck); the home cabinet's own table of scores.
   const jackpot = new Jackpot();
@@ -177,7 +215,16 @@ export function createServices(container: HTMLElement) {
   // The collector's book: milestones reached (the plaque, the display cabinet, rewards to claim) and the collection's value day by day.
   const milestones = new Milestones();
   const valueHistory = new ValueHistory();
-  const collectorWatch = new CollectorWatch({ collection, fame, medals, standing, league, milestones, history: valueHistory });
+  // The arcade's feats the book counts beside medals and pennants: cups, golds, the jackpot, a plush, a table topped.
+  const arcadeFacts = (): ArcadeFacts => ({
+    cups: tournament.titles,
+    golds: medals.golds,
+    tour: medals.tourDone,
+    jackpots: jackpot.hits,
+    plush: prizes.owned.filter((p) => p.id.startsWith('plush-')).length,
+    records: TICKET_GAMES.filter((id) => scores.topOf(id).you).length,
+  });
+  const collectorWatch = new CollectorWatch({ collection, fame, medals, standing, league, arcade: { facts: arcadeFacts, sources: [tournament, jackpot, prizes, scores] }, milestones, history: valueHistory });
   // The sets and consoles completed for good: a neon each over the living room's bookcases, the club's visit (docs/visitors.md "Gatherings").
   const honours = new Honours(collection, () => today.gameDay);
   // The neighbours' swaps, slipped under the door some market days (the post and the doorstep are the world's: `bootstrap/world`).
@@ -192,6 +239,8 @@ export function createServices(container: HTMLElement) {
   const felix = new FelixNotebook(collection);
   // Mémé's across town, by bus: the visits, the Sunday envelope, the memories of her album seen (docs/story.md "Mémé").
   // What she has heard of and what the memories' unlocking reads, live; what the player can bring her (her gifts).
+  // Her ways (docs/grandma.md "Sunday lunch, recipes and favours"): lunch at her table, her recipes, her favours, her occasions.
+  const grandmaRituals = new GrandmaRituals(() => today.gameDay);
   const grandma = new GrandmaVisits({
     facts: () => {
       const games = collection.games.filter((g) => g.status !== 'wishlist');
@@ -214,6 +263,23 @@ export function createServices(container: HTMLElement) {
     },
   });
   felix.onTicked(() => grandma.felixGameHome());
+  // The end of the family's story (docs/grandma.md): Gaspard at her table, the Christmas Game Boy, her visits to the flat.
+  const family = new FamilyStory({ seen: (id) => grandma.hasSeen(id), note: (text, weight) => journal.note('note', text, { weight }) });
+  // Her album's other photos (docs/grandma.md "The album's other photos"): the snapshots she finds, the player's
+  // prints glued in after Félix's pages, and the photo mode's last shots kept small to give her.
+  const albumFinds = new AlbumFinds(grandma, {
+    closeness: () => Math.max(0, tierRank(socialTier(MEME_ID)) - tierRank('acquaintance')),
+    season: () => seasonOf(today.realDate()).name,
+  });
+  const albumPrints = new AlbumPrints();
+  const photoRoll = new PhotoRoll();
+  // What points the player at her album's next photo: her hints, her ring on the flat's phone, her letter (docs/grandma.md).
+  const grandmaHints = new GrandmaHints(grandma, () => today.gameDay);
+  // Her own memory of the player (docs/grandma.md "Her presence"): the stories told, the news heard from the journal.
+  const grandmaPresence = new GrandmaPresence({ days: () => journal.history });
+  // Linden Avenue round her flat (docs/grandma.md "Around her flat"): the baguette she asks for, her mornings on the 38.
+  const grandmaBread = new BreadErrand();
+  const sharedRide = new SharedRide();
   // `?debug`: every progression done that its panel did not switch off (before the trail reads whether its cart is home).
   if (debug) unlockDebugProgress(debugSubjects({ today, collection, felix, upgrades, standing, medals, prizes }));
   // The lost prototype's trail, followed through the mail, the market, the radio, the arcade and the friends (src/story).
@@ -243,17 +309,25 @@ export function createServices(container: HTMLElement) {
   const classifieds = new Classifieds({ day: () => today.gameDay, hours });
   // The prototype's trail puts Hana's landlady's ad in the paper and hears when the player goes round.
   story.linkAds(classifieds);
+  // What Mémé gives to take home after the memories, and Félix's lots: his copies (his sticker on the back) turn up in
+  // Crane's suitcase and a dealer's small ad too, and one bought back counts for her album (docs/grandma.md).
+  const keepsakes = new Keepsakes();
+  followFelixLots({
+    today, collection, rival: lots.rival, classifieds, grandma,
+    catalogue: { given: () => keepsakes.has('catalogue'), subscribe: (cb) => keepsakes.subscribe(cb) },
+    price: (game) => fame.lookup(game).then((views) => marketPrice(game, views, 'complete', 1)),
+  });
   const sellerLots = new SellerLots({ book: classifieds, releases: (platform) => market.releases(platform), fame, owns: (id) => collection.owns(id) });
   const workshop = new Workshop();
 
   return {
     container, params, debug, returningPlayer, engine, input, settings, cssLayer,
     collection, deliveries, strays, showcases, shelfLabels, upgrades, overflow, arrangement, boxPool: new BoxPool(covers), furnishings, wallet,
-    scores, arcadeDaily, prizes, medals, league, payoutStats, arcadeScreen,
+    scores, arcadeDaily, prizes, prizeGoal, prizeSets, medals, league, payoutStats, arcadeScreen,
     index, fame, coverUrl, covers, videos,
     sky, today, marketDay, ledger, standing, market, tx, lots, catSettings,
     tournament, jackpot, replays, arcadeHabits, homeScores, milestones, valueHistory, collectorWatch, honours, neighbourTrades, firstDay, journal, visitBook, gatheringBook,
-    household, homeLife, perks, story, felix, grandma, reviews,
+    household, homeLife, perks, story, felix, grandma, grandmaRituals, keepsakes, family, initials, grandmaHints, grandmaPresence, grandmaBread, sharedRide,albumFinds, albumPrints, photoRoll, reviews,
     classifieds, sellerLots, workshop,
   };
 }

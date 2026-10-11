@@ -28,6 +28,10 @@ export abstract class RunMachine extends THREE.Group {
     return this.run.canReplay;
   }
 
+  get counting(): boolean {
+    return this.run.counting;
+  }
+
   pause(paused: boolean): void {
     this.run.setPaused(paused);
   }

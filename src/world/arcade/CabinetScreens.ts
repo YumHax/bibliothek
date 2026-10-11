@@ -25,7 +25,6 @@ const DEMO_RANGE = 9;
 /** What the title card tells about the game. */
 interface TitleInfo {
   scores: ScoreTable;
-  pointsPerTicket: number;
   medals?: MedalBook;
   challenge?: () => TodaysChallenge | null;
   /** What a play costs right now, for the card's foot: "1 COIN PER PLAY", "FREE PLAY". */
@@ -34,6 +33,23 @@ interface TitleInfo {
   home?: boolean;
   /** The cabinet's glow colour: the band the title's logo sits on. */
   accent?: number;
+}
+
+let snowCanvas: HTMLCanvasElement | null = null;
+
+/** A dead tube's snow, twice the glass's height, painted once for every cabinet: a dead one shows a window of it. */
+function snow(): HTMLCanvasElement {
+  if (snowCanvas) return snowCanvas;
+  const [canvas, ctx] = createCanvas(SCREEN_W, SCREEN_H * 2);
+  ctx.fillStyle = '#101014';
+  ctx.fillRect(0, 0, SCREEN_W, SCREEN_H * 2);
+  for (let i = 0; i < 1800; i++) {
+    const v = Math.floor(random() * 140);
+    ctx.fillStyle = `rgb(${v},${v},${v})`;
+    ctx.fillRect(random() * SCREEN_W, random() * SCREEN_H * 2, 2, 1);
+  }
+  snowCanvas = canvas;
+  return canvas;
 }
 
 /** The hall-of-fame page's rank colours, cycled down the lines as the page blinks. */
@@ -73,6 +89,10 @@ export class CabinetScreens {
   private readonly look = new THREE.Vector3();
   private readonly aim = new THREE.Vector3();
   private drawClock = 0;
+  private band: { accent: string; band: CanvasGradient } | null = null;
+  /** The game's last frame, kept once it is over: the initials and the end card draw over it without drawing the game again. */
+  private frozen: CanvasRenderingContext2D | null = null;
+  private frozenValid = false;
 
   constructor(
     private readonly game: ArcadeGame,
@@ -102,6 +122,7 @@ export class CabinetScreens {
     if (!everyFrame && (this.drawClock < 1 / SHOW_FPS || !this.inView())) return;
     this.drawClock = 0;
     this.game.draw(this.ctx);
+    this.frozenValid = false;
     overlay?.();
     this.texture.needsUpdate = true;
   }
@@ -119,7 +140,7 @@ export class CabinetScreens {
    */
   drawTitle(phase: number): void {
     const { ctx, game } = this;
-    const { scores, pointsPerTicket } = this.info;
+    const { scores } = this.info;
     ctx.fillStyle = '#07070c';
     ctx.fillRect(0, 0, SCREEN_W, SCREEN_H);
     this.drawLogo(phase, 14, 16);
@@ -128,10 +149,10 @@ export class CabinetScreens {
     const blurb = packClauses(game.summary, Math.floor((SCREEN_W - 2 * SAFE_X) / 7));
     blurb.forEach((line, i) => drawText(ctx, line, SCREEN_W / 2, (blurb.length === 1 ? 68 : 64) + i * 11, 7, '#9ad6ff'));
     const top = scores.topOf(game.id);
-    if (!home || top.score > 0) drawText(ctx, `HI ${top.name}  ${formatNumber(top.score)}`, SCREEN_W / 2, 94, 10, top.you ? '#7ee787' : '#c9c4ff');
+    // The top score's line says YOU when it is the player's (not only its colour).
+    if (!home || top.score > 0) drawText(ctx, `HI ${top.name}  ${formatNumber(top.score)}${top.you ? '  YOU' : ''}`, SCREEN_W / 2, 94, 10, top.you ? '#7ee787' : '#c9c4ff');
     const best = scores.bestOf(game.id);
-    const bestLine = home ? `YOUR BEST ${formatNumber(best)}` : `YOUR BEST ${formatNumber(best)}  (${Math.floor(best / pointsPerTicket)} TIX)`;
-    if (!home || best > 0) drawText(ctx, best > 0 ? bestLine : 'NO SCORE OF YOURS YET', SCREEN_W / 2, 112, 7, '#8a86b0');
+    if (!home || best > 0) drawText(ctx, best > 0 ? `YOUR BEST ${formatNumber(best)}` : 'NO SCORE OF YOURS YET', SCREEN_W / 2, 112, 7, '#8a86b0');
     const medal = this.nextMedal();
     if (medal) drawText(ctx, medal, SCREEN_W / 2, 126, 7, '#e0995a');
     const challenge = this.info.challenge?.();
@@ -141,12 +162,12 @@ export class CabinetScreens {
       ctx.fillStyle = 'rgba(255,210,58,0.12)';
       ctx.fillRect(SAFE_X, boxTop, SCREEN_W - 2 * SAFE_X, 30);
       drawText(ctx, "TODAY'S CHALLENGE", SCREEN_W / 2, boxTop + 8, 7, '#ffd23a');
-      drawText(ctx, challenge.done ? 'BEATEN! COME BACK TOMORROW' : `SCORE ${formatNumber(challenge.target)} · +${challenge.reward} TIX`, SCREEN_W / 2, boxTop + 21, 8, challenge.done ? '#7ee787' : '#fff2a8');
+      drawText(ctx, challenge.done ? 'BEATEN! COME BACK TOMORROW' : (challenge.line ?? `BEAT ${formatNumber(challenge.target)} TODAY`), SCREEN_W / 2, boxTop + 21, 8, challenge.done ? '#7ee787' : '#fff2a8');
     }
     if (phase % 2 === 0) drawText(ctx, home ? 'PRESS FIRE' : 'INSERT COIN', SCREEN_W / 2, 190, 12, '#ff8a80');
     const price = this.info.price?.();
     const cost = !price ? '1 COIN PER PLAY' : price.free ? 'FREE PLAY' : `${price.text.toUpperCase()} PER PLAY`;
-    drawText(ctx, home ? 'FREE PLAY · FOR FUN' : `${cost} · ${pointsPerTicket} PTS = 1 TICKET`, SCREEN_W / 2, 216, 7, '#7a7a90');
+    drawText(ctx, home ? 'FREE PLAY · FOR FUN' : cost, SCREEN_W / 2, 216, 7, '#7a7a90');
     this.texture.needsUpdate = true;
   }
 
@@ -162,8 +183,10 @@ export class CabinetScreens {
     table.forEach((entry, i) => {
       const y = 92 + i * 22;
       const color = entry.you ? '#7ee787' : RANK_COLORS[(i + phase) % RANK_COLORS.length]!;
-      drawText(ctx, `${i + 1}${['ST', 'ND', 'RD'][i] ?? 'TH'}`, 60, y, 9, color, 'left');
-      drawText(ctx, entry.name, 124, y, 9, color, 'left');
+      drawText(ctx, `${i + 1}${['ST', 'ND', 'RD'][i] ?? 'TH'}`, 44, y, 9, color, 'left');
+      drawText(ctx, entry.name, 100, y, 9, color, 'left');
+      // The player's lines say so in a word, not only in green.
+      if (entry.you) drawText(ctx, 'YOU', 140, y, 7, color, 'left');
       drawText(ctx, formatNumber(entry.score), SCREEN_W - 60, y, 9, color, 'right');
     });
     if (phase % 2 === 0) drawText(ctx, this.info.home ? 'PRESS FIRE' : 'INSERT COIN', SCREEN_W / 2, 214, 10, '#ff8a80');
@@ -183,12 +206,7 @@ export class CabinetScreens {
     const pad = Math.round(px * 0.6);
     const height = px + 2 * pad;
     const y = top + height / 2;
-    const accent = `#${new THREE.Color(this.info.accent ?? 0x9ad6ff).getHexString()}`;
-    const band = ctx.createLinearGradient(SAFE_X, 0, SCREEN_W - SAFE_X, 0);
-    band.addColorStop(0, 'rgba(0,0,0,0)');
-    band.addColorStop(0.25, accent);
-    band.addColorStop(0.75, accent);
-    band.addColorStop(1, 'rgba(0,0,0,0)');
+    const { accent, band } = this.logoBand();
     ctx.globalAlpha = 0.3;
     ctx.fillStyle = band;
     ctx.fillRect(SAFE_X, top, SCREEN_W - 2 * SAFE_X, height);
@@ -210,6 +228,19 @@ export class CabinetScreens {
     drawText(ctx, game.title, SCREEN_W / 2, y, px, '#fff2a8');
   }
 
+  /** The logo band's colour and its fade to the glass's edges, made once (the title card redraws a few times a second). */
+  private logoBand(): { accent: string; band: CanvasGradient } {
+    if (this.band) return this.band;
+    const accent = `#${new THREE.Color(this.info.accent ?? 0x9ad6ff).getHexString()}`;
+    const band = this.ctx.createLinearGradient(SAFE_X, 0, SCREEN_W - SAFE_X, 0);
+    band.addColorStop(0, 'rgba(0,0,0,0)');
+    band.addColorStop(0.25, accent);
+    band.addColorStop(0.75, accent);
+    band.addColorStop(1, 'rgba(0,0,0,0)');
+    this.band = { accent, band };
+    return this.band;
+  }
+
   /** Over a demo or a replay: what it is, and INSERT COIN blinking. */
   drawShowBanner(clock: number, replay: Replay | null): void {
     const { ctx } = this;
@@ -223,13 +254,8 @@ export class CabinetScreens {
   /** A dead tube: snow and a rolling bar (the note on the glass says the rest); `seconds` is the machine's time, for the bar. */
   drawStatic(seconds: number): void {
     const { ctx } = this;
-    ctx.fillStyle = '#101014';
-    ctx.fillRect(0, 0, SCREEN_W, SCREEN_H);
-    for (let i = 0; i < 900; i++) {
-      const v = Math.floor(random() * 140);
-      ctx.fillStyle = `rgb(${v},${v},${v})`;
-      ctx.fillRect(random() * SCREEN_W, random() * SCREEN_H, 2, 1);
-    }
+    // A window of the shared snow, somewhere else each time (painted once, `snow()`).
+    ctx.drawImage(snow(), 0, Math.floor(random() * SCREEN_H), SCREEN_W, SCREEN_H, 0, 0, SCREEN_W, SCREEN_H);
     // The bar rolls the height in about 2.5 s (1000 / 12 pixels a second, as it always did).
     const bar = (((seconds * 1000) / 12) % (SCREEN_H + 40)) - 20;
     ctx.fillStyle = 'rgba(255,255,255,0.06)';
@@ -239,9 +265,33 @@ export class CabinetScreens {
 
   /** The initials asked over the game's frozen last frame. */
   drawInitials(entry: InitialsEntry | null): void {
-    this.game.draw(this.ctx);
+    this.drawFrozen();
     entry?.draw(this.ctx, SCREEN_W / 2, SCREEN_H / 2 + 6);
     this.texture.needsUpdate = true;
+  }
+
+  /** The play held still (the pointer unlocked): its frozen frame, PAUSED over it, blinking on `phase`, in words. */
+  drawPaused(phase: number): void {
+    const { ctx } = this;
+    this.drawFrozen();
+    ctx.fillStyle = 'rgba(5,5,10,0.6)';
+    ctx.fillRect(0, SCREEN_H / 2 - 24, SCREEN_W, 48);
+    if (phase % 2 === 0) drawText(ctx, 'PAUSED', SCREEN_W / 2, SCREEN_H / 2 - 6, 16, '#fff2a8');
+    drawText(ctx, 'CLICK TO PLAY ON', SCREEN_W / 2, SCREEN_H / 2 + 14, 7, '#9ad6ff');
+    this.texture.needsUpdate = true;
+  }
+
+  /** The game's last frame: drawn once after it stopped moving, then copied back from the keep (the game is not drawn again). */
+  private drawFrozen(): void {
+    const { ctx } = this;
+    if (this.frozenValid && this.frozen) {
+      ctx.drawImage(this.frozen.canvas, 0, 0);
+      return;
+    }
+    this.game.draw(ctx);
+    this.frozen ??= createCanvas(SCREEN_W, SCREEN_H)[1];
+    this.frozen.drawImage(ctx.canvas, 0, 0);
+    this.frozenValid = true;
   }
 
   /**
@@ -252,7 +302,7 @@ export class CabinetScreens {
   drawGameOver(run: MachineRun): void {
     const { ctx } = this;
     const { last, lastRank, overClock, bonuses } = run;
-    this.game.draw(ctx);
+    this.drawFrozen();
     const total = run.scoreTickets + bonuses.reduce((sum, b) => sum + b.tickets, 0);
     const shown = run.shownTotal;
     const done = run.countUp >= 1;
@@ -289,15 +339,25 @@ export class CabinetScreens {
 
   /** Whether the camera is close enough for a demo to be worth running. */
   near(): boolean {
+    return this.distance() < DEMO_RANGE;
+  }
+
+  /** Metres from the camera to the cabinet. */
+  distance(): number {
     this.listener.getWorldPosition(this.scratch);
-    return this.scratch.distanceTo(this.cabinet.getWorldPosition(this.other)) < DEMO_RANGE;
+    return this.scratch.distanceTo(this.cabinet.getWorldPosition(this.other));
   }
 
   /** Whether the glass could be on screen: in front of the camera and within `DEMO_RANGE`. */
   inView(): boolean {
+    return this.facing(DEMO_RANGE);
+  }
+
+  /** Whether the glass is in front of the camera (within `range`, any distance by default): the title card's repaint asks. */
+  facing(range = Infinity): boolean {
     this.listener.getWorldPosition(this.scratch);
     const to = this.screen.getWorldPosition(this.other).sub(this.scratch);
-    if (to.length() > DEMO_RANGE) return false;
+    if (to.length() > range) return false;
     this.listener.getWorldDirection(this.look);
     return to.normalize().dot(this.look) > 0.2;
   }

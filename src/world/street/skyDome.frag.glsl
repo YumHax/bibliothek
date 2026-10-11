@@ -34,6 +34,11 @@ uniform float boltReach;
 uniform sampler2D blocks;
 uniform vec3 blockEye;
 uniform vec3 blockWalls[6];
+uniform vec3 planeFrom;
+uniform vec3 planeTo;
+uniform float planeT;
+uniform float planeTrail;
+uniform float planeBlink;
 varying vec3 vDir;
 const vec3 FLASH = vec3(0.78, 0.84, 1.0);
 #include <sky_chunk>
@@ -121,6 +126,32 @@ void main() {
   col += skySunDisc(sunColor, sunLow) * 6.0 * sunDisc * sunVisible * clear;
   col += vec3(0.55, 0.62, 0.85) * skyMoonHalo(d, moonDir) * moonVisibility * (1.0 - 0.8 * cloudCover);
   col = mix(col, vec3(0.8, 0.86, 1.0), skyMoonLit(d, moonDir, moonShadowDir, TS_DOME_MOON_RADIUS) * moonVisibility * (1.0 - 0.9 * cloudCover));
+
+  // An airliner crossing high up (planeT 0..1 along its great circle from planeFrom to planeTo, < 0 none): a silver
+  // speck by day, its lights at night (red and green, a white strobe), and by day its contrail behind it, widening
+  // and fading with age, as long as the air is humid enough (planeTrail); drawn under the clouds, which pass over it.
+  if (planeT >= 0.0 && h > 0.0) {
+    vec3 axis = normalize(cross(planeFrom, planeTo) + vec3(0.0, 0.0, 1e-6));
+    float arc = acos(clamp(dot(planeFrom, planeTo), -1.0, 1.0));
+    float now = planeT * arc;
+    vec3 onPlane = d - axis * dot(d, axis);
+    float off = abs(dot(d, axis));
+    vec3 onArc = normalize(onPlane + vec3(1e-6));
+    float along = atan(dot(cross(planeFrom, onArc), axis), dot(planeFrom, onArc));
+    vec3 craft = normalize(planeFrom * cos(now) + cross(axis, planeFrom) * sin(now));
+    float speck = 1.0 - smoothstep(0.0012, 0.0024, acos(clamp(dot(d, craft), -1.0, 1.0)));
+    if (nightness < 0.5) col = mix(col, vec3(0.85, 0.87, 0.9) * (0.6 + 0.6 * sunVisible), speck * 0.9);
+    else col += (planeBlink > 0.5 ? vec3(2.0) : vec3(1.2, 0.2, 0.15)) * speck * nightness;
+    if (planeTrail > 0.0) {
+      float age = (now - along) / max(planeTrail, 1e-3);
+      if (age > 0.012 && age < 1.0) {
+        float width = 0.0009 + 0.006 * age;
+        float trail = (1.0 - smoothstep(width * 0.4, width, off)) * pow(1.0 - age, 1.5) * (0.5 + 0.5 * smoothstep(0.012, 0.05, age));
+        vec3 lit = mix(horizon, vec3(1.0), 0.6) * (0.7 + 0.5 * sunVisible) + sunColor * 0.15 * sunVisible;
+        col = mix(col, lit, trail * 0.75 * (1.0 - nightness));
+      }
+    }
+  }
 
   // Clouds drifting over, thickening to a grey sheet as the cover closes in.
   if (h > 0.0) {

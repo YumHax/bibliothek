@@ -1,9 +1,10 @@
 import { clamp } from '@/math/scalar';
-import { type ArcadeControls, NO_CONTROLS, SCREEN_H, SCREEN_W, drawText } from './ArcadeGame';
+import { type ArcadeControls, NO_CONTROLS, SCREEN_H, SCREEN_W } from './ArcadeGame';
 import { BaseGame } from './BaseGame';
 import { random } from '@/random';
 import { Sprite } from './sprite';
 import { arcadeHint } from '../arcadeHint';
+import { carSprite, logSprite, turtleSprite } from './frogSprites';
 
 /** The frog sitting and mid-leap (legs stretched), 13 px: spots, white eyes with their pupils. */
 export const FROG_SPRITE = new Sprite([
@@ -39,8 +40,21 @@ const SPEED_PER_LEVEL = 0.14;
 /** Objects run round a loop wider than the screen by `OFF` either side, so they come in and go out unseen. */
 const OFF = 80;
 const LOOP = SCREEN_W + OFF * 2;
+/** Turtles surface for most of this cycle (s), dive for its last `TURTLE_DIVE`, and show they are going for `TURTLE_WARN` before. */
+const TURTLE_CYCLE = 4.2;
+const TURTLE_DIVE = 1.2;
+const TURTLE_WARN = 0.5;
+/** The far bank's bays (centres across), what one pays filled, and all of them. */
+const BAYS = [32, 96, 160, 224, 288];
+const BAY_REACH = 9;
+const BAY_POINTS = 50;
+const ALL_BAYS_POINTS = 500;
+/** A fly sits in an empty bay for this long, every this often: landing there pays. */
+const FLY_POINTS = 200;
+const FLY_STAY = 3.5;
+const FLY_EVERY = 5;
 
-type LaneKind = 'car' | 'truck' | 'log';
+type LaneKind = 'car' | 'truck' | 'log' | 'turtle';
 
 /** One lane's traffic: its row, which way and how fast (px/s at level 1), how long its things are and how many. */
 const LANES: readonly { row: number; kind: LaneKind; dir: 1 | -1; speed: number; w: number; count: number; color: string }[] = [
@@ -50,7 +64,7 @@ const LANES: readonly { row: number; kind: LaneKind; dir: 1 | -1; speed: number;
   { row: 4, kind: 'car', dir: 1, speed: 66, w: 20, count: 2, color: '#63b3ff' },
   { row: 5, kind: 'car', dir: -1, speed: 46, w: 24, count: 3, color: '#ff5f5f' },
   { row: 7, kind: 'log', dir: 1, speed: 28, w: 64, count: 3, color: '#a0703a' },
-  { row: 8, kind: 'log', dir: -1, speed: 40, w: 48, count: 3, color: '#8a5a2a' },
+  { row: 8, kind: 'turtle', dir: -1, speed: 40, w: 48, count: 3, color: '#3fbf8a' },
   { row: 9, kind: 'log', dir: 1, speed: 50, w: 80, count: 2, color: '#a0703a' },
   { row: 10, kind: 'log', dir: -1, speed: 34, w: 56, count: 3, color: '#8a5a2a' },
   { row: 11, kind: 'log', dir: 1, speed: 44, w: 72, count: 2, color: '#a0703a' },
@@ -65,6 +79,8 @@ interface Lane {
   color: string;
   /** Left edges along the loop (0..LOOP; on screen at `u - OFF`). */
   us: number[];
+  /** Turtles: where in its dive cycle each group starts (s). */
+  phases: number[];
 }
 
 type Dir = 'up' | 'down' | 'left' | 'right';
@@ -74,17 +90,19 @@ const STEP: Record<Dir, [dx: number, dRow: number]> = { up: [0, 1], down: [0, -1
 /**
  * LEAP FROG: fifteen seconds to get a frog across a road and a river as many times as it will go.
  * Each hop is one press (WASD or arrows). The road's cars and trucks run the frog over; on the
- * river it has to land on a log and ride it (off the edge of the screen is a swim too). A hop onto
- * a row not reached yet on this crossing pays and chains the combo, as long as the hops keep
- * coming; the far bank pays a crossing (times the chain) and seconds, and everything runs faster
- * the next time over. Run over or drowned costs a second and a half and the combo, and the frog starts
+ * river it has to land on a log or a raft of turtles and ride it (off the edge of the screen is a
+ * swim too; the turtles dive now and then, going pale first). A hop onto a row not reached yet on
+ * this crossing pays and chains the combo, as long as the hops keep coming; the far bank pays a
+ * crossing (times the chain) and seconds, landing in one of its five bays pays more (all five, a
+ * fat bonus, then they empty), a fly sitting in a bay more again; everything runs faster the next
+ * time over. Run over or drowned costs a second and a half and the combo, and the frog starts
  * again from the kerb (from the verge once it got that far). The lanes are laid from the run's seed, so a run replays exactly.
  */
 export class LeapFrog extends BaseGame {
   readonly id = 'frog';
   readonly title = 'LEAP FROG';
   get hint(): string {
-    return arcadeHint('{stick} or arrows hop · cross the road, ride the logs');
+    return arcadeHint('{stick} or arrows hop · cross the road, ride the logs, home into a bay');
   }
   readonly summary = '15 SEC · HOP ACROSS · EACH CROSSING +TIME';
 
@@ -101,6 +119,11 @@ export class LeapFrog extends BaseGame {
   /** Seconds before the frog is back on the kerb after dying, and where it died (for the splat). */
   private dead = 0;
   private deadAt: { x: number; row: number; water: boolean } | null = null;
+  /** Which bays on the far bank hold a frog already. */
+  private bays: boolean[] = BAYS.map(() => false);
+  /** The fly: its bay and how long it stays, or the wait for the next one. */
+  private fly: { bay: number; left: number } | null = null;
+  private flyTimer = 0;
 
   constructor() {
     super(ROUND_SECONDS);
@@ -111,18 +134,24 @@ export class LeapFrog extends BaseGame {
       const spacing = LOOP / l.count;
       const start = this.rand() * spacing;
       const us = Array.from({ length: l.count }, (_, i) => (start + i * spacing + (this.rand() - 0.5) * spacing * 0.3 + LOOP) % LOOP);
-      return { row: l.row, kind: l.kind, v: l.dir * l.speed, w: l.w, color: l.color, us };
+      const phases = us.map(() => this.rand() * TURTLE_CYCLE);
+      return { row: l.row, kind: l.kind, v: l.dir * l.speed, w: l.w, color: l.color, us, phases };
     });
     this.level = 1;
     this.crossings = 0;
     this.dead = 0;
     this.deadAt = null;
+    this.bays = BAYS.map(() => false);
+    this.fly = null;
+    this.flyTimer = FLY_EVERY * 0.6;
+    this.pilotBay = -1;
     this.toKerb();
   }
 
   protected tick(dt: number, controls: ArcadeControls): void {
     const factor = this.speedFactor;
     for (const lane of this.lanes) for (let i = 0; i < lane.us.length; i++) lane.us[i] = (((lane.us[i]! + lane.v * factor * dt) % LOOP) + LOOP) % LOOP;
+    this.updateFly(dt);
 
     for (const d of DIRS) if (this.keys.pressed(controls, d)) this.queued = d;
 
@@ -179,27 +208,26 @@ export class LeapFrog extends BaseGame {
         for (let x = (this.elapsed * 12 * (row % 2 ? 1 : -1)) % 32; x < SCREEN_W; x += 32) ctx.fillRect(x + 8, y + 7 + (row % 3), 6, 1);
       }
     }
-    drawText(ctx, 'HOME', SCREEN_W - 22, this.rowY(BANK) + CELL / 2, 6, 'rgba(126,231,135,0.8)');
+    this.paintBays(ctx);
 
     for (const lane of this.lanes) {
       const y = this.rowY(lane.row);
-      for (const u of lane.us) {
+      lane.us.forEach((u, i) => {
         const x = u - OFF;
-        if (x > SCREEN_W || x + lane.w < 0) continue;
-        ctx.fillStyle = lane.color;
-        if (lane.kind === 'log') {
-          ctx.fillRect(x, y + 2, lane.w, CELL - 4);
-          ctx.fillStyle = 'rgba(0,0,0,0.25)';
-          for (let k = 8; k < lane.w - 4; k += 12) ctx.fillRect(x + k, y + 4, 1, CELL - 8);
-        } else {
-          ctx.fillRect(x, y + 3, lane.w, CELL - 6);
-          // Headlights on the front, whichever way it goes.
-          ctx.fillStyle = '#fff2a8';
-          const front = lane.v > 0 ? x + lane.w - 2 : x;
-          ctx.fillRect(front, y + 4, 2, 2);
-          ctx.fillRect(front, y + CELL - 6, 2, 2);
-        }
-      }
+        if (x > SCREEN_W || x + lane.w < 0) return;
+        if (lane.kind === 'log') logSprite(lane.w).draw(ctx, x, y + 2, { x: lane.color, d: '#5a3a1a', r: '#d0a060' });
+        else if (lane.kind === 'turtle') {
+          const state = this.turtleState(lane, i, 0);
+          if (state === 'under') {
+            // Only rings on the water where they went down.
+            ctx.fillStyle = 'rgba(160,210,255,0.35)';
+            for (let k = 0; k < lane.w; k += 16) ctx.fillRect(Math.round(x + k + 4), y + 8, 8, 1);
+            return;
+          }
+          const inks = state === 'warn' ? { x: '#a8d8c0', s: '#6a8a7a' } : { x: lane.color, s: '#1f6f5a' };
+          for (let k = 0; k < lane.w; k += 16) turtleSprite(lane.v > 0 ? 1 : -1).draw(ctx, x + k + 1, y + 2, inks, Math.floor(this.elapsed * 3 + k) % 2);
+        } else carSprite(lane.kind, lane.w, lane.v > 0 ? 1 : -1).draw(ctx, x, y + 3, { x: lane.color, w: '#9ad6ff', t: '#20202a', h: '#fff2a8', r: '#ff5f5f' });
+      });
     }
 
     if (this.deadAt && this.dead > 0) {
@@ -228,6 +256,21 @@ export class LeapFrog extends BaseGame {
       return true;
     };
     const pick = (d: Dir): ArcadeControls => (this.keys.isHeld(d) ? out : { ...out, [d]: true });
+    // A person's thumb: a short hesitation now and then before the next hop.
+    if (random() < (1 - skill) * 0.05) return out;
+    // Close to the far bank, line up with a bay (the fly's first): a hop sideways when it is safe.
+    if (this.frogRow >= BANK - 2) {
+      if (this.pilotBay < 0 || this.bays[this.pilotBay]) this.pilotBay = this.fly ? this.fly.bay : this.bays.findIndex((full, i) => !full && Math.abs((BAYS[i] ?? 0) - this.frogX) < 70);
+      const bayX = BAYS[this.pilotBay];
+      if (bayX !== undefined && skill > 0.4) {
+        const off = bayX - this.frogX;
+        // A step sideways towards it when that is safe and the hop up would miss it; else on up all the same (a bay is a bonus).
+        if (Math.abs(off) > BAY_REACH && random() < skill) {
+          const side: Dir = off < 0 ? 'left' : 'right';
+          if (lands(side)) return pick(side);
+        }
+      }
+    }
     if (lands('up') || random() < (1 - skill) * 0.002) return pick('up');
     let staying = true;
     for (let t = 0; t <= margin + 0.1; t += 0.06) if (!this.safe(this.frogRow, this.rideX(this.frogRow, this.frogX, t), t)) staying = false;
@@ -239,6 +282,8 @@ export class LeapFrog extends BaseGame {
     for (const d of [toward, away, 'down'] as const) if (lands(d)) return pick(d);
     return out;
   }
+
+  private pilotBay = -1;
 
   private get speedFactor(): number {
     return 1 + (this.level - 1) * SPEED_PER_LEVEL;
@@ -272,6 +317,7 @@ export class LeapFrog extends BaseGame {
     if (this.frogRow === BANK) {
       this.crossings += 1;
       this.addScore(CROSS_POINTS, x, y, '#7ee787');
+      this.homeIntoBay(x, y);
       this.fx.pop('HOME!', SCREEN_W / 2, SCREEN_H / 2 - 24, '#7ee787', 14);
       this.fx.flash('#7ee787', 0.1);
       this.sound('perfect');
@@ -299,6 +345,68 @@ export class LeapFrog extends BaseGame {
     this.addTime(-DEATH_SECONDS, SCREEN_W / 2, SCREEN_H / 2);
   }
 
+  /** A frog home at `x`: into the bay there if it is empty (and the fly's bonus if it sits in it); all five, a big bonus and they empty. */
+  private homeIntoBay(x: number, y: number): void {
+    const bay = BAYS.findIndex((bx, i) => !this.bays[i] && Math.abs(bx - x) <= BAY_REACH);
+    if (bay < 0) return;
+    this.bays[bay] = true;
+    this.bonus(BAY_POINTS, 'BAY', x, y - 18);
+    if (this.fly?.bay === bay) {
+      this.fly = null;
+      this.flyTimer = FLY_EVERY;
+      this.bonus(FLY_POINTS, 'FLY', x, y - 34);
+      this.sound('eat');
+    }
+    if (this.bays.every(Boolean)) {
+      this.bays = BAYS.map(() => false);
+      this.bonus(ALL_BAYS_POINTS, 'ALL HOME', SCREEN_W / 2, SCREEN_H / 2 + 30);
+      this.fx.shake(3, 0.3);
+    }
+  }
+
+  /** The fly comes to an empty bay now and then, stays a while, goes. */
+  private updateFly(dt: number): void {
+    if (this.fly) {
+      this.fly.left -= dt;
+      if (this.fly.left <= 0) {
+        this.fly = null;
+        this.flyTimer = FLY_EVERY;
+      }
+      return;
+    }
+    this.flyTimer -= dt;
+    if (this.flyTimer > 0) return;
+    const empty = BAYS.map((_, i) => i).filter((i) => !this.bays[i]);
+    const bay = empty[Math.floor(this.rand() * empty.length)];
+    if (bay === undefined) this.flyTimer = FLY_EVERY;
+    else this.fly = { bay, left: FLY_STAY };
+  }
+
+  /** The bays along the far bank: dark notches, a frog in each filled one, the fly buzzing in its own. */
+  private paintBays(ctx: CanvasRenderingContext2D): void {
+    const y = this.rowY(BANK);
+    BAYS.forEach((bx, i) => {
+      ctx.fillStyle = '#0a2a1c';
+      ctx.fillRect(bx - CELL / 2, y + 1, CELL, CELL - 1);
+      if (this.bays[i]) FROG_SPRITE.drawCentred(ctx, bx, y + CELL / 2, { ...FROG_INKS, x: '#2fbf7e' });
+      else if (this.fly?.bay === i) {
+        const wing = Math.floor(this.elapsed * 16) % 2;
+        ctx.fillStyle = '#e8e6ff';
+        ctx.fillRect(bx - 3, y + 5 - wing, 2, 2);
+        ctx.fillRect(bx + 1, y + 5 - wing, 2, 2);
+        ctx.fillStyle = '#ffe066';
+        ctx.fillRect(bx - 1, y + 7, 2, 3);
+      }
+    });
+  }
+
+  /** Where turtle group `i` of `lane` is in its dive, `t` seconds from now. */
+  private turtleState(lane: Lane, i: number, t: number): 'up' | 'warn' | 'under' {
+    const at = (this.elapsed + t + (lane.phases[i] ?? 0)) % TURTLE_CYCLE;
+    if (at > TURTLE_CYCLE - TURTLE_DIVE) return 'under';
+    return at > TURTLE_CYCLE - TURTLE_DIVE - TURTLE_WARN ? 'warn' : 'up';
+  }
+
   /** Where a lane's thing starts on screen at `t` seconds from now. */
   private edgeAt(lane: Lane, u: number, t: number): number {
     return ((((u + lane.v * this.speedFactor * t) % LOOP) + LOOP) % LOOP) - OFF;
@@ -308,17 +416,17 @@ export class LeapFrog extends BaseGame {
     return this.lanes.find((l) => l.row === row);
   }
 
-  /** The log the frog at `x` stands on in `row` (now), if any. */
+  /** The log or turtles the frog at `x` stands on in `row` (now), if any. */
   private logUnder(row: number, x: number): Lane | null {
     const lane = this.lane(row);
-    if (!lane || lane.kind !== 'log') return null;
+    if (!lane || (lane.kind !== 'log' && lane.kind !== 'turtle')) return null;
     return lane.us.some((u) => x >= u - OFF && x <= u - OFF + lane.w) ? lane : null;
   }
 
   /** Where a frog at `x` in `row` will be `t` seconds on, carried by the river. */
   private rideX(row: number, x: number, t: number): number {
     const lane = this.lane(row);
-    return lane?.kind === 'log' ? x + lane.v * this.speedFactor * t : x;
+    return lane?.kind === 'log' || lane?.kind === 'turtle' ? x + lane.v * this.speedFactor * t : x;
   }
 
   /** Whether a frog at `x` in `row` is alive `t` seconds from now: clear of the traffic, on a log over the river, on the screen. */
@@ -329,6 +437,10 @@ export class LeapFrog extends BaseGame {
     if (lane.kind === 'log') return lane.us.some((u) => {
       const left = this.edgeAt(lane, u, t);
       return x >= left && x <= left + lane.w;
+    });
+    if (lane.kind === 'turtle') return lane.us.some((u, i) => {
+      const left = this.edgeAt(lane, u, t);
+      return x >= left && x <= left + lane.w && this.turtleState(lane, i, t) !== 'under';
     });
     return lane.us.every((u) => {
       const left = this.edgeAt(lane, u, t);

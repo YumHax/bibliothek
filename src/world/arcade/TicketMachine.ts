@@ -34,9 +34,9 @@ export interface TicketMachineWiring {
 const REGULAR_PAUSE = 3;
 
 /**
- * A physical ticket machine (the alley, the hoops, the ticket wheel) over a `MachineRun`: the paid
- * play from coin to end card, the initials, the strip, a regular taking it (their final score to
- * the crowd), out-of-order days, the labels. A machine is only its play: `newGame`, `play` (one
+ * A physical ticket machine (the pinball, the alley, the hoops, the ticket wheel) over a `MachineRun`:
+ * the paid play from coin to end card, the initials, the strip, a regular taking it (their final
+ * score to the crowd, their skill in `regularSkill`), out-of-order days, the labels. A machine is only its play: `newGame`, `play` (one
  * frame, true when it is over), `demoControls` (a regular's hands), `score`, its display, and
  * where people stand. Subclasses build their model, `speaker`, `strip` and `note` in their
  * constructor, before anything reads the state (the run is made on first use, from them).
@@ -62,6 +62,8 @@ export abstract class TicketMachine extends RunMachine implements Furniture, Int
   private readonly steps = new FixedStep(REPLAY_STEP);
   /** The regular on it, when their body is the machine's to direct (`occupy`). */
   protected performer: Performer | null = null;
+  /** How well the regular on it plays (0..1: theirs, from `occupy`), null for the machine's own regular. */
+  protected regularSkill: number | null = null;
 
   protected constructor(protected readonly wiring: TicketMachineWiring) {
     super();
@@ -115,9 +117,10 @@ export abstract class TicketMachine extends RunMachine implements Furniture, Int
     this.newGame();
   }
 
-  occupy(performer?: Performer): boolean {
+  occupy(performer?: Performer, skill?: number): boolean {
     if (!this.run.occupy()) return false;
     this.performer = performer ?? null;
+    this.regularSkill = skill ?? null;
     this.newGame();
     this.performerChanged();
     return true;
@@ -166,6 +169,7 @@ export abstract class TicketMachine extends RunMachine implements Furniture, Int
   }
 
   dispose(): void {
+    this.run.dispose();
     this.speaker.dispose();
   }
 

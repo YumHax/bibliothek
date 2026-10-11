@@ -6,13 +6,15 @@ import { PARK_TREES, STREET_TREES } from '../city/trees';
 import { PARKED_CARS } from '../city/parkedCars';
 import { LAWN_REACH, LAWN_Y, StreetGround } from './StreetGround';
 import { StreetPark } from './StreetPark';
-import { Buildings, type PaintedFront } from './Buildings';
+import { Buildings, paintFacadeAtlas, type PaintedFront } from './Buildings';
+import { castByStretch } from './shadowStretches';
 import type { WindowLife } from './windowLife';
 import { FacadeRelief, type FacadeReliefOptions } from './relief/FacadeRelief';
 import { BladeSigns } from './relief/BladeSigns';
 import { Shopfronts } from './shopfronts/Shopfronts';
 import { Shutters } from './relief/Shutters';
 import { ShopGlow } from './relief/ShopGlow';
+import { WallMounts } from './relief/WallMounts';
 import { StreetLamps } from './StreetLamps';
 import { StreetTrees, type TreeSpot } from './StreetTrees';
 import { StreetCars, type StreetCarsOptions } from './StreetCars';
@@ -56,14 +58,36 @@ interface StreetBaseOptions {
   windowFrames?: boolean;
 }
 
+/** Milliseconds of painting between two pauses of `paintStreetBase` (a facade's paint is a few ms: several fit an idle slice). */
+const PAINT_SLICE_MS = 6;
+
+/**
+ * The facades' atlas painted ahead of `buildStreetBase` with the same facades, scale and frames (`Buildings.paintFacadeAtlas`),
+ * a pause (`yield`) whenever `PAINT_SLICE_MS` of painting have gone by: iterate it, awaiting an idle moment at each, and
+ * the build that follows finds the atlas painted.
+ */
+export function* paintStreetBase(options: Pick<StreetBaseOptions, 'facades' | 'detailScale' | 'windowFrames'>): Generator<void, void, void> {
+  const { facades, detailScale, windowFrames } = options;
+  // A loading budget, in real milliseconds (the paint's own cost), as `OutlookView`'s compile slices.
+  let since = performance.now(); // convention-ok: a loading budget in real milliseconds
+  for (const _ of paintFacadeAtlas(facades, { detailScale, anisotropy: sceneryAnisotropy(), shopGoods: null, ...(windowFrames === false ? { windowFrames } : {}) })) {
+    if (performance.now() - since < PAINT_SLICE_MS) continue; // convention-ok: same
+    yield;
+    since = performance.now(); // convention-ok: same
+  }
+}
+
 /** The ground, the park's paths and beds, the facades. */
-export function buildStreetBase(add: AddScenery, options: StreetBaseOptions): { buildings: Buildings } {
+export function buildStreetBase(add: AddScenery, options: StreetBaseOptions): { buildings: Buildings; park: StreetPark } {
   const { dayNight, facades, detailScale, shopGoods, windowLife, walkable, windowFrames } = options;
   const anisotropy = sceneryAnisotropy();
   add(new StreetGround(dayNight, anisotropy));
-  add(new StreetPark({ anisotropy, lawnY: LAWN_Y, reach: LAWN_REACH.x, dayNight, ...(walkable ? { walkable } : {}) }));
+  const park = add(new StreetPark({ anisotropy, lawnY: LAWN_Y, reach: LAWN_REACH.x, dayNight, ...(walkable ? { walkable } : {}) }));
   const buildings = add(new Buildings(facades, dayNight, { detailScale, anisotropy, shopGoods, nightScale: nightScale(), ...(windowLife ? { windowLife } : {}), ...(windowFrames === false ? { windowFrames } : {}) }));
-  return { buildings };
+  // The sun's map draws only the stretches of their length it covers (`shadowStretches`).
+  castByStretch(park);
+  castByStretch(buildings);
+  return { buildings, park };
 }
 
 interface StreetFrontsOptions extends FacadeReliefOptions {
@@ -71,14 +95,17 @@ interface StreetFrontsOptions extends FacadeReliefOptions {
   onRoll?: (at: Vec2) => void;
 }
 
-/** What stands out of the painted facades: awnings, balconies, the landmark fronts, bracket signs, the walk-in shops' fronts, shutters, the shops' glow. */
+/** What stands out of the painted facades: awnings, balconies, the landmark fronts, bracket signs, the walk-in shops' fronts, shutters, the shops' glow, what is fixed to the walls (lanterns, alarms, cables, posters). */
 export function buildStreetFronts(add: AddScenery, fronts: readonly PaintedFront[], dayNight: DayNight, options: StreetFrontsOptions = {}): { shopfronts: Shopfronts } {
   const { onRoll, ...relief } = options;
-  add(new FacadeRelief(fronts, { dayNight, ...relief }));
+  const facadeRelief = add(new FacadeRelief(fronts, { dayNight, ...relief }));
   add(new BladeSigns(fronts, dayNight));
   const shopfronts = add(new Shopfronts(fronts, dayNight));
   add(new Shutters(fronts, dayNight, onRoll));
   add(new ShopGlow(fronts, dayNight));
+  const mounts = add(new WallMounts(fronts, dayNight));
+  // The sun's map draws only the stretches of their length it covers (`shadowStretches`).
+  for (const caster of [facadeRelief, shopfronts, mounts]) castByStretch(caster);
   return { shopfronts };
 }
 

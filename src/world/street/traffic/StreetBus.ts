@@ -9,12 +9,18 @@ import type { DayNight } from '../../props/DayNight';
 import { BUS, busGeometries, vehicleGlass } from '../carModel';
 import { nightnessOf } from '../streetAir';
 import { snowCovered } from '../snowCover';
-import { paint, standard } from '../../materials/palette';
+import { standard } from '../../materials/palette';
+import { LampMaterial } from './lampMaterial';
+import { WheelMaterial } from './wheelSpin';
+import { VEHICLES } from '../../city/vehicles';
+import { wakefulnessAt } from '@/time/wakefulness';
+import { lcg, random } from '@/random';
 import type { Vec2 } from '../streetPlan';
 import { ScriptedVehicle, type CollisionSet } from './ScriptedVehicle';
 import type { StreetTraffic } from './StreetTraffic';
 import { CRUISE as CITY_CRUISE } from '../../city/traffic';
 import { formatCoins } from '@/text/money';
+import { rideBy } from '../../travel/rideVia';
 
 interface StreetBusOptions {
   traffic: StreetTraffic;
@@ -35,9 +41,12 @@ interface StreetBusOptions {
    */
   ride?: {
     fare: number;
-    destination: () => { to: ZoneId; label: string } | null;
+    /** Where it goes now (`board`: the words on its destination board, else the line's terminus). */
+    destination: () => { to: ZoneId; label: string; board?: string } | null;
     /** Why there is nowhere to ride to now (the market shut for the night, and when it opens), for the caption. */
     closed?: () => string | null;
+    /** More than one stop on now: the builder deals the pick (`ui/street/ChoicePanel`) and `board`s the one chosen; true when it did. */
+    choose?: (session: SessionActions, board: (to: ZoneId, label: string) => void) => boolean;
   };
 }
 
@@ -53,6 +62,14 @@ const SIGNAL_BEFORE = 30;
 const SIGNAL_AFTER = 3;
 const LIVERY = 0xe9e6dc;
 const STRIPE = 0x2f7a4a;
+/** Where the line ends, on the board when it takes the player nowhere in particular. */
+const TERMINUS = 'CENTRAL STATION';
+/** How many sit aboard (besides the driver), at the busiest hour and at the quietest. */
+const ABOARD = { most: 9, least: 1 } as const;
+const SKINS = [0xf1c7a8, 0xe3b08e, 0xc99b7c, 0xa8775a, 0x8a5a3e, 0x5e3b28];
+/** Its axles along the body (`carModel` puts its wheels there): the rear follows the front's line. */
+const AXLES = { front: 3.9, rear: -3.4 } as const;
+const HIDDEN = new THREE.Matrix4().makeScale(0, 0, 0);
 
 /**
  * The city bus (line `line`): comes up Park Street on the traffic's first route, turns into Front
@@ -60,50 +77,74 @@ const STRIPE = 0x2f7a4a;
  * blinking; there the doors slide open, `traffic.busAtStop` goes true for the queue to board,
  * and after `dwell` seconds it closes up, indicates and pulls out, on towards the side street.
  * One every `every` game minutes by day, `nightEvery` at night (never closer than a minute and
- * a bit in real time). A single mesh set of its own (body with its livery stripe, glass, tyres,
- * lamps, the two door leaves, the lit destination board), solid while it stands. While its doors
+ * a bit in real time). A single mesh set of its own (body with its livery stripe, glass, tyres
+ * with the front pair steering, lamps on the street's `LampMaterial` (brake, indicators, reversing),
+ * the two door leaves, the driver and the passengers through the glass, more by day; the lit
+ * destination board, reading where it takes the player now), solid while it stands. While its doors
  * stand open the player can get on (`ride`: the fare paid, then the trip there).
  */
 export class StreetBus extends ScriptedVehicle implements Interactable {
   readonly hitboxes: THREE.Object3D[];
-  private readonly lampMaterial: THREE.MeshBasicMaterial;
-  private readonly indicatorMaterial: THREE.MeshBasicMaterial;
+  private readonly lamps: LampMaterial;
   private readonly signMaterial: THREE.MeshBasicMaterial;
+  /** The passengers seen through the glass band (heads and shoulders), the driver first. */
+  private readonly heads: THREE.InstancedMesh;
+  private readonly shoulders: THREE.InstancedMesh;
+  private readonly seats: THREE.Vector3[] = [];
+  private boardText = '';
   private readonly doors: THREE.Mesh[] = [];
   private doorOpen = 0;
   private waitClock = 6;
-  private blink = 0;
   private sinceLeaving = Infinity;
 
   constructor(private readonly dayNight: DayNight, private readonly bus: StreetBusOptions) {
-    // The line through the stop: the first route's points, with the pull-in and pull-out spliced in around it.
+    // The line through the stop (its front axle's): the first route's points, with the pull-in and pull-out spliced in around it.
+    const [sx, sz] = bus.stop.at;
     super({
       traffic: bus.traffic,
       viewer: bus.viewer,
-      route: withStop(bus.route, bus.stop.at),
+      route: withStop(bus.route, [sx + AXLES.front, sz]),
       cruise: CRUISE,
       size: { length: BUS.length, width: BUS.width, height: BUS.height },
       kind: 'bus',
-      stops: [bus.stop],
+      stops: [{ at: [sx + AXLES.front, sz], dwell: bus.stop.dwell }],
       stopFor: bus.stopFor,
       collisions: bus.collisions,
       accel: 1.2,
+      axles: AXLES,
     });
     this.name = 'StreetBus';
     const g = busGeometries();
     const body = new THREE.Mesh(g.body, snowCovered(new THREE.MeshStandardMaterial({ color: LIVERY, roughness: 0.35 })));
     const stripe = new THREE.Mesh(g.stripe, standard({ color: STRIPE, roughness: 0.4 }));
     const glass = new THREE.Mesh(g.glass, vehicleGlass(0x18222a));
-    const wheels = new THREE.Mesh(g.wheels, paint(0x151515, 0.85));
-    this.lampMaterial = new THREE.MeshBasicMaterial({ vertexColors: true, color: 0x666666 });
-    this.indicatorMaterial = new THREE.MeshBasicMaterial({ vertexColors: true, color: 0x222222 });
-    const lamps = new THREE.Mesh(g.lamps, this.lampMaterial);
-    const indicators = new THREE.Mesh(g.indicators, this.indicatorMaterial);
+    // The street's lamp and wheel materials: head, tail, brake, indicators and reversing lamps by role; the front pair steering.
+    this.lamps = new LampMaterial();
+    const tyres = new WheelMaterial(false);
+    this.lampFace = this.lamps;
+    this.wheelFace = { material: tyres, radius: VEHICLES.bus.wheelRadius, base: 7.3 };
+    const wheels = new THREE.Mesh(g.wheels, tyres);
+    const lamps = new THREE.Mesh(g.lamps, this.lamps);
     for (const mesh of [body, stripe, glass, wheels]) {
       mesh.castShadow = true;
       mesh.receiveShadow = true;
     }
-    this.add(body, stripe, glass, wheels, lamps, indicators);
+    this.add(body, stripe, glass, wheels, lamps);
+
+    // Who rides it: the driver, and passengers in the seats along the glass band.
+    const { driver, rows, sides, belt } = BUS.seats;
+    this.seats.push(new THREE.Vector3(driver[0], belt, driver[1]));
+    for (const x of rows) for (const z of sides) this.seats.push(new THREE.Vector3(x, belt, z));
+    this.heads = new THREE.InstancedMesh(new THREE.SphereGeometry(0.1, 10, 8).translate(0.02, 0.38, 0), new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.7 }), this.seats.length);
+    this.shoulders = new THREE.InstancedMesh(new THREE.BoxGeometry(0.24, 0.27, 0.42).translate(-0.04, 0.125, 0), new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.85 }), this.seats.length);
+    const people = lcg(3838);
+    const colour = new THREE.Color();
+    for (let i = 0; i < this.seats.length; i++) {
+      this.heads.setColorAt(i, colour.setHex(SKINS[Math.floor(people() * SKINS.length)]!));
+      this.shoulders.setColorAt(i, colour.setHSL(people(), 0.3, 0.2 + 0.3 * people()));
+    }
+    this.add(this.heads, this.shoulders);
+    this.seatPassengers(ABOARD.least);
 
     // The door leaves: dark glass in a frame, on the kerb side (+z), sliding outwards and apart.
     const leafMaterial = standard({ color: 0x2a3438, roughness: 0.1 });
@@ -127,8 +168,9 @@ export class StreetBus extends ScriptedVehicle implements Interactable {
     this.add(board);
     this.hitboxes = [board];
 
-    // The destination board over the windscreen, front and back.
-    this.signMaterial = new THREE.MeshBasicMaterial({ map: signTexture(bus.line), color: 0x999999 });
+    // The destination board over the windscreen, front and back (repainted with where it goes as it sets off).
+    this.boardText = TERMINUS;
+    this.signMaterial = new THREE.MeshBasicMaterial({ map: signTexture(bus.line, this.boardText), color: 0x999999 });
     const { y, width, height } = BUS.sign;
     for (const facing of [1, -1] as const) {
       const sign = new THREE.Mesh(new THREE.PlaneGeometry(facing > 0 ? width : width * 0.5, height), this.signMaterial);
@@ -169,11 +211,19 @@ export class StreetBus extends ScriptedVehicle implements Interactable {
     const ride = this.bus.ride;
     const where = ride?.destination();
     if (!ride || !where || !this.boarding) return;
+    // Two stops on now: which one first (`ride.choose`), then the fare.
+    if (ride.choose?.(session, (to, label) => this.board(session, ride.fare, to, label))) return;
+    this.board(session, ride.fare, where.to, where.label);
+  }
+
+  /** The fare paid, off to `to`. */
+  private board(session: SessionActions, fare: number, to: ZoneId, label: string): void {
     session.pay({
-      price: ride.fare,
+      price: fare,
       paid: () => {
-        session.travel(where.to);
-        return `You pay the driver and take a seat, off to ${where.label}.`;
+        rideBy('bus');
+        session.travel(to);
+        return `You pay the driver and take a seat, off to ${label}.`;
       },
     });
   }
@@ -185,7 +235,39 @@ export class StreetBus extends ScriptedVehicle implements Interactable {
     const night = inHours(this.dayNight.state.hours, [22.5, 6]);
     const gameMinute = this.dayNight.dayLength / (24 * 60);
     this.waitClock = Math.max(night ? NIGHT_MIN_GAP_S : MIN_GAP_S, (night ? this.bus.nightEvery : this.bus.every) * gameMinute);
+    this.setBoard(this.bus.ride?.destination()?.board ?? TERMINUS);
+    // Fuller by day, a few aboard late at night.
+    const busy = wakefulnessAt(this.dayNight.state.hours);
+    this.seatPassengers(Math.round(ABOARD.least + (ABOARD.most - ABOARD.least) * busy * (0.6 + 0.4 * random())));
     this.depart();
+  }
+
+  /** The destination board reads `where` (repainted only when it changes). */
+  private setBoard(where: string): void {
+    if (where === this.boardText) return;
+    this.boardText = where;
+    this.signMaterial.map?.dispose();
+    this.signMaterial.map = signTexture(this.bus.line, where);
+    this.signMaterial.needsUpdate = true;
+  }
+
+  /** `count` passengers in seats along the band (and always the driver), scattered over the rows. */
+  private seatPassengers(count: number): void {
+    const free = this.seats.slice(1).map((_, i) => i + 1);
+    const taken = new Set<number>([0]);
+    for (let k = 0; k < count && free.length; k++) taken.add(free.splice(Math.floor(random() * free.length), 1)[0]!);
+    const m = new THREE.Matrix4();
+    this.seats.forEach((seat, i) => {
+      const shown = taken.has(i);
+      m.makeTranslation(seat.x, seat.y, seat.z);
+      this.heads.setMatrixAt(i, shown ? m : HIDDEN);
+      this.shoulders.setMatrixAt(i, shown ? m : HIDDEN);
+    });
+    this.heads.instanceMatrix.needsUpdate = true;
+    this.shoulders.instanceMatrix.needsUpdate = true;
+    // Their culling sphere round the seats taken now (three keeps the first one it computed otherwise).
+    this.heads.computeBoundingSphere();
+    this.shoulders.computeBoundingSphere();
   }
 
   protected override arrived(): void {
@@ -209,7 +291,7 @@ export class StreetBus extends ScriptedVehicle implements Interactable {
   protected override animate(dt: number): void {
     const s = this.dayNight.state;
     const night = THREE.MathUtils.smoothstep(nightnessOf(s), 0.2, 0.6);
-    this.lampMaterial.color.setScalar(0.4 + 2.4 * night);
+    this.lamps.setNight(Math.max(night, 0.55 * this.bus.traffic.murk));
     this.signMaterial.color.setScalar(0.9 + 1.1 * night);
 
     // Doors: open once stood a moment, shut a moment before the dwell is up.
@@ -224,31 +306,40 @@ export class StreetBus extends ScriptedVehicle implements Interactable {
     }
     this.bus.traffic.busAtStop = standing && this.doorOpen >= 1;
 
-    // The indicator: pulling in (the stop ahead) and pulling out again.
+    // The indicators: right pulling in to the stop ahead, left pulling out again (the bends' own otherwise).
     this.sinceLeaving += dt;
-    const indicating = (this.state === 'driving' && this.toNextStop < SIGNAL_BEFORE) || (standing && this.stoodFor > dwell - 2) || this.sinceLeaving < SIGNAL_AFTER;
-    this.blink = (this.blink + dt) % 0.8;
-    this.indicatorMaterial.color.setScalar(indicating && this.blink < 0.4 ? 2.4 : 0.15);
+    const pullingIn = this.state === 'driving' && this.toNextStop < SIGNAL_BEFORE;
+    const pullingOut = (standing && this.stoodFor > dwell - 2) || this.sinceLeaving < SIGNAL_AFTER;
+    this.signalOverride = pullingOut ? -1 : pullingIn ? 1 : standing ? 0 : null;
   }
 }
 
 /**
- * The route through the stop: the given points up to the straight stretch of Front Street the
- * stop is on, a pull-in to the stop (in the parking lane) and a pull-out back to the lane, then the rest.
+ * The front axle's way in and out of the stop: metres along from where it stands, and how much of the way
+ * across from the lane to the stop it is. A long S in, straight a wheelbase and more before the stop (the
+ * bus stands square to the kerb), a gentler S out so its tail never swings onto the pavement; the nose and
+ * the tail keep off the kerb and clear of the parked car behind and the works' barrier ahead (worked out
+ * for the 12 m bus, `axles` on, in the bay between them).
+ */
+const PULL: readonly (readonly [number, number])[] = [
+  [-26.5, 0], [-20.5, 0.11], [-14.5, 0.55], [-9.5, 0.91], [-6.5, 1], [0, 1], [5, 0.86], [10.5, 0.42], [19, 0],
+];
+
+/**
+ * The route through the stop (`[sx, sz]`: where the front axle stands): the given points up to the
+ * straight stretch of Front Street the stop is on, the pull-in to the stop (in the parking lane) and
+ * the pull-out back to the lane (`PULL`), then the rest.
  */
 function withStop(route: readonly Vec2[], [sx, sz]: Vec2): Vec2[] {
-  const i = route.findIndex((p, k) => k + 1 < route.length && p[0] <= sx - 14 && route[k + 1]![0] >= sx + 14 && p[1] === route[k + 1]![1]);
+  const [first, last] = [PULL[0]![0], PULL[PULL.length - 1]![0]];
+  const i = route.findIndex((p, k) => k + 1 < route.length && p[0] <= sx + first && route[k + 1]![0] >= sx + last && p[1] === route[k + 1]![1]);
   if (i < 0) return [...route];
   const lane = route[i]![1];
-  return [
-    ...route.slice(0, i + 1),
-    [sx - 12, lane], [sx - 5.5, sz - 0.3], [sx - 2, sz], [sx + 2, sz], [sx + 6.5, sz - 0.6], [sx + 12, lane],
-    ...route.slice(i + 1),
-  ];
+  return [...route.slice(0, i + 1), ...PULL.map(([along, across]): Vec2 => [sx + along, lane + (sz - lane) * across]), ...route.slice(i + 1)];
 }
 
-/** The destination board: amber dot-matrix letters on black. */
-function signTexture(line: string): THREE.CanvasTexture {
+/** The destination board: amber dot-matrix letters on black, the line's number and `where`. */
+function signTexture(line: string, where: string): THREE.CanvasTexture {
   const [canvas, ctx] = createCanvas(256, 36);
   ctx.fillStyle = '#0a0a08';
   ctx.fillRect(0, 0, 256, 36);
@@ -258,7 +349,7 @@ function signTexture(line: string): THREE.CanvasTexture {
   ctx.textAlign = 'left';
   ctx.fillText(line, 8, 19);
   ctx.textAlign = 'center';
-  ctx.fillText('CENTRAL STATION', 150, 19, 200);
+  ctx.fillText(where, 150, 19, 200);
   // The dot matrix: a grid of dark lines over the letters.
   ctx.fillStyle = 'rgba(0,0,0,0.45)';
   for (let x = 0; x < 256; x += 3) ctx.fillRect(x, 0, 1, 36);

@@ -1,5 +1,7 @@
-import type { Game } from '@/catalog/types';
+import type { Game, PlatformId } from '@/catalog/types';
 import { inHours } from '@/time/clock';
+import { pocket } from '@/errands/pocket';
+import { STREET_SHOPS } from '@/streetShops/rules';
 import { getPlatform } from '@/catalog/platforms';
 import type { Household } from './Household';
 import { HOUSEHOLD } from './rules';
@@ -180,7 +182,8 @@ export class HomeLife {
 
   get bakeLabel(): string {
     if (!this.kitchenTable()) return 'Mixing bowl, nowhere to cool a cake yet · look';
-    return this.household.cakeOut ? 'Mixing bowl · a cake is out already' : 'Mixing bowl · bake a cake (for when friends drop by)';
+    if (this.household.cakeOut) return 'Mixing bowl · a cake is out already';
+    return pocket.count('basket') > 0 ? 'Mixing bowl · bake a lemon drizzle (the greengrocer’s basket)' : 'Mixing bowl · bake a cake (for when friends drop by)';
   }
 
   /** Why no cake can be baked now (a refusal), or null. */
@@ -190,7 +193,14 @@ export class HomeLife {
   }
 
   bake(): Outcome {
-    if (!this.household.bake()) return no('There is still cake on the table.');
+    // The greengrocer's baking basket, carried home from Front Street: a lemon drizzle, which keeps a day longer.
+    const basket = pocket.count('basket') > 0;
+    if (!this.household.bake(basket ? STREET_SHOPS.basket.cakeDays : 0)) return no('There is still cake on the table.');
+    if (basket) {
+      pocket.take('basket');
+      this.log('Baked a lemon drizzle cake');
+      return yes('The greengrocer’s eggs and lemons, forty minutes in the oven: a lemon drizzle cools on the table.\nIt keeps a day longer than a sponge. A friend who drops by will stay longer, and be grateful.');
+    }
     this.log('Baked a sponge cake');
     return yes('Flour, eggs, butter, forty minutes in the oven: a sponge cake cools on the table.\nA friend who drops by in the next day or so will stay longer, and be grateful.');
   }
@@ -328,6 +338,31 @@ export class HomeLife {
       : level === 'eye' ? (n === eye ? `You now spot a fake ${platform} print at a glance. ${respect - n} more and the stallholders will notice.` : `${respect - n} more and the ${platform} stallholders will notice.`)
       : n === respect ? `The ${platform} stallholders will hear it in how you talk: they go easier on you now.` : `You know the ${platform} like few do.`;
     return yes(`You leaf through ${copy.title}'s manual: the controls, the lore, the ads at the back.\n${platform} know-how: ${formatCount(n, 'manual')} read. ${next}`);
+  }
+
+  /**
+   * A strategy guide bought at COMICS & MANGA on Front Street (`streetShops/bookshop`), read on the spot: it counts as a
+   * manual read for its platform's know-how (as the reading chair's), once.
+   */
+  readGuide(platform: PlatformId, guideId: string, title: string): Outcome {
+    const name = getPlatform(platform).shortName;
+    if (this.household.hasRead(platform, guideId)) return no(`You know ${title} by heart.`);
+    const n = this.household.read(platform, guideId);
+    this.log(`Read ${title}`);
+    return yes(`${title}: maps, passwords, the moves the manual never told you.\n${name} know-how: ${formatCount(n, 'manual')} read.`);
+  }
+
+  /**
+   * A loose manual bought at CORNER BOOKS (`streetShops/bookshop`): the copy of `gameId` without one is complete again.
+   * Refused (nothing changes) when the player no longer has that copy, or it is not lacking its manual.
+   */
+  completeWithManual(gameId: string): Outcome {
+    const copy = this.deps.collection.find(gameId);
+    if (!copy || (copy.status ?? 'owned') !== 'owned') return no('You no longer have that game.');
+    if (copy.condition !== 'noManual') return no(`${copy.title} has its manual already.`);
+    this.deps.collection.update(copy.id, { condition: 'complete' });
+    this.log(`Bought the manual of ${copy.title} at CORNER BOOKS`);
+    return yes(`The manual of ${copy.title}, a little foxed: the copy is complete again.`);
   }
 
   /** On waking: the night's dream, if it brought one (once a market day, of the morning's stock). */

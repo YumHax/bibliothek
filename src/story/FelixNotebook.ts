@@ -90,6 +90,11 @@ export class FelixNotebook {
     for (const { game } of entries()) if (!this.collection.owns(game.id)) this.collection.want(game);
   }
 
+  /** Whether game `id` is one of his, in the notebook (found or not: Mémé knows his boxes either way). */
+  isHis(id: string): boolean {
+    return ENTRIES.some((entry) => entry.id === id);
+  }
+
   /** Hears each of his games coming home after the notebook was found. Returns the unsubscribe. */
   onTicked(cb: (ticked: Ticked) => void): () => void {
     this.listeners.add(cb);

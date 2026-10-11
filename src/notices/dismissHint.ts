@@ -41,16 +41,20 @@ export function followDismissHints(root: HTMLElement): () => void {
   };
 }
 
-/** A new hint pill for a card or tip ("Put down"). */
-export function dismissHint(): HTMLElement {
+/** What the key does to a notice: a card is put down (or turned over while pages are left), a banner closed. */
+type DismissVerb = 'put down' | 'turn over' | 'close';
+
+/** A new hint pill for a card ("Put down") or a banner ("Close"). */
+export function dismissHint(verb: DismissVerb = 'put down'): HTMLElement {
   const el = document.createElement('span');
   el.className = 'notice-dismiss';
+  el.dataset.verb = verb;
   fillDismissHint(el);
   return el;
 }
 
 /** What the key does now: "turn over" while pages are left, "put down" on the last. */
-export function setDismissVerb(el: HTMLElement, verb: 'put down' | 'turn over'): void {
+export function setDismissVerb(el: HTMLElement, verb: DismissVerb): void {
   if (el.dataset.verb === verb) return;
   el.dataset.verb = verb;
   fillDismissHint(el);

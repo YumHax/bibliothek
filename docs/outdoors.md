@@ -279,6 +279,17 @@ up). Starts on the first click or key press.
   of it, each part's face a multiple of `gapAt(80)` out and its back buried at a depth of its own (`casementParts`), so
   no two faces share a plane. `Buildings.windowFrames: false` (`buildStreetBase` passes it) paints them flat instead.
   The night map, the window ids and the stories are untouched: the lights stay painted behind the 3D frames.
+- **Each building its proportions** (`city/facadeStyle`): `storeyLayout` shares a front's height (still
+  `GROUND_FLOOR + (storeys - 1) * STOREY`, so roofs, party walls and both pictures' rows keep theirs) among its floors as
+  its style has it: a grand front's noble first floor taller and its top floor lower, a plainer one by less, our own
+  building regular (the flat's floor is where the stairs put it); `windowHeightOn` sizes each floor's windows, and the
+  grand fronts' balconies run across the second and top floors. A building's roof has its own pitch (`FacadeStyle.slope`,
+  our building the plan's `ROOF_SLOPE`: `street/roofSlope`) and its dormers their own head (pediment, segmental arch,
+  zinc hood), the odd bay without or an oeil-de-boeuf between (`roofFurniture`): both pictures read them.
+- **Surfaces in the facades' shader** (`Buildings` `SURFACE`, R of the surface mask by `SURFACE_FLAG`): brick courses,
+  dressed stone's 45 cm courses and broken joints, a render grain, and on the roofs slate or tile courses up the slope,
+  each its own shade, all in world metres and fading where they would shimmer; the paving's slabs each a shade and a
+  tilt of their own, gum and stains where people stop (`street/pavingSlabs`).
 - Our flat seen from the street: its windows (`FlatFront.windows[].room`) are lit as their room was left, the lamp
   dimmed by drawn curtains (`city/flatWindows`: `furnishShell` reports each room, `Buildings` reads `lampShown` and
   `curtainsOpen` into `flatLevels`); before a room is built they follow the curfew.
@@ -304,22 +315,40 @@ up). Starts on the first click or key press.
   Markings: lane arrows, Park Street's bays and its give-way (dashes and triangle). Snow is laid in the road's and
   pavement's shaders: tyre tracks and trodden paths cleared, banks along the kerbs and the walls, slush while wet.
   Rain and snow skip `Precipitation` shelters (the sas, `awningShelters`, the bus shelter, the kiosk, the shopfronts:
-  any number, the 32 nearest the camera chosen every 2 m). `clutter/StreetClutter`: bags and wheelie bins out by the
+  any number, the 32 nearest the camera chosen every 2 m, shared as `street/shelters` `STREET_SHELTERS`; a probe that
+  draws nothing keeps them chosen while nothing falls). Rain is thin quads turned to the eye (a pixel wide at least,
+  fainter when thinner) and drops and flakes catch the nearest lamps (`street/lampField`, written by `StreetLamps`);
+  splashes land on a shelter's top where there is one; drips run off the shelters' edges while it rains and while the
+  ground stays wet (`PrecipitationDrip`). `clutter/StreetClutter`: bags and wheelie bins out by the
   residents' doors from the evening before the bin round, the day's litter, spring's settled petals (`GROUND.leaf`).
 - Weather on things: `snowCovered()` (`snowCover.ts`) lays both snow (`STREET_SNOW`) and the rain's wet (`STREET_WET`:
-  darker, glossier on top) on whatever uses it (cars, furniture, relief, lamps, trees); `wetCovered()` is the wet alone (walls).
+  darker, glossier on top) on whatever uses it (cars, furniture, relief, lamps, trees), none under a shelter
+  (`STREET_SHELTERS`: the bench in the bus shelter stays dry); `snowCovered(m, { depth })` also stands the snow on the
+  tops of smooth shapes (the park's shrubs, their corners merged); `wetCovered()` is the wet alone (walls).
 - Light: the sun's shadow map is a square laid ahead of where the player looks (`LOOK_AHEAD`) and fades out over its
   outer 15 % (`shadowFade`) into the rows' far shadow: each point's ray to the sun against the roofline of our row,
   the far row and Park Street's (a 1D texture from `FACADES`), so the buildings' shadows run to the end of the street.
   Patched on every lit street material, the shared palette ones swapped for street copies (the flat's keep their
-  edges), in the windows' views too (`streetOutlook`). Lamps come in three kinds (`LAMP_DESIGNS`, `design` per
+  edges), in the windows' views too (`streetOutlook`). On medium and high the walkable street's sun map holds a second,
+  finer square round the player beside the whole one (`SunCascadeShadow`, `nearReach` 9 m: two viewports of one map,
+  no second shadow-casting light, so no texture unit more); the street's sun is told from other shadowed lights by its
+  shadow `radius` (`STREET_SUN_TAG`, which PCF soft never reads). The same lookup dims the sun under the clouds' shade
+  drifting down the wind on a broken-cloud day (`cloudShadow`: the ray to the sun against a noise deck 900 m up), and
+  the sky's ambient is scaled by how much sky a point sees between the rows (`streetSkyVisibility`, the rooflines'
+  texture again: the street's floor a little dimmer in the shade than the roofs and the park). Lying snow throws light
+  back up (`StreetLighting` `SNOW_BOUNCE` in the hemisphere's ground colour). Lamps come in three kinds (`LAMP_DESIGNS`, `design` per
   `STREET_PLAN.lamps`: the arm, Park Street's cast-iron crook lanterns, a post-top one), drawn per kind and per stretch
   of street (`STRETCH_EDGES`, culled out of view, as the trees are), with a soft halo per lit head where there is no
   bloom (low). The trees branch (limbs, branches, twigs: bare in winter) under crowns of clumps; the Christmas fir is
   whorls of sprays. The sky dome ray-casts `city/skyline` `BACKDROP_BLOCKS` (the neighbourhood's mid-rise blocks past
   the street's rows, the park's far side) in front of the far city, lit and windowed. The wet mirror (`WetGround`)
   renders every other frame (unless the view turned) and leaves out `unmirrored` (the people). The street reflects its own sky: `SkyDome`
-  hands `Environment` a `SkyReflection` (the dome prefiltered every 20 s, `setReflectionSource`) while occupied. The
+  hands `Environment` a `SkyReflection` (the dome prefiltered every 20 s, `setReflectionSource`) while occupied; in
+  the walkable street (not on low) the rows stand in it too (`SkyDome.reflectRows`: the facades' atlas lit flat as the
+  rig lights a wall, their night windows added), taken again every 7 m walked (14 on medium), so the row across shows
+  in glass, paint and the wet setts. The shops' interior-mapped glass gives back an analytic row across Front Street
+  (stone, a window grid lit at night, the shopfronts, the road below; `ShopInteriors` `aAcross`). Airliners cross the
+  dome now and then, a contrail behind them in humid air, their lights blinking at night (`SkyDome.fly`). The
   far towers (`SkylineSilhouette`, 4096 columns) are read linearly and smoothed over a pixel, re-baked every 0.5 m.
   Street lamps are sodium (`lighting/lampColours`): each photocell switches at its own point of the dusk and strikes
   pink, warming to amber in 7-12 s; the wet road's streaks take the same colour.
@@ -340,12 +369,28 @@ up). Starts on the first click or key press.
   and as through a pane in the market hall (`underRoof`).
 - Lamps without a real light: `StreetLamps` lends real point lights to the nearest few only; the next `WASH_SLOTS` (12)
   light the facades, the trees and the cars round them through an analytic term (`street/lampWash`, `LampWash.over`
-  from `buildStreetFixtures`, medium and high), so the walls stay warm all down the street at night.
-- Trees (`StreetTrees`): smooth-shaded crowns (normals leaning to the crown's middle, `SOFT_NORMALS`) under alpha-tested
+  from `buildStreetFixtures`, medium and high), diffuse and the material's own GGX highlight, so the walls stay warm
+  all down the street at night and wet paint and glass catch each lamp. In fog, rain or falling snow each lit lamp
+  hangs a soft cone of sodium to the ground and a glow round its head (`LampMist`, one upright quad per lamp turned
+  to the eye, in every quality).
+- Trees (`StreetTrees`): three kinds (`city/trees` `TreeSpecies`: the pavements' London planes with their peeling
+  mottled bark and broad crowns, the park's limes and horse chestnuts; `SPECIES` their greens by season, clumps and
+  outline), smooth-shaded crowns (normals leaning to the crown's middle, `SOFT_NORMALS`) under alpha-tested
   leaf cards that break their outline (`LEAF_CARDS`), the sun wrapping round them and shining through their rim from
   behind; past the sun's shadow map each throws a soft ground shadow away from the sun (`farShadows`, `FAR_SHADE`,
-  with `StreetLighting.far`). The park's pond ripples with the wind and rings with the rain (`rippledWater`); long
-  grass grows along its paths and the hedge's foot (`street/GrassTufts`).
+  with `StreetLighting.far`). The willows are limbs, a canopy and strands hanging nearly to the lawn (bare golden
+  twigs in winter), each strand swinging from where it hangs (`StrandBuilder`, `aHang`). Water ripples with the wind
+  and rings with the rain (`street/waterRipples`: the pond, the puddles, the gutters' running water while it rains,
+  `WetGround` `runoff`, and the wet mirror's picture bent by the rings); long grass grows along the park's paths and
+  the hedge's foot (`street/GrassTufts`). The lawn's tile is broken by a world-space mottle and the mower's stripes
+  (`lawnLook`); in the walked gardens blades of grass grow round the eye (`LawnBlades`: a grid moving with the camera,
+  placed in the vertex shader, masked off the paths, beds and pond; medium and high).
+- Wind (`street/wind.ts` `STREET_WIND`, eased from `SkyState.wind`, gusts running down the street): one uniform for the
+  trees' crowns, limbs and bare branches, the willows, the shrubs, the grass and the blades, the Fair's bunting
+  (`windSwayed(material, key, bend)`: a pivot, a give, a shiver, a per-vertex reach). `StreetLighting` drives it and
+  the clouds' shade (`oneDriver`: one rig a frame, whichever street, window view or roof is ticking). In the sky,
+  swifts race round in screaming parties over the roofs in summer, starlings murmur over the park at dusk in autumn
+  and winter (`SkyBirds`).
 - Far people: past the 3D crowd's draw distance, flat figures walk both pavements down the street (`FarWalkers`,
   `STREET_PLAN.crowd.far`; a cylindrical billboard from a small atlas in the window view's colours, dithered in past
   the crowd).

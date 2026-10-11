@@ -57,6 +57,8 @@ const UNSEEN = 14;
 const CHECK_EVERY = 1;
 /** No table nearer a shop door than this (along the pavement): people go in and out there. */
 const DOOR_CLEAR = 0.8;
+/** Served, a sip every this many seconds. */
+const SIP_EVERY = [9, 22] as const;
 /** A customer stays this many real seconds over their cup; the waiter brings it this long after they sit down. */
 const STAY = [45, 140] as const;
 const SERVED_AFTER = [4, 12] as const;
@@ -83,6 +85,8 @@ interface Customer {
   /** Real seconds left at the table; until the waiter is called over. */
   stay: number;
   serve: number;
+  /** Served: seconds to the next sip of their cup (none before it comes). */
+  sip: number | null;
 }
 
 interface Waiter {
@@ -106,6 +110,8 @@ interface Terrace {
   customers: Customer[];
   waiter: Waiter | null;
   centre: THREE.Vector3;
+  /** The waiter laying the tables out or stacking them while the player watches: the tables still to do, then the change. */
+  tidy: { tables: THREE.Vector3[]; open: boolean; wait: number } | null;
 }
 
 /**
@@ -113,7 +119,8 @@ interface Terrace {
  * pavement, out in front of them during their hours in dry weather (`terraceWeather`, the rule the
  * chatter's sound goes by too); outside those hours or in the rain the chairs are stacked on the
  * tables pushed against the wall, chained. Each layout is merged per material (metal, table tops,
- * rattan), and switches only while the player is not close by. The tables collide as laid out
+ * rattan), and switches while the player is not close by or, in their sight, once the waiter has been round the
+ * tables laying them out or stacking the chairs. The tables collide as laid out
  * (their boxes go in and out of the zone's collision set). Customers come and go: as many as the
  * hour is busy walk up from the pavement to a free chair and sit, the waiter (by the door between
  * rounds) brings their cup, and after a while they get up and walk off along the pavement; all go
@@ -153,7 +160,7 @@ export class Terraces extends THREE.Group implements Furniture, Updatable {
       const terrace = this.build(spec);
       const count = Math.min(spec.customers, options.maxCustomers ?? spec.customers);
       for (let i = 0; i < count; i++) {
-        terrace.customers.push({ figure: person('Customer · say hello', 'terrace', false), state: 'away', seat: null, stay: 0, serve: 0 });
+        terrace.customers.push({ figure: person('Customer · say hello', 'terrace', false), state: 'away', seat: null, stay: 0, serve: 0, sip: null });
       }
       // The waiter, by the door between rounds (not on low quality: `maxCustomers`).
       const door = this.doorOf(spec);
@@ -194,6 +201,13 @@ export class Terraces extends THREE.Group implements Furniture, Updatable {
     if (!active) return;
     this.fresh = true;
     this.clock = CHECK_EVERY;
+    // A round of the tables left half done: finished while nobody was looking.
+    for (const t of this.terraces) {
+      if (!t.tidy) continue;
+      this.setOpen(t, t.tidy.open);
+      t.tidy = null;
+      if (t.waiter) t.waiter.busy = false;
+    }
   }
 
   dispose(): void {
@@ -212,7 +226,11 @@ export class Terraces extends THREE.Group implements Furniture, Updatable {
       this.worldToLocal(this.local);
       for (const t of this.terraces) {
         const wanted = terraceOut(t.spec.hours, s);
-        if (wanted !== t.isOpen && (this.fresh || this.local.distanceTo(t.centre) > UNSEEN)) this.setOpen(t, wanted);
+        if (wanted !== t.isOpen && !t.tidy) {
+          if (this.fresh || this.local.distanceTo(t.centre) > UNSEEN) this.setOpen(t, wanted);
+          // In sight: the waiter goes round the tables first (laying them out, or stacking the chairs), then it changes.
+          else if (!wanted || this.seated(this.terraces.indexOf(t)) === 0) this.startTidy(t, wanted);
+        }
         const open = t.isOpen && wanted && terraceWeather(s);
         this.tendCustomers(t, open ? Math.max(1, Math.round(t.customers.length * (0.35 + 0.65 * busy))) : 0, this.fresh);
         this.tendWaiter(t, open);
@@ -220,6 +238,7 @@ export class Terraces extends THREE.Group implements Furniture, Updatable {
       this.fresh = false;
     }
     for (const t of this.terraces) {
+      if (t.tidy && t.tidy.wait > 0 && (t.tidy.wait -= dt) <= 0) this.tidyNext(t);
       const w = t.waiter;
       if (w && w.wait > 0 && (w.wait -= dt) <= 0 && w.figure.shown) {
         w.figure.walker.walk([w.home.clone()], () => {
@@ -232,6 +251,10 @@ export class Terraces extends THREE.Group implements Furniture, Updatable {
           c.stay -= dt;
           // The waiter busy at another table: asked again a moment later (else the cup never comes).
           if (c.serve > 0 && (c.serve -= dt) <= 0 && !this.callWaiter(t, c)) c.serve = 2;
+          if (c.sip !== null && (c.sip -= dt) <= 0) {
+            c.sip = within(random, SIP_EVERY);
+            c.figure.walker.gesture('sip');
+          }
         }
         c.figure.update(dt, this.eye, this.options.drawDistance, this.options.fade);
       }
@@ -267,10 +290,13 @@ export class Terraces extends THREE.Group implements Furniture, Updatable {
     c.seat = seat;
     c.stay = within(random, STAY);
     c.serve = instantly ? 0 : within(random, SERVED_AFTER);
+    c.sip = null;
     const walker = c.figure.walker;
     const sit = (): void => {
       c.state = 'seated';
       walker.sit(seat.yaw, CHAIR.seat, 'lap');
+      // Sat down to a cup already there (the terrace found full): it is in the hand.
+      if (instantly) this.served(c);
     };
     if (instantly) {
       c.figure.show(seat.at.clone(), true);
@@ -286,11 +312,19 @@ export class Terraces extends THREE.Group implements Furniture, Updatable {
     walker.walk([lane, seat.at.clone()], sit);
   }
 
+  /** Their cup has come: in the hand, a sip now and then. */
+  private served(c: Customer): void {
+    c.figure.walker.hold('cup');
+    c.sip = within(random, SIP_EVERY) * 0.5;
+  }
+
   private leave(t: Terrace, c: Customer): void {
     const seat = c.seat;
     c.state = 'leaving';
     c.seat = null;
+    c.sip = null;
     const walker = c.figure.walker;
+    walker.hold(null);
     if (!seat) {
       c.figure.hide();
       return;
@@ -307,10 +341,63 @@ export class Terraces extends THREE.Group implements Furniture, Updatable {
     });
   }
 
+  /** Where the seated customers' tables are (zone-local): what the pigeons hop under for crumbs. */
+  crumbs(): THREE.Vector3[] {
+    const out: THREE.Vector3[] = [];
+    for (const t of this.terraces) {
+      if (!t.isOpen) continue;
+      for (const c of t.customers) if (c.state === 'seated' && c.seat) out.push(c.seat.table);
+    }
+    return out;
+  }
+
+  /**
+   * The terrace changes in the player's sight: the waiter comes out and goes round its tables (a moment at each, a
+   * tidy of the chairs), then it is laid out or stacked. With no waiter (fewer people) it waits until unseen.
+   */
+  private startTidy(t: Terrace, open: boolean): void {
+    const w = t.waiter;
+    if (!w || w.busy) return;
+    const side = Math.sign(t.spec.from[1]);
+    const tables: THREE.Vector3[] = [];
+    for (const seat of t.seats) if (!tables.some((p) => p.distanceTo(seat.table) < 0.3)) tables.push(seat.table.clone().add(new THREE.Vector3(0, 0, -side * 0.55)));
+    t.tidy = { tables, open, wait: 0 };
+    w.busy = true;
+    if (!w.figure.shown) {
+      w.figure.show(w.home.clone());
+      w.figure.walker.stand(w.yaw, 'stand');
+    }
+    this.tidyNext(t);
+  }
+
+  /** The next table of the round, or the change once they are all done (and back to the door, or in). */
+  private tidyNext(t: Terrace): void {
+    const w = t.waiter!;
+    const tidy = t.tidy!;
+    const next = tidy.tables.shift();
+    const walker = w.figure.walker;
+    if (!next) {
+      this.setOpen(t, tidy.open);
+      t.tidy = null;
+      walker.walk([w.home.clone()], () => {
+        walker.stand(w.yaw, 'hips');
+        w.busy = false;
+        if (!tidy.open) w.figure.hide();
+      });
+      return;
+    }
+    walker.walk([next], () => {
+      walker.stand(walker.rotation.y, 'stand');
+      walker.gesture('straighten');
+      w.wait = 0;
+      tidy.wait = AT_TABLE;
+    });
+  }
+
   /** The waiter: by the door while the terrace is out, gone in when it shuts. */
   private tendWaiter(t: Terrace, open: boolean): void {
     const w = t.waiter;
-    if (!w) return;
+    if (!w || t.tidy) return;
     if (open && !w.figure.shown) {
       w.figure.show(w.home.clone(), this.fresh);
       w.figure.walker.stand(w.yaw, 'hips');
@@ -325,7 +412,10 @@ export class Terraces extends THREE.Group implements Furniture, Updatable {
   private callWaiter(t: Terrace, c: Customer): boolean {
     const w = t.waiter;
     const seat = c.seat;
-    if (!w || !seat) return true;
+    if (!w || !seat) {
+      this.served(c);
+      return true;
+    }
     if (w.busy || !w.figure.shown) return false;
     w.busy = true;
     const walker = w.figure.walker;
@@ -336,6 +426,7 @@ export class Terraces extends THREE.Group implements Furniture, Updatable {
       walker.stand(Math.atan2(seat.at.x - spot.x, seat.at.z - spot.z), 'stand');
       walker.gesture('nudge');
       c.figure.walker.react('good');
+      this.served(c);
       w.wait = AT_TABLE;
     });
     return true;
@@ -389,7 +480,7 @@ export class Terraces extends THREE.Group implements Furniture, Updatable {
     const closed = this.merge(closedParts);
     open.visible = false;
     this.add(open, closed);
-    return { spec, open, closed, isOpen: false, openBoxes, closedBoxes, seats, customers: [], waiter: null, centre: new THREE.Vector3((lo + hi) / 2, 0, z) };
+    return { spec, open, closed, isOpen: false, openBoxes, closedBoxes, seats, customers: [], waiter: null, centre: new THREE.Vector3((lo + hi) / 2, 0, z), tidy: null };
   }
 
   private merge(parts: Record<Finish, THREE.BufferGeometry[]>): THREE.Group {

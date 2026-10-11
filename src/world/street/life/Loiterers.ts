@@ -8,6 +8,8 @@ import { randomLook } from '../../people/looks';
 import { isShopOpen } from '../shops/shopHours';
 import type { ShopKind, Vec2 } from '../streetPlan';
 import { Figure } from './Figure';
+import { rainGear, umbrellaWeather } from './streetLook';
+import { WALKABLE, WORKS } from '@/world/measures/street';
 import type { TalkRole } from './streetTalk';
 import { random, within } from '@/random';
 
@@ -22,6 +24,8 @@ export interface LoiterSpec {
   shop?: ShopKind;
   /** Only in dry weather. */
   dry?: boolean;
+  /** On the stretch past the first works: only once they have moved on. */
+  stretch?: boolean;
 }
 
 interface LoiterersOptions {
@@ -40,6 +44,8 @@ const BREAK = [20, 70] as const;
 /** Seconds between two looks at the clock; a word between them every few seconds. */
 const CHECK_EVERY = 1;
 const CHAT_EVERY = [2.5, 6] as const;
+/** A smoker takes a draw every this many seconds (one of the group). */
+const PUFF_EVERY = [5, 14] as const;
 /** A stranger's caption shows only this close. */
 const LABEL_WITHIN = 4;
 
@@ -53,6 +59,10 @@ interface Group {
   chat: number;
   /** The first look after activation: whoever is due is there already. */
   fresh: boolean;
+  /** Dressed for rain when last looked. */
+  wet: boolean;
+  /** Seconds to the next draw on a cigarette (the smokers). */
+  puff: number;
 }
 
 /**
@@ -94,7 +104,7 @@ export class Loiterers extends THREE.Group implements Furniture, Updatable {
         options.place(walker, new THREE.Vector3());
         return new Figure(walker);
       });
-      this.groups.push({ spec, figures, centre, there: false, clock: 0, chat: 1, fresh: true });
+      this.groups.push({ spec, figures, centre, there: false, clock: 0, chat: 1, fresh: true, wet: false, puff: within(random, PUFF_EVERY) });
     }
   }
 
@@ -112,6 +122,7 @@ export class Loiterers extends THREE.Group implements Furniture, Updatable {
     this.options.viewer.getWorldPosition(this.eye);
     const s = this.dayNight.state;
     this.checkClock += dt;
+    const wet = umbrellaWeather(s);
     const check = this.checkClock >= CHECK_EVERY;
     if (check) this.checkClock = 0;
     for (const g of this.groups) {
@@ -123,11 +134,15 @@ export class Loiterers extends THREE.Group implements Furniture, Updatable {
         g.fresh = false;
       }
       if (g.there) this.talk(g, dt);
+      if (g.there && g.spec.kind === 'smokers' && (g.puff -= dt) <= 0) this.puff(g);
+      // The weather turned: umbrellas up (or down), the smokers' cigarettes kept.
+      if (g.there && wet !== g.wet) this.dress(g);
       for (const f of g.figures) f.update(dt, this.eye, this.options.drawDistance, this.options.fade);
     }
   }
 
   private due(spec: LoiterSpec, hours: number, rain: number): boolean {
+    if (spec.stretch && WALKABLE.maxX <= WORKS.front + 4) return false;
     const [from, to] = spec.hours;
     const h = hours < from && hours + 24 < to ? hours + 24 : hours;
     if (h < from || h >= to) return false;
@@ -145,8 +160,26 @@ export class Loiterers extends THREE.Group implements Furniture, Updatable {
       const yaw = Math.atan2(g.centre.x - x, g.centre.z - z);
       const smoker = g.spec.kind === 'smokers';
       f.walker.stand(yaw, smoker ? (i % 2 ? 'crossed' : 'stand') : i % 2 ? 'pockets' : 'hips');
-      f.walker.hold(smoker && i % 2 === 0 ? 'cigarette' : null);
     });
+    this.dress(g);
+  }
+
+  /** What is in their hands for the weather: the smokers' cigarettes (a hood in a downpour), umbrellas up for the rest in the rain. */
+  private dress(g: Group): void {
+    const sky = this.dayNight.state;
+    g.wet = umbrellaWeather(sky);
+    const smoker = g.spec.kind === 'smokers';
+    g.figures.forEach((f, i) => {
+      const cigarette = smoker && i % 2 === 0;
+      rainGear(f.walker, sky, cigarette ? 'cigarette' : null, cigarette);
+    });
+  }
+
+  /** One of the smokers takes a draw (those with a cigarette: every other one). */
+  private puff(g: Group): void {
+    g.puff = within(random, PUFF_EVERY);
+    const smokers = g.figures.filter((_, i) => i % 2 === 0);
+    smokers[Math.floor(random() * smokers.length)]?.walker.gesture('smokePuff');
   }
 
   private go(g: Group): void {

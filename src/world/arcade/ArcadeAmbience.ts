@@ -3,6 +3,7 @@ import { audioBus, startedAudioContext } from '@/audio/audioContext';
 import { CrowdMurmur } from '@/audio/CrowdMurmur';
 import type { OccupancyAware } from '../Furniture';
 import { Prop } from '../props/Prop';
+import { easeDuck } from './hallDuck';
 
 /**
  * Murmur level while the player is in the hall (the market's is louder: this is a quieter crowd): silent with nobody
@@ -21,13 +22,16 @@ const HUM: [frequency: number, level: number][] = [
  * (`CrowdMurmur`, kept low) and the hum of forty power supplies and a lot of neon. Runs only while
  * the player is in the arcade (`setOccupied`), and only once a gesture has started the page's
  * audio (it never starts it). The murmur follows how busy the hall is (`busy`, 0..1: the evening
- * crowd is louder than the morning's, an empty hall only hums). An empty `Prop`; place anywhere in the zone.
+ * crowd is louder than the morning's, an empty hall only hums) and drops about 6 dB while the player is at a
+ * machine (`hallDuck`). An empty `Prop`; place anywhere in the zone.
  */
 export class ArcadeAmbience extends Prop implements Updatable, OccupancyAware {
   private readonly murmur = new CrowdMurmur();
   private hum: { gain: GainNode; oscillators: OscillatorNode[] } | null = null;
   private occupied = false;
   private level = -1;
+  /** The level the hall's duck has the murmur at (1: full). */
+  private duck = 1;
 
   constructor(private readonly busy: () => number = () => 0.5) {
     super();
@@ -40,14 +44,16 @@ export class ArcadeAmbience extends Prop implements Updatable, OccupancyAware {
   }
 
   update(dt: number): void {
+    this.duck = easeDuck(this.duck, dt);
     if (this.occupied && !this.hum) this.apply();
     if (this.occupied && Math.abs(this.murmurLevel() - this.level) > 0.02) this.apply();
     this.murmur.update(dt);
   }
 
+  /** The murmur's level: how busy the hall is, lower while the player is at a machine (`hallDuck`). */
   private murmurLevel(): number {
     const busy = this.busy();
-    return Number.isFinite(busy) ? MURMUR.full * Math.sqrt(Math.min(1, Math.max(0, busy))) : 0;
+    return Number.isFinite(busy) ? MURMUR.full * Math.sqrt(Math.min(1, Math.max(0, busy))) * this.duck : 0;
   }
 
   dispose(): void {

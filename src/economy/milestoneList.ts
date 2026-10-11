@@ -2,6 +2,7 @@ import type { Game, PlatformId } from '@/catalog/types';
 import { getPlatform } from '@/catalog/platforms';
 import { COLLECTOR_SETS, setProgress } from './collectorSets';
 import { isGrail } from './grails';
+import { streetMarkCount, streetMarked } from '@/social/street/streetMarks';
 import { MILESTONE_REWARD } from './pricing';
 
 /** Something the collector's book brings home besides coins: the brass plaque, the glass display cabinet. */
@@ -19,8 +20,23 @@ export interface CollectorFacts {
   sales: number;
   /** Weekly leagues won (the pennants). */
   pennants: number;
+  /** The arcade's other feats, when the arcade is wired. */
+  arcade?: ArcadeFacts;
   /** The collection's estimated value (`collectionValue`'s market estimate). */
   value: number;
+}
+
+/** The arcade's feats beyond medals and pennants, as the book counts them. */
+export interface ArcadeFacts {
+  /** Saturday tournaments won. */
+  cups: number;
+  /** Machines the player holds the gold of, and whether that is every one (the hall's tour). */
+  golds: number;
+  tour: boolean;
+  /** The wheel's jackpot hit, plushes won at the claw, tables the player tops. */
+  jackpots: number;
+  plush: number;
+  records: number;
 }
 
 /** How far along a milestone is: `have` of `need`, and a word on it for the book ("best: NES"). */
@@ -122,11 +138,25 @@ export const MILESTONES: readonly Milestone[] = [
   count('medal-1', 'On the podium', 'Win a medal on an arcade machine.', 1, (facts) => facts.medals),
   count('medals-10', 'Medal cabinet', 'Hold 10 arcade medals.', 10, (facts) => facts.medals),
   count('league-1', 'League champion', 'Win a week of the arcade’s league.', 1, (facts) => facts.pennants),
+  count('arcade-record-1', 'Top of the table', 'Be first on a table of the arcade’s hall of fame.', 1, (facts) => facts.arcade?.records ?? 0),
+  count('arcade-plush-1', 'Claw master', 'Win a plush at the arcade’s claw.', 1, (facts) => facts.arcade?.plush ?? 0),
+  count('arcade-jackpot-1', 'Jackpot!', 'Hit the jackpot on the arcade’s ticket wheel.', 1, (facts) => facts.arcade?.jackpots ?? 0),
+  count('arcade-cup-1', 'Saturday champion', 'Win the arcade’s Saturday tournament.', 1, (facts) => facts.arcade?.cups ?? 0),
+  count('arcade-golds-5', 'Golden touch', 'Hold the gold medal on 5 arcade machines.', 5, (facts) => facts.arcade?.golds ?? 0),
+  count('arcade-tour', 'The hall’s tour', 'Gold on every machine of the arcade.', 1, (facts) => (facts.arcade?.tour ? 1 : 0)),
   count('deal-1', 'Haggler', 'Strike a deal by haggling at the market.', 1, (facts) => facts.deals),
   count('sale-1', 'Dealer', 'Sell a game: the WE BUY desk, or a wanted card.', 1, (facts) => facts.sales),
   count('value-1000', 'Worth a bit', 'A collection worth 1,000 coins.', 1000, (facts) => facts.value),
   count('value-5000', 'Worth a fortune', 'A collection worth 5,000 coins.', 5000, (facts) => facts.value),
   count('grail-1', 'Holy grail', 'Own one of the grails: a game so rare it only comes to the market on a day of its own.', 1, (facts) => owned(facts).filter((g) => isGrail(g.id)).length),
+  // Front Street's moments (`social/street/streetMarks`): kept once each, read here as they stand.
+  count('street-cat', 'Home again', 'Win the stray’s trust all the way, and let him follow you home.', 1, () => (streetMarked('strayHome') ? 1 : 0)),
+  count('street-scratch', 'Three sevens', 'Win the top line of a PIXEL SCRATCH card.', 1, () => (streetMarked('scratchBig') ? 1 : 0)),
+  count('street-garage', 'Loft find', 'Buy a game off a garage sale’s table.', 1, () => (streetMarked('garageFind') ? 1 : 0)),
+  count('street-felix', 'Bought back', 'Buy one of Félix’s copies back from Victor’s suitcase.', 1, () => (streetMarked('felixFromVictor') ? 1 : 0)),
+  count('street-favour', 'Good neighbour', 'Do a favour for someone behind the bells of Park Corner Mansions.', 1, () => (streetMarked('mansionFavour') ? 1 : 0)),
+  count('street-wager', 'A bet is a bet', 'Win a wager against Victor Crane.', 1, () => (streetMarked('wagerWon') ? 1 : 0)),
+  count('street-secrets', 'Street wise', 'Find Front Street’s three secrets.', 3, () => streetMarkCount('secret:')),
 ];
 
 /** Whether `milestone` is reached by `facts`. */

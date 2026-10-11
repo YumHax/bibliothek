@@ -89,6 +89,21 @@ export const WALKABLE_AREAS: readonly Area[] = [
   PARK_WALK,
 ];
 
+/** Where Front Street's closure stands on market day `gameDay` (x): `WORKS.front`, then `WORKS_LIFT.front` once the works moved on. */
+export function frontWorksOn(gameDay: number): number {
+  return gameDay >= WORKS_LIFT.afterGameDay ? WORKS_LIFT.front : WORKS.front;
+}
+
+/**
+ * Whether a zone-local floor point is the street's walked ground on market day `gameDay` (`WALKABLE_AREAS`, Front
+ * Street's end where its works stand that day): what is saved and restored across a reload beyond the zone's box (the
+ * park's gardens, the stretch the works opened), and whose current zone stays the street there.
+ */
+export function onWalkedGround(x: number, z: number, gameDay: number): boolean {
+  const end = frontWorksOn(gameDay) - 0.4;
+  return WALKABLE_AREAS.some((a) => x >= a.minX && x <= (a === WALKABLE ? end : a.maxX) && z >= a.minZ && z <= a.maxZ);
+}
+
 /** Where Front Street's closure stands now (the works moved on or not): its walkable end follows (`details/roadworks.syncWorks`). */
 export function setFrontStreetEnd(worksX: number): void {
   WALKABLE.maxX = worksX - 0.4;

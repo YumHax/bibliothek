@@ -3,19 +3,13 @@ import { horn } from '@/audio/street/streetVoices';
 import type { SpatialOut } from '@/audio/spatial';
 import type { CarVoice } from '../StreetCars';
 import { falloff, type StreetEar } from './streetEar';
-import type { SoundGraph } from './soundGraph';
-import { airBrakes, bikeBell, binClatter, brakesOff, crate, doorPsst, freewheelTick, splash, vanDoor } from './vehicleCues';
+import type { SoundGraph, SoundPart } from './soundGraph';
+import { airBrakes, bikeBell, binClatter, brakeSqueal, brakesOff, carDoor, crate, doorPsst, freewheelTick, reverseBeep, splash, tyreScreech, vanDoor } from './vehicleCues';
 import { random } from '@/random';
 import { damp } from '@/math/damp';
 
 /** Which scripted vehicle a voice is, when it is one (the bus's brakes and doors, the van's crates, the lorry's bins). */
 export type VehicleRole = 'bus' | 'van' | 'lorry';
-
-/** What a road user may say beyond `CarVoice` (the cars' model, a taxi): read defensively. */
-interface VoiceExtras {
-  readonly model?: string;
-  readonly taxi?: boolean;
-}
 
 /** How an engine sounds: its wave, idle pitch (Hz), how far it revs over a gear, the low-pass that is its body, its level. */
 interface Character {
@@ -49,33 +43,48 @@ const CHARACTERS: Record<string, Character> = {
 const SOUND_SPEED = 343;
 /** Below this (m/s) a vehicle is standing. */
 const STANDING = 0.05;
+/** A voice nobody drives for this long (s) lets its sources go; they are made again when a car is lent it. */
+const IDLE_RELEASE = 1.2;
+/** Slowing harder than this (m/s²) from above `SQUEAL_FROM` m/s may squeal the brakes; harder than `SKID_AT`, the tyres skid. */
+const BRAKING = { squealAt: 3.2, squealFrom: 3, skidAt: 7, squealChance: 0.3, heavySquealChance: 0.75 };
+/** A reversing lorry's, bus's or van's beeper: one pip a second. */
+const BEEP_EVERY = 1;
+
+/** What a voice keeps sounding while a car is lent it: its sources, made on demand (`SoundPart`). */
+interface Nodes {
+  part: SoundPart;
+  leg: SpatialOut;
+  level: GainNode;
+  tyres: BiquadFilterNode;
+  tyreGain: GainNode;
+  splashGain: GainNode;
+  /** The engine, none for a bike. */
+  engine: { osc: OscillatorNode; second: OscillatorNode; secondGain: GainNode; body: BiquadFilterNode; gain: GainNode } | null;
+  /** The gearbox's whine in reverse. */
+  reverse: { osc: OscillatorNode; gain: GainNode } | null;
+  /** The lorry's compactor. */
+  whine: { osc: OscillatorNode; gain: GainNode } | null;
+}
 
 /**
- * One road user's sound where it is: its tyres on the road (hissier wet, with a swish through
+ * One road user's sound where it is (its sources made only while a car is lent it, `SoundPart`): its tyres on the road (hissier wet, with a swish through
  * the puddles), its engine by what it is (a hatch's buzz, a saloon's hum, a diesel van's or taxi's
  * clatter, the bus's and lorry's deep diesel, a scooter's two-stroke, a motorbike's growl; a bike
  * has none, its freewheel ticking while it coasts and its bell rung when it has to brake), the
  * engine revving up each gear and dropping at the change, all shifted by its approach (Doppler),
  * louder near, to its side and duller behind. Its horn when the driver loses patience (`honks`).
  * The scripted vehicles' moments: the bus's air brakes, doors and release, the van's back doors
- * and crates, the bin lorry's compactor and bins.
+ * and crates, the bin lorry's compactor and bins. What `CarVoice` tells of the driving: brakes squealing now and then
+ * as it pulls up hard (a skid on a sudden stop), the gearbox whining in reverse (and the beeper of the heavy ones and
+ * vans), a door shut as someone gets in or out (`doorSlams`).
  */
 export class VehicleVoice {
-  private readonly leg: SpatialOut;
-  private readonly level: GainNode;
-  private readonly tyres: BiquadFilterNode;
-  private readonly tyreGain: GainNode;
-  private readonly splashGain: GainNode;
-  private readonly engine: OscillatorNode;
-  private readonly second: OscillatorNode;
-  private readonly secondGain: GainNode;
-  private readonly body: BiquadFilterNode;
-  private readonly engineGain: GainNode;
-  private readonly whine: OscillatorNode | null = null;
-  private readonly whineGain: GainNode | null = null;
+  private nodes: Nodes | null = null;
+  private idleFor = 0;
   private character: Character;
   private kindKey = '';
   private honks: number;
+  private doors: number;
   private distance = -1;
   private closing = 0;
   private lastSpeed = 0;
@@ -90,6 +99,8 @@ export class VehicleVoice {
   private tickClock = 0;
   private bellCooldown = 5;
   private wasAtStop = false;
+  private wasBraking = false;
+  private beepClock = 0;
   private readonly world = new THREE.Vector3();
 
   constructor(
@@ -101,43 +112,76 @@ export class VehicleVoice {
   ) {
     this.character = CHARACTERS.hatch!;
     this.honks = voice.honks;
-    this.leg = g.leg();
-    this.level = g.gain();
-    this.level.connect(this.leg.input);
-    this.tyres = g.filter('bandpass', 800, 0.6);
-    this.tyreGain = g.gain(1);
-    g.loop().connect(this.tyres).connect(this.tyreGain).connect(this.level);
-    this.splashGain = g.gain();
-    g.loop().connect(g.filter('highpass', 2400, 0.7)).connect(this.splashGain).connect(this.level);
-    this.body = g.filter('lowpass', 260, 0.8);
-    this.engineGain = g.gain();
-    this.engine = g.oscillator('sawtooth', 40);
-    this.engine.connect(this.body);
-    this.second = g.oscillator('triangle', 80);
-    this.secondGain = g.gain();
-    this.second.connect(this.secondGain).connect(this.body);
-    this.body.connect(this.engineGain).connect(this.level);
-    if (role === 'lorry') {
-      this.whine = g.oscillator('sawtooth', 170);
-      this.whineGain = g.gain();
-      this.whine.connect(g.filter('bandpass', 900, 2)).connect(this.whineGain).connect(this.level);
+    this.doors = voice.doorSlams ?? 0;
+  }
+
+  /** The sources for what is driving now: tyres and spray for all, an engine unless it is a bike, a gearbox, the lorry's compactor. */
+  private build(): Nodes {
+    const part = this.g.part();
+    const leg = part.leg();
+    const level = part.gain();
+    level.connect(leg.input);
+    const tyres = part.filter('bandpass', 800, 0.6);
+    const tyreGain = part.gain(1);
+    part.loop().connect(tyres).connect(tyreGain).connect(level);
+    const splashGain = part.gain();
+    part.loop().connect(part.filter('highpass', 2400, 0.7)).connect(splashGain).connect(level);
+    const c = this.character;
+    let engine: Nodes['engine'] = null;
+    let reverse: Nodes['reverse'] = null;
+    if (this.kindKey !== 'bike') {
+      const body = part.filter('lowpass', c.body, 0.8);
+      const gain = part.gain();
+      const osc = part.oscillator(c.wave, c.idle);
+      osc.connect(body);
+      const second = part.oscillator('triangle', c.idle * c.ratio);
+      const secondGain = part.gain(c.second);
+      second.connect(secondGain).connect(body);
+      body.connect(gain).connect(level);
+      engine = { osc, second, secondGain, body, gain };
+      const rev = part.oscillator('sine', 700);
+      const revGain = part.gain();
+      rev.connect(part.filter('bandpass', 900, 3)).connect(revGain).connect(level);
+      reverse = { osc: rev, gain: revGain };
     }
+    let whine: Nodes['whine'] = null;
+    if (this.role === 'lorry') {
+      const osc = part.oscillator('sawtooth', 170);
+      const gain = part.gain();
+      osc.connect(part.filter('bandpass', 900, 2)).connect(gain).connect(level);
+      whine = { osc, gain };
+    }
+    return { part, leg, level, tyres, tyreGain, splashGain, engine, reverse, whine };
+  }
+
+  private release(): void {
+    this.nodes?.part.release();
+    this.nodes = null;
   }
 
   update(dt: number, ear: StreetEar, toWorld: (local: THREE.Vector3) => THREE.Vector3, sky: { wetness: number }, occupied: boolean, busAtStop: boolean): void {
     const g = this.g;
     const now = g.now;
     const voice = this.voice;
-    this.recharacter();
-    const c = this.character;
     if (!voice.active) {
-      this.level.gain.setTargetAtTime(0, now, 0.15);
       this.distance = -1;
       this.standingFor = 0;
       this.honks = voice.honks;
-      this.setWhine(false, now);
+      this.doors = voice.doorSlams ?? 0;
+      this.wasBraking = false;
+      if (this.nodes) {
+        this.nodes.level.gain.setTargetAtTime(0, now, 0.15);
+        this.setWhine(false, now);
+        this.idleFor += dt;
+        if (this.idleFor > IDLE_RELEASE) this.release();
+      }
       return;
     }
+    this.idleFor = 0;
+    // A bike has no engine: a slot changing between a bike and a motor vehicle is made again.
+    if (this.recharacter() && this.nodes && (this.nodes.engine === null) !== (this.kindKey === 'bike')) this.release();
+    const n = (this.nodes ??= this.build());
+    const c = this.character;
     toWorld(this.world.copy(voice.position));
     const d = Math.max(0.5, ear.distance(this.world));
     // The approach, smoothed over a few frames: what shifts the pitch.
@@ -147,20 +191,28 @@ export class VehicleVoice {
     const doppler = SOUND_SPEED / (SOUND_SPEED + this.closing);
     const speed = voice.speed;
     const near = falloff(d, c.reach);
-    this.level.gain.setTargetAtTime(c.presence * (1 + speed / 9) * near * 0.5, now, 0.12);
+    n.level.gain.setTargetAtTime(c.presence * (1 + speed / 9) * near * 0.5, now, 0.12);
     const side = ear.spatial(this.world);
-    this.leg.set(side.pan, 0, false, side.rear ?? 0);
+    n.leg.set(side.pan, side.walls, false, side.rear ?? 0);
+    const reversing = voice.reversing === true && speed > STANDING;
 
-    // The engine: up each gear and down at the change; idling when it stands.
-    const pitch = c.idle * (1 + 0.06 * (this.tint - 0.5)) * (1 + c.rev * gearFraction(speed, c.gears)) * doppler;
-    this.engine.frequency.setTargetAtTime(pitch, now, 0.12);
-    this.second.frequency.setTargetAtTime(pitch * c.ratio, now, 0.12);
-    this.engineGain.gain.setTargetAtTime(c.level * (speed < STANDING ? 0.7 : 1), now, 0.2);
+    // The engine: up each gear and down at the change; idling when it stands; held in first, whining, in reverse.
+    if (n.engine) {
+      const gear = reversing ? 0.2 + Math.min(0.6, speed / 3) : gearFraction(speed, c.gears);
+      const pitch = c.idle * (1 + 0.06 * (this.tint - 0.5)) * (1 + c.rev * gear) * doppler;
+      n.engine.osc.frequency.setTargetAtTime(pitch, now, 0.12);
+      n.engine.second.frequency.setTargetAtTime(pitch * c.ratio, now, 0.12);
+      n.engine.gain.gain.setTargetAtTime(c.level * (speed < STANDING ? 0.7 : 1), now, 0.2);
+    }
+    if (n.reverse) {
+      n.reverse.gain.gain.setTargetAtTime(reversing ? 0.05 : 0, now, 0.15);
+      if (reversing) n.reverse.osc.frequency.setTargetAtTime((520 + speed * 380) * doppler, now, 0.1);
+    }
     // The tyres: hissier and higher wet, a swish of spray at speed.
     const wet = sky.wetness;
-    this.tyres.frequency.setTargetAtTime((700 + wet * 1600 + speed * 40) * doppler, now, 0.3);
-    this.tyreGain.gain.setTargetAtTime(c.tyres * Math.min(1, 0.2 + speed / 6), now, 0.2);
-    this.splashGain.gain.setTargetAtTime(0.6 * wet * Math.min(1, speed / 7) * c.tyres, now, 0.3);
+    n.tyres.frequency.setTargetAtTime((700 + wet * 1600 + speed * 40) * doppler, now, 0.3);
+    n.tyreGain.gain.setTargetAtTime(c.tyres * Math.min(1, 0.2 + speed / 6), now, 0.2);
+    n.splashGain.gain.setTargetAtTime(0.6 * wet * Math.min(1, speed / 7) * c.tyres, now, 0.3);
 
     const out = (seconds: number): AudioNode => this.g.shot(ear.spatial(this.world), seconds);
     const heard = near * (1 + speed / 9);
@@ -170,10 +222,25 @@ export class VehicleVoice {
       else this.horn(out(2), heard);
     }
     this.honks = voice.honks;
+    // Its doors: someone getting in or out (a taxi's fare, a driver back at a parked car).
+    const doors = voice.doorSlams ?? 0;
+    if (doors > this.doors && occupied && d < 30) carDoor(g, out(1.2), Math.min(1, falloff(d, 6) * 1.5), this.kindKey === 'diesel' && voice.model === 'van');
+    this.doors = doors;
     if (!occupied) {
       this.lastSpeed = speed;
+      this.wasBraking = voice.braking === true;
       return;
     }
+
+    this.braking(dt, speed, d, wet, out, heard);
+    // Backing up: the heavy ones and the vans beep.
+    if (reversing && (this.role !== null || voice.kind === 'van' || voice.model === 'van')) {
+      this.beepClock -= dt;
+      if (this.beepClock <= 0) {
+        this.beepClock = BEEP_EVERY;
+        if (d < 45) reverseBeep(g, out(0.6), heard);
+      }
+    } else this.beepClock = 0;
 
     // Standing and setting off.
     const standing = speed < STANDING;
@@ -205,10 +272,24 @@ export class VehicleVoice {
     this.lastSpeed = speed;
   }
 
-  /** Its character from what it is (it can change: a car slot is a new car each time round). */
-  private recharacter(): void {
+  /** Pulling up: now and then the brakes squeal (the heavy ones more often); a sudden stop from speed skids the tyres. */
+  private braking(dt: number, speed: number, d: number, wet: number, out: (seconds: number) => AudioNode, heard: number): void {
+    const braking = this.voice.braking === true;
+    const decel = dt > 0 ? (this.lastSpeed - speed) / dt : 0;
+    if (braking && !this.wasBraking && this.kindKey !== 'bike' && d < 40) {
+      if (decel > BRAKING.skidAt && this.lastSpeed > 5) tyreScreech(this.g, out(1.2), Math.min(1, heard * 1.5), wet);
+      else if (decel > BRAKING.squealAt && this.lastSpeed > BRAKING.squealFrom) {
+        const heavy = this.kindKey === 'heavy';
+        if (random() < (heavy ? BRAKING.heavySquealChance : BRAKING.squealChance) * (1 - 0.6 * wet)) brakeSqueal(this.g, out(1.2), heard, heavy);
+      }
+    }
+    this.wasBraking = braking;
+  }
+
+  /** Its character from what it is (it can change: a car slot is a new car each time round); true when it changed. */
+  private recharacter(): boolean {
     const kind: string = this.voice.kind;
-    const extras = this.voice as CarVoice & VoiceExtras;
+    const model = this.voice.model;
     let key: string;
     if (kind === 'bus' || kind === 'lorry' || kind === 'fire') key = 'heavy';
     // Traffic's kinds (`StreetCars.VehicleKind`): a courier rides a scooter with a box, 'moto' is a motorbike.
@@ -216,15 +297,19 @@ export class VehicleVoice {
     else if (kind === 'courier') key = 'scooter';
     else if (kind === 'moto' || kind === 'motorbike') key = 'motorbike';
     else if (kind === 'police') key = 'saloon';
-    else if (kind === 'van' || kind === 'ambulance' || extras.model === 'van' || extras.taxi) key = 'diesel';
-    else key = extras.model === 'saloon' ? 'saloon' : 'hatch';
-    if (key === this.kindKey) return;
+    else if (kind === 'van' || kind === 'ambulance' || model === 'van' || this.voice.taxi) key = 'diesel';
+    else key = model === 'saloon' ? 'saloon' : 'hatch';
+    if (key === this.kindKey) return false;
     this.kindKey = key;
     this.character = CHARACTERS[key] ?? CHARACTERS.hatch!;
-    const now = this.g.now;
-    this.engine.type = this.character.wave;
-    this.body.frequency.setTargetAtTime(this.character.body, now, 0.05);
-    this.secondGain.gain.setTargetAtTime(this.character.second, now, 0.05);
+    const engine = this.nodes?.engine;
+    if (engine) {
+      const now = this.g.now;
+      engine.osc.type = this.character.wave;
+      engine.body.frequency.setTargetAtTime(this.character.body, now, 0.05);
+      engine.secondGain.gain.setTargetAtTime(this.character.second, now, 0.05);
+    }
+    return true;
   }
 
   /** Just pulled up. */
@@ -268,9 +353,10 @@ export class VehicleVoice {
   }
 
   private setWhine(on: boolean, now: number, heard = 0): void {
-    if (!this.whine || !this.whineGain) return;
-    this.whineGain.gain.setTargetAtTime(on ? 0.1 * heard : 0, now, 0.5);
-    if (on) this.whine.frequency.setTargetAtTime(170 + 70 * (0.5 + 0.5 * Math.sin(now * 0.8)), now, 0.3);
+    const whine = this.nodes?.whine;
+    if (!whine) return;
+    whine.gain.gain.setTargetAtTime(on ? 0.1 * heard : 0, now, 0.5);
+    if (on) whine.osc.frequency.setTargetAtTime(170 + 70 * (0.5 + 0.5 * Math.sin(now * 0.8)), now, 0.3);
   }
 
   /** A bike: its freewheel ticking while it coasts, its bell when it has to brake near someone, now and then for nothing. */

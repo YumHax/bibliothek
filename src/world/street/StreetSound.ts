@@ -11,9 +11,13 @@ import { wakefulnessAt } from '@/time/wakefulness';
 import type { CarVoice } from './StreetCars';
 import { STREET_PLAN } from './streetPlan';
 import { RainOnRoofs } from './audio/RainOnRoofs';
+import { RainRunoff, type ParkedNow } from './audio/RainRunoff';
 import { SoundGraph } from './audio/soundGraph';
 import { StreetBirds } from './audio/StreetBirds';
+import { setStreetEcho } from './audio/streetBus';
 import { StreetEar } from './audio/streetEar';
+import { echoAround } from './audio/streetEcho';
+import { TreesAround } from './audio/treesNear';
 import { VehicleVoice, type VehicleRole } from './audio/VehicleVoice';
 import { random } from '@/random';
 
@@ -28,6 +32,8 @@ interface StreetSoundOptions {
   traffic?: { readonly busAtStop: boolean };
   /** What keeps the rain off (zone-local boxes, `Precipitation`'s): its drumming overhead. */
   shelters?: readonly THREE.Box3[];
+  /** The cars parked now (`StreetCars`): the rain ticks on their roofs. */
+  parked?: ParkedNow;
 }
 
 const MASTER = 0.5;
@@ -38,10 +44,16 @@ const SIREN_EVERY = { day: [150, 420], night: [80, 240] } as const;
 /** The distant siren's two tones (the French la, si) and how long each is held. */
 const SIREN_TONES: [number, number] = [435, 488];
 const SIREN_STEP = 0.55;
+/** How often (s) the walls' echo and the trees round the listener are worked out again. */
+const PLACE_EVERY = 0.25;
+/** The city's rumble under settled snow and in fog: how much quieter and how far its highs come down (Hz, from `RUMBLE_HZ`). */
+const RUMBLE_HZ = 320;
+const HUSH = { snow: 0.45, fog: 0.25, snowHz: 170, fogHz: 240 };
 
 /** The graph's continuous beds (rebuilt with it). */
 interface Beds {
   rumble: GainNode;
+  rumbleTone: BiquadFilterNode;
   rain: GainNode;
   rainTone: BiquadFilterNode;
   windBed: GainNode;
@@ -62,7 +74,10 @@ interface Beds {
  * the birds by season and hour (`audio/StreetBirds`: a dawn chorus, swifts on summer evenings);
  * a siren far off now and then (more at night); and the church clock beyond the park striking
  * the hours from 8:00 to 21:00. Everything goes through the street's bus (`audio/streetBus`: the
- * facades' faint echo). Only while the player is in the street (`setOccupied`); nothing before the
+ * walls' faint echo, which follows where the listener stands: `audio/streetEcho`). Under settled snow
+ * and in fog the city's rumble hushes; after rain the gutters run, a drain gurgles and drops tick on the
+ * parked cars (`audio/RainRunoff`). The birds sing from the trees round the listener (`audio/treesNear`),
+ * an owl at night. Only while the player is in the street (`setOccupied`); nothing before the
  * page's first gesture started the audio; while the zone is dormant the whole graph is let go.
  */
 export class StreetSound extends THREE.Group implements Furniture, Updatable, OccupancyAware, ActivityAware {
@@ -79,13 +94,18 @@ export class StreetSound extends THREE.Group implements Furniture, Updatable, Oc
   private readonly church = new THREE.Vector3();
   private readonly birds = new StreetBirds(() => currentSeason().name);
   private readonly roofs: RainOnRoofs;
+  private readonly runoff: RainRunoff;
+  private readonly trees = new TreesAround(30);
+  private placeClock = 0;
+  private readonly wallPoint = new THREE.Vector3();
   private readonly toWorld = (v: THREE.Vector3): THREE.Vector3 => this.localToWorld(v);
 
   constructor(private readonly dayNight: DayNight, private readonly options: StreetSoundOptions) {
     super();
     this.name = 'StreetSound';
-    this.ear = new StreetEar(options.listener);
+    this.ear = new StreetEar(options.listener, this);
     this.roofs = new RainOnRoofs(options.shelters ?? []);
+    this.runoff = new RainRunoff(options.parked ?? null);
   }
 
   get footprint(): THREE.Box3 {
@@ -117,7 +137,11 @@ export class StreetSound extends THREE.Group implements Furniture, Updatable, Oc
     const now = g.now;
     this.ear.update();
     const awake = wakefulnessAt(s.hours);
-    beds.rumble.gain.setTargetAtTime(0.06 + 0.22 * awake, now, 2);
+    // Snow lying everywhere and fog swallow the city's far traffic: quieter and duller.
+    const snowHush = THREE.MathUtils.smoothstep(s.snowCover, 0.2, 0.8);
+    const fogHush = THREE.MathUtils.smoothstep(s.fog, 0.2, 0.9);
+    beds.rumble.gain.setTargetAtTime((0.06 + 0.22 * awake) * (1 - HUSH.snow * snowHush) * (1 - HUSH.fog * fogHush), now, 2);
+    beds.rumbleTone.frequency.setTargetAtTime(RUMBLE_HZ - (RUMBLE_HZ - HUSH.snowHz) * snowHush - (RUMBLE_HZ - HUSH.fogHz) * fogHush * (1 - snowHush), now, 2);
     // The rain: the open street's hiss, duller and quieter under a roof (where the drumming takes over).
     this.local.copy(this.ear.at);
     this.worldToLocal(this.local);
@@ -125,6 +149,13 @@ export class StreetSound extends THREE.Group implements Furniture, Updatable, Oc
     const under = this.roofs.under;
     beds.rain.gain.setTargetAtTime((0.45 * s.rain + 0.08 * s.wetness * awake) * (1 - 0.55 * under), now, 0.6);
     beds.rainTone.frequency.setTargetAtTime(3000 - 1600 * under, now, 0.6);
+    this.runoff.update(dt, g, s, this.local, this.ear, this.toWorld);
+    // Where the listener stands: the walls' answer, the trees the birds sing from.
+    this.placeClock -= dt;
+    if (this.placeClock <= 0) {
+      this.placeClock = PLACE_EVERY;
+      this.place(g, under);
+    }
     // The wind, as through the windows but in the open: a band of noise rising with it, a whistle round the corners when it blows hard.
     const wind = s.wind;
     beds.windBed.gain.setTargetAtTime(0.5 * wind * wind, now, 0.6);
@@ -135,7 +166,7 @@ export class StreetSound extends THREE.Group implements Furniture, Updatable, Oc
     for (const v of beds.vehicles) v.update(dt, this.ear, this.toWorld, s, this.occupied, busAtStop);
 
     if (!this.occupied) return;
-    this.birds.update(dt, g, s, (pan, rear, seconds) => g.shot({ pan, rear, walls: 0 }, seconds));
+    this.birds.update(dt, g, s, this.trees, (perch, seconds) => g.shot(perch ? this.ear.spatial(this.localToWorld(perch)) : this.overhead(), seconds));
     // A siren far off, now and then.
     this.sirenClock -= dt;
     if (this.sirenClock <= 0) {
@@ -156,11 +187,26 @@ export class StreetSound extends THREE.Group implements Furniture, Updatable, Oc
     }
   }
 
+  /** The walls' echo round the listener (`streetEcho`, panned from where they stand) and the trees round them. */
+  private place(g: SoundGraph, under: number): void {
+    const local = this.local;
+    const { echo, walls } = echoAround(local, under);
+    const pans = walls.map((w) => this.ear.spatial(this.localToWorld(this.wallPoint.set(w.at.x, 2, w.at.y))).pan * 0.8) as [number, number];
+    setStreetEcho(g.ctx, { ...echo, pans });
+    this.trees.update(local);
+  }
+
+  /** Somewhere over the roofs round the listener (the swifts, a gutter's sparrow): a side and sometimes behind. */
+  private overhead(): { pan: number; rear: number; walls: number } {
+    return { pan: random() * 1.6 - 0.8, rear: random() < 0.3 ? 0.6 + random() * 0.4 : 0, walls: 0.1 };
+  }
+
   private teardown(): void {
     this.graph?.stop();
     this.graph = null;
     this.beds = null;
     this.roofs.reset();
+    this.runoff.reset();
   }
 
   private build(): SoundGraph | null {
@@ -171,7 +217,8 @@ export class StreetSound extends THREE.Group implements Furniture, Updatable, Oc
     const brown = brownNoise(ctx, 2);
 
     const rumble = g.gain();
-    g.loop(brown).connect(g.filter('lowpass', 320)).connect(rumble).connect(g.master);
+    const rumbleTone = g.filter('lowpass', RUMBLE_HZ);
+    g.loop(brown).connect(rumbleTone).connect(rumble).connect(g.master);
 
     const rain = g.gain();
     const rainTone = g.filter('bandpass', 3000, 0.35);
@@ -192,8 +239,9 @@ export class StreetSound extends THREE.Group implements Furniture, Updatable, Oc
     // One voice per road user that can drive through.
     const roles = this.options.roles;
     const vehicles = this.options.cars.map((voice, i) => new VehicleVoice(g, voice, roles?.get(voice) ?? null, ((i * 0.618) % 1 + 1) % 1));
-    this.beds = { rumble, rain, rainTone, windBed, windBand, whistle, far, farPan, vehicles };
+    this.beds = { rumble, rumbleTone, rain, rainTone, windBed, windBand, whistle, far, farPan, vehicles };
     this.roofs.build(g);
+    this.runoff.build(g);
     return g;
   }
 

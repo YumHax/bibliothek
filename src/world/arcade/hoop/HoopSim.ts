@@ -47,6 +47,14 @@ export const STREAK_MAX = 3;
 const MOVE_AFTER = 10;
 const SLIDE = 0.2;
 
+/** How well the machine's own regular throws (0..1), when the one at it does not say. */
+const REGULAR_SKILL = 0.7;
+
+/** How far off a regular of `skill` (0..1) throws (0 perfect .. 1 wild): the machine's own regular is in the middle of the bodies' range. */
+export function throwError(skill = REGULAR_SKILL): number {
+  return THREE.MathUtils.clamp(1.6 - skill, 0.35, 1.3);
+}
+
 /** How a shot ended, for whoever threw it to react: in (clean or off the rim), out off the rim (so close), or out. */
 export type HoopOutcome = 'basket' | 'swish' | 'rimOut' | 'miss';
 
@@ -81,6 +89,8 @@ export class HoopSim {
   power = 0;
   /** The hoop's slide across, from its middle. */
   hoopX = 0;
+  /** How far off a regular without a body throws (`throwError` of their skill): the machine sets it when one steps up. */
+  regularError = throwError();
   private baskets = 0;
   private chargeClock = 0;
   private slideClock = 0;
@@ -89,7 +99,7 @@ export class HoopSim {
   private overtime = 0;
   private readonly sounds = new SoundQueue();
   private outcomes: HoopOutcome[] = [];
-  private flash: string | null = null;
+  private flash: { text: string; good: boolean } | null = null;
   private readonly scratch = new THREE.Vector3();
   private readonly away = new THREE.Vector3();
 
@@ -110,8 +120,8 @@ export class HoopSim {
     return outcomes;
   }
 
-  /** The line to flash on the scoreboard (a basket, the hoop moving), once, or null. */
-  takeFlash(): string | null {
+  /** The line to flash on the scoreboard (a basket, the hoop moving, one that rattled out), once, or null; `good` is a make. */
+  takeFlash(): { text: string; good: boolean } | null {
     const flash = this.flash;
     this.flash = null;
     return flash;
@@ -187,20 +197,11 @@ export class HoopSim {
     this.launch(ball, direction.multiplyScalar(speed));
   }
 
-  /** A regular: the arc that would drop it in, with a little error. */
+  /** A regular the machine throws for (no body to throw with): the same aimed arc as one with a body, off by the same error. */
   private regularThrow(): void {
     const ball = this.nextBall();
     if (!ball) return;
-    const skill = 0.7;
-    const target = this.scratch.set(this.hoopX + (random() - 0.5) * 0.12 * (1 - skill + 0.3), HOOP.y, HOOP.z + 0.02);
-    const d = target.clone().sub(RELEASE);
-    const horizontal = Math.hypot(d.x, d.z);
-    const angle = THREE.MathUtils.degToRad(55);
-    const denom = 2 * Math.cos(angle) ** 2 * (horizontal * Math.tan(angle) - d.y);
-    const speed = Math.sqrt((GRAVITY * horizontal * horizontal) / Math.max(0.01, denom)) * (1 + (random() - 0.5) * 0.08);
-    const vel = new THREE.Vector3(d.x / horizontal, 0, d.z / horizontal).multiplyScalar(Math.cos(angle) * speed);
-    vel.y = Math.sin(angle) * speed;
-    this.launch(ball, vel);
+    this.launch(ball, this.aimedVelocity(RELEASE, this.regularError));
   }
 
   /** The resting ball nearest `near` (machine-local; default the hand's release point), or null. */
@@ -234,7 +235,11 @@ export class HoopSim {
       this.drop(ball);
       return;
     }
-    const from = ball.pos;
+    this.launch(ball, this.aimedVelocity(ball.pos, error), ball.pos.clone());
+  }
+
+  /** The arc from `from` that would drop a ball in where the hoop will be when it gets there, off by `error` (0 perfect .. 1 wild). */
+  private aimedVelocity(from: THREE.Vector3, error: number): THREE.Vector3 {
     const target = this.scratch.set(this.hoopXAt(0.75) + (random() - 0.5) * 0.2 * error, HOOP.y, HOOP.z + 0.02 + (random() - 0.5) * 0.12 * error);
     const d = target.clone().sub(from);
     const horizontal = Math.max(0.05, Math.hypot(d.x, d.z));
@@ -243,7 +248,7 @@ export class HoopSim {
     const speed = Math.sqrt((GRAVITY * horizontal * horizontal) / Math.max(0.01, denom)) * (1 + (random() - 0.5) * 0.1 * error);
     const vel = new THREE.Vector3(d.x / horizontal, 0, d.z / horizontal).multiplyScalar(Math.cos(angle) * speed);
     vel.y = Math.sin(angle) * speed;
-    this.launch(ball, vel, from.clone());
+    return vel;
   }
 
   /** Where the hoop will be `ahead` seconds from now (it slides on a known wave once it moves). */
@@ -333,6 +338,32 @@ export class HoopSim {
           this.spreadInGutter(b);
         }
       }
+      this.collideBalls();
+    }
+  }
+
+  /** Two balls in the air (or rolling down the ramp) knock into each other instead of passing through. */
+  private collideBalls(): void {
+    const n = this.away;
+    for (let i = 0; i < this.balls.length; i++) {
+      for (let j = i + 1; j < this.balls.length; j++) {
+        const a = this.balls[i]!;
+        const b = this.balls[j]!;
+        if (a.state !== 'flying' || b.state !== 'flying') continue;
+        n.subVectors(b.pos, a.pos);
+        const d = n.length();
+        if (d >= BALL_R * 2 || d === 0) continue;
+        n.divideScalar(d);
+        const push = (BALL_R * 2 - d) / 2;
+        a.pos.addScaledVector(n, -push);
+        b.pos.addScaledVector(n, push);
+        const vn = b.vel.dot(n) - a.vel.dot(n);
+        if (vn >= 0) continue;
+        const impulse = -vn * 0.8;
+        a.vel.addScaledVector(n, -impulse);
+        b.vel.addScaledVector(n, impulse);
+        if (vn < -0.8) this.sounds.push('thud', 1.1);
+      }
     }
   }
 
@@ -365,20 +396,24 @@ export class HoopSim {
     const final = this.timeLeft <= FINAL_SECONDS;
     const points = (final ? FINAL_POINTS : BASKET_POINTS) * Math.min(STREAK_MAX, this.streak);
     this.points += points;
-    this.flash = b.touched ? `+${points}` : `SWISH +${points}`;
+    this.flash = { text: b.touched ? `+${points}` : `SWISH +${points}`, good: true };
     this.outcomes.push(b.touched ? 'basket' : 'swish');
     this.sounds.push('swish');
     this.sounds.push('score', 1 + Math.min(STREAK_MAX, this.streak) * 0.1);
     if (this.baskets === MOVE_AFTER || this.baskets === MOVE_AFTER * 2) {
-      this.flash = this.baskets === MOVE_AFTER ? 'HOOP ON THE MOVE!' : 'FASTER!';
+      this.flash = { text: this.baskets === MOVE_AFTER ? 'HOOP ON THE MOVE!' : 'FASTER!', good: true };
       this.sounds.push('bonus');
     }
   }
 
+  /** A shot that did not go in: one that rattled round the rim and out says so (so close), a run it ends says that. */
   private missed(b: HoopBall): void {
     b.scored = true; // counted, one way or the other
     this.outcomes.push(b.rimmed ? 'rimOut' : 'miss');
+    if (b.rimmed) this.flash = { text: 'SO CLOSE!', good: false };
+    else if (this.streak > 1) this.flash = { text: 'STREAK OVER', good: false };
     if (this.streak > 1) this.sounds.push('lose');
+    else if (b.rimmed) this.sounds.push('miss');
     this.streak = 0;
   }
 

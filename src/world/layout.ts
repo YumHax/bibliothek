@@ -22,6 +22,8 @@ import { RoomWindow } from './props/Window';
 import { homeOutlook } from './outlook/sharedOutlook';
 import { Poster } from './props/Poster';
 import { FeatherWand } from './prizes/FeatherWand';
+import { BouncyBall } from './prizes/BouncyBall';
+import { placeRetiredCabinet } from './homeArcade/placeRetiredCabinet';
 import { ConsoleStand } from './props/ConsoleStand';
 import { Console } from './props/Console';
 import { Cushion } from './props/Cushion';
@@ -47,6 +49,7 @@ import { furnishAnnex, placeAnnexOpening } from './annex/furnishAnnex';
 import { furnishStudy } from './annex/furnishStudy';
 import { onRouxPhase } from '@/building/rouxMove';
 import { regionLockFor } from '@/economy/regionLock';
+import { placeKeepsakes } from './keepsakes/placeKeepsakes';
 
 // The builders' shared types live in `buildContext.ts`; re-exported for the code that imported them from here.
 
@@ -73,7 +76,7 @@ interface RoomHandle extends ZoneHandle {
  * Everything goes through `zone.place()` (zone-local coordinates) so it collides, ticks and is
  * clickable as its class says. Lights are switched by clicking them; playing a video never touches them.
  */
-function furnishRoom(zone: Zone, ctx: Pick<BuildContext, 'cssLayer' | 'covers' | 'sky' | 'listener' | 'acoustics' | 'collection' | 'home' | 'arcade' | 'today'>): RoomHandle {
+function furnishRoom(zone: Zone, ctx: Pick<BuildContext, 'cssLayer' | 'covers' | 'sky' | 'listener' | 'acoustics' | 'collection' | 'home' | 'arcade' | 'today' | 'keepsakes' | 'notices' | 'input'>): RoomHandle {
   const { cssLayer, covers, sky, collection: { games, shelved, overflow, arrangement, boxes }, home: { onSelectPlatform, upgrades, furnishings, callCat, collector }, arcade: { prizes } } = ctx;
   const plan = ROOM_PLAN;
   const { width } = plan.room;
@@ -202,6 +205,9 @@ function furnishRoom(zone: Zone, ctx: Pick<BuildContext, 'cssLayer' | 'covers' |
   if (prizes) {
     const wand = zone.placeAt(new FeatherWand({ prizes, ...(callCat ? { callCat } : {}) }), plan.featherWand.at);
     placerFor(zone, upgrades, plan.featherWand.rug).onOwned(() => void (wand.position.y += plan.featherWand.lift));
+    // Its bouncy ball, thrown for the cat; and the hall's retired cabinet once bought back, in the front-left corner.
+    zone.placeAt(new BouncyBall({ prizes, ...(callCat ? { callCat } : {}) }), plan.bouncyBall);
+    placeRetiredCabinet(zone, ctx, plan.retiredCabinet);
   }
   // 9. The collector's book (on the sideboard once it is bought), and what its milestones bring home: the
   //    brass plaque, the display cabinet.
@@ -215,6 +221,9 @@ function furnishRoom(zone: Zone, ctx: Pick<BuildContext, 'cssLayer' | 'covers' |
       furnishCollectorCorner(zone, collector, { covers, shelved: shelved ?? games, ...(sideboard ? { sideboard } : {}) });
     });
   }
+
+  // 10. What Mémé gave to take home (`world/keepsakes`): Félix's shelf on the front wall, his cushion on the TV rug.
+  placeKeepsakes(zone, ctx);
 
   const standEveryBookcase = (every: boolean): readonly Shelf[] => {
     // Every slot but the one Mrs Roux's opening takes once the wall is knocked through (`bookcasesIn` knows).
@@ -269,6 +278,9 @@ const ZONE_BUILDERS = {
   saleroom: lazy(() => import('./saleroom/furnishSaleroom').then((m) => m.furnishSaleroom)),
   sellerFlat: lazy(() => import('./sellerFlat/furnishSellerFlat').then((m) => m.furnishSellerFlat)),
   grandmaFlat: lazy(() => import('./grandma/furnishGrandmaFlat').then((m) => m.furnishGrandmaFlat)),
+  lindenAvenue: lazy(() => import('./linden/furnishLindenAvenue').then((m) => m.furnishLindenAvenue)),
+  replayShop: lazy(() => import('./replay/furnishReplay').then((m) => m.furnishReplay)),
+  lindenLanding: lazy(() => import('./linden/furnishLindenLanding').then((m) => m.furnishLindenLanding)),
   cellar: lazy(() => import('./cellar/furnishCellar').then((m) => m.furnishCellar)),
   attic: lazy(() => import('./attic/furnishAttic').then((m) => m.furnishAttic)),
   roof: lazy(() => import('./roof/furnishRoof').then((m) => m.furnishRoof)),

@@ -117,6 +117,7 @@ export function createInteraction(services: Services, parts: { world: GameWorld;
     interactor,
     blocked: (): string | null => (inspector.isActive ? 'Put the game down first' : furniture.piece || planView.isOpen ? 'Set the furniture down first' : moves.travel.isTravelling || moves.sleep.isAsleep || built.pastimes.isBusy ? 'Not now' : null),
     say: (text) => notices.refuse(text),
+    kept: (shot) => services.photoRoll.keep(shot),
   });
   engine.addUpdatable(photo);
 

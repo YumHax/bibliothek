@@ -5,7 +5,8 @@ import { actionKeyLabel } from '@/ui/keys';
 import { type ArcadeControls, NO_CONTROLS, drawText } from './games/ArcadeGame';
 import { TicketMachine, type TicketMachineWiring } from './TicketMachine';
 import type { TicketStrip } from './TicketStrip';
-import { BACK_Z, CAGE_H, FINAL_SECONDS, FRONT_Z, HOOP, HoopSim, RELEASE, STREAK_MAX, WIDTH } from './hoop/HoopSim';
+import { BACK_Z, CAGE_H, FINAL_SECONDS, FRONT_Z, HOOP, HoopSim, RELEASE, STREAK_MAX, WIDTH, throwError } from './hoop/HoopSim';
+import type { ScoreTable } from './scoreTable';
 import { type HoopModel, buildHoopModel } from './hoop/hoopModel';
 import { HoopThrower } from './hoop/HoopThrower';
 import { arcadeHint } from './arcadeHint';
@@ -42,6 +43,7 @@ export class HoopShot extends TicketMachine {
   protected readonly strip: TicketStrip;
 
   private readonly sim = new HoopSim();
+  private readonly scores: ScoreTable;
   private readonly model: HoopModel;
   private readonly hands: [THREE.Vector3, THREE.Vector3] = [new THREE.Vector3(), new THREE.Vector3()];
   private readonly look = new THREE.Vector3();
@@ -49,11 +51,13 @@ export class HoopShot extends TicketMachine {
   private thrower: HoopThrower | null = null;
   private flashClock = 0;
   private flashText = '';
+  private flashGood = true;
   private displayClock = 0;
 
-  constructor(options: HoopShotOptions, wiring: TicketMachineWiring) {
+  constructor(options: HoopShotOptions, wiring: TicketMachineWiring & { scores: ScoreTable }) {
     super(wiring);
     this.name = 'HoopShot';
+    this.scores = wiring.scores;
     const title = options.title ?? 'HOOP FEVER';
     this.game = { id: 'hoops', title, get hint() {
         return arcadeHint('Look to aim · hold {fire}, let go to throw');
@@ -95,9 +99,12 @@ export class HoopShot extends TicketMachine {
     this.placeBalls();
   }
 
+  /** A regular's body throws (their skill sets how far off); without one, the machine throws for them just as well. */
   protected override performerChanged(): void {
     this.thrower?.stop();
-    this.thrower = this.performer && this.who === 'regular' ? new HoopThrower(this.sim, this, this.performer) : null;
+    const error = this.regularSkill === null ? undefined : throwError(this.regularSkill);
+    this.sim.regularError = error ?? throwError();
+    this.thrower = this.performer && this.who === 'regular' ? new HoopThrower(this.sim, this, this.performer, error) : null;
   }
 
   protected override betweenGames(dt: number): void {
@@ -121,7 +128,8 @@ export class HoopShot extends TicketMachine {
     for (const { sfx, pitch } of this.sim.takeSounds()) this.speaker.play(sfx, pitch);
     const flash = this.sim.takeFlash();
     if (flash !== null) {
-      this.flashText = flash;
+      this.flashText = flash.text;
+      this.flashGood = flash.good;
       this.flashClock = 0.8;
     }
     return over;
@@ -142,26 +150,32 @@ export class HoopShot extends TicketMachine {
     const { sim } = this;
     ctx.fillStyle = '#07060c';
     ctx.fillRect(0, 0, 256, 96);
+    const blink = Math.floor(this.clock * 3) % 2 === 0;
     if (this.state === 'initials' && this.entry) {
       this.entry.draw(ctx, 128, 50);
     } else if (this.state === 'over') {
-      drawText(ctx, `${this.last.score}`, 128, 30, 24, '#ffd23a');
-      drawText(ctx, `${this.shownTotal} TICKETS`, 128, 68, 14, '#ffe066');
+      drawText(ctx, `${this.last.score}`, 128, 20, 20, '#ffd23a');
+      drawText(ctx, `${this.shownTotal} TICKETS`, 128, 44, 14, '#ffe066');
+      const note = this.endCardNote();
+      if (note) drawText(ctx, note, 128, 64, 10, blink ? '#7ee787' : '#ffffff');
+      if (this.canReplay) drawText(ctx, this.playAgainLine(), 128, 84, 8, '#ff8a80');
     } else if (this.state === 'attract') {
-      drawText(ctx, this.game.title, 128, 30, 18, '#ff8a3a');
-      drawText(ctx, Math.floor(this.clock * 2) % 2 ? 'INSERT COIN' : '30 SECONDS', 128, 66, 14, '#ff8a80');
+      const top = this.scores.topOf(this.game.id);
+      drawText(ctx, this.game.title, 128, 22, 18, '#ff8a3a');
+      drawText(ctx, `HI ${top.name} ${top.score}`, 128, 50, 12, top.you ? '#7ee787' : '#c9c4ff');
+      drawText(ctx, Math.floor(this.clock * 2) % 2 ? 'INSERT COIN' : '30 SECONDS', 128, 76, 12, '#ff8a80');
     } else {
       drawText(ctx, `${sim.points}`, 56, 34, 22, '#ffffff');
       const final = sim.timeLeft <= FINAL_SECONDS && sim.timeLeft > 0;
       drawText(ctx, `${Math.ceil(sim.timeLeft)}`, 200, 34, 22, final && Math.floor(this.clock * 4) % 2 ? '#ff5f5f' : '#ffd23a');
-      if (this.flashClock > 0) drawText(ctx, this.flashText, 128, 72, 12, '#7ee787');
+      if (this.flashClock > 0) drawText(ctx, this.flashText, 128, 72, 12, this.flashGood ? '#7ee787' : '#ffb15a');
       else if (final) drawText(ctx, 'FINAL SECONDS x1.5', 128, 72, 10, '#ff8a3a');
       else if (sim.streak > 1) drawText(ctx, `STREAK x${Math.min(STREAK_MAX, sim.streak)}`, 128, 72, 10, '#7ee787');
-      // The power meter along the bottom while charging.
+      // The power meter along the bottom while charging: soft in blue, the throws that carry in green, too hard in red.
       if (sim.charging) {
         ctx.fillStyle = '#222233';
         ctx.fillRect(16, 86, 224, 6);
-        ctx.fillStyle = sim.power > 0.8 ? '#ff5f5f' : sim.power > 0.45 ? '#ffe066' : '#7ee787';
+        ctx.fillStyle = sim.power > 0.8 ? '#ff5f5f' : sim.power > 0.6 ? '#ffe066' : sim.power > 0.3 ? '#7ee787' : '#5fa8ff';
         ctx.fillRect(16, 86, 224 * sim.power, 6);
       }
     }

@@ -1,5 +1,6 @@
 // Precipitation snow vertex shader (Precipitation.ts): the #include <...> lines are chunks assemble() writes in.
 #include <shelter>
+#include <lamp_field>
 attribute vec2 extra;
 uniform float time;
 uniform float amount;
@@ -7,6 +8,8 @@ uniform vec3 box;
 uniform vec3 velocity;
 uniform float size;
 uniform float pointScale;
+uniform float lampShare;
+varying vec3 vLamp;
 void main() {
   vec3 p = position * box + velocity * time;
   p.x += sin(time * 0.9 + position.y * 40.0) * 0.6;
@@ -16,5 +19,6 @@ void main() {
   vec4 view = viewMatrix * vec4(w, 1.0);
   gl_Position = projectionMatrix * view;
   gl_PointSize = size * pointScale * (0.6 + 0.8 * extra.x) / max(-view.z, 0.5);
+  vLamp = lampFieldAt(w) * lampShare;
   if (extra.y > amount || sheltered(w)) gl_Position = vec4(2.0, 2.0, 2.0, 1.0);
 }

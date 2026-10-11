@@ -9,7 +9,7 @@ import { wakefulnessAt } from '@/time/wakefulness';
 import { BIKE, bikeGeometry, tube } from '../carModel';
 import type { CarVoice } from '../StreetCars';
 import type { Spot, Vec2 } from '../streetPlan';
-import { ROAD_Y, allowedSpeed, approach, corneringSpeed, placeOnRoute, sampleRoute, type Route } from './driving';
+import { ROAD_Y, allowedSpeed, approach, corneringSpeed, placeOnRoute, sampleRoute, type HeldBy, type Route } from './driving';
 import type { RoadVehicle, StreetTraffic } from './StreetTraffic';
 import { CYCLE_OFFSET } from '../../city/frontage';
 import { lcg, seededRng } from '@/random';
@@ -53,6 +53,8 @@ class Rider implements RoadVehicle, CarVoice {
   blocked = 0;
   clear = 0;
   crank = 0;
+  /** What holds the rider up (for the horns behind). */
+  holdUp: HeldBy = null;
   readonly self: RoadVehicle = this;
 }
 
@@ -217,6 +219,7 @@ export class StreetBikes extends THREE.Group implements Furniture, Updatable {
     const route = this.routes[rider.route]!;
     const cap = corneringSpeed(route, rider.distance, CRUISE);
     const { target, heldBy } = allowedSpeed(this.options.traffic, rider, cap, this.eye, 2.5);
+    rider.holdUp = heldBy;
     // Held up by something that is not moving (the van, a parked bus): swing out and go round.
     const stuck = target < 1.2 && (heldBy === 'obstacle' || heldBy === 'vehicle');
     rider.blocked = stuck ? rider.blocked + dt : 0;

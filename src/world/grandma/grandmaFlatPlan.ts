@@ -1,5 +1,6 @@
 import type { RoomOptions } from '../Room';
 import type { Placement } from '../Placement';
+import { DOOR_LEAF } from '../roomPlan';
 import type { DecorEntry } from '../props/decor';
 import type { MemoryLine, MemoryShot } from '@/memories/memoryReel';
 import type { FamilyPhoto } from './familyPhotos';
@@ -21,6 +22,8 @@ export const GRANDMA_FLAT_ROOM: RoomOptions = {
   width: 5.6,
   depth: 4.6,
   height: 2.6,
+  // Her front door onto the landing (`world/linden`): the landing hangs the leaf, it opens in here.
+  doorways: [{ wall: 'back', along: -2.0, ...DOOR_LEAF, door: false, to: 'lindenLanding' }],
   // The window's wall lets the daylight in; the rest is party walls and the landing.
   opaqueWalls: ['back', 'left', 'right'],
   finish: { walls: 0xe9dcc0, ceiling: 0xf5efe2, trim: 0xd2c4a6 },
@@ -30,8 +33,6 @@ export const GRANDMA_FLAT_PLAN = {
   room: GRANDMA_FLAT_ROOM,
   /** Off the bus and up the stairs: just inside the landing door, looking into the room. */
   arrival: { at: [-2.0, -1.6] as Vec2, yaw: Math.PI },
-  /** The landing door, back down to the bus stop. */
-  exit: { wall: 'back', along: -2.0, y: 0 } as Placement,
   pendant: { ceiling: [0.2, 0.1] } as Placement,
   lightSwitch: { wall: 'back', along: -1.3, y: 1.1 } as Placement,
   /** One window on the avenue, its curtains half drawn (no sun of its own: no shadow map; the view is Linden Avenue's, `LindenView`). */
@@ -55,6 +56,18 @@ export const GRANDMA_FLAT_PLAN = {
   memeDay: {
     table: { at: [1.35, -0.92] as Vec2, yaw: 0, seat: 0.47, gaze: [1.35, 0.76, -0.5] as Vec3 },
     knitting: [-1.33, 0.55, 1.14] as Vec3,
+  },
+  /**
+   * What the player does with her (`visit/pastimes`): the evening's cards take her from her armchair round the
+   * visitor's chair to her place at the table (`memeDay.table`), and back the same way; her eyes on the cards.
+   */
+  pastimes: {
+    toTable: [
+      [-0.35, 0.8],
+      [0.3, -0.7],
+      [1.35, -0.92],
+    ] as Vec2[],
+    cardsGaze: [1.35, 0.78, -0.35] as Vec3,
   },
 
   /** The dining table, its long side along x, and its chairs. */
@@ -119,6 +132,9 @@ export const GRANDMA_FLAT_PLAN = {
       pot: [0.2, 0.2],
       bread: [-0.45, -0.25],
       fruit: [0.25, 0.1],
+      /** The pot's lid once lunch is served, between the pot and the table's end; her birthday cake left of the album. */
+      lidOff: [0.46, 0.3],
+      cake: [-0.52, 0.22],
     } as TableLayout,
     /** The loose boards, [x, z, radius] (off the memories' camera moves). */
     creaks: [
@@ -146,7 +162,8 @@ export const GRANDMA_FLAT_PLAN = {
     /** The parcel torn out of its sports pages on the rug before the child, and the red cloth of the table that night. */
     parcel: { at: [-1.6, 0.06] as Vec2, yaw: 0.6 },
     cloth: 0x9a2630,
-    /** The child's beats: the present opened (a hop), then playing, eyes down. */
+    /** The child's beats: the paper torn (the film waits on the player there, a hop when it gives), then playing, eyes down. */
+    tearAt: 10.3,
     cheerAt: 11,
     playFrom: 12.6,
     /** Félix's: pretending not to know, then caught out. */
@@ -196,6 +213,8 @@ export const GRANDMA_FLAT_PLAN = {
     gaspardRubAt: 13.2,
     felixStandAt: 15,
     felixPointAt: 19.8,
+    /** The film waits on the player here (the cue): the child looks up at Félix, or keeps their eyes on the game. */
+    lookUpCueAt: 22.4,
     childLooksUpAt: 23.2,
     childBackAt: 26.4,
     memeSighAt: 28.6,

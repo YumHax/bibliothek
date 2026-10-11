@@ -1,0 +1,53 @@
+/* The pinned prize on the wallet chip, after the tickets (`PrizeGoalChip.ts`): a greyed photo filling with colour from the bottom. */
+@layer tokens, base, components, panels;
+@layer panels {
+  .prize-goal {
+    display: inline-flex;
+    align-items: center;
+    align-self: stretch;
+    --fill: 0;
+  }
+  .prize-goal__pic {
+    position: relative;
+    display: block;
+    width: 1.9rem;
+    height: 1.9rem;
+    margin: 0 0.35rem 0 0.1rem;
+  }
+  .prize-goal__pic img {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+  }
+  .prize-goal__pic img:not([src]) { visibility: hidden; }
+  .prize-goal__dim {
+    filter: grayscale(1) brightness(0.55);
+    opacity: 0.8;
+  }
+  .prize-goal__lit {
+    clip-path: inset(calc((1 - var(--fill)) * 100%) 0 0 0);
+    transition: clip-path var(--dur-slow) ease;
+  }
+  /* Always laid out, so the chip does not change width when it turns up. */
+  .prize-goal__ready {
+    font-size: var(--fs-0);
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--ui-gold-pale);
+    padding-right: 0.5rem;
+    visibility: hidden;
+  }
+  .prize-goal--ready .prize-goal__ready { visibility: visible; }
+  .prize-goal--ready .prize-goal__lit {
+    filter: drop-shadow(0 0 4px var(--ui-accent-bright));
+    animation: prize-goal-glow var(--dur-pulse) ease-in-out infinite alternate;
+  }
+  @keyframes prize-goal-glow {
+    from { filter: drop-shadow(0 0 2px var(--ui-accent-bright)); }
+    to { filter: drop-shadow(0 0 7px var(--ui-accent-bright)); }
+  }
+  .reduce-motion .prize-goal__lit { transition: none; }
+  .reduce-motion .prize-goal--ready .prize-goal__lit { animation: none; }
+}

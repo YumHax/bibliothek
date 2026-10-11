@@ -92,7 +92,7 @@ function voiceOf(sound: NonNullable<DoorLife['sound']>): AmbientVoice {
  * player walks the stairs on (`FirstPersonController.setGround`), the light level and the stone
  * under the feet.
  */
-export function furnishStairwell(zone: Zone, { sky, listener, acoustics, building, home, today, covers, money, collection, market, arcade, story, social }: Pick<BuildContext, 'sky' | 'listener' | 'acoustics' | 'building' | 'home' | 'today' | 'covers' | 'money' | 'collection' | 'market' | 'arcade' | 'story' | 'social'>): StairwellHandle {
+export function furnishStairwell(zone: Zone, { sky, listener, acoustics, building, home, today, covers, money, collection, market, arcade, story, social, grandmaHints }: Pick<BuildContext, 'sky' | 'listener' | 'acoustics' | 'building' | 'home' | 'today' | 'covers' | 'money' | 'collection' | 'market' | 'arcade' | 'story' | 'social' | 'grandmaHints'>): StairwellHandle {
   const ctxHearing = { listener, acoustics };
   const origin = new THREE.Vector3();
   const stairs = zone.place(new Staircase(coproChoice('paint')), origin);
@@ -210,7 +210,7 @@ export function furnishStairwell(zone: Zone, { sky, listener, acoustics, buildin
   zone.place(
     new OurMailbox({
       day: () => today.gameDay,
-      post: (day) => mailFor(day, { arcadeDaily: arcade.daily, market: market.stock, marketDay: market.day, story }),
+      post: (day) => mailFor(day, { arcadeDaily: arcade.daily, market: market.stock, marketDay: market.day, story, grandma: grandmaHints }),
       width: box.flap.width * 0.9,
       height: box.flap.height * 0.9,
     }),

@@ -55,6 +55,11 @@ export const BATHROOM_PLAN = {
   /** The tub along the back wall, 5 cm short of each side wall; tap, riser and screen at its left end (x -0.85..-0.05 on the rim). */
   bathtub: { wall: 'back', along: 0, y: 0, offset: WAINSCOT_THICKNESS } as Placement,
   bathtubSize: TUB,
+  /**
+   * The arcade's rubber duck once won (`world/prizes/BathDuck`), tub-local: on the front rim at the far end from the
+   * taps, clear of the towel (x 0.1..0.5); afloat, in the middle of the water.
+   */
+  duck: { rim: [0.68, TUB.height, TUB.width - TUB_RIM / 2] as [number, number, number], float: [0.4, 0, 0.38] as [number, number, number] },
   /** A small frosted window high above the tub, clear of the shower riser (at x -0.55). */
   window: { wall: 'back', along: 0.35, y: 2.0 } as Placement,
 

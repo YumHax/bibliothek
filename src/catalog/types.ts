@@ -100,6 +100,11 @@ export interface Game {
   restored?: boolean;
   /** An old shop's price sticker on the cover: worth a little less until it is peeled off at home. */
   sticker?: boolean;
+  /**
+   * Félix's own copy (`economy/felixLots`): his round F.A. sticker on the back and the number it went under at the sale
+   * of his flat (1 to 412). A keepsake: the WE BUY desk refuses it.
+   */
+  felixLot?: number;
   /** Where and for how much the player got it; absent for games from before receipts were kept. */
   acquired?: Acquisition;
   /**

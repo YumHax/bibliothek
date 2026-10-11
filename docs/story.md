@@ -50,8 +50,15 @@ notebook as a trail (`file()`: his lines for those home, the next three to look 
 `bibliothek.felixNotebook.v1` (`{ found, ticked }`). No reward but the line: the frame's "putting the place back", one
 game at a time.
 
-**The cat.** Félix's cat ran off when the flat was emptied: the stray on Front Street (`street/life/StrayCat`) is him. Planned:
-trusted all the way, he comes home instead of a cat bought at the pet shop.
+**The cat.** Félix's cat ran off when the flat was emptied: the stray on Front Street (`street/life/StrayCat`) is him.
+Trusted all the way with no cat at home yet, he follows the player home (`HomeContext.strayHome`: adopted for nothing,
+named Mistigri, ginger, a big reward); the butcher, a friend, says whose cat he was. With a cat bought already, the
+street stays his.
+
+**Act 2 on the street** (built): Victor's first word is the sale of Félix's lot (`RivalCollector.greeting` before
+they ever met); one of Félix's copies in his suitcase some of his days (`street/shops/Trader`); his initials in the
+park's railing, and CONTINUE? F.A. under the dust of the empty shop below the flat (`street/secrets/StreetSecrets`);
+the bookseller's guide with his maps (`street/townsfolk/shopkeeperTalk`).
 
 ### The opening (`src/intro/`)
 
@@ -94,20 +101,23 @@ How it is made:
 ## Mémé (`src/grandma/`, `src/memories/`, `world/grandma/`)
 
 The family's side of the story, and the player's own past. **Mémé** is Odette Aubry, Félix's mother and the player's
-grandmother, in her flat across town: the only place bus line 38 takes the player (`STREET_PLAN.busRide`, 2 coins,
-the way back included), somewhere they cannot walk to. **Gaspard** Aubry, Félix's elder brother, had her sign the
+grandmother, in her flat across town at number 14, Linden Avenue: the only place bus line 38 takes the player
+(`STREET_PLAN.busRide`, 2 coins, the way back included), somewhere they cannot walk to (the avenue, her landing and
+its people: docs/grandma.md "Around her flat"). **Gaspard** Aubry, Félix's elder brother, had her sign the
 sale's papers "to keep it simple" and sold the lot on the quiet to Victor Crane, the rival collector (why Crane holds
 most of it): she went through the sale, he arranged it. The player learns it late, through the memories. The player's
-own parent (Félix's other sibling) stays in the background, named in passing, never shown.
+own parent (Félix's other sibling) stays in the background, named in passing, never shown. How it ends (Gaspard at
+her table and the reckoning, the Christmas Game Boy bought back from Crane, her visit to the flat and the album's last
+photo) is docs/grandma.md "The end of the story".
 
 - **The visit** (`GrandmaVisits`, `bibliothek.grandma.v1`: visits, the last Sunday envelope, memories seen, what she
   was given, the news told). The bus runs to her in her waking hours (`busRide.destinations[].hours`, 8:00 to 21:00;
   shut, its caption says she is in bed). Her day (`GRANDMA_DAY`, `world/grandma/meme.ts`, moved only while the player
   is away): the paper at the table in the morning, the set from her armchair in the afternoon, knitting in the
-  evening, sleepy after 20:15. On the way in (`GrandmaTalk`): a hello for the hour, or once each the news she has heard
+  evening, sleepy after 20:15. On the way in (`GrandmaTalk`; she comes to the door for it, docs/grandma.md "Her presence"): a hello for the hour, or once each the news she has heard
   (games, a medal, the notebook, Crane beaten, the grey cart's trail); on a **Sunday**, once, lunch and an envelope of
   `GRANDMA.sundayCoins` (10) coins paid at once with a reward banner (`envelopeSale` on a sale day), the first visit
-  included; then the album line whenever a memory waits. `?debug`'s Now: Mémé as on the first day, every memory ready,
+  included (in her lunch hours it waits for the end of lunch: docs/grandma.md "Sunday lunch, recipes and favours"); then the album line whenever a memory waits. `?debug`'s Now: Mémé as on the first day, every memory ready,
   every memory seen, the Sunday envelope again (`grandma/grandmaDebug`).
 - **Talking to her**: a click opens the conversation (`talkHook`, person `meme`, place `theirFlat`); her opening and
   the entry "Tell me about Félix?" draw her chat from a shuffled bag (every day's, then Gaspard's pressure once memory 4
@@ -126,7 +136,8 @@ own parent (Félix's other sibling) stays in the background, named in passing, n
   a memory waits.
 - **The ride** (`ui/busRide/`, `audio/busRideSounds.ts`): line 38 either way plays over the travel curtain
   (`Travel`'s `interlude`, wired in `bootstrap/player.ts`) while the far zone builds: about ten seconds on a seat by
-  the window, the town going past in three depths in the light of the hour, the display, the STOP bell, the doors.
+  the window, the town going past in three depths in the light of the hour, the display, the STOP bell, the doors, and
+  the line's regulars of the hour (`busRiders`; Mémé herself some mornings, docs/grandma.md "Around her flat").
   Esc, E, Space, Enter or a click skips it; with reduced motion there is only the curtain.
 - **Her flat** (`world/grandma/furnishGrandmaDecor.ts`, spots in `GRANDMA_FLAT_PLAN.dressing`): the window shows
   Linden Avenue (`LindenView`, painted in `lindenPainters`: a side street to the town, parked cars and a car each way,
@@ -141,7 +152,8 @@ own parent (Félix's other sibling) stays in the background, named in passing, n
   photo album on her table (`world/grandma/albumWiring`, `PhotoAlbum`, its cover swinging open): the very first plays
   at once; after that the album opens (`ui/memories/AlbumPanel`): a print per memory seen (a frame of its first play,
   `MemoryProjector.still`, else a drawn sepia print, `albumPhotos`) with its title in her hand, the one ready slipping
-  out of the pages, empty photo corners for the rest (nothing says how they fill); a print clicked plays it. Only a
+  out of the pages (clicked, it plays), empty photo corners with its name pencilled in for the rest (nothing says how
+  they fill); a print seen opens close, "Watch it again" plays it; her other photos among them (docs/grandma.md). Only a
   memory with a reel is ever ready (`GrandmaVisits.setFilmed`, from `REELS`). A memory is a film like the opening
   (`memories/MemoryFilm`: the `IntroScreen`'s black, bars and narration in her voice, the waltz recoloured per memory,
   `IntroScore.startMemory`, the grade `MEMORY_LOOK`) opened as a panel. Under the first black the zones it is filmed in
@@ -162,7 +174,7 @@ The memories, from the childhood to the arrival:
 | 3 | **Three letters** (`arcadeMemory`): Félix takes the teenager on a Saturday, the record on the spaceships cabinet beaten, the initials typed in | the arcade (LexiPunk, the tournament's board and the medals put aside) | the first arcade medal |
 | 4 | **Money asleep** (`rowMemory`): a Sunday supper in 1999 gone cold, Gaspard: "your cartridges are money asleep"; Félix stands up, "they're for the kid"; the child of ten in the armchair hears it all | Mémé's flat | Félix's notebook found |
 | 5 | **The last Wednesday** (`leavingMemory`): the player at eighteen, suitcase by the door; "when you're settled, half of these are yours"; then Félix alone at the window in the rain | Félix's flat (as for 2) | 50 games, or a club set |
-| 6 | **Lot 1 to 412** (`saleMemory`): the sale as Mémé saw it from the back row, Gaspard checking his watch, Crane in the front row bidding on everything: arranged between them | the saleroom, Félix's boxes by the rostrum | a game of Félix's notebook bought back (the sticker's copies are not built) |
+| 6 | **Lot 1 to 412** (`saleMemory`): the sale as Mémé saw it from the back row, Gaspard checking his watch, Crane in the front row bidding on everything: arranged between them | the saleroom, Félix's boxes by the rostrum | a game of Félix's notebook bought back, or one of his copies (his F.A. sticker, docs/grandma.md "What the memories leave behind") |
 | 7 | **A day late** (`keysMemory`): this year, Mémé holds Félix's keys out to the player (the camera); then our landing, the push in to the door, ending on the opening's own line "By the time you got the keys…" | Mémé's flat, then our landing | the six before it seen, and the prototype found or 120 games |
 
 ### Adding a memory
@@ -189,6 +201,8 @@ The memories, from the childhood to the arrival:
 5. **Register** the builder in `albumWiring`'s `REELS`: it is offered as soon as `MEMORIES` unlocks it.
 6. In another zone, mind what reacts to the player's zone (the camera counts for the `ZoneManager`): read
    `ctx.memories.filming` where it should not.
+7. A moment for the player to do (tear the paper, take the keys) is a scene's `cues` entry, inside a shot, its beat in
+   `done`; `returned` goes through `memoryStage.backInTheRoom` (with `'hard'` / `'soft'` when it moves her): docs/grandma.md "In the films".
 
 ## The lost prototype (`src/story/`)
 

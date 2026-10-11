@@ -26,24 +26,24 @@ export const POINTS_PER_TICKET = 50;
  * different scales (a pinball ball is worth tens of thousands, a roll up the alley a few hundred)
  * and last differently long, so each rate is set on what an ordinary player nets there a minute,
  * the coin each play costs paid: about 60 tickets (6 coins) a minute on every machine, some 25-30 a
- * play on a short one, 40-50 on a long one; a first-timer nets 20-55 (`TICKET_FLOOR` keeps a flop from
- * costing the coin), a good player one and a half to two times the ordinary one. The plays are measured by `npm run balance` (scripts/arcade-balance.mjs:
+ * play on a short one, 40-50 on a long one; a first-timer nets 25-60 (`TICKET_FLOOR` keeps a flop from
+ * costing the coin), a good player 65-105 (NEON SNAKE's long runs tapered, `TICKET_TAPER`). The plays are measured by `npm run balance` (scripts/arcade-balance.mjs:
  * every cabinet game and the alley, hoops and pinball played headless by simulated people, a novice,
  * an ordinary player and a good one: their reactions, their timing, their slips); retune a rate
  * from its table, and check the real plays with `?payout` (see docs/economy.md).
  */
 export const PAYOUT: Readonly<Record<string, number>> = {
-  breakout: 57,
-  invaders: 65,
-  stacker: 134,
-  frog: 78,
-  snake: 12,
-  comets: 47,
-  pinball: 240,
-  alley: 10,
-  duel: 18,
-  stepbeat: 195,
-  sheriff: 100,
+  breakout: 104,
+  invaders: 46,
+  stacker: 132,
+  frog: 53,
+  snake: 11,
+  comets: 52,
+  pinball: 960,
+  alley: 14,
+  duel: 33,
+  stepbeat: 203,
+  sheriff: 104,
   hoops: 14,
   /** LexiPunk's scale is its own: a first guess until the site's scores are seen. */
   lexipunk: 50,
@@ -56,9 +56,27 @@ export function pointsPerTicket(gameId: string): number {
   return PAYOUT[gameId] ?? POINTS_PER_TICKET;
 }
 
+/**
+ * A long run pays a little less per point on the machines listed here: past `knee` tickets in one play, each further
+ * ticket costs the points of `1 / rate` tickets. NEON SNAKE's good runs (long snakes at full speed, x4 chains) paid
+ * twice what a good player makes anywhere else; the taper keeps the ordinary player's pay and the skill all profit,
+ * only less of it. Every count of a play's tickets goes through `ticketsAt` (the live TIX, the end card, the payout).
+ */
+const TICKET_TAPER: Readonly<Record<string, { knee: number; rate: number }>> = {
+  snake: { knee: 45, rate: 0.5 },
+};
+
+/** Tickets a score of `score` pays on `gameId` at `pointsPerTicket` points a ticket (0: a run that pays none), the taper counted. */
+export function ticketsAt(gameId: string, score: number, points = pointsPerTicket(gameId)): number {
+  if (points <= 0) return 0;
+  const raw = Math.max(0, score / points);
+  const taper = TICKET_TAPER[gameId];
+  return Math.floor(taper && raw > taper.knee ? taper.knee + (raw - taper.knee) * taper.rate : raw);
+}
+
 /** Tickets a score of `score` on `gameId` pays. */
 export function ticketsFor(gameId: string, score: number): number {
-  return Math.max(0, Math.floor(score / pointsPerTicket(gameId)));
+  return ticketsAt(gameId, score);
 }
 
 /**
@@ -86,7 +104,7 @@ export function playIsFree(wallet: { readonly coins: number; readonly tickets: n
   return wallet.coins < PLAY_COST && wallet.tickets < TICKETS_PER_COIN * PLAY_COST;
 }
 
-/** What the change machine coughs up on a day it works: coins, and how often a day it works. */
+/** What the change machine coughs up on a (game) day it works: coins, and how often a day it works. */
 export const CHANGE_MACHINE = { minCoins: 1, maxCoins: 3, workingOdds: 0.25 };
 
 /** The daily challenge's reward range in tickets (the day picks one in it). */
@@ -100,6 +118,19 @@ export const CHALLENGE_REWARD = { min: 50, max: 90 };
 export const CHALLENGE_BAND: Readonly<Record<string, { low: number; high: number }>> & { default: { low: number; high: number } } = {
   default: { low: 3, high: 1 },
 };
+
+/**
+ * The kinds of daily challenge and how often each comes up (weights): `score` one play reaching the target, `twice`
+ * two plays of the day each reaching a lower one (`twiceBand`: the table's fifth to fourth score), `total` the day's
+ * plays on the machine adding up to `totalOf` times a target of the usual band. Once the player holds the machine's
+ * gold, a `score` challenge follows their own best instead of the table (`personal`: that share of it).
+ */
+export const CHALLENGE_KINDS = {
+  weights: { score: 5, twice: 2, total: 2 },
+  twiceBand: { low: 4, high: 3 },
+  totalOf: 2.5,
+  personal: { low: 0.8, high: 0.95 },
+} as const;
 
 /** How often a day has an arcade machine out of order. */
 export const OUT_OF_ORDER_ODDS = 0.35;
@@ -136,10 +167,12 @@ export const BARGAIN_PRICE = 25;
 export const BIN_WHERE = 'the bargain bin';
 /** The street's flat-price copies' receipts (a garage sale, the box of cast-offs): capped at the desk like the bin's. */
 export const GARAGE_WHERE = 'a garage sale on Front Street';
+/** The dépôt-vente's trestle on Linden Avenue, under Mémé's (`world/linden/DepotTable`): flat prices too. */
+export const DEPOT_WHERE = 'the dépôt-vente on Linden Avenue';
 export const GIVEAWAY_WHERE = 'a box of cast-offs on Front Street';
 /** A game out of a sealed box lot (`economy/boxLots.ts`): its receipt is its share of the carton's price, capped at the desk like the bin's. */
 export const SEALED_WHERE = 'a sealed box lot';
-const FLAT_PRICE_WHERES: ReadonlySet<string> = new Set([BIN_WHERE, GARAGE_WHERE, GIVEAWAY_WHERE, SEALED_WHERE]);
+const FLAT_PRICE_WHERES: ReadonlySet<string> = new Set([BIN_WHERE, GARAGE_WHERE, DEPOT_WHERE, GIVEAWAY_WHERE, SEALED_WHERE]);
 /** How the mystery game's receipt names where it came from (paid in tickets: its price on the receipt is 0). */
 export const PRIZE_WHERE = 'the prize counter';
 
@@ -523,13 +556,14 @@ export function isImport(game: Pick<Game, 'region'>): boolean {
 
 /**
  * The most a dealer gives for a copy by its receipt: a flat-price copy (the bin, a garage sale, the cast-offs) what it cost,
- * the mystery game what its tickets were worth in coins (`MYSTERY_GAME_VALUE`), so none of them is a way to print coins
+ * the mystery game and the rare cartridge what their tickets were worth in coins (`MYSTERY_GAME_VALUE`, `RARE_GAME.value`), so none of them is a way to print coins
  * at the desk; anything else no cap.
  */
 export function receiptCap(game: Pick<Game, 'acquired'>): number {
   const receipt = game.acquired;
   if (!receipt) return Infinity;
   if (receipt.where === PRIZE_WHERE) return MYSTERY_GAME_VALUE;
+  if (receipt.where === RARE_PRIZE_WHERE) return RARE_GAME.value;
   return FLAT_PRICE_WHERES.has(receipt.where) ? Math.max(1, receipt.price) : Infinity;
 }
 
@@ -579,28 +613,63 @@ export const BOOKCASE_PRICE = 250;
 
 // --- The arcade's extras: medals, streaks, the weekly league, the wheel, the mystery game -------
 
-/** Tickets a medal pays, once, the first time a machine's bronze, silver or gold score is reached. */
-export const MEDAL_REWARD = { bronze: 25, silver: 60, gold: 150 } as const;
+/**
+ * Tickets a medal pays, once, the first time a machine's bronze, silver or gold score is reached; platinum is the
+ * player's own gold-winning score beaten by `PLATINUM.over` (frozen when the gold is won).
+ */
+export const MEDAL_REWARD = { bronze: 25, silver: 60, gold: 150, platinum: 300 } as const;
+export const PLATINUM = { over: 1.2 } as const;
+/** Gold on every machine that keeps a table: the hall's tour, its trophy home once (`Prizes`). */
+export const HALL_TOUR = { prize: 'hallTour' } as const;
 
 /**
- * Coming back day after day: the first ticket play of a day pays `perDay` tickets for every day of
- * the streak so far (a day missed starts it again), up to `maxDays`.
+ * The arcade's regular's card: every game day with a ticket play punches it (a day missed costs nothing: the count
+ * never goes back). Every `tokenEvery` punches drop a gold token in the pocket (one play on the house, any machine);
+ * the card goes up a colour at each of `tiers`' punches (the league board, the attendant and the journal say so), each
+ * step with `tierTokens` more tokens.
  */
-export const STREAK = { perDay: 10, maxDays: 7 } as const;
+export const ARCADE_CARD = {
+  tokenEvery: 3,
+  tiers: [
+    { punches: 5, name: 'REGULAR' },
+    { punches: 15, name: 'SILVER CARD' },
+    { punches: 30, name: 'GOLD CARD' },
+    { punches: 60, name: 'HALL LEGEND' },
+  ],
+  tierTokens: [1, 2, 3, 5],
+} as const;
 
 /**
- * The weekly league: the tickets won at the arcade this week (Monday to Sunday) against the
- * regulars'. Their totals grow through the week from a base drawn per week in `rivalWeek`
- * (tickets); first place on Sunday night takes the league pennant home.
+ * The weekly league, on the game's week (`Today.gameDay`: seven game days, Monday to Sunday): the tickets won at the
+ * arcade this week against five regulars'. Their totals grow through the week from a base drawn per week in
+ * `rivalWeek` (tickets, the bronze division's), times the division's `divisions[d]`; first place on Sunday night takes
+ * that division's pennant home (`pennants[d]`, a prize id) and moves the player up one (never down).
  */
-export const LEAGUE = { rivalWeek: { min: 1500, max: 6000 }, rivals: 5 } as const;
+export const LEAGUE = {
+  rivalWeek: { min: 400, max: 2200 },
+  rivals: 5,
+  divisions: [1, 1.6, 2.5],
+  divisionNames: ['BRONZE', 'SILVER', 'GOLD'],
+  pennants: ['pennant', 'pennant-silver', 'pennant-gold'],
+} as const;
 
 /**
  * The Saturday tournament: `entry` coins to sign the sheet (once a Saturday), then three rounds on
  * the day's cabinet, each a normal paid play that must beat the opponent's score. `reward[n]` is
  * the tickets for going out after winning n rounds (3: the champion, who also takes the cup home).
+ * The cup grows with the titles won (`cups`: from `titles` on, the regulars play `strength` times better, the tickets
+ * are `pay` times more, the champion takes `prize` home).
  */
-export const TOURNAMENT = { entry: 3, reward: [0, 60, 180, 450], prize: 'saturdayCup' } as const;
+export const TOURNAMENT = {
+  entry: 3,
+  reward: [0, 60, 180, 450],
+  prize: 'saturdayCup',
+  cups: [
+    { titles: 0, name: 'SATURDAY CUP', prize: 'saturdayCup', strength: 1, pay: 1 },
+    { titles: 2, name: 'SILVER CUP', prize: 'saturdayCup-silver', strength: 1.1, pay: 1.5 },
+    { titles: 5, name: 'GOLD CUP', prize: 'saturdayCup-gold', strength: 1.2, pay: 2 },
+  ],
+} as const;
 
 /**
  * The ticket wheel: what each slice pays and how wide it is (weights, so the slices are drawn to
@@ -627,7 +696,7 @@ export const WHEEL_SLICES: readonly { tickets: number | 'jackpot'; weight: numbe
   { tickets: 14, weight: 14 },
   { tickets: 16, weight: 8 },
 ];
-export const JACKPOT = { start: 250, perSpin: 3 } as const;
+export const JACKPOT = { start: 250, perSpin: 3, news: 1000 } as const;
 
 /** A random game for the collection from the prize counter: the dearest thing on the list. */
 export const MYSTERY_GAME_TICKETS = 900;
@@ -655,7 +724,30 @@ export const PRIZE_TICKETS = {
   trophy: 400,
   miniCabinet: 600,
   mysteryGame: MYSTERY_GAME_TICKETS,
+  // The back room, for when the flat is done: at an ordinary player's 60 tickets a minute, a limited edition is half
+  // an hour of play, the rare cartridge an hour, the sponsor's plate fifty minutes, a retired cabinet an hour and a half.
+  goldToken: 1500,
+  jukeboxTape: 1500,
+  pixelPal: 1600,
+  snowGlobe: 1800,
+  goldStick: 2000,
+  lightBox: 2200,
+  sponsor: 3000,
+  rareGame: 4000,
+  hallCabinet: 5000,
 } as const;
+
+/** What a set of prizes all at home pays, once (`Prizes.PRIZE_SETS`): every claw bunny, the whole glass case, every limited edition. */
+export const PRIZE_SET_TICKETS = { bunnies: 200, counter: 300, limited: 500 } as const;
+
+/**
+ * The back room's rare cartridge: a game the collection lacks priced over the mystery game's ceiling and at most
+ * `maxPrice` coins (never a grail); `value` is what the WE BUY desk and a swap count it for at most (its tickets'
+ * worth in coins), so it is no way to print coins either.
+ */
+export const RARE_GAME = { maxPrice: 900, value: Math.round(PRIZE_TICKETS.rareGame / TICKETS_PER_COIN) } as const;
+/** Where the rare cartridge's receipt says it came from: its cap is `RARE_GAME.value` (`receiptCap`). */
+export const RARE_PRIZE_WHERE = 'the prize counter’s back room';
 
 /**
  * What the flat's furniture costs, in coins (the bookcase is `BOOKCASE_PRICE`; `homeGoods.ts` has the list, who sells

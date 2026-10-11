@@ -5,6 +5,7 @@ import type { Furniture } from '../Furniture';
 import type { DayNight } from '../props/DayNight';
 import { currentSeason } from '@/time/season';
 import { patchShader, afterChunk } from '../materials/shaderPatch';
+import { windSwayed } from './wind';
 import { snowCovered } from './snowCover';
 import type { Vec2 } from './streetPlan';
 import { PARK_STREET } from '@/world/measures/street';
@@ -12,10 +13,9 @@ import { isRoad } from './relief/ground';
 import { GROUND, onSurface } from '../surface/layers';
 import { overKeepingAlpha } from '../materials/blend';
 import { radialGlow } from '../materials/glowTextures';
-import { createCanvas, toTexture } from '@/covers/generated/canvasUtils';
-import { TREE_FORM, type PlantedTree } from '../city/trees';
+import { canvasTexture, createCanvas, toTexture } from '@/covers/generated/canvasUtils';
+import { TREE_FORM, type PlantedTree, type TreeSpecies } from '../city/trees';
 import { lcg } from '@/random';
-import { damp } from '@/math/damp';
 
 /** Past the sun's shadow map (`StreetLighting`'s square round the player), each tree's shadow lies on the ground as a soft
  * decal instead: faded in between these distances from the eye (m), this dark at most (in leaf; bare: a third of it). */
@@ -26,14 +26,54 @@ export type TreeSpot = PlantedTree;
 
 const CROWN_Y = TREE_FORM.trunk;
 const CROWN_RADIUS = TREE_FORM.crown;
-const SUMMER = ['#4f7a34', '#5a8a3a', '#46703a', '#628f42'];
-const SPRING = ['#7fb04a', '#8cc05a', '#72a444', '#e7b8c8'];
-const AUTUMN = ['#c9862f', '#d9a33a', '#b8562a', '#8a7a32', '#6a8a3a'];
-/** How many crown shapes and branch frames the trees share (a draw call each per stretch). */
-const CROWN_SHAPES = 3;
+/**
+ * Each kind of tree (`TreeSpecies`): its leaves by season (summer, spring, autumn), its crown's clumps and how the
+ * crown is drawn out (wider, flatter or taller about its middle), how wide its limbs spread, and its bark.
+ */
+interface SpeciesLook {
+  summer: readonly string[];
+  spring: readonly string[];
+  autumn: readonly string[];
+  clumps: readonly [number, number];
+  crown: { wide: number; tall: number };
+  spread: number;
+  bark: 'furrowed' | 'mottled';
+}
+const SPECIES: Record<TreeSpecies, SpeciesLook> = {
+  lime: {
+    summer: ['#4f7a34', '#5a8a3a', '#46703a', '#628f42'],
+    spring: ['#7fb04a', '#8cc05a', '#72a444', '#e7b8c8'],
+    autumn: ['#c9862f', '#d9a33a', '#b8562a', '#8a7a32', '#6a8a3a'],
+    clumps: [5, 7],
+    crown: { wide: 1, tall: 1 },
+    spread: 0.62,
+    bark: 'furrowed',
+  },
+  plane: {
+    summer: ['#6b8f3e', '#7a9a46', '#5f8538', '#86a24c'],
+    spring: ['#9cc25a', '#a8c868', '#8fb850'],
+    autumn: ['#b89a4a', '#a87e3a', '#8a6a32', '#c4a456', '#9a8a3e'],
+    clumps: [7, 9],
+    crown: { wide: 1.16, tall: 0.84 },
+    spread: 0.85,
+    bark: 'mottled',
+  },
+  chestnut: {
+    summer: ['#3f6a2e', '#46733a', '#38602a', '#4c7a36'],
+    spring: ['#5f9a3a', '#6aa444', '#f0ead8', '#5a9036'],
+    autumn: ['#b8642a', '#c8823a', '#9a4a22', '#7a6a2a'],
+    clumps: [6, 8],
+    crown: { wide: 0.96, tall: 1.12 },
+    spread: 0.5,
+    bark: 'furrowed',
+  },
+};
+const SPECIES_ORDER: readonly TreeSpecies[] = ['lime', 'plane', 'chestnut'];
+/** How many crown shapes and branch frames each kind shares (a draw call each per stretch where it grows). */
+const CROWN_SHAPES = 2;
 const WOOD_SHAPES = 2;
-/** A crown is this many clumps of leaves round its middle. */
-const CLUMPS = [5, 7] as const;
+/** Where the crown's sway starts (scale-1 tree, object space): the trunk under it stands still, limbs and crown move together. */
+const SWAY_PIVOT = CROWN_Y - 1.5;
 /** Cards of leaves scattered over a crown's clumps (its ragged outline against the sky), and their size (m, scale 1). */
 const LEAF_CARDS = 70;
 const CARD_SIZE = 0.75;
@@ -45,20 +85,20 @@ const PIT = 1.2;
 const STRETCH_EDGES = [PARK_STREET.hedge, 0, 50] as const;
 
 /**
- * The trees: along the pavements and scattered over the park behind the hedge. A trunk branching
- * into limbs, branches and twigs (the frame bare in winter, inside the leaves the rest of the year)
- * and a crown of leafy clumps (lumpy blobs, darker underneath and inside, smooth-shaded as one mass, under a
- * scatter of alpha-tested leaf cards that break its outline; the sun wraps round it and shines through its rim
- * when it is behind), both instanced per shape
- * and per stretch of street (`STRETCH_EDGES`: a stretch out of view is not drawn), each tree turned,
- * sized and tinted on its own; the crowns sway with the wind (a vertex patch fed from
- * `SkyState.wind`). The season is the painted view's (`currentSeason`): fresh greens and blossom in
- * spring, turning in autumn and thinning as it deepens, bare in winter. Snow settles on the crowns'
- * tops and along the limbs, and rain wets the bark (`snowCovered`).
+ * The trees: along the pavements and scattered over the park behind the hedge, of three kinds (`SPECIES`: the
+ * pavements' London planes, the park's limes and horse chestnuts). A trunk branching into limbs, branches and twigs
+ * (the frame bare in winter, inside the leaves the rest of the year; its bark the kind's: furrowed, or the plane's
+ * peeling patches) and a crown of leafy clumps (lumpy blobs, darker underneath and inside, smooth-shaded as one mass,
+ * under a scatter of alpha-tested leaf cards that break its outline; the sun wraps round it and shines through its rim
+ * when it is behind), both instanced per kind, per shape and per stretch of street (`STRETCH_EDGES`: a stretch out of
+ * view is not drawn), each tree turned, sized and tinted on its own. Crowns, limbs and bare branches sway together
+ * with the street's wind (`wind.ts`: gusts running down the street, one tree after the next), the leaf cards shivering
+ * on top. The season is the painted view's (`currentSeason`): fresh greens and blossom (the chestnuts' candles) in
+ * spring, turning in autumn and thinning as it deepens, bare in winter. Snow settles on the crowns' tops and along
+ * the limbs, and rain wets the bark (`snowCovered`).
  */
 export class StreetTrees extends THREE.Group implements Furniture, Updatable {
   readonly contactShadow = false;
-  private readonly sway = { time: { value: 0 }, wind: { value: 0.3 } };
   /** How strong the far shadows are now (the sun's light through the weather). */
   private readonly shade = { value: 0 };
   private readonly bare: boolean;
@@ -72,19 +112,24 @@ export class StreetTrees extends THREE.Group implements Furniture, Updatable {
     const bare = season.name === 'winter';
     this.bare = bare;
 
-    const woods = Array.from({ length: WOOD_SHAPES }, (_, k) => branchFrame(lcg(4401 + k * 17)));
-    const bark = snowCovered(new THREE.MeshStandardMaterial({ color: 0x4a3c30, roughness: 0.95 }));
-    const crownGeometries = Array.from({ length: CROWN_SHAPES }, () => crownClumps(random));
-    // Smooth-shaded (normals softened towards the crown's middle: `crownClumps`), the clumps under a scatter of leaf
-    // cards that break their outline; both sway, and both let the sun through when it is behind them.
-    const crownMaterial = this.leafy(snowCovered(new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.9, vertexColors: true })));
-    const cardMaterial = this.leafy(snowCovered(new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.85, vertexColors: true, map: leafClusterTexture(), alphaTest: 0.5, side: THREE.DoubleSide })));
-    const cardGeometries = crownGeometries.map((g) => leafCards(random, g));
+    // Each kind its frames, crowns, cards and bark, only for the kinds planted here.
+    const kinds = SPECIES_ORDER.filter((k) => spots.some((t) => (t.species ?? 'lime') === k));
+    const crownMaterial = this.leafy(windSwayed(snowCovered(new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.9, vertexColors: true })), 'treeCrown', { pivotY: SWAY_PIVOT }));
+    const cardMaterial = this.leafy(windSwayed(snowCovered(new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.85, vertexColors: true, map: leafClusterTexture(), alphaTest: 0.5, side: THREE.DoubleSide })), 'treeCards', { pivotY: SWAY_PIVOT, flutter: 0.02 }));
+    const forms = new Map(kinds.map((kind) => {
+      const look = SPECIES[kind];
+      const crowns = Array.from({ length: CROWN_SHAPES }, () => crownClumps(random, look));
+      return [kind, {
+        woods: Array.from({ length: WOOD_SHAPES }, (_, k) => branchFrame(lcg(4401 + k * 17 + SPECIES_ORDER.indexOf(kind) * 101), look.spread)),
+        crowns,
+        cards: crowns.map((g) => leafCards(random, g)),
+        bark: windSwayed(snowCovered(new THREE.MeshStandardMaterial({ map: barkTexture(look.bark), color: 0xffffff, roughness: 0.95 })), `treeBark:${look.bark}`, { pivotY: SWAY_PIVOT }),
+      }] as const;
+    }));
     // The pavements' trees stand in square pits with a cast-iron grate (the park's in the lawn).
     const pitted = spots.filter(({ at }) => at[0] > PARK_STREET.hedge && !isRoad(at[0], at[1]));
     const pits = pitted.length > 0 ? new THREE.InstancedMesh(new THREE.PlaneGeometry(PIT, PIT).rotateX(-Math.PI / 2), onSurface(new THREE.MeshStandardMaterial({ map: grateTexture(), color: 0xffffff, roughness: 0.75 }), GROUND.grate), pitted.length) : null;
 
-    const palette = season.name === 'spring' ? SPRING : season.name === 'autumn' ? AUTUMN : SUMMER;
     const matrix = new THREE.Matrix4();
     const crownMatrix = new THREE.Matrix4();
     const scale = new THREE.Matrix4();
@@ -93,8 +138,10 @@ export class StreetTrees extends THREE.Group implements Furniture, Updatable {
     const color = new THREE.Color();
     const at = new THREE.Vector3();
     const size = new THREE.Vector3();
-    // Each tree: its stretch, its turn and size, its crown's stretch and tint (drawn in the same order as before: the seeded look stays).
-    const trees = spots.map(({ at: [x, z], scale: s }, i) => {
+    // Each tree: its kind, stretch, turn and size, its crown's stretch and tint.
+    const trees = spots.map(({ at: [x, z], scale: s, species }, i) => {
+      const kind = species ?? 'lime';
+      const look = SPECIES[kind];
       q.setFromAxisAngle(yAxis, random() * Math.PI * 2);
       matrix.compose(at.set(x, 0, z), q, size.set(s, s, s));
       // Late autumn thins the crowns.
@@ -102,32 +149,37 @@ export class StreetTrees extends THREE.Group implements Furniture, Updatable {
       // Wider or taller, about the crown's middle.
       const [sx, sy, sz] = [leaf * (0.88 + random() * 0.24), leaf * (0.85 + random() * 0.3), leaf * (0.88 + random() * 0.24)];
       crownMatrix.copy(matrix).multiply(scale.makeScale(sx, sy, sz).setPosition(0, (1 - sy) * (CROWN_Y + 0.6), 0));
+      const palette = season.name === 'spring' ? look.spring : season.name === 'autumn' ? look.autumn : look.summer;
       color.set(palette[Math.floor(random() * palette.length)]!).multiplyScalar(0.85 + random() * 0.3);
-      return { stretch: STRETCH_EDGES.filter((edge) => x >= edge).length, wood: matrix.clone(), crown: crownMatrix.clone(), tint: color.clone(), shape: i % CROWN_SHAPES, frame: i % WOOD_SHAPES };
+      return { kind, stretch: STRETCH_EDGES.filter((edge) => x >= edge).length, wood: matrix.clone(), crown: crownMatrix.clone(), tint: color.clone(), shape: i % CROWN_SHAPES, frame: i % WOOD_SHAPES };
     });
 
     const stretches = new Set(trees.map((t) => t.stretch));
     for (const stretch of stretches) {
-      const here = trees.filter((t) => t.stretch === stretch);
-      for (let k = 0; k < WOOD_SHAPES; k++) {
-        const own = here.filter((t) => t.frame === k);
-        if (own.length === 0) continue;
-        const mesh = new THREE.InstancedMesh(woods[k]!, bark, own.length);
-        own.forEach((t, n) => mesh.setMatrixAt(n, t.wood));
-        this.finish(mesh);
-      }
-      if (bare) continue;
-      for (let k = 0; k < CROWN_SHAPES; k++) {
-        const own = here.filter((t) => t.shape === k);
-        if (own.length === 0) continue;
-        for (const [geometry, material] of [[crownGeometries[k]!, crownMaterial], [cardGeometries[k]!, cardMaterial]] as const) {
-          const mesh = new THREE.InstancedMesh(geometry, material, own.length);
-          own.forEach((t, n) => {
-            mesh.setMatrixAt(n, t.crown);
-            mesh.setColorAt(n, t.tint);
-          });
-          if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true;
+      for (const kind of kinds) {
+        const form = forms.get(kind)!;
+        const here = trees.filter((t) => t.stretch === stretch && t.kind === kind);
+        if (here.length === 0) continue;
+        for (let k = 0; k < WOOD_SHAPES; k++) {
+          const own = here.filter((t) => t.frame === k);
+          if (own.length === 0) continue;
+          const mesh = new THREE.InstancedMesh(form.woods[k]!, form.bark, own.length);
+          own.forEach((t, n) => mesh.setMatrixAt(n, t.wood));
           this.finish(mesh);
+        }
+        if (bare) continue;
+        for (let k = 0; k < CROWN_SHAPES; k++) {
+          const own = here.filter((t) => t.shape === k);
+          if (own.length === 0) continue;
+          for (const [geometry, material] of [[form.crowns[k]!, crownMaterial], [form.cards[k]!, cardMaterial]] as const) {
+            const mesh = new THREE.InstancedMesh(geometry, material, own.length);
+            own.forEach((t, n) => {
+              mesh.setMatrixAt(n, t.crown);
+              mesh.setColorAt(n, t.tint);
+            });
+            if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true;
+            this.finish(mesh);
+          }
         }
       }
     }
@@ -152,32 +204,17 @@ export class StreetTrees extends THREE.Group implements Furniture, Updatable {
     return spots.map((at) => new THREE.Box3(new THREE.Vector3(at[0] - 0.4, 0, at[1] - 0.4), new THREE.Vector3(at[0] + 0.4, 1.5, at[1] + 0.4)));
   }
 
-  update(dt: number): void {
-    this.sway.time.value = (this.sway.time.value + dt) % 1000;
-    this.sway.wind.value = damp(this.sway.wind.value, this.dayNight.state.wind, 2, dt);
+  update(): void {
     const s = this.dayNight.state;
     this.shade.value = FAR_SHADE.dark * s.daylight * s.sunThrough * (this.bare ? 0.35 : 1);
   }
 
   /**
-   * A leaf material: swaying with the wind above the trunk (the time and the wind shared by every tree), and lit
-   * as leaves are: the light wraps a little round the crown's shoulders, and a sun low behind the crown shines
-   * through its thin outer leaves (the first directional light: the street's sun or moon).
+   * A leaf material, lit as leaves are: the light wraps a little round the crown's shoulders, and a sun low behind
+   * the crown shines through its thin outer leaves (the first directional light: the street's sun or moon).
    */
   private leafy<M extends THREE.MeshStandardMaterial>(material: M): M {
     return patchShader(material, 'streetTreeLeaves', (shader) => {
-      shader.uniforms.swayTime = this.sway.time;
-      shader.uniforms.swayWind = this.sway.wind;
-      shader.vertexShader = 'uniform float swayTime;\nuniform float swayWind;\n' + afterChunk(shader.vertexShader, 'begin_vertex', /* glsl */ `
-        #ifdef USE_INSTANCING
-          float swayPhase = instanceMatrix[3].x * 0.37 + instanceMatrix[3].z * 0.23;
-        #else
-          float swayPhase = 0.0;
-        #endif
-        float swayHeight = max(transformed.y - ${(CROWN_Y - 1.5).toFixed(2)}, 0.0);
-        transformed.x += sin(swayTime * 1.3 + swayPhase) * swayWind * 0.07 * swayHeight;
-        transformed.z += cos(swayTime * 1.05 + swayPhase * 1.3) * swayWind * 0.05 * swayHeight;
-      `);
       shader.fragmentShader = afterChunk(shader.fragmentShader, 'lights_fragment_end', /* glsl */ `
         #if NUM_DIR_LIGHTS > 0
         {
@@ -249,7 +286,7 @@ function farShadows(spots: readonly TreeSpot[], farSun: { value: THREE.Vector3 }
  * branches and those into twigs, thinner and shorter at each fork, turned up towards the light.
  * Open-ended tapered cylinders, merged.
  */
-function branchFrame(random: () => number): THREE.BufferGeometry {
+function branchFrame(random: () => number, spread: number): THREE.BufferGeometry {
   const parts: THREE.BufferGeometry[] = [];
   const up = new THREE.Vector3(0, 1, 0);
   const q = new THREE.Quaternion();
@@ -278,7 +315,7 @@ function branchFrame(random: () => number): THREE.BufferGeometry {
   const limbs = 4 + Math.floor(random() * 2);
   for (let i = 0; i < limbs; i++) {
     const a = (i / limbs) * Math.PI * 2 + random() * 0.6;
-    const dir = new THREE.Vector3(Math.cos(a) * 0.62, 1, Math.sin(a) * 0.62).normalize();
+    const dir = new THREE.Vector3(Math.cos(a) * spread, 1, Math.sin(a) * spread).normalize();
     grow(new THREE.Vector3(0, trunkTop - random() * 0.9, 0), dir, 1.7 + random() * 0.6, 0.075, 0);
   }
   const out = mergeGeometries(parts);
@@ -291,10 +328,11 @@ function branchFrame(random: () => number): THREE.BufferGeometry {
  * envelope, a vertex colour per corner, darker underneath and deep inside (the light gets in less),
  * brighter on the outside top. Unit-radius `TREE_FORM.crown`, the middle `TREE_FORM.trunk + 0.6` up.
  */
-function crownClumps(random: () => number): THREE.BufferGeometry {
+function crownClumps(random: () => number, look: SpeciesLook): THREE.BufferGeometry {
   const parts: THREE.BufferGeometry[] = [];
   const centre = new THREE.Vector3(0, CROWN_Y + 0.6, 0);
-  const n = CLUMPS[0] + Math.floor(random() * (CLUMPS[1] - CLUMPS[0] + 1));
+  const [fewest, most] = look.clumps;
+  const n = fewest + Math.floor(random() * (most - fewest + 1));
   const v = new THREE.Vector3();
   for (let i = 0; i < n; i++) {
     // The first one is the crown's core; the others sit round it, the upper ones bigger.
@@ -328,6 +366,9 @@ function crownClumps(random: () => number): THREE.BufferGeometry {
     own.fromBufferAttribute(nor, k).lerp(outward, SOFT_NORMALS).normalize();
     nor.setXYZ(k, own.x, own.y, own.z);
   }
+  // The kind's outline: drawn wider and flatter (the plane) or taller (the chestnut) about the crown's middle.
+  const { wide, tall } = look.crown;
+  if (wide !== 1 || tall !== 1) merged.translate(0, -centre.y, 0).scale(wide, tall, wide).translate(0, centre.y, 0);
   return merged;
 }
 
@@ -430,6 +471,52 @@ function lumpySphere(random: () => number): THREE.BufferGeometry {
   }
   g.computeVertexNormals();
   return g;
+}
+
+/**
+ * Bark, wrapped round the trunk and limbs (u round, v along each piece): `furrowed`, dark grey-brown ridges running up
+ * with darker cracks between (the lime, the chestnut); `mottled`, the plane's: olive-grey bark flaking off in patches
+ * of cream, khaki and pale green.
+ */
+function barkTexture(kind: 'furrowed' | 'mottled'): THREE.CanvasTexture {
+  const w = 128;
+  const h = 256;
+  const [canvas, ctx] = createCanvas(w, h);
+  const random = lcg(kind === 'mottled' ? 7717 : 7711);
+  if (kind === 'mottled') {
+    ctx.fillStyle = '#7a7660';
+    ctx.fillRect(0, 0, w, h);
+    const patches = ['#cfc6a0', '#b9b38a', '#9aa07a', '#d8d2b4', '#8a8a6a', '#a8a47e'];
+    for (let i = 0; i < 160; i++) {
+      ctx.fillStyle = patches[Math.floor(random() * patches.length)]!;
+      ctx.beginPath();
+      const x = random() * w;
+      const y = random() * h;
+      const rx = 4 + random() * 14;
+      const ry = 6 + random() * 22;
+      ctx.ellipse(x, y, rx, ry, random() * Math.PI, 0, Math.PI * 2);
+      ctx.fill();
+      // Wrapped round: the patch carries on across the seam.
+      ctx.beginPath();
+      ctx.ellipse(x > w / 2 ? x - w : x + w, y, rx, ry, 0, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  } else {
+    ctx.fillStyle = '#4a3e32';
+    ctx.fillRect(0, 0, w, h);
+    for (let x = 0; x < w; x += 3 + random() * 5) {
+      ctx.fillStyle = random() < 0.5 ? 'rgba(30, 24, 18, 0.55)' : 'rgba(110, 96, 80, 0.35)';
+      let y = 0;
+      while (y < h) {
+        const run = 10 + random() * 40;
+        ctx.fillRect(x + (random() - 0.5) * 2, y, 1 + random() * 2, run);
+        y += run + random() * 8;
+      }
+    }
+  }
+  const texture = canvasTexture(canvas, { anisotropy: 'facing', repeat: true });
+  texture.repeat.set(1, 2);
+  return texture;
 }
 
 /** A tree pit's cast-iron grate: a frame, rings of slots round the trunk's hole, the soil dark through them. */

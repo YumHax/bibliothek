@@ -45,7 +45,7 @@ const HINTS = {
 const started = performance.now();
 const restore = hush();
 // What the script imports from the game is listed in `src/headless/scene.ts` (typechecked, and knip sees it used).
-const { zfightSubjects, lintLights, lintPlacement, lintReach, lintDisposal, SharingLedger, markShared, seedLiveRandom, THREE } = await bundle(
+const { zfightSubjects, lintLights, lintPlacement, lintGround, lintReach, lintDisposal, SharingLedger, markShared, seedLiveRandom, THREE } = await bundle(
   `export * from '@/headless/scene';`,
   { name: 'scene-lint' },
 );
@@ -79,9 +79,16 @@ seedLiveRandom(0x9e3779b9);
   careless.dispose = () => palette.dispose();
   const freed = lintDisposal(careless).findings.some((f) => f.check === 'shared disposed');
 
-  if (!sunk || !far || !unshared || !freed) {
+  // Outdoors: a crate a metre over a road 12 cm down.
+  const street = new THREE.Group();
+  const aloft = new THREE.Mesh(new THREE.BoxGeometry(0.4, 0.4, 0.4), new THREE.MeshStandardMaterial({ color: 0xaa2222 }));
+  aloft.position.y = 1;
+  street.add(aloft);
+  const floating = lintGround(street, () => -0.12).some((f) => f.check === 'floating');
+
+  if (!sunk || !far || !unshared || !freed || !floating) {
     restore();
-    console.error('[scene] the checks missed a known fault (a sunk crate, a 500 m shadow far, an unmarked cache, a freed palette material): the lint is blind, fix world/lint first');
+    console.error('[scene] the checks missed a known fault (a sunk crate, a 500 m shadow far, an unmarked cache, a freed palette material, a crate floating over the road): the lint is blind, fix world/lint first');
     process.exit(1);
   }
 }
@@ -125,6 +132,8 @@ for (const subject of zfightSubjects()) {
     for (const f of lintPlacement(built, subject.room)) file(subject.name, f);
     for (const f of lintReach(built)) file(subject.name, f);
   }
+  // Outdoors (the street's fixtures): what stands on uneven ground, sunk into it or floating over it.
+  if (subject.ground) for (const f of lintGround(built, subject.ground)) file(subject.name, f);
   const items = itemsOf(built);
   for (const item of items) for (const f of ledger.note(item, subject.name)) file(f.subject, f);
   for (const item of items) {

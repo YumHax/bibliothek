@@ -52,7 +52,8 @@ export class GamePanel {
       ['Edition', edition ? capitalise(edition) : undefined],
       // What sets this copy apart (sealed, a misprint, a crushed box), shown on a stall's copy too; what was found inside it.
       ['Copy', describeVariant(game)],
-      ['Bootleg', game.bootleg ? 'An unlicensed cartridge: a curiosity, never a fake' : undefined],
+      ['Félix’s', game.felixLot !== undefined ? `His round F.A. sticker on the back: lot ${game.felixLot} at the sale of his flat` : undefined],
+      ['Bootleg', game.bootleg ?'An unlicensed cartridge: a curiosity, never a fake' : undefined],
       ['Inside', game.past?.found ? game.past.text : undefined],
       // What the flat can do for it (docs/household.md): a worn box cleaned at the kitchen table, a sticker lifted with warm air.
       ['State', own ? ownState(game) : undefined],

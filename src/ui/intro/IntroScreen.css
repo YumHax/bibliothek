@@ -168,3 +168,59 @@
     border-color: var(--tint-50);
   }
 }
+
+/* A memory's moment waiting on the player (`IntroScreen.cue`): the act and its key just over the bottom bar, the initials' three boxes above it. */
+@layer panels {
+  .intro__cue {
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: calc(var(--intro-bar) * var(--intro-bars) + var(--sp-4));
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: var(--sp-3);
+    opacity: 0;
+    transform: translateY(0.4em);
+    transition: opacity var(--intro-line-fade) var(--ui-ease), transform var(--intro-line-fade) var(--ui-ease);
+  }
+  .intro__cue--on {
+    opacity: 1;
+    transform: none;
+  }
+  .intro__cue--pulse .intro__cue-act { animation: intro-cue-nod var(--dur-fall) var(--ui-ease); }
+  .intro__cue-act {
+    display: flex;
+    align-items: center;
+    gap: var(--sp-2);
+    margin: 0;
+    padding: var(--sp-1) var(--sp-4);
+    border-radius: var(--ui-radius-pill);
+    background: var(--shade-45);
+    font-family: var(--ui-font-print);
+    font-style: italic;
+    font-size: clamp(1rem, 2vw, var(--fs-t3));
+    color: var(--tint-90);
+  }
+  .intro__cue-letters {
+    display: flex;
+    gap: var(--sp-2);
+    margin: 0;
+  }
+  .intro__cue-letter {
+    display: grid;
+    place-items: center;
+    width: 2.2em;
+    height: 2.6em;
+    border-bottom: 3px solid var(--tint-50);
+    font-family: var(--ui-font-display);
+    font-size: clamp(1.4rem, 3.5vw, 2.2rem);
+    color: var(--ui-white);
+    text-shadow: 0 0.06em 0.4em var(--shade-60);
+  }
+  .intro__cue-letters--offered .intro__cue-letter { color: var(--tint-50); }
+  .intro__cue-letter--at { border-bottom-color: var(--ui-white); }
+  @keyframes intro-cue-nod {
+    40% { transform: scale(1.06); }
+  }
+}

@@ -9,7 +9,7 @@ import type { JobLot } from './MarketStock';
 import { lotOffer } from './JobLot';
 import type { Prize } from './Prizes';
 import type { StockItem } from './StockItem';
-import { PRIZE_WHERE, SWAP_WHERE_PREFIX, wantedPay } from './pricing';
+import { PRIZE_WHERE, RARE_PRIZE_WHERE, SWAP_WHERE_PREFIX, wantedPay } from './pricing';
 
 /*
  * The shapes a transaction needs of each store: structural, so the Session's parts (`SessionParts`)
@@ -64,7 +64,7 @@ interface TxLedger {
 }
 
 interface TxPrizes {
-  add(id: string): void;
+  add(id: string, extra?: { day?: number; game?: string }): void;
 }
 
 interface TransactionDeps {
@@ -88,11 +88,11 @@ export type TxResult<T extends object = object> = ({ ok: true } & T) | { ok: fal
 
 /**
  * A one-of-a-kind story item (the lost prototype, `story/prototype.PROTOTYPE_ID`, ids prefixed `proto:`), or a game
- * borrowed from a friend (`social/friendsLife`): never sold, swapped or traded away; every desk and stall refuses it
- * (`notOwned`, the panels say why).
+ * borrowed from a friend (`social/friendsLife`), or a copy of Félix's bought back (`Game.felixLot`): never sold, swapped
+ * or traded away; every desk and stall refuses it (`notOwned`, the panels say why).
  */
-export function isKeepsake(game: Pick<Game, 'id'>): boolean {
-  return game.id.startsWith('proto:') || isBorrowed(game.id);
+export function isKeepsake(game: Pick<Game, 'id' | 'felixLot'>): boolean {
+  return game.id.startsWith('proto:') || game.felixLot !== undefined || isBorrowed(game.id);
 }
 
 const fail = (reason: TxFailure, needed?: number, have?: number): { ok: false; reason: TxFailure; needed?: number; have?: number } => ({
@@ -371,8 +371,11 @@ export class Transactions {
     return { ok: true };
   }
 
-  /** The prize counter: `prize` for its tickets; the mystery game (`game`, drawn by the caller) goes into the collection instead of on the shelf. */
-  takePrize(prize: Prize, game: Game | null = null): TxResult {
+  /**
+   * The prize counter: `prize` for its tickets; the mystery game and the rare cartridge (`game`, drawn by the caller) go
+   * into the collection instead of home; `cabinet` is the cabinet game a sponsor's plate goes on, or the retired cabinet runs.
+   */
+  takePrize(prize: Prize, game: Game | null = null, cabinet?: string): TxResult {
     const { wallet, collection, prizes, market } = this.deps;
     if (!wallet?.spendTickets || prize.tickets === null) return fail('unavailable');
     if (prize.game ? !game || !collection : !prizes) return fail('unavailable');
@@ -382,8 +385,8 @@ export class Transactions {
     batch(() => {
       wallet.spendTickets!(prize.tickets!);
       // The mystery game comes with its receipt, like anything else that joins the collection.
-      if (game) collection!.add(bought(game, 0, PRIZE_WHERE, market?.day ?? 0));
-      else prizes!.add(prize.id);
+      if (game) collection!.add(bought(game, 0, prize.special === 'rare' ? RARE_PRIZE_WHERE : PRIZE_WHERE, market?.day ?? 0));
+      else prizes!.add(prize.id, { ...(market ? { day: market.day } : {}), ...(cabinet ? { game: cabinet } : {}) });
     });
     return { ok: true };
   }

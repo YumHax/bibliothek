@@ -51,7 +51,7 @@ export class RoadworksSound extends THREE.Group implements Furniture, Updatable,
   constructor(private readonly dayNight: DayNight, private readonly options: RoadworksSoundOptions) {
     super();
     this.name = 'RoadworksSound';
-    this.ear = new StreetEar(options.listener);
+    this.ear = new StreetEar(options.listener, this);
     // Where the works stand for this build of the street (`syncWorks` ran before it).
     this.sites = closures().map((c) => {
       const mid = (c.lanes[0] + c.lanes[1]) / 2;
@@ -104,7 +104,7 @@ export class RoadworksSound extends THREE.Group implements Furniture, Updatable,
       this.localToWorld(this.world.copy(site.at));
       const d = this.ear.distance(this.world);
       const side = this.ear.spatial(this.world);
-      site.leg?.set(side.pan, 0, false, side.rear ?? 0);
+      site.leg?.set(side.pan, side.walls, false, side.rear ?? 0);
       site.generator?.gain.setTargetAtTime(on ? 0.05 * falloff(d, HALF.generator) : 0, now, 1.5);
       if (!on || d > 70) continue;
       this.hammer(g, site, dt, falloff(d, HALF.hammer));

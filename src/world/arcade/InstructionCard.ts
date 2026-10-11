@@ -3,12 +3,13 @@ import { createCanvas, toTexture } from '@/covers/generated/canvasUtils';
 import { PIXEL_FONT, drawText } from './games/ArcadeGame';
 import { arcadeHint } from './arcadeHint';
 import { repaintWhenFontLoads } from '@/graphics/fontReady';
+import { onKeyLabelsChange } from '@/ui/keys';
 
 interface InstructionCardOptions {
   /** The machine's name, across the top. */
   title: string;
   /** How to play: one line each, e.g. "A / D  MOVE". Split a `·`-separated hint with `hintLines`. */
-  lines: readonly string[];
+  lines: readonly string[] | (() => readonly string[]);
   /** The stripe and the title's colour. Default the hall's magenta. */
   accent?: number;
   /** Size of the card, metres. Default 0.16 x 0.09. */
@@ -27,10 +28,31 @@ export class InstructionCard extends THREE.Mesh {
   constructor(options: InstructionCardOptions) {
     const width = options.width ?? 0.16;
     const height = options.height ?? 0.09;
-    super(new THREE.PlaneGeometry(width, height), new THREE.MeshStandardMaterial({ map: paintCard(options, width, height), roughness: 0.7 }));
+    const { texture, repaint } = paintCard(options, width, height);
+    super(new THREE.PlaneGeometry(width, height), new THREE.MeshStandardMaterial({ map: texture, roughness: 0.7 }));
     this.name = 'InstructionCard';
     this.receiveShadow = true;
+    // The keys rebound in the settings: the card is printed again the next time it is drawn (its lines name the keys).
+    watchKeyLabels();
+    let printed = labelsVersion;
+    this.onBeforeRender = () => {
+      if (printed === labelsVersion) return;
+      printed = labelsVersion;
+      repaint();
+    };
   }
+}
+
+/** Bumped whenever the key names change (a rebinding, the keyboard layout learnt): one listener for every card, none to leak. */
+let labelsVersion = 0;
+let watching = false;
+
+function watchKeyLabels(): void {
+  if (watching) return;
+  watching = true;
+  onKeyLabelsChange(() => {
+    labelsVersion += 1;
+  });
 }
 
 /** "A/D move · Space launch" as card lines: each part upper-cased on its own line. */
@@ -41,7 +63,7 @@ export function hintLines(hint: string): string[] {
     .filter(Boolean);
 }
 
-function paintCard(options: InstructionCardOptions, width: number, height: number): THREE.Texture {
+function paintCard(options: InstructionCardOptions, width: number, height: number): { texture: THREE.Texture; repaint: () => void } {
   const W = Math.round(width * PX_PER_M);
   const H = Math.round(height * PX_PER_M);
   const [canvas, ctx] = createCanvas(W, H);
@@ -49,11 +71,12 @@ function paintCard(options: InstructionCardOptions, width: number, height: numbe
   const paint = (): void => paintFace(ctx, options, W, H, accent);
   paint();
   const texture = toTexture(canvas, 'facing');
-  repaintWhenFontLoads(`${Math.round(H * 0.13)}px ${PIXEL_FONT}`, () => {
+  const repaint = (): void => {
     paint();
     texture.needsUpdate = true;
-  });
-  return texture;
+  };
+  repaintWhenFontLoads(`${Math.round(H * 0.13)}px ${PIXEL_FONT}`, repaint);
+  return { texture, repaint };
 }
 
 /** The card's print: yellowed paper, the stripe and title, the lines (their key tokens named, `arcadeHint`), INSERT 1 COIN. */
@@ -69,7 +92,7 @@ function paintFace(ctx: CanvasRenderingContext2D, options: InstructionCardOption
   ctx.fillStyle = accent;
   ctx.fillRect(0, 0, W, H * 0.24);
   drawText(ctx, options.title, W / 2, H * 0.125, Math.round(H * 0.13), '#fffbe6');
-  const lines = options.lines.slice(0, 4).map((line) => arcadeHint(line).toUpperCase());
+  const lines = (typeof options.lines === 'function' ? options.lines() : options.lines).slice(0, 4).map((line) => arcadeHint(line).toUpperCase());
   const rowH = (H * 0.66) / Math.max(3, lines.length);
   lines.forEach((line, i) => {
     // Pixel type is square: a character as wide as it is tall.

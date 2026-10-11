@@ -6,6 +6,7 @@ import type { ScoreTable } from './scoreTable';
 import { ReplayPlayer } from './replay/Replay';
 import type { ReplayShelf } from './replay/ReplayStore';
 import { lcg, random as liveRandom } from '@/random';
+import { DEMO_LEVEL, demoHeard, leaveDemoBed } from './demoBed';
 
 /** What an idle cabinet shows: its title card, its hall of fame, the game playing itself, or the player's best run. */
 type AttractMode = 'title' | 'scores' | 'autoplay' | 'replay';
@@ -42,7 +43,8 @@ interface AttractParts {
 
 /**
  * An idle cabinet's attract sequence, round and round: its title card (with a jingle now and
- * then), its hall of fame (the top five), then the game playing itself (DEMO, on its autopilot, silent) or, every other time round,
+ * then), its hall of fame (the top five), then the game playing itself (DEMO, on its autopilot; heard very low when it is
+ * one of the two nearest the camera, `demoBed`, else silent) or, every other time round,
  * the player's best run replayed step for step (a replay that no longer ends on its score was
  * recorded under older rules and is dropped). Only the title card when the camera is far or the
  * game cannot play itself; snow when the cabinet is out of order.
@@ -70,6 +72,7 @@ export class AttractLoop {
 
   /** Back to the title card, from a play, a regular or a show. */
   enter(): void {
+    this.leave();
     this.mode = 'title';
     this.modeClock = 0;
     this.replay = null;
@@ -78,13 +81,19 @@ export class AttractLoop {
     this.parts.screens.drawTitle(this.phase);
   }
 
+  /** The show stops being heard (a play or a regular took the cabinet, or it is going away): out of the hall's demo bed. */
+  leave(): void {
+    leaveDemoBed(this);
+  }
+
   /** One frame of it (`dead`: out of order today); returns the controls of the show's step, for the stick. */
   update(dt: number, dead: boolean): ArcadeControls {
     const { game, runner, screens, speaker, replays } = this.parts;
     if (dead) {
       this.clock += dt;
       this.staticPhase += dt;
-      if (this.clock >= 1 / STATIC_FPS) {
+      // Every repaint uploads the glass (and rebuilds its mipmaps): none while nobody could see it.
+      if (this.clock >= 1 / STATIC_FPS && screens.facing()) {
         this.clock = 0;
         screens.drawStatic(this.staticPhase);
       }
@@ -96,7 +105,7 @@ export class AttractLoop {
       if (this.clock >= 1 / ATTRACT_FPS) {
         this.clock = 0;
         this.phase += 1;
-        screens.drawScores(this.phase);
+        if (screens.facing()) screens.drawScores(this.phase);
       }
       if (this.modeClock >= SCORES_SECONDS) {
         if (game.demoable !== false && screens.near()) this.startShowing();
@@ -116,7 +125,7 @@ export class AttractLoop {
       if (this.clock >= 1 / ATTRACT_FPS) {
         this.clock = 0;
         this.phase += 1;
-        screens.drawTitle(this.phase);
+        if (screens.facing()) screens.drawTitle(this.phase);
       }
       if (this.modeClock >= TITLE_SECONDS && screens.near()) {
         this.mode = 'scores';
@@ -125,12 +134,16 @@ export class AttractLoop {
       }
       return NO_CONTROLS;
     }
-    // A demo or a replay: silent, the game drawn under a banner.
+    // A demo or a replay, the game drawn under a banner: heard very low when it is one of the nearest (`demoBed`), else silent.
     let controls: ArcadeControls = NO_CONTROLS;
     const replay = this.replay;
     if (!game.over && this.modeClock < (replay ? REPLAY_MAX : DEMO_MAX)) {
       controls = runner.step(dt, () => (replay && !replay.done ? replay.next() : replay ? NO_CONTROLS : game.autopilot(DEMO_SKILL)));
-      game.takeSounds();
+      const sounds = game.takeSounds();
+      if (!this.parts.quiet && sounds.length && demoHeard(this, screens.distance())) {
+        speaker.level = DEMO_LEVEL;
+        speaker.playAll(sounds);
+      }
     } else {
       // Recorded under older rules, it no longer ends where it did: nothing worth showing any more.
       if (this.hold === 0 && game.over && replay && game.score !== replay.replay.score) replays?.drop(game.id);

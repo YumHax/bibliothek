@@ -120,6 +120,7 @@ export class Vendor extends THREE.Group implements Furniture, Interactable, Upda
       this.model.nod();
       this.unfold();
     }
+    if (this.attention.inConversation) this.model.listen(0.5);
     this.local.copy(this.viewerPos);
     this.worldToLocal(this.local);
     const near = this.local.z > 0.3 && Math.hypot(this.local.x, this.local.z) < NOTICE_RANGE;
@@ -151,7 +152,7 @@ export class Vendor extends THREE.Group implements Furniture, Interactable, Upda
   /** A word or two in a bubble over their head ("Sold!", "Good eye!"). */
   say(text: string, seconds?: number): void {
     this.bubble.say(text, seconds, () => {
-      this.model.talk(lineSeconds(text));
+      this.model.talk(lineSeconds(text), text);
       this.attention.engage(WORD_ATTENTION);
     });
   }
@@ -164,7 +165,7 @@ export class Vendor extends THREE.Group implements Furniture, Interactable, Upda
   /** A line to the player, over their head with their name (`name`: someone met, by their own) (or in the subtitles, out of view): they talk it, eyes on the player. */
   speak(text: string, name = this.speaker): void {
     this.bubble.speak(text, name, () => {
-      this.model.talk(lineSeconds(text));
+      this.model.talk(lineSeconds(text), text);
       this.attention.engage(lineSeconds(text) + LINE_ATTENTION);
       this.unfold();
     });

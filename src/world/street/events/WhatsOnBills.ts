@@ -20,6 +20,9 @@ const BILL = { wrap: 1.7, bottom: 0.75, top: 2.15 };
 const BILL_CANVAS = { w: 640, h: 512 };
 /** The shelter's poster (the size of `StreetFurniture`'s panel). */
 const AD_CANVAS = { w: 256, h: 372 };
+/** Items pasted on the column (more and the lines are too small to read), and read out on a click. */
+const PAINTED = 5;
+const READ_OUT = 8;
 
 /**
  * The street's "what's on": a fresh bill pasted on the Morris column facing the road (the next
@@ -75,16 +78,16 @@ export class WhatsOnBills extends THREE.Group implements Furniture, Interactable
 
   activate(session: SessionActions): void {
     const items = whatsOn(this.options);
-    // A line an item, the first five; the rest counted.
-    const lines = items.slice(0, 5).map((i) => `${i.today ? 'TODAY · ' : ''}${i.title}: ${i.line}`);
-    if (items.length > 5) lines.push(`…and ${items.length - 5} more`);
+    // A line an item, the first eight; the rest counted.
+    const lines = items.slice(0, READ_OUT).map((i) => `${i.today ? 'TODAY · ' : ''}${i.title}: ${i.line}`);
+    if (items.length > READ_OUT) lines.push(`…and ${items.length - READ_OUT} more`);
     session.read({ title: "What's on", text: lines.join('\n'), look: 'note' });
   }
 
   private repaint(): void {
     this.day = this.options.day();
     const items = whatsOn(this.options);
-    paintBill(this.billCanvas, items);
+    paintBill(this.billCanvas, items.slice(0, PAINTED));
     paintAd(this.adCanvas, items[0]?.title === 'GRAND FLEA FAIR' ? items[0] : items.find((i) => i.title === 'GRAND FLEA FAIR') ?? null);
     this.bill.needsUpdate = true;
     this.ad.needsUpdate = true;

@@ -7,7 +7,9 @@ import type { Game } from '@/catalog/types';
 import { readGame } from '@/catalog/validate';
 import { createCanvas, toTexture } from '@/covers/generated/canvasUtils';
 import { StockItem } from '@/economy/StockItem';
-import { TRADER_MARKUP } from '@/economy/pricing';
+import { TRADER_MARKUP, marketPrice } from '@/economy/pricing';
+import { felixCopy, felixLotOn } from '@/economy/felixLots';
+import { markStreet } from '@/social/street/streetMarks';
 import { KEYS, PersistedStore } from '@/persistence';
 import { gameDayRandom } from '@/time/daily';
 import { inHours } from '@/time/clock';
@@ -102,6 +104,10 @@ export class Trader extends THREE.Group implements Furniture, Updatable, Interac
   private greeted = false;
   /** The games in his suitcase that he won off the player's nose (his haul). */
   private readonly haulIds = new Set<string>();
+  /** One of Félix's copies in his suitcase today, its lot number (`economy/felixLots`, his days one in two), or null. */
+  private felixLot: number | null = null;
+  /** He has had his word about Félix's copy this visit. */
+  private toldFelix = false;
   private present = false;
   private lookClock = LOOK_EVERY;
   private line = 0;
@@ -165,14 +171,28 @@ export class Trader extends THREE.Group implements Furniture, Updatable, Interac
       rival.meet();
       return;
     }
+    const felix = this.felixWord();
+    if (felix) {
+      this.person.speak(felix);
+      return;
+    }
     const lines = this.boxes.length ? LINES : EMPTY_LINES;
     const line = lines[this.line++ % lines.length]!;
     this.person.speak(line);
   }
 
+  /** His word about Félix's copy on his table, once a visit while it is still there; else null. */
+  private felixWord(): string | null {
+    if (this.toldFelix || this.felixLot === null || !this.boxes.some((b) => b.item.game.felixLot === this.felixLot)) return null;
+    this.toldFelix = true;
+    return `That one? Lot ${this.felixLot}. Your uncle’s sticker is still on the back. Sentimental value is extra, I’m afraid. Firm price.`;
+  }
+
   /** His first word in a conversation: how things stand, and the copy he beat the player to if it is on his table; then his patter. */
   private opening(): string {
     const rival = this.options.rival!;
+    const felix = this.felixWord();
+    if (felix) return felix;
     if (!this.greeted) {
       this.greeted = true;
       const haul = this.boxes.some((b) => this.haulIds.has(b.item.game.id));
@@ -262,15 +282,21 @@ export class Trader extends THREE.Group implements Furniture, Updatable, Interac
     for (const h of haul) this.haulIds.add(h.game.id);
     // Today's pick was saved with his markup on: taken off again for a friend.
     const picked = games.map((game, i) => ({ game, price: Math.max(2, Math.round((prices[i]! / MARKUP) * markup)) })).filter(({ game }) => !this.haulIds.has(game.id));
-    const left = [...haul, ...picked].filter(({ game }) => !owns(game.id)).slice(0, COPIES + 2);
+    // One of Félix's copies, some of his days (docs/story.md, act 2): complete, his sticker on the back, firm at his markup.
+    const lot = felixLotOn(today.gameDay, 'crane', owns);
+    const felix = lot && felixCopy(lot);
+    const felixOffer = felix ? [{ game: felix, price: Math.max(2, Math.round(marketPrice(felix, undefined, 'complete', 1) * MARKUP)) }] : [];
+    this.felixLot = felix ? lot.lot : null;
+    const left = [...felixOffer, ...haul, ...picked.filter(({ game }) => game.id !== felix?.id)].filter(({ game }) => !owns(game.id)).slice(0, COPIES + 2);
     const spacing = SUITCASE.width / (left.length + 1);
     left.forEach(({ game, price }, i) => {
       // At cost it is a sale (the usual price struck through), never haggled on top: what he won at a saleroom's
       // opening bid, haggled down, would sell back at the WE BUY desk for more than it cost (docs/economy.md).
       // What he won (the haul) is firm at his markup too: a saleroom copy came at an opening bid, and a haggle off
       // ×1.25 of it could still land under the desk's buy-back.
-      const won = this.haulIds.has(game.id);
-      const item = new StockItem(game, game.condition ?? 'complete', 'stall', { list: price, final: true }, { ...(markup < MARKUP ? { sale: markup / MARKUP } : {}), ...(won ? { firm: true } : {}) });
+      // Félix's copy too: firm at his markup, never at cost (he knows what it means to the player).
+      const won = this.haulIds.has(game.id) || game.felixLot !== undefined;
+      const item = new StockItem(game, game.condition ?? 'complete', 'stall', { list: price, final: true }, { ...(markup < MARKUP && game.felixLot === undefined ? { sale: markup / MARKUP } : {}), ...(won ? { firm: true } : {}) });
       const box = new ForSaleBox(item, covers, {
         pose: { kind: 'lean', angle: 0.35 },
         wallet,
@@ -285,8 +311,9 @@ export class Trader extends THREE.Group implements Furniture, Updatable, Interac
       box.onSold = () => {
         host.remove(box);
         this.boxes.splice(this.boxes.indexOf(box), 1);
-        // Bought back off him: out of his haul.
-        if (this.haulIds.has(game.id)) rival?.sold(game.id);
+        // Bought back off him: out of his haul; one of Félix's is a moment of the story.
+        if (game.felixLot !== undefined) markStreet('felixFromVictor');
+        else if (this.haulIds.has(game.id)) rival?.sold(game.id);
       };
       box.restock = () => {
         place();

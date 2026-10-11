@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import type { Zone } from '../zone/Zone';
-import type { BuildContext, HomeContext, MoneyContext, ZoneHandle } from '../buildContext';
+import type { BuildContext, HomeContext, MarketContext, MoneyContext, ZoneHandle } from '../buildContext';
+import { isKeepsake } from '@/economy/Transactions';
 import type { Furniture } from '../Furniture';
 import { furnishShell } from '../shell';
 import { placeClock, placeRoomLight } from '../build/roomParts';
@@ -43,7 +44,7 @@ import { talkHook } from '../people/socialHook';
 import { clerkTalk } from './clerkTalk';
 
 /** What a walk-in shop's builder reads of the `BuildContext`: the sky and the camera (its sounds), the till's panel, the day, what the flat owns, the money, the consoles and the people. */
-type ShopBuild = Pick<BuildContext, 'sky' | 'listener' | 'acoustics' | 'panels' | 'today' | 'classifieds' | 'social'> & { home: Pick<HomeContext, 'upgrades' | 'household'>; money: Pick<MoneyContext, 'wallet'> };
+type ShopBuild = Pick<BuildContext, 'sky' | 'listener' | 'acoustics' | 'panels' | 'today' | 'classifieds' | 'social' | 'collection'> & { home: Pick<HomeContext, 'upgrades' | 'household'>; money: Pick<MoneyContext, 'wallet' | 'purse'>; market: Pick<MarketContext, 'lots'> };
 
 /**
  * The shop's daylight: the sky's through its one window, never darker than this (the back of a shop is lit by its
@@ -188,7 +189,7 @@ function placeCounterAndClerk(zone: Zone, ctx: ShopBuild, plan: ShopPlan): { cou
   const home = zone.toLocal(counter.localToWorld(CLERK_AT.clone()));
   const { seed, lines, callOuts, thanks, chores } = plan.clerk;
   const clerkId = clerkOf(plan.shop);
-  const talk = { shop: plan.shop, openTill, day: () => ctx.today.gameDay, catName: ctx.home.household?.catName, catHome: () => upgrades?.has('cat') ?? true, workshop: ctx.classifieds?.workshop };
+  const talk = { shop: plan.shop, openTill, day: () => ctx.today.gameDay, catName: ctx.home.household?.catName, catHome: () => upgrades?.has('cat') ?? true, workshop: ctx.classifieds?.workshop, karim: karimTrade(ctx) };
   const social = clerkId ? talkHook(ctx.social, clerkId, (session) => clerkTalk({ ...talk, clerk }, session)) : undefined;
   const clerk: ShopClerk = zone.place(new ShopClerk({ viewer: listener, seed, lines, callOuts, thanks, chores, home: { at: home.clone(), yaw: counter.rotation.y }, label: 'The shopkeeper · chat', ...(social ? { social } : {}) }), home, counter.rotation.y);
   const sold = (): void => {
@@ -335,4 +336,17 @@ function soundOf(sound: ShopSound): AmbientVoice {
     case 'pets':
       return new PetShopNoises();
   }
+}
+
+/** Karim's trade at TV REPAIR (`clerkTalk`): his bench's fee from the wallet, a swap through `Transactions` into the parcel. */
+function karimTrade(ctx: ShopBuild): Parameters<typeof clerkTalk>[0]['karim'] {
+  const { purse } = ctx.money;
+  const tx = ctx.market.lots?.tx;
+  if (!purse || !tx) return undefined;
+  return {
+    purse,
+    givable: () => ctx.collection.games.games.filter((g) => (g.status ?? 'owned') === 'owned' && !isKeepsake(g)),
+    owns: (id) => ctx.collection.owns(id),
+    swap: (give, get) => tx.swapWithNeighbour(give, get, 'Karim at TV REPAIR (a swap)').ok,
+  };
 }

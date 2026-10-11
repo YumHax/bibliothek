@@ -1,14 +1,23 @@
 import * as THREE from 'three';
-import { afterChunk, patchShader } from '../materials/shaderPatch';
+import { afterChunk, beforeChunk, patchShader } from '../materials/shaderPatch';
 import { isShared, markShared } from '../materials/sharedResources';
 import { facadeHeight } from './facadePainter';
 import { FACADES } from '@/world/city/facades';
 import { FRONT, PARK_STREET, STREET_ENDS } from '@/world/measures/street';
+import { CLOUD_SHADOW, CLOUD_SHADOW_GLSL } from './cloudShadow';
 
 /** The sun's shadow fades out over this outer share of its map (the square of street round the player): no hard edge. */
 const EDGE_FADE = 0.15;
 
 const RETURN = 'return mix( 1.0, shadow, shadowIntensity );';
+const BIAS = 'shadowCoord.z += shadowBias;';
+
+/**
+ * The street's sun is told from any other shadowed light by its shadow's `radius` (PCF soft filtering, the one the
+ * engine uses, never reads it): exactly this value, exactly representable, compared in the shader. Every street rig
+ * (`StreetLighting`) gives its sun this radius; its map may then hold two squares (`sunCascade`) and the clouds shade it.
+ */
+export const STREET_SUN_TAG = 1.375;
 
 /*
  * Past the map's square, the sun's shadow is not simply gone: the street's long shadows are its two
@@ -29,10 +38,15 @@ const ALONG = { x0: PARK_STREET.hedge, x1: STREET_ENDS.east, z0: STREET_ENDS.sou
 export interface FarShadowUniforms {
   farSun: { value: THREE.Vector3 };
   farOrigin: { value: THREE.Vector3 };
+  /**
+   * The near square in the sun's map (`SunCascadeShadow`): a point's coordinate in the far square times xy plus zw is
+   * its coordinate in the near one (the right half of the map, the far square its left); x 0 while there is none.
+   */
+  sunCascade: { value: THREE.Vector4 };
 }
 
 export function farShadowUniforms(): FarShadowUniforms {
-  return { farSun: { value: new THREE.Vector3(0, 1, 0) }, farOrigin: { value: new THREE.Vector3() } };
+  return { farSun: { value: new THREE.Vector3(0, 1, 0) }, farOrigin: { value: new THREE.Vector3() }, sunCascade: { value: new THREE.Vector4(0, 0, 0, 0) } };
 }
 
 let rows: THREE.DataTexture | null = null;
@@ -74,8 +88,15 @@ const f = (n: number): string => n.toFixed(2);
 const FAR_SHADOW = /* glsl */ `
 uniform vec3 farSun;
 uniform vec3 farOrigin;
+uniform vec4 sunCascade;
 uniform sampler2D farRows;
 varying vec3 vFarWorld;
+float farRowHeight(float along, float from, float to, int channel) {
+  float u = (along - from) / (to - from);
+  if (u <= 0.0 || u >= 1.0) return 0.0;
+  vec4 h = texture2D(farRows, vec2(u, 0.5)) * ${f(ROW_HEIGHT)};
+  return channel == 0 ? h.r : channel == 1 ? h.g : h.b;
+}
 float farRowLit(float along, float y, float from, float to, int channel) {
   float u = (along - from) / (to - from);
   if (u <= 0.0 || u >= 1.0) return 1.0;
@@ -108,18 +129,71 @@ float farShadowAt(vec3 w) {
  * The shadow chunk with `getShadow` (directional and spot maps; the point lights' is another
  * function) fading its shadow towards the map's border into the far shadow of the rows. Out here
  * the only shadow-casting light is the sun (`StreetLighting`), whose map is a square round the
- * player: without this its shadows stop dead along that square's edge.
+ * player: without this its shadows stop dead along that square's edge. For the street's sun (told by
+ * `STREET_SUN_TAG`) two more things: where its map holds a near square too (`sunCascade`), a point
+ * inside it reads it there (finer by three, the seam dithered over a band), and the clouds' shade
+ * drifting over (`cloudShadow`) dims what the sun lights.
  */
 function fadingShadowChunk(): string {
   const chunk = THREE.ShaderChunk.shadowmap_pars_fragment;
-  const at = chunk.indexOf(RETURN);
+  const start = chunk.indexOf('float getShadow(');
+  const bias = start < 0 ? -1 : chunk.indexOf(BIAS, start);
+  const at = bias < 0 ? -1 : chunk.indexOf(RETURN, bias);
   if (at < 0) throw new Error('[shadowFade] getShadow has changed');
-  const fade = /* glsl */ `
+  const cascade = /* glsl */ `
 		float shadowEdge = max( abs( shadowCoord.x - 0.5 ), abs( shadowCoord.y - 0.5 ) ) * 2.0;
-		if ( shadowEdge > ${(1 - EDGE_FADE).toFixed(3)} ) shadow = mix( shadow, farShadowAt( vFarWorld ), smoothstep( ${(1 - EDGE_FADE).toFixed(3)}, 1.0, shadowEdge ) );
+		bool streetSun = shadowRadius == ${STREET_SUN_TAG.toFixed(3)};
+		if ( streetSun && sunCascade.x > 0.0 ) {
+			vec2 nearUv = shadowCoord.xy * sunCascade.xy + sunCascade.zw;
+			float nearEdge = max( abs( nearUv.x - 0.5 ), abs( nearUv.y - 0.5 ) ) * 2.0;
+			float seam = 0.84 + 0.12 * fract( sin( dot( gl_FragCoord.xy, vec2( 12.9898, 78.233 ) ) ) * 43758.5453 );
+			if ( nearEdge < seam ) shadowCoord.xy = vec2( 0.5 + 0.5 * nearUv.x, nearUv.y );
+			else shadowCoord.x = ( shadowCoord.x < 0.0 || shadowCoord.x > 1.0 ) ? - 1.0 : 0.5 * shadowCoord.x;
+			shadowMapSize.x *= 2.0;
+		}
 		`;
-  return FAR_SHADOW + chunk.slice(0, at) + fade + chunk.slice(at);
+  const fade = /* glsl */ `
+		if ( shadowEdge > ${(1 - EDGE_FADE).toFixed(3)} ) shadow = mix( shadow, farShadowAt( vFarWorld ), smoothstep( ${(1 - EDGE_FADE).toFixed(3)}, 1.0, shadowEdge ) );
+		if ( streetSun ) shadow *= cloudShadowAt( vFarWorld, farSun );
+		`;
+  return FAR_SHADOW + CLOUD_SHADOW_GLSL + chunk.slice(0, bias + BIAS.length) + cascade + chunk.slice(bias + BIAS.length, at) + fade + chunk.slice(at);
 }
+
+/**
+ * How much of the sky a point down in the street sees (0.6 at the foot of a tall row across a narrow street .. 1 on
+ * the roofs and out in the open): each row standing beside it (Front Street's two, Park Street's one: their rooflines
+ * from `farRows`) hides the sky up to its parapet's elevation; a point on a row's own face leaves that row out. The
+ * sky's ambient and the reflected sky are scaled by it, so the street's floor is a little dimmer in the shade than the
+ * open park and the upper floors.
+ */
+const SKY_VISIBILITY = /* glsl */ `
+float streetRowBlock(float height, float y, float away) {
+  if (height <= 0.0 || away < 0.6) return 0.0;
+  float rise = max(height - y, 0.0);
+  return rise / sqrt(rise * rise + away * away);
+}
+float streetSkyVisibility(vec3 w) {
+  vec3 p = w - farOrigin;
+  float blocked = 0.0;
+  if (p.z > ${f(FRONT.ourLine)} && p.z < ${f(FRONT.farLine)}) {
+    blocked += streetRowBlock(farRowHeight(p.x, ${f(ALONG.x0)}, ${f(ALONG.x1)}, 0), p.y, p.z - ${f(FRONT.ourLine)});
+    blocked += streetRowBlock(farRowHeight(p.x, ${f(ALONG.x0)}, ${f(ALONG.x1)}, 1), p.y, ${f(FRONT.farLine)} - p.z);
+  } else if (p.z <= ${f(FRONT.ourLine)} && p.x < ${f(PARK_STREET.line)}) {
+    blocked += streetRowBlock(farRowHeight(p.z, ${f(ALONG.z0)}, ${f(ALONG.z1)}, 2), p.y, ${f(PARK_STREET.line)} - p.x);
+  }
+  return 1.0 - 0.4 * clamp(blocked * 0.5, 0.0, 1.0);
+}
+`;
+
+const SKY_VISIBILITY_APPLY = /* glsl */ `
+#ifdef USE_SHADOWMAP
+  {
+    float streetSky = streetSkyVisibility( vFarWorld );
+    irradiance *= streetSky;
+    iblIrradiance *= mix( 1.0, streetSky, 0.6 );
+  }
+#endif
+`;
 
 const FAR_VERTEX = /* glsl */ `
 #ifdef USE_SHADOWMAP
@@ -163,9 +237,12 @@ export function fadeSunShadowEdges(root: THREE.Object3D, far: FarShadowUniforms)
     patchShader(material, 'streetShadowFade', (shader) => {
       shader.uniforms.farSun = far.farSun;
       shader.uniforms.farOrigin = far.farOrigin;
+      shader.uniforms.sunCascade = far.sunCascade;
+      shader.uniforms.cloudShadow = CLOUD_SHADOW;
       shader.uniforms.farRows = { value: texture };
       shader.vertexShader = 'varying vec3 vFarWorld;\n' + afterChunk(shader.vertexShader, 'worldpos_vertex', FAR_VERTEX);
-      shader.fragmentShader = shader.fragmentShader.replace('#include <shadowmap_pars_fragment>', chunk);
+      shader.fragmentShader = shader.fragmentShader.replace('#include <shadowmap_pars_fragment>', chunk + SKY_VISIBILITY);
+      shader.fragmentShader = beforeChunk(shader.fragmentShader, 'lights_fragment_end', SKY_VISIBILITY_APPLY);
     });
   };
   const own = (material: THREE.Material): THREE.Material => {

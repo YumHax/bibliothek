@@ -18,10 +18,10 @@ const REAL_DAY_POLL_MS = 30_000;
  * for what is on when):
  * - `gameDay`: the game's day count, from 1 (the market calendar: a day passes at the game clock's
  *   midnight, or on a new real date). The market's stock and themes, the mail, visits, loans,
- *   neighbours' swaps, the trader's pick, the strays round the flat. `clock` adds the hour of the game
+ *   neighbours' swaps, the trader's pick, the strays round the flat, the arcade's days (its challenge,
+ *   change machine, broken machine, league week, regular's card, Saturday tournament). `clock` adds the hour of the game
  *   day (`clock.hours`, from the sky's clock): the one `GameClock` a feature reads instead of a closure.
- * - `realDay` / `realDate`: the player's local date. Street events, finds and tallies, the
- *   arcade's daily challenge, the wall calendar. `onNewRealDay` tells a feature the date turned while
+ * - `realDay` / `realDate`: the player's local date. Street events, finds and tallies, the wall calendar. `onNewRealDay` tells a feature the date turned while
  *   the game ran (a real-day draw taken at a zone's build follows it).
  * Made once in `bootstrap/services` (which hands it the sky's hours: `setHoursSource`) and given to the
  * builders in `BuildContext`.

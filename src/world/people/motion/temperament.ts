@@ -20,6 +20,10 @@ export interface Temperament {
   stance: number;
   /** 0..1: how likely a reaction shows in the body, not only on the face. */
   expressive: number;
+  /** Seconds per breath at rest (3.4 .. 4.6). */
+  breath: number;
+  /** The head's damping onto a new gaze: about 0.62 (brisk, a little past and back) .. 0.8 (settles softly). */
+  headDamping: number;
 }
 
 /** A person's temperament, fixed by `seed` (the build nudges the stance). */
@@ -33,6 +37,8 @@ export function temperamentOf(seed: number, look: PersonLook): Temperament {
     fidgetEvery: 6 + random() * 16,
     stance: -0.01 + random() * 0.05 + (look.build - 1) * 0.04,
     expressive: Math.min(1, 0.25 + random() * 0.55 + (energy - 1) * 0.5),
+    breath: 3.4 + random() * 1.2,
+    headDamping: 0.62 + random() * 0.18,
   };
 }
 

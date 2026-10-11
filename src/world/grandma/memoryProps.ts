@@ -90,6 +90,26 @@ export class TornParcel extends Prop {
 }
 
 /**
+ * THE PARCEL, still wrapped: the Game Boy's box in the sports pages, a string tied round it both ways, lying on the
+ * rug where `TornParcel` will be once the child has torn into it (Christmas 1995's cue). Origin on the floor.
+ */
+export class WrappedParcel extends Prop {
+  readonly contactShadow = false;
+
+  constructor() {
+    super();
+    this.name = 'WrappedParcel';
+    const base = FLOOR.rug.lift + PROUD; // convention-ok: a solid thing standing on the pile rug's top, not a layer drawn on it
+    const [w, h, d] = [0.26, 0.09, 0.21];
+    part(this, w, h, d, sportsPages(), { y: base + h / 2 });
+    // The string, each way round, the second a hair over the first where they cross on top.
+    const string = paint(0xc8b48a, 0.9);
+    part(this, w + 2 * PROUD, h + 2 * PROUD, 0.006, string, { y: base + h / 2 });
+    part(this, 0.006, h + 4 * PROUD, d + 4 * PROUD, string, { y: base + h / 2 });
+  }
+}
+
+/**
  * A SUNDAY SUPPER GONE COLD on a table whose top (a cloth's, if any) is at `top`: the enamel cocotte in the middle,
  * three plates pushed back (Mémé's at the back, the brothers' at the ends), the child's left at the front, the bread,
  * the bottle and the glasses. Origin on the floor under the table's middle, like the table's.

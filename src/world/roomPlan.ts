@@ -131,6 +131,34 @@ export const ROOM_PLAN = {
    * its pile instead of sinking into it (on the bare boards before).
    */
   featherWand: { at: { floor: [2.05, 0.3], rotationY: 0.5 } as Placement, lift: 0.012, rug: { good: 'livingRug', nth: 1 } as Owned },
+  /** The arcade's bouncy ball once won (`world/prizes/BouncyBall`): on the boards between the projector armchair and the pedestal, off the rug. */
+  bouncyBall: { floor: [1.05, 0.95] } as Placement,
+  /**
+   * The hall's retired cabinet once bought back at the prize counter (`homeArcade/placeRetiredCabinet`): in the
+   * front-left corner, its back to the front wall and its screen to the room (x -2.97..-2.31, z 2.22..3), clear of
+   * the vitrine (from x -2.15) and of the TV wall's plant; played standing in front of it.
+   */
+  retiredCabinet: { floor: [-2.64, 2.6], rotationY: Math.PI } as Placement,
+
+  /**
+   * What Mémé gives the player to take home (`world/keepsakes/`, docs/grandma.md "What the memories leave behind"):
+   * Félix's shelf on the front wall over the radiator, between the platform poster (x -1.5..-1.0, from 1.3 m up) and
+   * the first window (from x -0.3), put up with the first keepsake; each keepsake's spot on it [x, board (0 lower, 1
+   * upper), z, yaw]; his cushion on the TV rug between the set and its armchair, where the child sat on Wednesdays.
+   */
+  keepsakes: {
+    shelf: { at: { wall: 'front', along: -0.7, y: 1.12 } as Placement, width: 0.56, depth: 0.16, spacing: 0.24 },
+    spots: {
+      catalogue: [-0.2, 0, 0.08, 0.08],
+      wrapping: [-0.06, 0, 0.075, -0.1],
+      gaspardLetter: [0.08, 0, 0.075, 0.05],
+      suitcaseLabel: [0.21, 0, 0.08, 0.2],
+      screenPhoto: [-0.17, 1, 0.07, 0.15],
+      keyRing: [-0.02, 1, 0.08, 0],
+      stickers: [0.15, 1, 0.08, 0],
+    } as const,
+    cushion: { at: { floor: [-1.95, 0.5], rotationY: 0.35 } as Placement, look: { width: 0.55, depth: 0.5, thickness: 0.2, color: 0x8f3b3b } },
+  },
 
   /**
    * The collector's book (`src/world/collector/`). The binder lies on the sideboard's top (0.5 m) in the gap between the

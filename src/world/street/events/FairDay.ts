@@ -8,9 +8,13 @@ import { paint } from '../../materials/palette';
 import { TriBuilder } from '../relief/TriBuilder';
 import { distanceFade } from '../life/fade';
 import { snowCovered } from '../snowCover';
+import { windSwayed } from '../wind';
 import { FAIR_DAY, type Vec2 } from '../streetPlan';
 import { FRONT } from '@/world/measures/street';
 import { lcg } from '@/random';
+import { rainGear } from '../life/streetLook';
+import { currentSeason } from '@/time/season';
+import type { SkyState } from '../../props/DayNight';
 
 interface FairDayOptions {
   /** The camera: the waiting people face and fade by it. */
@@ -21,6 +25,8 @@ interface FairDayOptions {
   talk: () => string;
   drawDistance: number;
   fade: number;
+  /** The sky (an umbrella up for whoever waits in the rain). */
+  sky?: () => SkyState;
 }
 
 /** The bunting's flags: how far apart, their size, their colours. */
@@ -71,7 +77,9 @@ export class FairDay extends THREE.Group implements Furniture, Updatable {
         painted.quad(identity, [x, ya + 0.008, za], [x, yb + 0.008, zb], [x, yb - 0.008, zb], [x, ya - 0.008, za], '#e8e4d8', true);
       }
     }
-    const bunting = new THREE.Mesh(painted.build(), new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.85, side: THREE.DoubleSide }));
+    // It swings in the street's wind, most at the middle of each line (`wind.ts`), the flags fluttering.
+    const span = `clamp((transformed.z - (${FRONT.ourLine.toFixed(2)})) / ${(FRONT.farLine - FRONT.ourLine).toFixed(2)}, 0.0, 1.0)`;
+    const bunting = new THREE.Mesh(painted.build(), windSwayed(new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.85, side: THREE.DoubleSide }), 'fairBunting', { pivotY: 0, give: 0.6, flutter: 0.04, reachExpression: `4.0 * ${span} * (1.0 - ${span}) * 3.0` }));
     bunting.castShadow = false;
     this.add(bunting);
 
@@ -102,9 +110,12 @@ export class FairDay extends THREE.Group implements Furniture, Updatable {
     // People waiting about the door.
     let line = 0;
     FAIR_DAY.waiting.forEach((spot, i) => {
-      const person = new Walker({ viewer: options.viewer, seed: 1401 + i * 17, look: randomLook(1401 + i * 17), talk: () => (line < FAIR_LINES.length ? FAIR_LINES[line++]! : options.talk()), label: 'Waiting for the Fair', fade: true, labelWithin: 4 });
+      const person = new Walker({ viewer: options.viewer, seed: 1401 + i * 17, look: randomLook(1401 + i * 17, 'shopper', { season: currentSeason().name }), talk: () => (line < FAIR_LINES.length ? FAIR_LINES[line++]! : options.talk()), label: 'Waiting for the Fair', fade: true, labelWithin: 4 });
       options.place(person, at(spot.at));
       person.stand(spot.yaw, i % 2 ? 'crossed' : 'pockets', 'viewer');
+      // An umbrella up if it rains (the Fair is worth a wet wait).
+      const sky = options.sky?.();
+      if (sky) rainGear(person, sky, null);
       this.people.push(person);
     });
   }

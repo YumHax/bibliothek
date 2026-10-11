@@ -23,6 +23,8 @@ export interface PartnerSpot {
   handsAt(): readonly [THREE.Vector3, THREE.Vector3];
   /** Someone took the second stick (their initials), or left it (null: the machine plays it). */
   setPartner(name: string | null): void;
+  /** The last game's goals, the player's and player two's (null: the game keeps none): who won it. */
+  tally(): { you: number; them: number } | null;
 }
 
 /**
@@ -41,10 +43,11 @@ export interface Station extends THREE.Object3D {
   /** How far a player leans in over it (radians): a little over a panel, a lot over a pinball. */
   readonly lean: number;
   /**
-   * A regular steps up: the machine plays itself until `release`. False (nothing changes) when it is
-   * taken. With `performer` (their body), a machine that plays by the body (the hoops, the dance pad) directs it.
+   * A regular steps up: the machine plays itself until `release`, at `skill` (their hands: 0..1, else the machine's
+   * own regular's). False (nothing changes) when it is taken. With `performer` (their body), a machine that plays by
+   * the body (the hoops, the dance pad) directs it.
    */
-  occupy(performer?: Performer): boolean;
+  occupy(performer?: Performer, skill?: number): boolean;
   /** It directs the body of whoever plays it (`occupy` with a performer): their hands are its business, not the controls'. */
   readonly directs?: boolean;
   release(): void;

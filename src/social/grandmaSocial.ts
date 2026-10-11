@@ -83,13 +83,16 @@ export function callGrandma(at: { day: number; hour: number; photos: boolean }):
 /**
  * The journal's lines about her: Sunday lunch from the Friday before until it is eaten (paired with the saleroom's
  * sale, the same Sunday: the bus back drops the player by the market), and the album when she has photos to show.
+ * `hint` (`GrandmaHints.journal`): her words, she rang or wrote about the photos ready, or what she said of the next.
  */
-export function upcomingGrandma(at: { day: number; photos: boolean }): Upcoming[] {
+export function upcomingGrandma(at: { day: number; photos: boolean; hint?: { due: boolean; text: string } | null }): Upcoming[] {
   const lines: Upcoming[] = [];
   const toSunday = (SUNDAY_WEEKDAY - weekdayOf(at.day) + 7) % 7;
   const sunday = at.day + toSunday;
   const lunchDone = toSunday === 0 && countedToday(MEME_ID, 'sundayLunch', at.day);
   if (toSunday <= 2 && !lunchDone) lines.push({ kind: 'social', text: isAuctionDay(sunday) ? 'Sunday lunch at Mémé’s, then the sale' : 'Sunday lunch at Mémé’s', inDays: toSunday });
-  if (at.photos) lines.push({ kind: 'social', text: 'Mémé found more photos' });
+  const hint = at.hint ?? null;
+  if (at.photos) lines.push({ kind: 'social', text: hint?.due ? hint.text : 'Mémé found more photos' });
+  else if (hint && !hint.due) lines.push({ kind: 'social', text: hint.text });
   return lines;
 }

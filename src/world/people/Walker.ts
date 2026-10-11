@@ -48,6 +48,8 @@ export interface WalkerOptions {
   stopsToTalk?: boolean;
   /** Someone the player can talk to (docs/social.md): the social caption, and a click opens the conversation instead of a line. */
   social?: SocialHook;
+  /** Far enough off, drawn as one skinned mesh on the same bones (`PersonModel.useProxy`). Default: with `fade` (the crowds). */
+  distantProxy?: boolean;
 }
 
 /** How fast the body turns towards its heading, per second, walking; standing, a turn is slower (the feet step it round). */
@@ -78,6 +80,42 @@ const GO_ROUND = { sideMax: 0.75, pace: 0.45 };
  * within `follow` m: they slow to that pace.
  */
 const PASS = { ahead: 2.2, wide: 0.7, side: 0.55, sideMax: 0.4, pace: 0.85, follow: 1.1 };
+/**
+ * The others round a walker are found in a grid of `CELL` m squares over the crowd (built once a frame for a crowd
+ * list: again as soon as someone asks a second time), not by going through everyone: `PASS.ahead` fits in the cell
+ * and its neighbours.
+ */
+const CELL = 2.5;
+interface CrowdGrid {
+  /** Who has asked since it was built: one asking again means a new frame. */
+  asked: Set<Walker>;
+  cells: Map<number, Walker[]>;
+}
+const grids = new WeakMap<readonly Walker[], CrowdGrid>();
+/** A cell's key from its column and row. */
+const cellKey = (cx: number, cz: number): number => (cx + 4096) * 8192 + (cz + 4096);
+
+/** The crowd's grid for `asker`, rebuilt once a frame: those present and shown, by cell. */
+function gridOf(list: readonly Walker[], asker: Walker): CrowdGrid {
+  let grid = grids.get(list);
+  if (grid && !grid.asked.has(asker)) {
+    grid.asked.add(asker);
+    return grid;
+  }
+  grid ??= { asked: new Set(), cells: new Map() };
+  grid.asked.clear();
+  grid.asked.add(asker);
+  for (const cell of grid.cells.values()) cell.length = 0;
+  for (const w of list) {
+    if (!w.isPresent || !w.wantsShown) continue;
+    const key = cellKey(Math.floor(w.position.x / CELL), Math.floor(w.position.z / CELL));
+    let cell = grid.cells.get(key);
+    if (!cell) grid.cells.set(key, (cell = []));
+    cell.push(w);
+  }
+  grids.set(list, grid);
+  return grid;
+}
 
 type State = { kind: 'walk'; path: THREE.Vector3[]; then: (() => void) | null } | { kind: 'stand'; yaw: number };
 /** What they keep their eyes on: a world point, the player (in conversation: mostly on them, a glance aside now and then), or nothing (their own glances). */
@@ -118,6 +156,9 @@ export class Walker extends THREE.Group implements Furniture, Updatable, Interac
   private readonly fades: boolean;
   /** Who walks with them (a friend, a parent): not someone to make way for. */
   partner: Walker | null = null;
+  /** Whose hand they hold while walking (a child's, a parent's; `holdHand`). */
+  private handIn: Walker | null = null;
+  private readonly handPoint = new THREE.Vector3();
   /** The street's people budget's share of them (0..1, times the fade asked for: `setAllowance`). */
   private allowance = 1;
   /** Seconds they stand still for a line said to the player (`stopsToTalk`). */
@@ -163,6 +204,7 @@ export class Walker extends THREE.Group implements Furniture, Updatable, Interac
     // Under the hips and each foot, sized to them.
     this.blob = this.model.groundShadow();
     if (options.fade) this.model.enableFade();
+    if (options.distantProxy ?? options.fade) this.model.useProxy();
     this.bubble.position.y = BUBBLE_Y;
     // A conversation frames their eyes, wherever they are under the bubble (a child, seated, tall).
     this.bubble.userData.faceLift = (): number => this.model.eyesAbove(this.bubble);
@@ -198,6 +240,32 @@ export class Walker extends THREE.Group implements Furniture, Updatable, Interac
   /** The way they face (yaw, 0 = +z). */
   get facingYaw(): number {
     return Number.isNaN(this.heading) ? this.rotation.y : this.heading;
+  }
+
+  /**
+   * How long (s) the player has stood in their way so far (0 when not): they slow, stop a moment, then step round
+   * (`makeWay`). For someone watching (a word, a frown: the street's `StreetReactions`).
+   */
+  get blockedFor(): number {
+    return this.state.kind === 'walk' && this.yields ? this.yielding : 0;
+  }
+
+  /** Whether they are drawn as the one-draw proxy now (far off: `distantProxy`). */
+  get isProxy(): boolean {
+    return this.model.isProxy;
+  }
+
+  /**
+   * Hand in hand with `other` (a child and a grown-up walking together), or let go (null): each frame the hands on
+   * the sides facing each other meet halfway, at the child's reach. Call it on both.
+   */
+  holdHand(other: Walker | null): void {
+    if (this.handIn === other) return;
+    this.handIn = other;
+    if (!other) {
+      this.model.grip(0, null);
+      this.model.grip(1, null);
+    }
   }
 
   /** How fast they are walking right now (m/s). */
@@ -367,14 +435,24 @@ export class Walker extends THREE.Group implements Furniture, Updatable, Interac
     this.pace = factor;
   }
 
-  /** Something in the right hand (a phone, a book, an umbrella up), or nothing. */
+  /** Something in the hand (a phone, a book in both, an umbrella up), or nothing. */
   hold(item: Held | null): void {
     this.model.hold(item);
+  }
+
+  /** A box carried before them in both arms, its sides in the palms (`PersonModel.carry`), or put down (null). */
+  carry(box: THREE.Object3D | null, size?: { w: number; d: number }): void {
+    this.model.carry(box, size);
   }
 
   /** The hood up (snow) or down. */
   setHood(up: boolean): void {
     this.model.setHood(up);
+  }
+
+  /** Something worn on the head (a costume's hat), in the skull's frame. */
+  wearOnHead(object: THREE.Object3D): void {
+    this.model.wearOnHead(object);
   }
 
   setFocus(focus: Focus): void {
@@ -406,7 +484,7 @@ export class Walker extends THREE.Group implements Furniture, Updatable, Interac
 
   /** A line of theirs just showed (a queued one, after those before it): they nod along while it would take to say. */
   protected lineShown(text: string): void {
-    this.model.talk(this.lineSeconds(text));
+    this.model.talk(this.lineSeconds(text), text);
   }
 
   /** About how long `text` takes to say (s). */
@@ -420,6 +498,7 @@ export class Walker extends THREE.Group implements Furniture, Updatable, Interac
     // Faded right out (beyond sight, through a door, held back by a budget): they still go where they go, but
     // their body is not posed, nor their eyes moved, until it shows again.
     const drawn = this.model.visible;
+    if (this.handIn) this.joinHands(this.handIn, drawn);
     if (this.state.kind === 'walk') this.step(dt, this.state, drawn);
     else {
       // Turning on the spot, slower than walking: the planted feet step round with it (`PersonModel`).
@@ -494,7 +573,8 @@ export class Walker extends THREE.Group implements Furniture, Updatable, Interac
     for (let i = 1; i < state.path.length; i++) left += state.path[i]!.distanceTo(state.path[i - 1]!);
     goal = Math.min(goal, Math.max(ARRIVE_SPEED, Math.sqrt((2 * own * left) / ACCEL_S)));
     if (this.yields) goal = this.makeWay(dt, first, goal);
-    if (this.crowd) goal = this.passOthers(dt, first, goal);
+    // Passing others only matters where it shows: faded out, they go through.
+    if (this.crowd && drawn) goal = this.passOthers(dt, first, goal);
     const accel = (own / ACCEL_S) * dt;
     this.current = this.current < goal ? Math.min(goal, this.current + accel) : Math.max(goal, this.current - accel * 2);
     let move = this.current * dt;
@@ -580,21 +660,19 @@ export class Walker extends THREE.Group implements Furniture, Updatable, Interac
     const fz = hz / h;
     let speed = goal;
     let meeting = false;
-    for (const other of this.crowd!()) {
-      if (other === this || other === this.partner || !other.present || other.parent !== this.parent || !other.wantsShown) continue;
-      const dx = other.position.x - this.position.x;
-      const dz = other.position.z - this.position.z;
-      const along = dx * fx + dz * fz;
-      if (along <= 0 || along > PASS.ahead) continue;
-      // Positive: they are on our left.
-      const side = dx * fz - dz * fx;
-      if (Math.abs(side) > PASS.wide) continue;
-      const oyaw = other.facingYaw;
-      const facing = Math.sin(oyaw) * fx + Math.cos(oyaw) * fz;
-      if (facing < -0.3 && other.isWalking) meeting = true;
-      else if (facing > 0.5 && along < PASS.follow && other.currentSpeed < speed) speed = Math.max(other.currentSpeed, 0.25);
-      else if (!other.isWalking && along < 0.9) meeting = true;
-    }
+    const cells = gridOf(this.crowd!(), this).cells;
+    const cx = Math.floor(this.position.x / CELL);
+    const cz = Math.floor(this.position.z / CELL);
+    for (let ix = -1; ix <= 1; ix++)
+      for (let iz = -1; iz <= 1; iz++) {
+        const cell = cells.get(cellKey(cx + ix, cz + iz));
+        if (!cell) continue;
+        for (const other of cell) {
+          const near = this.meet(other, fx, fz, speed);
+          if (near === 'meet') meeting = true;
+          else if (near !== null) speed = near;
+        }
+      }
     if (meeting) {
       // Keep right: (fz, -fx) is our left, so step the other way.
       if (this.passed < PASS.sideMax) {
@@ -606,6 +684,58 @@ export class Walker extends THREE.Group implements Furniture, Updatable, Interac
       speed = Math.min(speed, goal * PASS.pace);
     }
     return speed;
+  }
+
+  /**
+   * One other on the way (heading `fx`, `fz`): 'meet' when they come the other way close to the line (or stand in it),
+   * a slower pace to follow when they go the same way just ahead, else null.
+   */
+  private meet(other: Walker, fx: number, fz: number, speed: number): 'meet' | number | null {
+    if (other === this || other === this.partner || !other.present || other.parent !== this.parent || !other.wantsShown) return null;
+    const dx = other.position.x - this.position.x;
+    const dz = other.position.z - this.position.z;
+    const along = dx * fx + dz * fz;
+    if (along <= 0 || along > PASS.ahead) return null;
+    // Positive: they are on our left.
+    const side = dx * fz - dz * fx;
+    if (Math.abs(side) > PASS.wide) return null;
+    const oyaw = other.facingYaw;
+    const facing = Math.sin(oyaw) * fx + Math.cos(oyaw) * fz;
+    if (facing < -0.3 && other.isWalking) return 'meet';
+    if (facing > 0.5 && along < PASS.follow && other.currentSpeed < speed) return Math.max(other.currentSpeed, 0.25);
+    if (!other.isWalking && along < 0.9) return 'meet';
+    return null;
+  }
+
+  /**
+   * Hand in hand: the hand on the side towards `other` and theirs meet halfway between them, at the height a child's
+   * hand comes to with the arm a little up (the shorter one's), a little ahead; the other hand is free.
+   */
+  private joinHands(other: Walker, drawn: boolean): void {
+    if (!drawn || !other.present || other.parent !== this.parent) {
+      this.model.grip(0, null);
+      this.model.grip(1, null);
+      return;
+    }
+    const parent = this.parent;
+    if (!parent) return;
+    const dx = other.position.x - this.position.x;
+    const dz = other.position.z - this.position.z;
+    const apart = Math.hypot(dx, dz);
+    if (apart > 1.4) {
+      this.model.grip(0, null);
+      this.model.grip(1, null);
+      return;
+    }
+    // Which of our hands faces them: their offset along the body's +x (yaw 0 faces +z).
+    const yaw = this.facingYaw;
+    const plusX = dx * Math.cos(yaw) - dz * Math.sin(yaw);
+    const hand: 0 | 1 = plusX > 0 ? 1 : 0;
+    const height = Math.min(this.model.eyeHeight, other.model.eyeHeight) * 0.56;
+    this.handPoint.set(this.position.x + dx * 0.5 + Math.sin(yaw) * 0.08, height, this.position.z + dz * 0.5 + Math.cos(yaw) * 0.08);
+    parent.localToWorld(this.handPoint);
+    this.model.grip(hand, this.handPoint);
+    this.model.grip(hand === 1 ? 0 : 1, null);
   }
 
   /** Whether the body has (nearly) finished turning to `yaw`. */
@@ -629,6 +759,7 @@ export class Walker extends THREE.Group implements Furniture, Updatable, Interac
     const busy = this.hands !== null && !this.attention.inConversation;
     const atPlayer = this.attention.update(dt, this, this.viewer, walking ? WALKING : STANDING, this.viewerPos) && !busy;
     if (this.attention.takeNotice() && !busy) this.model.nod();
+    if (this.attention.inConversation) this.model.listen(0.5);
     if (atPlayer) {
       this.model.gaze(this.viewerPos);
       return;

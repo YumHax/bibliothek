@@ -14,8 +14,8 @@ interface HouseholdState {
   restored: { day: number; n: number };
   /** A bath was taken and no haggle has used its calm yet. */
   soaked: boolean;
-  /** Market day the cake was baked (-1: none out), and whether a friend finished it. */
-  cake: { day: number; eaten: boolean };
+  /** Market day the cake was baked (-1: none out), whether a friend finished it, and the days it keeps over the usual (a lemon drizzle: the greengrocer's basket). */
+  cake: { day: number; eaten: boolean; longer?: number };
   /** The rest (`Household.rest`) the cat had its last treat in. */
   treatDay: number;
   /** What the cat left, from its market day on, until picked up. */
@@ -143,14 +143,14 @@ export class Household {
 
   /** A cake on the kitchen table, not finished and not stale. */
   get cakeOut(): boolean {
-    const { day, eaten } = this.state.cake;
-    return day >= 0 && !eaten && this.day() - day < HOUSEHOLD.cake.days;
+    const { day, eaten, longer = 0 } = this.state.cake;
+    return day >= 0 && !eaten && this.day() - day < HOUSEHOLD.cake.days + longer;
   }
 
-  /** Bakes one: false when one is already out. */
-  bake(): boolean {
+  /** Bakes one (keeping `longer` days over the usual): false when one is already out. */
+  bake(longer = 0): boolean {
     if (this.cakeOut) return false;
-    this.commit({ cake: { day: this.day(), eaten: false } });
+    this.commit({ cake: { day: this.day(), eaten: false, ...(longer > 0 ? { longer } : {}) } });
     return true;
   }
 
@@ -296,8 +296,9 @@ function readState(data: unknown): HouseholdState | null {
   }
   state.soaked = d.soaked === true;
   if (typeof d.cake === 'object' && d.cake) {
-    const c = d.cake as { day?: unknown; eaten?: unknown };
-    state.cake = { day: num(c.day, -1), eaten: c.eaten === true };
+    const c = d.cake as { day?: unknown; eaten?: unknown; longer?: unknown };
+    const longer = num(c.longer, 0);
+    state.cake = { day: num(c.day, -1), eaten: c.eaten === true, ...(longer > 0 ? { longer } : {}) };
   }
   state.treatDay = num(d.treatDay, -1);
   state.gift = readGift(d.gift);

@@ -108,6 +108,7 @@ export class YardKid extends THREE.Group implements Furniture, Interactable, Upd
   update(dt: number): void {
     const looking = this.attention.update(dt, this, this.options.viewer, NOTICE, this.viewerPos);
     if (this.attention.takeNotice()) this.model.nod();
+    if (this.attention.inConversation) this.model.listen(0.5);
     this.onScreen = !looking;
     if (this.device) {
       this.device.updateMatrixWorld(true);
@@ -156,13 +157,13 @@ export class YardKid extends THREE.Group implements Furniture, Interactable, Upd
 
   /** A word in a bubble over their head (a cheer, the news shouted across the yard). */
   say(text: string, seconds?: number): void {
-    this.bubble.say(text, seconds, () => this.model.talk(lineSeconds(text)));
+    this.bubble.say(text, seconds, () => this.model.talk(lineSeconds(text), text));
   }
 
   /** A line to the player, their name on it once met; eyes on the player. */
   speak(text: string): void {
     this.bubble.speak(text, this.options.speaker(), () => {
-      this.model.talk(lineSeconds(text));
+      this.model.talk(lineSeconds(text), text);
       this.attention.engage(lineSeconds(text) + LINE_ATTENTION);
     });
   }

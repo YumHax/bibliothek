@@ -42,6 +42,7 @@
     --pz-card-pink: #ff93cc;
     --pz-card-green: #a4ff72;
     --pz-card-orange: #ffb347;
+    --pz-card-violet: #d6a8ff;
     --pz-photo-shadow: rgba(20, 25, 35, 0.35);
     --pz-hot: #e8245f;
     --pz-hot-dark: #9e1240;
@@ -264,6 +265,9 @@
   .prizes__card--pink { background: var(--pz-card-pink); transform: rotate(2deg); }
   .prizes__card--green { background: var(--pz-card-green); transform: rotate(-1.5deg); }
   .prizes__card--orange { background: var(--pz-card-orange); transform: rotate(2.5deg); }
+  .prizes__card--violet { background: var(--pz-card-violet); transform: rotate(-2deg); }
+  /* The back room's shelf: a curtain line above it, set apart from the glass case's price bands. */
+  .prizes__shelf--back { border-top: 2px dashed var(--pz-shelf-glass-2); padding-top: 0.9rem; }
 
   .prizes__row { position: relative; z-index: var(--z-above); flex: 1; display: flex; flex-wrap: wrap; gap: 0.3rem 0.6rem; align-items: flex-end; }
 
@@ -426,6 +430,38 @@
   .prizes__take:hover:not(:disabled) { filter: brightness(1.08); }
   .prizes__take:active:not(:disabled) { transform: translateY(5px); box-shadow: 0 1px 0 var(--pz-hot-dark), 0 2px 5px var(--shade-45), inset 0 1px 0 var(--tint-35); }
   .prizes__take:disabled { background: var(--pz-take-off); box-shadow: 0 6px 0 var(--pz-take-off-shade); color: var(--pz-take-off-ink); text-shadow: none; cursor: default; font-size: var(--fs-5); }
+  /* Pinning a prize as the goal: a quiet button under the big one, always there so nothing moves. */
+  .prizes__pin {
+    align-self: center;
+    padding: 0.3rem 0.8rem;
+    border: 1px solid var(--pz-rim);
+    border-radius: var(--ui-radius-pill);
+    background: transparent;
+    color: var(--pz-where);
+    font-size: var(--fs-3);
+    cursor: pointer;
+  }
+  .prizes__pin:hover:not(:disabled) { color: var(--pz-text); border-color: var(--pz-sign); }
+  .prizes__pin--on { color: var(--pz-sign); border-color: var(--pz-sign); }
+  .prizes__pin:disabled { opacity: 0.4; cursor: default; }
+  /* The sponsor's plate: which cabinet it goes on. */
+  .prizes__choose { display: flex; flex-wrap: wrap; gap: 0.35rem; }
+  .prizes__choice {
+    padding: 0.3rem 0.6rem;
+    border: 1px solid var(--pz-rim);
+    border-radius: var(--ui-radius);
+    background: var(--pz-laminate);
+    color: var(--pz-text);
+    font-family: var(--ui-font-mono);
+    font-size: var(--fs-2);
+    cursor: pointer;
+  }
+  .prizes__choice[aria-pressed='true'] { border-color: var(--pz-sign); color: var(--pz-sign); box-shadow: 0 0 0 1px var(--pz-sign); }
+  .prizes__choice:disabled { opacity: 0.55; cursor: default; }
+  .prizes__choice small { color: var(--ui-success); }
+  .prizes__pin:focus-visible,
+  .prizes__choice:focus-visible { outline: 3px solid var(--pz-sign); outline-offset: 2px; }
+
   /* The counter's own ring: the sign's yellow, wide, as a lit button's halo. */
   .prizes__take:focus-visible,
   .prizes__feed:focus-visible,

@@ -12,7 +12,8 @@ friend coming round), never a daily chore. What is worn or set stays so (saved) 
 | Kitchen table, the kit | A **worn** box in hand, click | Cleaned: `condition` `noManual` + `restored` (bright cover, still no manual), worth more in the collector's book; the WE BUY desk and swaps still count it worn (`pricing.dealerFactor`), so bin-to-desk never pays. One a rest (after a night's sleep, or every `restEvery` market days) | `HomeLife.cleanBox` |
 | Bathroom, hair dryer | A box with an old **price sticker** in hand | Peeled: worth its full price again (stickered copies sell at `STICKER.factor` and are worth that much less) | `HomeLife.peelSticker` |
 | Bathroom, the full bath | Click to soak (the water goes out after) | The next haggle's stallholder hears one more offer (`soak.patience`), whenever it comes | `HomeLife.soak`, `Perks.ease` |
-| Kitchen hob, mixing bowl | Bake a cake (on the table two market days; refused without the table) | A friend visiting while it is out has a slice, lingers `cake.linger` times as long and leaves a thank-you (a game to their taste, else coins) | `HomeLife.bake`, `Visitors.thankForCake` |
+| Kitchen hob, mixing bowl | Bake a cake (on the table two market days, three for a lemon drizzle with the greengrocer's basket in the pocket; refused without the table) | A friend visiting while it is out has a slice, lingers `cake.linger` times as long and leaves a thank-you (a game to their taste, else coins) | `HomeLife.bake`, `Visitors.thankForCake` |
+| Kitchen worktop, Mémé's recipe tin (once she taught one) | Cook her next recipe (blanquette, plum jam, yoghurt cake) | The dish counts as the cake for a friend who drops by; a portion goes to her (docs/grandma.md "Sunday lunch, recipes and favours") | `world/kitchen/memeRecipes.ts`, `GrandmaRituals.cook` |
 | Kitchen worktop, treat jar | A treat, once a rest (after a night's sleep, or every `restEvery` market days; the cat comes) | Next morning, sometimes, something by its kitchen bowl: coins, or the lost booklet of a shelved `noManual` game (complete again) | `HomeLife.giveTreat` / `takeGift`, `catGift.ts` |
 | Kitchen radio | Switched on between `radio.from` and `radio.until`, once a day | Radio Brocante: a grail heard of `radio.grailDays` ahead (the others say 3), tomorrow's theme and clearance, the Flea Fair | `chronicle.ts` |
 | Bedroom chair | Sit with a **complete** box in hand | Its manual read: platform know-how. From `knowHow.eye` manuals a fake's print is noticed before opening the box; from `respect` that platform's stallholders go easier | `HomeLife.readManual`, `Perks.tell` / `ease` |
@@ -21,6 +22,7 @@ friend coming round), never a daily chore. What is worn or set stays so (saved) 
 | Market, before `firstSale.before` | The morning's first stall purchase | "The first sale brings luck": the haggle opens lower (`firstSale.floor`) | `Perks.firstSale` |
 | Bedroom phone | Call a stall where the player is a regular (`phone.regularFrom`) in market hours | It reads out today's table and puts a copy aside for the hold deposit, as if held at the stall | `PhonePanel`, `Transactions.holdCopy` |
 | Bedroom phone | Ask a friend round, once a market day before `phone.friendsUntil` | They come `phone.inHours` later (a visit on demand: loans, tips, the cake) | `Visitors.invite`, `VisitBook.invite` |
+| Bedroom phone | It rings: Mémé, a photo of her album ready (or her message after) | The conversation opens on her news; let ring out, her message is read at the next click | `world/bedroom/memeRing` (docs/grandma.md) |
 | Bedroom phone | Have everyone round tonight; ring THE GAMING WEEKLY for an open house | A games night (PADDLE WARS on the TV, a photo), an open house two days on (coins at the door, the paper's article) | `Gatherings.phoneRows`, `call` (docs/visitors.md "Gatherings") |
 | Market stalls | Some ordinary copies carry an old price sticker (`STICKER.odds`) | Sold at `STICKER.factor`: a bargain once peeled off at home | `MarketStock.priced` (its own hash) |
 | Bedroom wardrobe (door open) | Choose an outfit | Arcade tee: +10 % tickets. Bargain hunter's jacket: every haggle opens lower. Sunday best: the glass case opens whatever the reputation. Mémé's scarf: she beams when it is worn to hers. Each is earned (a trophy, reputation, 25 games, Mémé close) | `outfits.ts`, `WardrobePanel` |
@@ -87,6 +89,13 @@ The kitchen radio ducks its music `DUCK_DB` under a jingle while the chronicle's
   ticket, no medal, league or challenge), its scores on a table of its own (`HomeScores`, `KEYS.homeArcade`). No light
   of its own (a glow pool only). A guest takes stick two (`cabinet.partner.setPartner(name)`, `games.pick('duel')`).
 - **The NES on the TV** plays the homebrew carts for real (docs/media.md "Homebrew carts").
+- **The arcade's prizes at home** (`world/prizes`, docs/economy.md "Prizes"): each where it is used, a click to play
+  with it. The duck on the bath's rim, afloat and bobbing once the bath is run (`BathDuck`, `Bathtub.waterSurface`;
+  a squeeze squeaks); the bouncy ball on the living-room floor (`BouncyBall`: thrown, it hops lower and lower and
+  calls the cat); the plush in a row on the bed (`BedPlushes`); the tin rocket turning over it (`RocketMobile`); the
+  yo-yo (thrown down its string and back) and the keyring (a flick, a jingle) under the prize shelf (`HangingToy`); the
+  lava lamp's wax drifting at the end of the trophy row (`LavaLampPrize`). Sounds in `audio/prizeSounds`; places in the
+  plans (`bedroomPlan` `plushes`, `rocketMobile`; `bathroomPlan` `duck`; `ROOM_PLAN` `bouncyBall`, `retiredCabinet`).
 
 Every number is in `household/rules.ts` (`HOUSEHOLD`) or at the top of `outfits.ts`; the sticker's in `pricing.ts`
 (`STICKER`). All first guesses.
@@ -108,6 +117,10 @@ two clicks) for `REPAIR.resaleShare` of its value (`CONSOLES`). Bonus only: a br
 Not kept to play: the TV stand already shows a console for every platform owned. Numbers in `repair/consoles.ts`.
 A friend upstairs helps: with Théo at Friend, the find and tool steps name the faulty part and the tool
 (`RepairPanel`'s `hint`, `social/building/student.repairHint`).
+Or Karim mends it (`clerkTalk`'s `bench`, `streetShops/karim.benchFee`: 45 % of what he pays for it working): left on
+his bench (`Workshop.leaveAtShop`, off the kitchen chair), collected working from the next game day (`collectFromShop`).
+The kitchen table stays the cheaper way. Karim also swaps once a game week, from Friendly, one of his NES, Mega Drive
+or SNES spares for one of the player's games on those (`karimOffer`, `Transactions.swapWithNeighbour`).
 
 ## Files
 

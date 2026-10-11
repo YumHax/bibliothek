@@ -6,6 +6,8 @@ import { RETRO_NEWS } from '../props/outdoors/RetroShopLure';
 import { Walker } from '../people/Walker';
 import { Figure } from './life/Figure';
 import type { Vec2 } from './streetPlan';
+import { rainGear, streetLook } from './life/streetLook';
+import type { SkyState } from '../props/DayNight';
 
 interface RetroLureOptions {
   /** The banner: its middle on the shop window (zone-local, y up), the way it faces, its size. */
@@ -18,6 +20,8 @@ interface RetroLureOptions {
   talk: () => string;
   drawDistance: number;
   fade: number;
+  /** The sky (umbrellas up in the queue when it rains). */
+  sky?: () => SkyState;
   /** Today's stock colours changed (a new market day): repaint the shop's window and shelves. */
   onStock: (colors: readonly string[]) => void;
   /**
@@ -59,7 +63,8 @@ export class RetroLure extends THREE.Group implements Furniture, Updatable {
     this.add(this.banner);
     this.stockDay = RETRO_NEWS.day;
     options.queue.forEach((_, i) => {
-      const walker = new Walker({ viewer: options.viewer, seed: SEEDS[i % SEEDS.length]!, speed: 1, talk: options.talk, label: 'Collector · say hello', labelWithin: 4, fade: true });
+      const seed = SEEDS[i % SEEDS.length]!;
+      const walker = new Walker({ viewer: options.viewer, seed, look: streetLook(seed), speed: 1, talk: options.talk, label: 'Collector · say hello', labelWithin: 4, fade: true });
       walker.traverse((o) => {
         o.castShadow = false;
       });
@@ -107,6 +112,9 @@ export class RetroLure extends THREE.Group implements Furniture, Updatable {
       if (i < want && !figure.shown) {
         figure.show(new THREE.Vector3(spot[0], 0, spot[1]), instantly);
         figure.walker.stand(towards(spot, door), i % 2 ? 'crossed' : 'pockets');
+        // Nobody gives up their place for the rain: umbrellas up.
+        const sky = this.options.sky?.();
+        if (sky) rainGear(figure.walker, sky, null);
       } else if (i >= want && figure.shown) {
         if (instantly) figure.hide(true);
         else figure.walker.walk([new THREE.Vector3(door[0], 0, door[1] - 0.3)], () => figure.hide());

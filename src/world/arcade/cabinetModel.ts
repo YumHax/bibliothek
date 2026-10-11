@@ -41,7 +41,8 @@ interface CabinetBodySpec {
   /** Stickers, burns and scuffs, 0..1. */
   wear: number;
   title: string;
-  hint: string;
+  /** How to play, read again whenever the card is reprinted (a game's hint names the player's keys as they stand). */
+  hint: string | (() => string);
   /** Two sticks on the panel: the instruction card moves to the middle. */
   twoPlayer: boolean;
 }
@@ -84,7 +85,7 @@ export function buildCabinetBody(cabinet: THREE.Group, spec: CabinetBodySpec): C
   panel.rotation.x = -0.25;
   cabinet.add(panel);
   // The instruction card lies on the panel, where the hands do not go.
-  const card = new InstructionCard({ title: spec.title, lines: hintLines(spec.hint), accent: glow, width: 0.12, height: 0.075 });
+  const card = new InstructionCard({ title: spec.title, lines: () => hintLines(typeof spec.hint === 'function' ? spec.hint() : spec.hint), accent: glow, width: 0.12, height: 0.075 });
   card.rotation.x = -Math.PI / 2;
   card.position.set(spec.twoPlayer ? 0.02 : 0.235, 0.041, 0.03);
   panel.add(card);

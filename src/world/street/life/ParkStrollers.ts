@@ -8,6 +8,8 @@ import { PARK_PATHS } from '../../city/park';
 import type { Vec2 } from '../streetPlan';
 import { FLAT_IN_STREET, PARK_STREET } from '@/world/measures/street';
 import { Figure } from './Figure';
+import { rainGear, streetLook } from './streetLook';
+import type { TalkRole } from './streetTalk';
 import { random } from '@/random';
 
 interface ParkStrollersOptions {
@@ -20,6 +22,8 @@ interface ParkStrollersOptions {
   fade: number;
   /** How far into the park they go (street x): the lawn's end. */
   reach: number;
+  /** What they say when clicked. */
+  talk?: (role: TalkRole) => string;
 }
 
 /** Seconds a stroller waits before setting off again, and their pace. */
@@ -49,7 +53,21 @@ export class ParkStrollers extends THREE.Group implements Furniture, Updatable {
       return [new THREE.Vector3(Math.min(x0, PARK_STREET.hedge - 1.5), 0, z0), ...kept.slice(1).map(([x, z]) => new THREE.Vector3(x, 0, z))];
     });
     for (let i = 0; i < options.count; i++) {
-      const walker = new Walker({ viewer: options.viewer, seed: SEEDS[i % SEEDS.length]!, speed: 0.9 + 0.15 * i, corners: 1.5, fade: true });
+      const seed = SEEDS[i % SEEDS.length]!;
+      const elder = i % 2 === 1;
+      const talk = options.talk;
+      const walker = new Walker({
+        viewer: options.viewer,
+        seed,
+        look: streetLook(seed, elder ? 'elder' : undefined),
+        speed: elder ? 0.75 : 0.9 + 0.15 * i,
+        corners: 1.5,
+        fade: true,
+        label: 'Out for a stroll · say hello',
+        labelWithin: 5,
+        talk: talk ? () => talk(elder ? 'elder' : 'passer') : undefined,
+        stopsToTalk: true,
+      });
       walker.traverse((o) => {
         o.castShadow = false;
       });
@@ -74,6 +92,7 @@ export class ParkStrollers extends THREE.Group implements Furniture, Updatable {
           const route = this.routes[i % this.routes.length]!;
           st.out = true;
           st.figure.show(route[0]!.clone());
+          rainGear(st.figure.walker, s, null);
           // In along the path and back out to the hedge, where they fade away.
           const back = [...route].reverse().slice(1);
           st.figure.walker.walk([...route.slice(1), ...back], () => {

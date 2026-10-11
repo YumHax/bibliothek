@@ -3,12 +3,12 @@ import type { Updatable } from '@/core/Engine';
 import { QUALITY } from '@/graphics/quality';
 import type { Furniture } from '../../Furniture';
 import type { DayNight } from '../../props/DayNight';
-import { wakefulnessAt } from '@/time/wakefulness';
+import { wakefulnessAt, type Weekday } from '@/time/wakefulness';
 import { snowCovered } from '../snowCover';
 import { nightnessOf } from '../streetAir';
 import type { CarVoice, VehicleKind } from '../StreetCars';
 import type { Vec2 } from '../streetPlan';
-import { Horn, ROAD_Y, allowedSpeed, approach, corneringSpeed, headingAt, placeOnRoute, sampleRoute, type Route } from './driving';
+import { Horn, ROAD_Y, allowedSpeed, approach, corneringSpeed, headingAt, oncomingClear, placeOnRoute, sampleRoute, type HeldBy, type Route } from './driving';
 import type { RoadVehicle, StreetTraffic } from './StreetTraffic';
 import { LampMaterial, lampStates } from './lampMaterial';
 import { WheelMaterial, rollAngle, wheelAngles } from './wheelSpin';
@@ -28,12 +28,19 @@ interface MotorbikesOptions {
   gap: readonly [number, number];
   courier: number;
   moto: number;
+  /** The day of the week (none: a weekday): the rush hours, a quiet Sunday. */
+  weekday?: () => Weekday;
 }
 
 const MODELS: readonly TwoWheelerModel[] = ['scooter', 'moto'];
 const HIDDEN = new THREE.Matrix4().makeScale(0, 0, 0);
 /** Metres right of the car lane's line a rider keeps. */
 const LANE_OFFSET = 0.45;
+/**
+ * Filtering: held behind a queue standing still, a rider slips up between the lanes, this far left of their line, at
+ * no more than `speed`, moving across at `across` m/s; back into the lane once nothing stands beside them.
+ */
+const FILTER = { aside: -1.6, speed: 3, across: 1.2 } as const;
 /** Cruising speeds (m/s). */
 const CRUISE = { scooter: 7, courier: 7.8, moto: 9.5 } as const;
 /** The lean into a bend: at most this (radians), eased at this rate. */
@@ -63,6 +70,12 @@ class Mount implements RoadVehicle, CarVoice {
   signal: -1 | 0 | 1 = 0;
   rolled = 0;
   readonly width = 0.75;
+  /** Metres right of its line (negative: filtering between the lanes), and where it is easing to. */
+  aside = 0;
+  asideTo = 0;
+  /** Between the lanes beside a car, with something coming the other way: stands there till it has gone by. */
+  waiting = false;
+  holdUp: HeldBy = null;
 
   get length(): number {
     return TWO_WHEELERS[this.shape].length;
@@ -177,7 +190,7 @@ export class Motorbikes extends THREE.Group implements Furniture, Updatable {
     if (this.spawnClock <= 0) {
       const weather = s.snowCover > 0.3 ? 0 : 1 - 0.75 * THREE.MathUtils.smoothstep(s.rain, 0.15, 0.6);
       const [a, b] = this.options.gap;
-      this.spawnClock = (a + this.random() * (b - a)) / Math.max(0.1, wakefulnessAt(s.hours) * rushAt(s.hours) * weather);
+      this.spawnClock = (a + this.random() * (b - a)) / Math.max(0.1, wakefulnessAt(s.hours) * rushAt(s.hours, this.options.weekday?.() ?? 0) * weather);
       if (weather > 0) this.spawn();
     }
     this.signalClock = (this.signalClock + dt * SIGNAL.hz) % 1;
@@ -217,6 +230,9 @@ export class Motorbikes extends THREE.Group implements Furniture, Updatable {
     mount.distance = 0;
     mount.speed = mount.cruise;
     mount.lean = 0;
+    mount.aside = 0;
+    mount.asideTo = 0;
+    mount.waiting = false;
     mount.yaw = placeOnRoute(this.routes[route]!, 0, mount.position);
     this.options.traffic.vehicles.add(mount);
     const set = this.sets.get(mount.shape)!;
@@ -230,12 +246,16 @@ export class Motorbikes extends THREE.Group implements Furniture, Updatable {
   private ride(mount: Mount, dt: number): void {
     const route = this.routes[mount.route]!;
     const traffic = this.options.traffic;
-    const cap = corneringSpeed(route, mount.distance, mount.cruise);
-    const { target, heldBy, pullOver } = allowedSpeed(traffic, mount, cap, this.eye, 3);
+    let cap = corneringSpeed(route, mount.distance, mount.cruise * traffic.pace);
+    if (mount.asideTo < 0) cap = Math.min(cap, mount.waiting ? 0 : FILTER.speed);
+    const allowed = allowedSpeed(traffic, mount, cap, this.eye, 3);
+    const { target, heldBy, pullOver } = allowed;
     const before = mount.speed;
     mount.speed = approach(mount.speed, pullOver ? Math.min(target, 2) : target, dt, 3, traffic.grip);
     mount.braking = (before - mount.speed) / Math.max(dt, 1e-3) > 0.8 || (mount.speed < 0.3 && heldBy !== null);
-    mount.horn.update(dt, mount.speed, heldBy, traffic.carsGreen);
+    mount.holdUp = heldBy;
+    mount.horn.update(dt, mount.speed, allowed);
+    this.filter(mount, allowed.heldBy === 'vehicle' && (allowed.vehicle?.speed ?? 1) < 1 && allowed.vehicle?.kind !== 'bike', dt);
     const yawBefore = mount.yaw;
     mount.distance += mount.speed * dt;
     mount.rolled += mount.speed * dt;
@@ -246,6 +266,9 @@ export class Motorbikes extends THREE.Group implements Furniture, Updatable {
       return;
     }
     mount.yaw = placeOnRoute(route, mount.distance, mount.position);
+    // Right of the heading is (sin yaw, cos yaw).
+    mount.position.x += Math.sin(mount.yaw) * mount.aside;
+    mount.position.z += Math.cos(mount.yaw) * mount.aside;
     // Lean into the bend: tan(lean) = v ω / g, towards the inside (a left turn leans left, -x about the bike's axis).
     const omega = angleTo(yawBefore, mount.yaw) / Math.max(dt, 1e-3);
     const lean = THREE.MathUtils.clamp(-Math.atan((mount.speed * omega) / 9.81), -LEAN.most, LEAN.most);
@@ -254,6 +277,38 @@ export class Motorbikes extends THREE.Group implements Furniture, Updatable {
     const next = headingAt(route, mount.distance + SIGNAL.ahead);
     const turn = angleTo(here, next);
     mount.signal = Math.abs(turn) < SIGNAL.turn ? 0 : turn > 0 ? -1 : 1;
+  }
+
+  /**
+   * Filtering past a standing queue (`queued`: held by a vehicle standing still) between the lanes, once nothing comes
+   * the other way; back into the lane once nothing stands beside the rider.
+   */
+  private filter(mount: Mount, queued: boolean, dt: number): void {
+    const traffic = this.options.traffic;
+    mount.waiting = false;
+    if (mount.asideTo === 0 && queued && oncomingClear(traffic, mount, 20, 3)) mount.asideTo = FILTER.aside;
+    else if (mount.asideTo < 0) {
+      // Back into the lane only into a free slot (the rider waits; the cars never make room): with a car still beside
+      // and something coming the other way, the rider stands between the lanes till it has gone by.
+      const beside = this.besideAny(mount);
+      if (!beside) mount.asideTo = 0;
+      else mount.waiting = !oncomingClear(traffic, mount, 8, 3);
+    }
+    mount.aside += THREE.MathUtils.clamp(mount.asideTo - mount.aside, -FILTER.across * dt, FILTER.across * dt);
+  }
+
+  /** Whether a vehicle going the rider's way stands or crawls beside them (within a car's length either way). */
+  private besideAny(mount: Mount): boolean {
+    const fx = Math.cos(mount.yaw);
+    const fz = -Math.sin(mount.yaw);
+    for (const v of this.options.traffic.vehicles) {
+      if (v === mount || !v.active || Math.cos(v.yaw - mount.yaw) < 0.8) continue;
+      const rx = v.position.x - mount.position.x;
+      const rz = v.position.z - mount.position.z;
+      const along = rx * fx + rz * fz;
+      if (Math.abs(along) < v.length / 2 + 3 && Math.abs(rx * fz - rz * fx) < 2.6) return true;
+    }
+    return false;
   }
 
   /** Writes rider `i` into its shape's slot (hiding it in the other's). */

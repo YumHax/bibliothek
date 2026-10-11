@@ -1,7 +1,7 @@
 /*
- * THE REAL CALENDAR, one convention for the whole economy: the player's local time (the arcade's
- * challenge, the change machine, the streak, the league's week, the market calendar's "came back on
- * another date"). The in-game market day is `MarketCalendar`'s count, not this.
+ * THE REAL CALENDAR, one convention for the whole economy: the player's local time (the market
+ * calendar's "came back on another date", reading old saves that kept real dates: the arcade's days
+ * moved to the game's in their version 3 / 2). The in-game market day is `MarketCalendar`'s count, not this.
  */
 
 /** A local date as YYYY-MM-DD (zero-padded), the key every daily thing is saved and seeded under. */
@@ -32,12 +32,6 @@ export function isoWeek(date: Date): string {
   const yearStart = Date.UTC(t.getUTCFullYear(), 0, 1);
   const week = Math.ceil(((t.getTime() - yearStart) / 86400000 + 1) / 7);
   return `${t.getUTCFullYear()}-W${String(week).padStart(2, '0')}`;
-}
-
-/** How far through its week (Monday 00:00 to Sunday 24:00, local) `date` is, 0..1. */
-export function weekProgress(date: Date): number {
-  const day = (date.getDay() + 6) % 7;
-  return (day + (date.getHours() + date.getMinutes() / 60) / 24) / 7;
 }
 
 /**

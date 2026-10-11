@@ -90,7 +90,7 @@ export const FRIEND_PEOPLE: readonly PersonCard[] = [
     effects: [
       { key: 'helpsCarry', at: 'friendly', text: 'Brings his van: heavy furniture moved in one go' },
       { key: 'lendsGames', at: 'friend', text: 'Lends you games from his own shelf' },
-      { key: 'arcadePartner', at: 'friend', text: 'Joins you at the arcade for two-player cabinets' },
+      { key: 'arcadePartner', at: 'friend', text: 'Meets you at the arcade on a day you fix, and takes player two at PADDLE WARS' },
       { key: 'dropsBy', at: 'close', text: 'Drops by unannounced with a find' },
       { key: 'stopsVisiting', at: 'cold', down: true, text: 'Stops coming round' },
     ],

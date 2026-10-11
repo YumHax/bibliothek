@@ -1,5 +1,7 @@
 import type { ShopKind } from '../streetPlan';
 import { inHours } from '@/time/clock';
+import { streetDay } from '@/time/streetDay';
+import { weekdayOf, type Weekday } from '@/time/wakefulness';
 import { clockShort } from '@/text/clock';
 import { capitalise } from '@/text/strings';
 
@@ -10,7 +12,7 @@ interface ShopHours {
 }
 
 /**
- * Opening hours by kind of shop, every day alike: the bakery at dawn, the bars till late, the
+ * Opening hours by kind of shop, every day but the week's exceptions (`WEEK` below): the bakery at dawn, the bars till late, the
  * arcade never shut, the flat's shops (furniture, TV repair, pets, the florist) from 9:00 to 21:00, RETRO GAMES (and the flea market behind it) from 8:00 to 23:00. A `shut` shop
  * never opens. Its roller shutter, its window light, its sounds and its door all follow this.
  */
@@ -34,10 +36,49 @@ export const SHOP_HOURS: Record<ShopKind, ShopHours | null> = {
   shut: null,
 };
 
-/** Whether a shop of `kind` is open at `hours` (0 ≤ hours < 24): its span, past midnight included (`time/clock`). */
+/**
+ * The street's week (Monday 0 .. Sunday 6, the game's: `time/streetDay`): what a weekday changes of `SHOP_HOURS`, a kind
+ * shut all day (null) or open other hours. Sunday is a short morning for the food shops, a day off for the bookshops and
+ * the chemist (the duty one is two streets away); the butcher takes Monday off, the bookshops open after lunch. The
+ * flat's shops, RETRO GAMES, the arcade, the cafés and the bars keep their every day.
+ */
+const WEEK: Readonly<Partial<Record<Weekday, Partial<Record<ShopKind, ShopHours | null>>>>> = {
+  0: { butcher: null, books: { open: 14, close: 19 } },
+  6: { bakery: { open: 7, close: 13 }, butcher: { open: 8.5, close: 13 }, grocer: { open: 8.5, close: 13 }, tabac: { open: 8, close: 13 }, pharmacy: null, books: null },
+};
+const WEEKDAY_NAMES = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'] as const;
+
+/** The street's weekday now (a Wednesday before the street has a game day: no exceptions). */
+export function streetWeekday(): Weekday {
+  const day = streetDay();
+  return day === null ? 2 : weekdayOf(day);
+}
+
+/** A kind's hours on `weekday` (today's by default): the week's exception, else its every day (`SHOP_HOURS`). */
+export function hoursOn(kind: ShopKind, weekday: Weekday = streetWeekday()): ShopHours | null {
+  const exceptions = WEEK[weekday];
+  return exceptions && kind in exceptions ? exceptions[kind] ?? null : SHOP_HOURS[kind];
+}
+
+/** Whether a shop of `kind` is open at `hours` (0 ≤ hours < 24) today: its span, past midnight included (`time/clock`). */
 export function isShopOpen(kind: ShopKind, hours: number): boolean {
-  const h = SHOP_HOURS[kind];
+  const h = hoursOn(kind);
   return h !== null && inHours(hours, { from: h.open, to: h.close });
+}
+
+/**
+ * When a shut shop of `kind` opens again, as a caption says it: "opens at 8:00" today, "opens tomorrow at 8:00" when
+ * today is over (or its day off), "closed on Sundays" when tomorrow is not it either.
+ */
+export function opensAgain(kind: ShopKind, hours: number): string {
+  const weekday = streetWeekday();
+  const today = hoursOn(kind, weekday);
+  if (today && hours < today.open) return `opens at ${clockShort(today.open)}`;
+  const next = ((weekday + 1) % 7) as Weekday;
+  const tomorrow = hoursOn(kind, next);
+  if (!today && !tomorrow) return `closed on ${WEEKDAY_NAMES[weekday]}s`;
+  if (!today) return `closed on ${WEEKDAY_NAMES[weekday]}s · opens tomorrow at ${clockShort(tomorrow!.open)}`;
+  return tomorrow ? `opens at ${clockShort(tomorrow.open)}` : `closed tomorrow, ${WEEKDAY_NAMES[next]}`;
 }
 
 /**
@@ -56,7 +97,7 @@ export function retroShutNotice(hours: number): { label: string; hint: string } 
  */
 export function shopShutNotice(kind: ShopKind, name: string, closed: string, hours: number): { label: string; hint: string } | null {
   if (isShopOpen(kind, hours)) return null;
-  const opens = clockShort(SHOP_HOURS[kind]?.open ?? 8);
+  const opens = opensAgain(kind, hours);
   const Name = capitalise(name);
-  return { label: `${Name} · closed, opens at ${opens}`, hint: `${Name} is closed. ${closed} Opens at ${opens}.` };
+  return { label: `${Name} · closed, ${opens}`, hint: `${Name} is closed. ${closed} ${capitalise(opens)}.` };
 }
