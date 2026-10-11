@@ -3,6 +3,7 @@
   "entry": [
     "api/**/*.ts",
     "server/*Plugin.ts",
+    "server/prod.ts",
     "scripts/*.mjs",
     "scripts/conventions/*.mjs",
     "src/headless/*.ts"
