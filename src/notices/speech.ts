@@ -6,6 +6,8 @@ interface SpeechSink {
   speak(anchor: THREE.Object3D, text: string, options?: SpeechOptions): void;
   /** While on, a line said to the player replaces the one the speaker is saying instead of waiting behind it. */
   converse(on: boolean): void;
+  /** `anchor`'s lines draw no bubble (their mouth and voice still go): the conversation draws its own (null: none muted). */
+  mute(anchor: THREE.Object3D | null): void;
 }
 
 let sink: SpeechSink | null = null;
@@ -31,7 +33,13 @@ export function bindSpeech(next: SpeechSink): void {
         },
       }),
     converse: (on) => next.converse(on),
+    mute: (anchor) => next.mute(anchor),
   };
+}
+
+/** While a conversation draws the speaker's balloon itself, the speech layer draws none for `anchor` (null: back to normal). */
+export function muteSpeech(anchor: THREE.Object3D | null): void {
+  sink?.mute(anchor);
 }
 
 /** Hears every line as it shows over someone's head (a voice for it); returns the way to stop listening. */
@@ -53,4 +61,21 @@ export function speechSink(): SpeechSink | null {
 export function conversing(on: boolean): void {
   sink?.converse(on);
   document.body.classList.toggle('conversing', on);
+  const was = talking;
+  talking = on;
+  if (was && !on) for (const listener of [...ends]) listener();
+}
+
+let talking = false;
+const ends = new Set<() => void>();
+
+/** Whether a conversation is open now (`conversing`): banners and cards raised meanwhile wait for its end (`Notices`). */
+export function isConversing(): boolean {
+  return talking;
+}
+
+/** Hears each conversation's end. Returns the unsubscribe. */
+export function onConversingEnd(listener: () => void): () => void {
+  ends.add(listener);
+  return () => ends.delete(listener);
 }

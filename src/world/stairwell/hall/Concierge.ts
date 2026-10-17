@@ -6,6 +6,7 @@ import { giveKey, hasKey } from '@/building/keys';
 import { conciergeState, saveConcierge } from '@/building/conciergeState';
 import type { OccupancyAware } from '../../Furniture';
 import { randomLook, type PersonLook } from '../../people/looks';
+import { castDress } from '../../people/castLook';
 import { Prop, part } from '../../props/Prop';
 import { paint } from '../../materials/palette';
 import { createCanvas, toTexture } from '@/graphics/canvas';
@@ -26,7 +27,7 @@ const who = plan.concierge;
 /** Her look: a blue housecoat over a mauve blouse, grey hair in a bun, glasses. */
 function conciergeLook(): PersonLook {
   return {
-    ...randomLook(who.seed, 'vendor'),
+    ...randomLook(who.seed, 'vendor', castDress(PERSON)),
     figure: 'curvy',
     hairStyle: 'bun',
     hair: 0x9a958e,

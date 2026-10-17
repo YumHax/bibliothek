@@ -85,7 +85,10 @@ root (scaled to look.height) > pelvis > hips (2) > knees > ankles (shoes)
 - Skin tones (`skinTone.ts`): each palette tone solved into melanin, haemoglobin and carotene, varied per person
   (darker or lighter, rosier or sallower, golden or pink) from a stream of its own. The painted face uses the same
   absorbers (`absorb`): flushes are more blood (red at any tone, never pink paint on dark skin), shade under the eyes
-  and round the mouth more melanin, plus faint blotches, a shaved man's beard shadow, an elder's age spots. Under the
+  and round the mouth more melanin, plus faint blotches, a shaved man's beard shadow, an elder's age spots. The palette
+  (`looks.SKINS`) is kept off orange, and fair skin takes a lighter flush (a doll's pink otherwise). Every material
+  of a person also wears a faint rim of the room's own light where the body turns from the viewer
+  (`occlusion.AMBIENT_RIM`, with the capsules' patch: no texture unit), so people stand off the walls. Under the
   hairline (`hair.hairlineAt`, by style: none for the bald) the skin is shaded and the roots tint the edge, so the hair
   seems to sit on the forehead rather than stop on it; the face's texture is cached by hair style too.
 - Hair catches the light along its strands (`hair.strandSheen`, Kajiya-Kay from the texture's v by derivatives, no
@@ -114,6 +117,11 @@ root (scaled to look.height) > pelvis > hips (2) > knees > ankles (shoes)
   collar is folded over its stand, with points on the chest. A hood, down or up, is a shell with a rim
   (`thickSphereShell`). The torso's paint has stitching beside the seams (gold on jeans), back pockets, sewn buttons, worn prints,
   rubbed patches and an uneven tone.
+- Known people (`castLook.castDress(person, dress)`): their card's `look.sex` and `look.age` go into the `dress`, so the
+  seed draws a woman as a woman (curvy figure, no beard, her hair styles and heights), an old man old, a kid a kid; every
+  body built for someone known (the stairs, their flat, the yard, the crowd's regulars, clerks, stallholders, the rival,
+  any `Walker` / `Vendor` with a social hook) goes through it, and the `Walker` / `Vendor` record it (`social/lookBook`)
+  so the portrait is the face met; at start-up everyone is registered with a look of the right sex and age.
 - Ages and seasons (`looks.randomLook(seed, role, dress)`): a `dress` redresses the seed's look from a stream of its own
   (no dress: the look it always had): winter coats, scarves (`look.scarf`, a torus and a tail on the chest) and beanies,
   summer tees and shorts; a child is short with a bigger head (`look.headScale` scales the neck pivot's group), a
@@ -256,9 +264,38 @@ move every frame (planted feet never skate); the face and the swinging parts res
     are busy.
 - `motion/temperament.ts` gives each person a tempo, an energy, a slouch, a fidget rate, a stance width, an
   expressiveness, a breathing pace and how the head settles, all from their seed.
+- The face shows feelings at the person's own size (`Face.setExpressiveness`, from the temperament: about 0.85
+  reserved to 1.4 open, capped at 1.2 per channel), and at rest it is never quite still: every 4-11 s a passing
+  look (a half smile, brows up, lips pressed, a squint) crosses it for a second or two (`IDLE_*` in `motion/face.ts`).
+- Stallholders (`Vendor`) change stance every 8-20 s (`STANCE_HOLD`) among standing, hands flat on the table
+  (`table`), arms folded, hands on the hips, in the pockets and easy on one leg (`lean`), and now and then
+  square up their wares (the `tidy` gesture, `TIDY_EVERY`) when nothing else is going on.
+- The breath and the weight show more than they used to: `POSTURAL_SWAY` 9 mm, `WEIGHT_SHIFT` 4 cm, the chest's
+  fill and the shoulders' rise a third more (`PersonModel`).
 - To call them: `PersonModel.react(reaction)`, `gesture(name)`, `feel(expression, seconds)`. Walker forwards
   `react` and `gesture`. A face (`FaceKey`) has `smile`, `smirk`, `browsUp`, `frown`, `squint`, `jaw`, `sad`,
   `press`, `sneer`, `wide`, `puff`; a new channel goes in `FACE_CHANNELS` (the gesture frame and `Face` loop over it).
+
+## The body as the social interface (`socialSelf.ts`, `socialHook.ts`)
+
+A known person's body says how they stand with the player before any panel does (docs/social.md "Bodies").
+`Walker`, `Vendor` and `YardKid` each own a `SocialSelf` (lent their root, their `PersonModel`, their `Attention`):
+- **Aimed at** (`setHovered`): eyes up and the face of how they stand and their mood (`SocialHook.mien`, `mienOf`:
+  a half smile for an acquaintance, a smile for a friend, pressed lips for the cold), let go a second after.
+- **In a conversation** (`SocialBody.hold` → `converse`): a walker stops and stays however long it lasts, eyes on the
+  player; a row of the menu hovered (`SocialBody.anticipate(fit)`) shows on them first (`ANTICIPATION`: leaning in with
+  the brows up for what they love, a half smile, a look aside for "meh", a wince and a lean back), through
+  `PersonModel.attitude(lean, aside)` (eased; the head turns part of the aside, the eyes the rest) and a held feeling.
+- **Reactions** (`SocialBody.react(reaction, strength)` → `PersonModel.socialReact` → `repertoire.respondSocial`): in
+  their own measure (temperament's `expressive` and the moment's strength decide whether it reaches the body): a real
+  `laugh` or a chuckle, `clap` or a nod for delight, `handsJoin` for thanks, `glanceAway` for boredom, a head shake or a
+  wince. A body without `socialReact` falls back to `socialHook.ACTED`.
+- **Passing** (`greetIfNear`, checked five times a second, once a pass, 45 s apart): by tier, a look away (hostile), eyes
+  avoided (cold), a glance and "Hello." (polite), a nod, a wave and their hello, a friend slowing, a close friend stopping
+  turned to the player; one with a word for the player (`threads.hasWordFor`) then `beckon`s. The street's crowd asks it
+  through `knownFaces.greets`.
+- **Witnesses** (`social/presence`): registered on their first update (the registry holds them weakly), `notice(at,
+  whisper)` turns their eyes to what happened and, after, to the nearest other present body with a `whisper`.
 
 ## Machines that direct a body (`performer.ts`)
 

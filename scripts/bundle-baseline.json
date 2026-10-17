@@ -1,12 +1,12 @@
 {
   "total": {
-    "raw": 5781182,
-    "gzip": 1993861
+    "raw": 5969020,
+    "gzip": 2057123
   },
   "chunks": {
     "BargainBin.js": {
-      "raw": 15149,
-      "gzip": 6269
+      "raw": 14979,
+      "gzip": 6230
     },
     "Birdcage.js": {
       "raw": 2098,
@@ -18,91 +18,91 @@
     },
     "Courtyard.js": {
       "raw": 6118,
-      "gzip": 2911
+      "gzip": 2912
     },
     "CrowdMurmur.js": {
       "raw": 1149,
-      "gzip": 576
+      "gzip": 577
     },
     "displayPieces.js": {
       "raw": 4594,
-      "gzip": 2215
+      "gzip": 2212
     },
     "Dog.js": {
-      "raw": 2900,
-      "gzip": 1366
+      "raw": 2898,
+      "gzip": 1364
     },
     "furnishArcade.js": {
-      "raw": 155596,
-      "gzip": 54900
+      "raw": 155566,
+      "gzip": 54879
     },
     "furnishAttic.js": {
       "raw": 23228,
-      "gzip": 9485
+      "gzip": 9484
     },
     "furnishCellar.js": {
       "raw": 17861,
-      "gzip": 7481
+      "gzip": 7479
     },
     "furnishCourtyard.js": {
       "raw": 51206,
-      "gzip": 20750
+      "gzip": 20758
     },
     "furnishGrandmaFlat.js": {
-      "raw": 160334,
-      "gzip": 60283
+      "raw": 160326,
+      "gzip": 60275
     },
     "furnishLindenAvenue.js": {
-      "raw": 16735,
-      "gzip": 7291
+      "raw": 16733,
+      "gzip": 7294
     },
     "furnishLindenLanding.js": {
       "raw": 1880,
-      "gzip": 1125
+      "gzip": 1128
     },
     "furnishMarket.js": {
-      "raw": 70913,
-      "gzip": 26805
+      "raw": 70919,
+      "gzip": 26808
     },
     "furnishNeighbourFlat.js": {
       "raw": 14631,
-      "gzip": 6257
+      "gzip": 6255
     },
     "furnishReplay.js": {
       "raw": 2797,
-      "gzip": 1574
+      "gzip": 1572
     },
     "furnishRoof.js": {
       "raw": 16599,
-      "gzip": 6948
+      "gzip": 6953
     },
     "furnishSaleroom.js": {
       "raw": 25231,
-      "gzip": 10212
+      "gzip": 10214
     },
     "furnishSellerFlat.js": {
       "raw": 11197,
       "gzip": 5121
     },
     "furnishShop.js": {
-      "raw": 144141,
-      "gzip": 53872
+      "raw": 144464,
+      "gzip": 54008
     },
     "furnishStreet.js": {
-      "raw": 488408,
-      "gzip": 179438
+      "raw": 489068,
+      "gzip": 179624
     },
     "gildedLettering.js": {
-      "raw": 2149,
-      "gzip": 1199
+      "raw": 1215,
+      "gzip": 761
     },
     "grandmaSounds.js": {
       "raw": 5557,
-      "gzip": 2066
+      "gzip": 2068
     },
     "GrassTufts.js": {
       "raw": 1712,
-      "gzip": 1037
+      "gzip": 1038
     },
     "handheldModel.js": {
       "raw": 2525,
@@ -110,15 +110,15 @@
     },
     "homeGoodModels.js": {
       "raw": 562,
-      "gzip": 399
+      "gzip": 400
     },
     "index.css": {
-      "raw": 207346,
-      "gzip": 40081
+      "raw": 220622,
+      "gzip": 42414
     },
     "index#1.js": {
-      "raw": 3072286,
-      "gzip": 1085142
+      "raw": 3245083,
+      "gzip": 1145550
     },
     "index#2.js": {
       "raw": 136104,
@@ -126,19 +126,19 @@
     },
     "inView.js": {
       "raw": 923,
-      "gzip": 539
+      "gzip": 538
     },
     "JukeboxTune.js": {
       "raw": 5634,
-      "gzip": 2283
+      "gzip": 2284
     },
     "RetroLure.js": {
       "raw": 2920,
-      "gzip": 1484
+      "gzip": 1485
     },
     "RiserStall.js": {
       "raw": 7424,
-      "gzip": 3389
+      "gzip": 3392
     },
     "ShopCounter.js": {
       "raw": 1453,
@@ -150,39 +150,39 @@
     },
     "shopSounds.js": {
       "raw": 5918,
-      "gzip": 1997
+      "gzip": 2001
     },
     "showOnStall.js": {
       "raw": 701,
-      "gzip": 479
+      "gzip": 478
     },
     "snowScreen.js": {
       "raw": 3483,
-      "gzip": 1528
+      "gzip": 1529
     },
     "StreetBounds.js": {
       "raw": 591,
       "gzip": 417
     },
     "streetOutlook.js": {
-      "raw": 1932,
-      "gzip": 1114
+      "raw": 1969,
+      "gzip": 1135
     },
     "streetScenery.js": {
-      "raw": 128907,
-      "gzip": 48313
+      "raw": 129678,
+      "gzip": 48635
     },
     "StreetTrees.js": {
-      "raw": 109636,
-      "gzip": 41307
+      "raw": 109721,
+      "gzip": 41336
     },
     "three.js": {
       "raw": 822600,
       "gzip": 249644
     },
     "Vendor.js": {
-      "raw": 3205,
-      "gzip": 1332
+      "raw": 3717,
+      "gzip": 1485
     },
     "victorTalk.js": {
       "raw": 220,
@@ -190,11 +190,11 @@
     },
     "wheelSpin.js": {
       "raw": 13462,
-      "gzip": 5158
+      "gzip": 5157
     },
     "YardKids.js": {
-      "raw": 7946,
-      "gzip": 3379
+      "raw": 8463,
+      "gzip": 3534
     }
   }
 }

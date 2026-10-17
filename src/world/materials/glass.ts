@@ -1,7 +1,40 @@
 import * as THREE from 'three';
-import { standard } from './palette';
+import { QUALITY } from '@/graphics/quality';
+import { standard, standardVariant } from './palette';
+import { overKeepingAlpha } from './blend';
+import { afterChunk, patchShader } from './shaderPatch';
 import { RENDER_ORDER } from '../surface/layers';
 import type { SkyState } from '../props/DayNight';
+
+/**
+ * How much of a pane's edge-on view is reflection rather than what lies behind it (the Fresnel
+ * term, raised to 1 at grazing incidence): glass seen head on is nearly invisible, seen at a
+ * slant it turns into a mirror of the room, the way a shop window or a display case does.
+ */
+const GLASS_EDGE = 0.55;
+
+/**
+ * A see-through pane's shared look: with `QUALITY.detailedMaterials` its opacity rises towards the
+ * edge-on view (`GLASS_EDGE`), so the room's reflections (and the lamps') show where a real pane's
+ * would; ALU only. Blended over what is behind it without writing the canvas's alpha (the video
+ * cut-out, docs/graphics.md "Alpha is sacred"). The plain palette look otherwise.
+ */
+function seeThrough(parameters: THREE.MeshStandardMaterialParameters): THREE.MeshStandardMaterial {
+  if (!QUALITY.detailedMaterials) return standard(parameters);
+  return standardVariant('glassFresnel', parameters, (material) =>
+    overKeepingAlpha(patchShader(material, 'glassFresnel', (shader) => {
+      shader.fragmentShader = afterChunk(
+        shader.fragmentShader,
+        'normal_fragment_maps',
+        `{
+          float glassFacing = saturate(dot(normal, normalize(vViewPosition)));
+          float glassEdge = pow(1.0 - glassFacing, 5.0);
+          diffuseColor.a = mix(diffuseColor.a, 1.0, ${GLASS_EDGE.toFixed(2)} * glassEdge);
+        }`,
+      );
+    })),
+  );
+}
 
 /*
  * The flat's and the shops' glass, one look per kind of glass (shared palette materials: never edit
@@ -12,15 +45,15 @@ import type { SkyState } from '../props/DayNight';
  */
 export const GLASS = {
   /** A display case's or a cabinet's thin clear pane, seen from both sides: nothing but its reflections. */
-  clear: standard({ color: 0xe8f4f4, roughness: 0.03, metalness: 0, transparent: true, opacity: 0.12, depthWrite: false, side: THREE.DoubleSide, envMapIntensity: 2.4 }),
+  clear: seeThrough({ color: 0xe8f4f4, roughness: 0.03, metalness: 0, transparent: true, opacity: 0.12, depthWrite: false, side: THREE.DoubleSide, envMapIntensity: 2.4 }),
   /** A glazed door's or a lodge's pane, seen from one side. */
-  pane: standard({ color: 0xdfe8ea, roughness: 0.04, metalness: 0, transparent: true, opacity: 0.13, depthWrite: false }),
+  pane: seeThrough({ color: 0xdfe8ea, roughness: 0.04, metalness: 0, transparent: true, opacity: 0.13, depthWrite: false }),
   /** A glass shelf, edge on: a little greener and denser than a pane. */
-  shelf: standard({ color: 0xcfe6e2, roughness: 0.08, metalness: 0, transparent: true, opacity: 0.32, depthWrite: false, envMapIntensity: 1.8 }),
+  shelf: seeThrough({ color: 0xcfe6e2, roughness: 0.08, metalness: 0, transparent: true, opacity: 0.32, depthWrite: false, envMapIntensity: 1.8 }),
   /** A shower screen, the bathroom's shelves and tumblers: thicker glass, a little more of it shows. */
-  screen: standard({ color: 0xdff0f0, roughness: 0.05, metalness: 0, transparent: true, opacity: 0.28, side: THREE.DoubleSide, depthWrite: false }),
+  screen: seeThrough({ color: 0xdff0f0, roughness: 0.05, metalness: 0, transparent: true, opacity: 0.28, side: THREE.DoubleSide, depthWrite: false }),
   /** Jars, glasses and glazed cabinet doors in the kitchen. */
-  ware: standard({ color: 0xe8f0f2, roughness: 0.05, metalness: 0, transparent: true, opacity: 0.35, side: THREE.DoubleSide }),
+  ware: seeThrough({ color: 0xe8f0f2, roughness: 0.05, metalness: 0, transparent: true, opacity: 0.35, side: THREE.DoubleSide }),
   /** A mirror's silvered glass (the environment's reflection; the mirrors with a real reflection are `props/MirrorGlass`). */
   mirror: standard({ color: 0xc8ccd0, roughness: 0.05, metalness: 1 }),
 } as const;

@@ -2,12 +2,12 @@ import type * as THREE from 'three';
 import { afterChunk, patchShader, VALUE_NOISE } from './shaderPatch';
 
 /** How far the roughness wanders (±) and the colour (± share) across a painted surface. */
-const ROUGHNESS_JITTER = 0.06;
-const ALBEDO_JITTER = 0.03;
+const ROUGHNESS_JITTER = 0.12;
+const ALBEDO_JITTER = 0.045;
 
 /**
  * Paint is never perfectly even: a slow world-space mottle (blotches of about 40 cm, a finer one
- * under it) moves its roughness by ±0.06 and its colour by ±3 %, so a large painted prop stops
+ * under it) moves its roughness by ±0.12 and its colour by ±4.5 %, so a large painted prop stops
  * reading as CG plastic. In world space (instancing included), so a row of identical cabinets
  * differs; ALU only, no texture. One program for every painted look (`palette`'s plain standard).
  */

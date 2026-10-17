@@ -43,6 +43,7 @@ import { furnishCarton } from './furnishCarton';
 import { RivalInHall } from './RivalInHall';
 import { MARKET_PLAN } from './marketPlan';
 import { primaryCode } from '@/input/actions';
+import { castDress } from '@/world/people/castLook';
 
 /** Held to float titles and prices over the boxes (physical key). */
 const SCAN_KEY = primaryCode('readStalls');
@@ -76,8 +77,14 @@ export function furnishMarket(zone: Zone, context: Pick<BuildContext, 'sky' | 'l
     for (const pendant of pendants) if (pendant.isOn !== on) pendant.setOn(on);
   };
   for (const at of plan.pendants) pendants.push(zone.placeAt(new IndustrialPendant({ ...plan.pendant, onSwitch: switchAll }), at));
-  // The roof light follows the sky.
-  zone.onUnload(sky.dayNight.onChange((state) => roof.setDaylight(state.daylight, state.ambient)));
+  // The roof light follows the sky, and the sun falls through it.
+  const towardSun = new THREE.Vector3();
+  zone.onUnload(
+    sky.dayNight.onChange((state) => {
+      roof.setDaylight(state.daylight, state.ambient);
+      roof.setSun(state, sky.outdoors.lightDirection(state, towardSun));
+    }),
+  );
 
   // The desks at the back, a clerk behind each.
   const counter = zone.placeAt(new OrderCounter({ wallBehind: plan.counter.wallBehind }), plan.counter.at);
@@ -118,8 +125,9 @@ export function furnishMarket(zone: Zone, context: Pick<BuildContext, 'sky' | 'l
       body: vendorBody(vendor),
       extras: [{ id: 'table', group: 'talk', label: 'What’s new on the table?', run: () => ({ line: pickLine(talk()) }) }],
     }));
-    const vendor = zone.place(new Vendor({ viewer: listener, lines: talk, seed: i + 1, callOuts: callOuts(platform.shortName), label: 'The stallholder · chat', social }), behind(stall, stall.vendorAt), stall.rotation.y);
-    rememberLook(person, randomLook(i + 1, 'vendor'));
+    const look = randomLook(i + 1, 'vendor', castDress(person));
+    const vendor = zone.place(new Vendor({ viewer: listener, lines: talk, seed: i + 1, look, callOuts: callOuts(platform.shortName), label: 'The stallholder · chat', social }), behind(stall, stall.vendorAt), stall.rotation.y);
+    rememberLook(person, look);
     const pennant = stall.pennantAt ? zone.place(new WishPennant(i + 1), onTop(stall, stall.pennantAt), stall.rotation.y) : null;
     if (pennant) pennant.visible = false;
     const entry: FloorStall = { index: i, platform, stall, vendor, boxes: new Set(), sold: 0, pennant };

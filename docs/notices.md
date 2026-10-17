@@ -40,7 +40,10 @@ Timing: `readMs(text)` = 1.2 s + 62 ms per character, 2.2 s to 15 s, times Setti
 (`setReadingPace`: 1, 1.6, 2.6). Every line said to the player (`addressed`) is also kept, the last 30, in
 `speechLog` for the pause menu's "What was said" (`ui/SaidPanel`). Every clock but the alert's counts only while
 the player is in front of the game (`attending`: not under the pause menu, tab visible); a panel open over the room
-counts as attending, so a reward bought in a panel plays out over it.
+counts as attending, so a reward bought in a panel plays out over it. Nothing comes over a conversation: a `reward` or a
+`read` raised while one is open (`conversing`, `speech.isConversing`) waits for its end and then comes in turn. A trip
+elsewhere (`Travel.onDepart`, the curtain down) clears every bubble and subtitle (`SpeechLayer.clearAll`): what was said
+there stays there.
 
 ## Choosing the kind
 

@@ -5,6 +5,7 @@ import type { CoproMeeting } from '@/building/coproMeeting';
 import { COPRO_PLAN } from '@/building/coproPlan';
 import type { OccupancyAware } from '../../Furniture';
 import { randomLook, type PersonLook } from '../../people/looks';
+import { castDress } from '../../people/castLook';
 import { Prop } from '../../props/Prop';
 import { paint } from '../../materials/palette';
 import { StairWalker, type StairWalkerOptions } from '../StairWalker';
@@ -16,7 +17,7 @@ import { bodyOf, talkHook } from '../../people/socialHook';
 /** The syndic's look: a grey suit, white hair, glasses. */
 function syndicLook(): PersonLook {
   return {
-    ...randomLook(COPRO_PLAN.syndicSeed, 'shopper'),
+    ...randomLook(COPRO_PLAN.syndicSeed, 'shopper', castDress(PERSON)),
     figure: 'straight',
     hairStyle: 'short',
     hair: 0xd9d3c8,

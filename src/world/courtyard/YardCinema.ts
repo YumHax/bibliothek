@@ -16,6 +16,7 @@ import type { SoundOcclusion } from '../acoustics/SoundOcclusion';
 import { Projector } from '../Projector';
 import { Walker } from '../people/Walker';
 import { randomLook } from '../people/looks';
+import { castDress } from '../people/castLook';
 import type { Reaction } from '../people/performer';
 import { bodyOf, talkHook } from '../people/socialHook';
 import { ChairPile, CinemaLead, CinemaSheet, CinemaTrestle, FoldingChair, TRESTLE_TOP, type SheetSpot } from './YardCinemaPieces';
@@ -299,7 +300,7 @@ export class YardCinema extends THREE.Group implements Furniture, Updatable {
       const walker: Walker = new Walker({
         viewer,
         seed: v.seed,
-        look: randomLook(v.seed + 900, 'shopper'),
+        look: randomLook(v.seed + 900, 'shopper', castDress(person)),
         lines: FILM_TALK,
         label: `${v.name} · chat`,
         speaker: v.name,

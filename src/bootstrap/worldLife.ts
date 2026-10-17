@@ -29,6 +29,7 @@ import { EPILOGUE_PRINT } from '@/grandma/albumPrints';
 import type { Services } from './services';
 import type { GameWorld } from './world';
 import type { FlatPanels } from './worldContext';
+import { wireTierScenes } from './tierScenes';
 
 /** Where the TV a seated friend watches stands (read every frame, copied by the visit). */
 const tvAt = new Vector3();
@@ -107,6 +108,8 @@ export function wireBuildingLife(services: Services, engine: Engine, world: Game
     cat: { bowl: cat.bowl, adopted: () => cat.adopted, catName: () => services.catSettings.settings.name },
     onFlat: (cb) => manager.onZoneChange((zone) => cb(inFlat(zone.id))),
   });
+  // Friends at the door with their keepsake, notes under it (docs/social.md "Tier scenes").
+  wireTierScenes(services, engine, world, { building, manager, notices: flat.notices });
 }
 
 /** What the visitors are wired to. */

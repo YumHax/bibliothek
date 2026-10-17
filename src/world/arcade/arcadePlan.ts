@@ -420,7 +420,7 @@ export const ARCADE_PLAN = {
     { kind: 'gamePoster', at: { wall: 'right', along: 2.85, y: 1.75 }, options: { game: 'frog' } },
 
     // A tired plant in each front corner, the way every arcade has one.
-    { kind: 'plant', at: { corner: 'front-left', inset: 0.45 }, options: { kind: 'yucca', pot: 'ceramic', seed: 31 } },
+    { kind: 'plant', at: { corner: 'front-left', inset: 0.62 }, options: { kind: 'yucca', pot: 'ceramic', seed: 31, scale: 0.82 } },
     { kind: 'plant', at: { corner: 'front-right', inset: 0.45 }, options: { kind: 'fig', pot: 'ceramic', seed: 32 } },
 
     // --- The holidays (up only then) ---

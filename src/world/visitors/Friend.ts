@@ -2,6 +2,7 @@ import type * as THREE from 'three';
 import type { SessionActions } from '@/game/SessionActions';
 import { Walker } from '../people/Walker';
 import { randomLook } from '../people/looks';
+import { castDress } from '@/world/people/castLook';
 import type { FriendPlan } from './friendsPlan';
 import type { SocialHook } from '../people/socialHook';
 
@@ -39,7 +40,7 @@ export class Friend extends Walker {
 
   constructor(readonly plan: FriendPlan, viewer: THREE.Object3D) {
     // Corners swept rather than pivoted; the `Visit` makes way for the player itself (a word, a sidestep clear of walls).
-    super({ viewer, seed: plan.seed, look: { ...randomLook(plan.seed, 'shopper'), ...plan.look }, speed: plan.speed, fade: true, speaker: plan.name, corners: CORNERS, yields: false });
+    super({ viewer, seed: plan.seed, look: { ...randomLook(plan.seed, 'shopper', castDress(plan.id)), ...plan.look }, speed: plan.speed, fade: true, speaker: plan.name, corners: CORNERS, yields: false });
     this.name = `Friend:${plan.id}`;
   }
 

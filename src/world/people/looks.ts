@@ -105,16 +105,17 @@ export interface FaceTraits {
   length: number;
 }
 
-const SKINS = [0xf3d6c1, 0xe8b894, 0xd9a279, 0xc68e6a, 0x9c6a4a, 0x7a4f36, 0x6b4630, 0x4a2f22];
+// Fair to deep, kept off orange: the fair ones a touch more neutral, the middle ones more olive and beige than tan.
+const SKINS = [0xeed5c4, 0xe3bfa4, 0xd4ab8c, 0xc39878, 0xa47658, 0x86593f, 0x6a4532, 0x4c3125];
 const HAIRS = [0x2a1d14, 0x4a3222, 0x8a5a2a, 0xc9a25a, 0xd9d3c8, 0x1a1a1a, 0x9a2f1f, 0x6e6a66];
 const EYES = [0x3a2a1c, 0x2f4a6b, 0x4a6b3a, 0x5a4634, 0x1e1e1e];
-const TOPS = [0x3b5b8f, 0x8f3b3b, 0x4f7a4a, 0xe0d6c2, 0x2f2f33, 0xd8a33a, 0x6b4a8f, 0xb85c3a, 0x7a9ab0, 0x4a4a4a, 0x1f3a2a, 0x8a6a3a];
-const ACCENTS = [0xf2efe8, 0x1e1e22, 0xd8a33a, 0xc8443a, 0x2f6b8f, 0x8fbf9a, 0xe6a83a];
-const TROUSERS = [0x2b3a5a, 0x3a3a3a, 0x6b5a44, 0x1e2a3a, 0x5a6a5a, 0x8a7a66, 0x24304a, 0x4a3a30];
+const TOPS = [0x3b5b8f, 0x8f3b3b, 0x4f7a4a, 0xe0d6c2, 0x2f2f33, 0xd8a33a, 0x6b4a8f, 0xb85c3a, 0x7a9ab0, 0x4a4a4a, 0x1f3a2a, 0x8a6a3a, 0x5a6e78, 0xa8584a, 0xc9b79a, 0x3e4a3a, 0x7a3f55, 0x2a4e66, 0xd6c8b0, 0x5c4a3e, 0x9aa48a, 0x1e2433];
+const ACCENTS = [0xf2efe8, 0x1e1e22, 0xd8a33a, 0xc8443a, 0x2f6b8f, 0x8fbf9a, 0xe6a83a, 0x6a7fa0, 0xb0875a, 0xe8d8c0];
+const TROUSERS = [0x2b3a5a, 0x3a3a3a, 0x6b5a44, 0x1e2a3a, 0x5a6a5a, 0x8a7a66, 0x24304a, 0x4a3a30, 0x55606a, 0x3a4434, 0x7a6a58, 0x1c1c20, 0x4f5f7a];
 const SHOE_COLORS = [0x2a2622, 0x4a3a2a, 0xe8e6e0, 0x1a1a1a, 0x8f3b3b, 0x3b5b8f];
-const HATS = [0x8f3b3b, 0x2f2f33, 0x3b5b8f, 0xd8a33a, 0x4f7a4a, 0x1a1a1a];
+const HATS = [0x8f3b3b, 0x2f2f33, 0x3b5b8f, 0xd8a33a, 0x4f7a4a, 0x1a1a1a, 0x6a5a4a, 0xc9b79a, 0x5a2a3a];
 const APRONS = [0x3a3a3a, 0x5a3a2a, 0x2a4a3a, 0x6b2f2a, 0x2a3a5a];
-const BAGS = [0xd8cdb4, 0x2f2f33, 0x6b4a2a, 0x8f3b3b, 0x3b5b8f];
+const BAGS = [0xd8cdb4, 0x2f2f33, 0x6b4a2a, 0x8f3b3b, 0x3b5b8f, 0x4f6a4a, 0xa8784a, 0x7a7a80];
 const HAIR_STYLES: Record<Figure, HairStyle[]> = {
   straight: ['short', 'short', 'short', 'short', 'buzz', 'buzz', 'curly', 'bald', 'long', 'ponytail'],
   curvy: ['long', 'long', 'long', 'bun', 'bun', 'ponytail', 'ponytail', 'curly', 'short', 'buzz'],
@@ -127,7 +128,12 @@ export type Age = 'child' | 'teen' | 'adult' | 'elder';
 export interface Dress {
   season?: 'spring' | 'summer' | 'autumn' | 'winter';
   age?: Age;
+  /** Who they are, when the person is known (their card's `look.sex`): the figure, and all it brings, follows it. */
+  sex?: Sex;
 }
+
+/** A known person's sex, as their card says it (`PersonCard.look.sex`); a look drawn without one picks its figure at random. */
+export type Sex = 'woman' | 'man';
 
 const SCARVES = [0x8f2a2a, 0x2a3f6a, 0xd8b23a, 0x3a5a3a, 0xe8e2d6, 0x5a2a5e, 0x2a2a2a];
 const SKIRTS = [0x2a2f45, 0x6b2f3a, 0x3a4a3a, 0x8a6a4a, 0x1e1e22, 0x7a5a8a, 0xb88a5a, 0x4a5a7a];
@@ -140,7 +146,7 @@ const TIGHTS = [0x1c1a1c, 0x2a2426, 0x3a2e2a, 0x5a4a44];
  * without one, the look is what it always was for that seed.
  */
 export function randomLook(seed: number, role: 'vendor' | 'shopper' = 'shopper', dress?: Dress): PersonLook {
-  const look = baseLook(seed, role);
+  const look = baseLook(seed, role, dress?.sex);
   const out = lowerHalf(dress ? dressed(look, seed, dress) : { ...look }, seed, dress?.season);
   out.lines = bodyLines(seed, out);
   return out;
@@ -315,10 +321,12 @@ function dressed(look: PersonLook, seed: number, { season, age }: Dress): Person
 }
 
 /** The whole look a seed draws: the body's lines first, then the face, the clothes and the build, in that order of draws. */
-function baseLook(seed: number, role: 'vendor' | 'shopper'): PersonLook {
+function baseLook(seed: number, role: 'vendor' | 'shopper', sex?: Sex): PersonLook {
   const random = lcg(seed * 2246822519);
 
-  const figure: Figure = chance(random, 0.45) ? 'curvy' : 'straight';
+  // The draw is made either way, so a known sex leaves every later draw of the seed as it was.
+  const drawn: Figure = chance(random, 0.45) ? 'curvy' : 'straight';
+  const figure: Figure = sex === 'woman' ? 'curvy' : sex === 'man' ? 'straight' : drawn;
   const skin = pick(random, SKINS);
   const hair = hairFor(random, skin);
   const hairStyle = pick(random, HAIR_STYLES[figure]);
@@ -369,7 +377,8 @@ function drawFace(random: Stream, { figure, skin, hairStyle, hatRoll }: { figure
     smile: chance(random, 0.55),
     jaw: figure === 'curvy' ? 0.85 + random() * 0.15 : 0.95 + random() * 0.2,
     nose: 0.8 + random() * 0.45,
-    freckles: skin >= 0xd9a279 && chance(random, 0.25),
+    // Freckles on the three fairest tones.
+    freckles: SKINS.indexOf(skin) <= 2 && chance(random, 0.25),
   };
 }
 

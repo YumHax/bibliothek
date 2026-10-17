@@ -26,7 +26,7 @@ const PRICE: Record<TierId, number> = {
   nemesis: 360,
   hostile: 360,
   cold: 260,
-  stranger: 180,
+  polite: 180,
   acquaintance: 180,
   friendly: 120,
   friend: 60,

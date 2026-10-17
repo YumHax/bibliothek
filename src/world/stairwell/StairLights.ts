@@ -21,10 +21,13 @@ interface StairLightsOptions {
  * its landing and the flights off it, never the landing above or below through the stairs (lights ignore the slabs).
  */
 const LIGHTS = 2;
-const INTENSITY = 9;
+/** Bright enough that each lit globe pools its landing and the flights fall off into shade between them (the stone, not a lit box). */
+const INTENSITY = 13;
 const REACH = STOREY * 1.3;
 const WARM = LAMP_LIGHT.incandescent.clone();
 const TOP = landingY(0) + 2.8;
+/** The hemisphere's share: always, with lit globes near (`litNear`), by day. */
+const AMBIENT = { base: 0.07, lit: 0.3, day: 0.16 } as const;
 /** Seconds a globe stays lit once its sensor saw someone (the building's timer), and its bulb's warm-up and fade. */
 const LIT_S = 45;
 const WARM_UP_S = 0.25;
@@ -220,7 +223,8 @@ export class StairLights extends THREE.Group implements Furniture, Updatable, Oc
     }
     const lit = this.litNear();
     const s = this.dayNight.state;
-    this.ambient.intensity = this.occupied ? 0.1 + 0.45 * lit * this.on + 0.2 * s.daylight : 0;
+    // The bounce down the shaft: low, so the globes' pools and the skylight shape the stairs (an even fill flattened them).
+    this.ambient.intensity = this.occupied ? AMBIENT.base + AMBIENT.lit * lit * this.on + AMBIENT.day * s.daylight : 0;
     this.paintSky(s);
   }
 

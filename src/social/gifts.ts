@@ -11,6 +11,8 @@ import type { GiftKind, PersonId } from './types';
 
 /** A game as a gift is weighed: its platform, its genres, its year. */
 export interface GameGift {
+  /** The game's id, when it is one of the collection's (the memory's cover in the People book). */
+  id?: string;
   title: string;
   platform: string;
   genres?: readonly string[];

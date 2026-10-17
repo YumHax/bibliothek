@@ -1,16 +1,20 @@
 import { onBlackout } from '@/building/blackout';
 import { isPartyDay, partyGuests } from '@/building/neighboursParty';
 import type { Upcoming } from '@/journal';
+import { startConflicts } from '../conflicts/conflicts';
+import { startVotePromises } from '../conflicts/votes';
 import { personAtDoor, shortName } from '../people';
+import { startWitnesses } from '../witnesses';
 import { upcomingBirthdays, startBirthdays } from './birthdays';
 import { favoursToDo, startFavours, todoText, type FavourDeps } from './favours';
 import { startIntroductions, together } from './introductions';
 import { startMediation } from './mediation';
 
 /*
- * The social web's life, started once at boot (`bootstrap/social`): favours, birthdays, introductions, go-betweens,
- * and the building's gatherings that bring people together (the power cut's scene, the neighbours' party). The games
- * night tells `introductions.together` itself.
+ * The social web's life, started once at boot (`bootstrap/social`): favours (the promises), birthdays,
+ * introductions, go-betweens, the building's quarrels and the votes promised at its meetings, the witnesses of what
+ * the player does in public, and the gatherings that bring people together (the power cut's scene, the neighbours'
+ * party). The games night tells `introductions.together` itself.
  */
 
 /** Who the power cut's scene puts together (`stairwell/powerCut`): the two chatting on the 2nd, the card players in the hall. */
@@ -19,8 +23,11 @@ const POWER_CUT_PAIRS: readonly (readonly string[])[] = [
   ['girard', 'martin'],
 ];
 
-export function startSocialLife(deps: FavourDeps & { realDate(): Date }): void {
+export function startSocialLife(deps: FavourDeps & { realDate(): Date; player?(): { x: number; y: number; z: number } | null }): void {
+  startWitnesses({ player: () => deps.player?.() ?? null });
   startFavours(deps);
+  startConflicts(deps);
+  startVotePromises(deps);
   startBirthdays();
   startIntroductions(deps.note);
   startMediation();

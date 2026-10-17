@@ -9,6 +9,9 @@ import './menu/menu.css';
 import { onWorldLoad } from './worldLoad';
 import { fadeIn, fadeOut } from './fade';
 import { parseCaption } from './hoverCaption';
+import { personCaption } from '@/social/caption';
+import { tierBadge } from './social/badge';
+import { portrait } from './social/portrait';
 import { hudSlot } from './hudSlot';
 import { downloadSave } from './settings/SaveFileSettings';
 import { lastDevice, onDeviceChange } from '@/input/lastDevice';
@@ -743,12 +746,36 @@ export class Overlay {
     label.classList.add('hover-label--in');
   }
 
-  /** The caption's markup: the name, and the verb behind the device's key cap. */
+  /** The caption's markup: the name, and the verb behind the device's key cap (a known person: two lines, their face). */
   private renderCaption(text: string): void {
+    const who = personCaption(text);
+    this.label.classList.toggle('hover-label--person', !!who);
+    if (who) {
+      this.renderPersonCaption(text, who);
+      return;
+    }
     const { name, verb } = parseCaption(text);
     const nameHtml = name ? `<span class="hover-label__name">${escapeHtml(name)}</span>` : '';
     const verbHtml = verb ? `<span class="hover-label__verb">${this.capHtml()}${escapeHtml(verb)}</span>` : '';
     this.label.innerHTML = nameHtml + verbHtml;
+  }
+
+  /**
+   * A known person's caption (`social/caption`): their face in their tier's ring, their name and the tier badge (after a
+   * place's name when the caption has one: "Café · Lou"); on a second line their state when it matters, then the key
+   * cap and the verb. Never cut: it wraps.
+   */
+  private renderPersonCaption(text: string, who: NonNullable<ReturnType<typeof personCaption>>): void {
+    const { person } = who;
+    const place = text.slice(0, who.start).replace(/ · $/, '');
+    const { name: rest, verb } = parseCaption(text.slice(who.end + 3));
+    const state = [person.state, rest].filter(Boolean).join(' · ');
+    const placeHtml = place ? `<span class="hover-label__place">${escapeHtml(place)} ·</span>` : '';
+    const verbHtml = verb ? `<span class="hover-label__verb">${this.capHtml()}${escapeHtml(verb)}</span>` : '';
+    this.label.innerHTML =
+      `<span class="hover-label__line">${placeHtml}<span class="hover-label__face" style="--tier:${escapeHtml(person.colour)}"></span><span class="hover-label__who">${escapeHtml(person.name)}</span>${String(tierBadge(person.tier, person.id, { small: true }))}</span>` +
+      `<span class="hover-label__line hover-label__line--state">${state ? `<span class="hover-label__state">${escapeHtml(state)}</span>` : ''}${verbHtml}</span>`;
+    this.label.querySelector('.hover-label__face')?.appendChild(portrait(person.id, 30, person.colour));
   }
 
   /** The key cap for the device last used (`input/lastDevice`, not how the room was entered): the mouse (default), the controller's A, a finger. */

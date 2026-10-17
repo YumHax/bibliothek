@@ -1,5 +1,7 @@
 import * as THREE from 'three';
+import { QUALITY } from '@/graphics/quality';
 import { cylinderMesh, invisibleHitbox } from '../meshUtils';
+import { IndustrialPendantBeam } from './IndustrialPendantBeam';
 import { paint, standard } from '../materials/palette';
 import { SwitchableLamp } from './SwitchableLamp';
 import { LAMP_GLOW, LAMP_LIGHT } from '../lighting/lampColours';
@@ -15,6 +17,11 @@ export interface IndustrialPendantOptions {
   on?: boolean;
   /** Called with the new state on every switch, right away with the initial state: chain the other pendants and the room's light here. */
   onSwitch?: (on: boolean) => void;
+  /**
+   * The warm air under the shade made visible (`IndustrialPendantBeam`, with `QUALITY.lightShafts`): how far down it
+   * reaches and how wide it is there (m). None by default.
+   */
+  beam?: { length: number; foot: number };
 }
 
 const SHADE_R = 0.24;
@@ -40,6 +47,7 @@ export class IndustrialPendant extends SwitchableLamp {
   private readonly inner: THREE.MeshStandardMaterial;
   private readonly bulb: THREE.MeshStandardMaterial;
   private readonly onSwitch?: (on: boolean) => void;
+  private readonly beam: IndustrialPendantBeam | null = null;
 
   constructor(options: IndustrialPendantOptions = {}) {
     super('lamp');
@@ -74,6 +82,11 @@ export class IndustrialPendant extends SwitchableLamp {
       m.receiveShadow = true;
     }
     this.add(rose, cord, cap, outer, inner, bulb, this.light, hitbox);
+    if (options.beam && QUALITY.lightShafts) {
+      this.beam = new IndustrialPendantBeam({ top: SHADE_R * 0.92, length: options.beam.length, foot: options.beam.foot });
+      this.beam.position.y = shadeY - SHADE_H / 2;
+      this.add(this.beam);
+    }
     this.setOn(options.on ?? true);
   }
 
@@ -88,5 +101,6 @@ export class IndustrialPendant extends SwitchableLamp {
     this.inner.emissiveIntensity = level * INNER_GLOW;
     SwitchableLamp.warmGlow(this.bulb, LAMP_GLOW.incandescent, level);
     this.bulb.emissiveIntensity = level * BULB_GLOW;
+    this.beam?.setLevel(level);
   }
 }

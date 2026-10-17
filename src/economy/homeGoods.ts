@@ -76,6 +76,7 @@ const LINES: readonly GoodLine[] = [
   { id: 'bistroSet', name: 'Bistro set', price: HOME_GOOD_PRICES.bistroSet, blurb: 'A folding table and two chairs for the balcony.', shop: 'furniture' },
   { id: 'displayCase', name: 'Display case', price: HOME_GOOD_PRICES.displayCase, blurb: 'Narrow, glazed, edge-lit glass shelves: five of your best boxes on show, face out. By the living room door.', shop: 'furniture' },
   { id: 'pedestal', name: 'Pedestal', price: HOME_GOOD_PRICES.pedestal, blurb: 'A gallery plinth with an easel and a warm glow: one grail, on show in the middle of the room.', shop: 'furniture' },
+  { id: 'corkboard', name: 'Corkboard', price: HOME_GOOD_PRICES.corkboard, blurb: 'Cork in a pine frame, for the kitchen wall: room for twenty more of the things friends leave you.', shop: 'furniture' },
   { id: 'labelMaker', name: 'Label maker', price: HOME_GOOD_PRICES.labelMaker, blurb: 'An embossing label maker and five tapes: aim at a shelf’s edge and press K to label it.', shop: 'furniture' },
   // The TV repair shop.
   { id: 'crt', name: 'Portable CRT', price: HOME_GOOD_PRICES.crt, blurb: 'A 14-inch set for the kitchen: longplays while the kettle boils.', shop: 'electronics' },
@@ -107,7 +108,7 @@ export const HOME_UPGRADES = [
   'bookcase', 'rug', 'lamp', 'poster', 'record',
   'armchair', 'floorLamp', 'sideTable', 'livingRug', 'floorCushions', 'sideboard', 'framedPrint',
   'bed', 'nightstands', 'dresser', 'readingCorner', 'bedroomRug', 'mirror',
-  'kitchenTable', 'kitchenRug', 'bathMat', 'hallStand', 'bistroSet', 'displayCase', 'pedestal', 'labelMaker',
+  'kitchenTable', 'kitchenRug', 'bathMat', 'hallStand', 'bistroSet', 'displayCase', 'pedestal', 'labelMaker', 'corkboard',
   'crt', 'projector', 'speakers', 'bedroomTv', 'radio', 'appliances', 'homeArcade',
   'famicomAdapter', 'superFamicomAdapter', 'megaDriveConverter', 'n64Passthrough', 'ps1ModChip',
   'houseplant', 'plant',

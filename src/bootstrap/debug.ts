@@ -1,3 +1,5 @@
+import { RENDER_TUNING } from '@/graphics/renderTuning';
+import { useLegacyLooks } from '@/graphics/grade';
 import * as THREE from 'three';
 import type { Engine } from '@/core/Engine';
 import { startPerfLog } from '@/core/PerfLog';
@@ -9,7 +11,7 @@ import { PayoutOverlay } from '@/ui/PayoutOverlay';
 import { findZFighting, zfightRoots, type ZFightOptions } from '@/world/surface/zfight';
 import { forceBlackout } from '@/building/blackout';
 import { forceEndlessStairs } from '@/world/stairwell/downAndDark';
-import { everyone, findPerson } from '@/social/people';
+import { everyone, findPerson, shortName } from '@/social/people';
 import { setStanding, standing } from '@/social/standing';
 import { tierOf } from '@/social/tiers';
 import { formatCount } from '@/text/count';
@@ -21,6 +23,8 @@ import { forceBulkyDay } from '@/building/bulkyWaste';
 import { forceKidsOut } from '@/building/kids/yardKids';
 import { forceFilmNight } from '@/building/yardCinema';
 import { DebugPanel, type DebugEvent } from '@/ui/debug/DebugPanel';
+import { labTarget, socialLabGroups } from '@/cheats/socialLab';
+import { flag } from '@/settings/flags';
 import type { Services } from './services';
 import { albumDebugEvents, grandmaDebugEvents, grandmaHintDebugEvents, keepsakeDebugEvents, lindenDebugEvents, presenceDebugEvents } from '@/grandma/grandmaDebug';
 import { ritualsDebugEvents } from '@/grandma/ritualsDebug';
@@ -110,6 +114,13 @@ export function installDebugPanel(services: Services, parts: { input: Input; ope
     places: () => parts.travel.everyStop(),
     go: (id) => void parts.travel.go(id as ZoneId),
     reload: () => location.reload(),
+    lab: {
+      who: () => {
+        const id = labTarget();
+        return id ? `${shortName(id)} (${id})` : 'nobody';
+      },
+      groups: socialLabGroups({ day: () => today.gameDay, settings: services.settings }),
+    },
   });
   const open = (): void => {
     if (panel.isOpen) panel.close();
@@ -120,6 +131,11 @@ export function installDebugPanel(services: Services, parts: { input: Input; ope
     if (PANEL_KEYS.includes(e.code)) open();
   });
   exposeDebug({ debugPanel: open, party, estateSale, bulkyDay, filmNight });
+  // `?social-lab`: the panel open on the lab from the start.
+  if (flag('social-lab')) {
+    panel.showTab('social');
+    open();
+  }
 }
 
 /**
@@ -145,6 +161,37 @@ export function installSocialDebug(day: () => number): void {
       },
     },
   });
+}
+
+/**
+ * `?debug`: the room without the mouse locked (a browser driven by a script cannot lock it): `bibliothek.room.enter()`
+ * enters it as a controller would (a virtual lock), `look(yaw, pitch)` turns the view, `go(x, z)` steps there.
+ */
+export function installRoomDebug(enter: () => Promise<void>, player: Pick<FirstPersonController, 'setLook' | 'getLook' | 'setPosition' | 'getEyePosition'>): void {
+  const global = globalThis as { bibliothek?: { room?: Record<string, unknown> } };
+  exposeDebug({
+    room: {
+      ...global.bibliothek?.room,
+      enter,
+      look: (yaw: number, pitch: number) => player.setLook(yaw, pitch),
+      where: () => ({ ...player.getLook(), ...player.getEyePosition() }),
+      go: (x: number, z: number) => player.setPosition(x, z),
+    },
+    // The render pass's before and after from the same spot: `legacy(true)` puts the old ambient, occlusion and looks back.
+    render: {
+      legacy: (on = true) => {
+        RENDER_TUNING.legacy = on;
+        useLegacyLooks(on);
+        return on ? 'legacy render' : 'current render';
+      },
+    },
+  });
+}
+
+/** `?debug`: `bibliothek.room.use()` does what a click at the crosshair does (the room must be entered). */
+export function exposeRoomUse(use: () => void): void {
+  const global = globalThis as { bibliothek?: { room?: Record<string, unknown> } };
+  exposeDebug({ room: { ...global.bibliothek?.room, use } });
 }
 
 /** Adds `entries` to the console's `bibliothek` handle (each installer adds its own). */

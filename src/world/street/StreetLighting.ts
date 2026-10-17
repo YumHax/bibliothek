@@ -38,6 +38,17 @@ const GROUND_BOUNCE = new THREE.Color(0x6a6560);
 /** What lying snow throws back up (the undersides of awnings, balconies and cornices brighten over it). */
 const SNOW_BOUNCE = new THREE.Color(0xc8ccd4);
 const GLOW = new THREE.Color(0xffb070);
+/**
+ * The golden hour (the sun low but up): its light warmed towards `GOLDEN` and a little stronger, the shade it leaves
+ * cooled towards `COOL_SHADE` (the sky's blue fills the shadows), by how low it is: full at the horizon, gone by
+ * `GOLDEN_UNTIL` of the sun's height.
+ */
+const GOLDEN = new THREE.Color(0xffa45c);
+const COOL_SHADE = new THREE.Color(0x8aa6d8);
+const GOLDEN_UNTIL = 0.32;
+/** The sky's ambient: at night (a moonlit trace, so the lamps' pools stand out) and what full day adds. */
+const SKY_NIGHT = 0.1;
+const SKY_DAY = 1.09;
 /** Per second: the sky's ambient comes and goes this fast as the player steps out of the sas or back in (no pop). */
 const SKY_RATE = 3;
 /**
@@ -188,17 +199,18 @@ export class StreetLighting extends THREE.Group implements Furniture, Updatable,
     this.far.farSun.value.copy(this.dir).normalize();
     this.target.position.copy(this.eye);
     this.sun.position.copy(this.eye).addScaledVector(this.dir, SUN_DISTANCE);
-    this.sun.color.copy(s.lightColor);
-    this.sun.intensity = s.lightIntensity * SUN_SHARE;
+    const golden = s.night || s.sunHeight <= 0 ? 0 : 1 - THREE.MathUtils.smoothstep(s.sunHeight, 0.04, GOLDEN_UNTIL);
+    this.sun.color.copy(s.lightColor).lerp(GOLDEN, 0.35 * golden);
+    this.sun.intensity = s.lightIntensity * SUN_SHARE * (1 + 0.25 * golden);
     // No sun through the cloud (rain, overcast, fog): its shadow map is not re-rendered for nothing.
     this.sunShadow.setLive(this.occupied && this.sun.intensity > 0);
 
     // The sky's ambient: its hue, brighter by day, a moonlit trace at night; a flash in a storm (at once).
     const ease = dampFactor(SKY_RATE, dt);
     if (this.occupied) {
-      this.sky.color.copy(s.ambient).lerp(s.zenith, 0.25);
+      this.sky.color.copy(s.ambient).lerp(s.zenith, 0.25 + 0.3 * golden).lerp(COOL_SHADE, 0.25 * golden);
       this.sky.groundColor.copy(GROUND_BOUNCE).lerp(SNOW_BOUNCE, 0.85 * s.snowCover).lerp(GLOW, 0.2 * (1 - s.daylight));
-      const steady = 0.14 + 1.05 * s.daylight;
+      const steady = SKY_NIGHT + SKY_DAY * s.daylight;
       const flash = 1.4 * s.lightning;
       this.skyLevel += (steady - this.skyLevel) * ease;
       this.sky.intensity = this.skyLevel + flash;

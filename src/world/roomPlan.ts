@@ -258,8 +258,8 @@ export const ROOM_PLAN = {
     // Floor plants: fig in the back-left corner, yucca in the front-left one, monstera beside the TV.
     // The florist's houseplants come in this order (`houseplant` nth 0-6 here, then the bedroom, the kitchen, the bathroom).
     { kind: 'plant', at: { corner: 'back-left', inset: 0.45 }, options: { kind: 'fig', pot: 'ceramic', seed: 3 }, upgrade: { good: 'houseplant', nth: 0 } },
-    { kind: 'plant', at: { corner: 'front-left', inset: 0.45 }, options: { kind: 'yucca', pot: 'terracotta', seed: 5 }, upgrade: { good: 'houseplant', nth: 2 } },
-    { kind: 'plant', at: { floor: [-2.5, -1.3] }, options: { kind: 'monstera', pot: 'ceramic', seed: 11 }, upgrade: { good: 'houseplant', nth: 1 } },
+    { kind: 'plant', at: { corner: 'front-left', inset: 0.6 }, options: { kind: 'yucca', pot: 'terracotta', seed: 5, scale: 0.82 }, upgrade: { good: 'houseplant', nth: 2 } },
+    { kind: 'plant', at: { floor: [-2.3, -1.3] }, options: { kind: 'monstera', pot: 'ceramic', seed: 11 }, upgrade: { good: 'houseplant', nth: 1 } },
     // Trailing plants hung from the ceiling: by the front wall between the radiator and the first window (the front-right
     // corner is the balcony door's swing now), and over the rug.
     { kind: 'plant', at: { ceiling: [-0.6, 2.3] }, options: { kind: 'hanging', seed: 13, scale: 0.8 }, upgrade: { good: 'houseplant', nth: 5 } },

@@ -9,7 +9,7 @@ import type { TouchSpot } from './motion/touch';
  * bend (x) and then swing across (y).
  */
 
-export type Pose = 'stand' | 'crossed' | 'hips' | 'think' | 'pockets' | 'play' | 'cheer' | 'phone' | 'lead' | 'lap' | 'read';
+export type Pose = 'stand' | 'crossed' | 'hips' | 'think' | 'pockets' | 'play' | 'cheer' | 'phone' | 'lead' | 'lap' | 'read' | 'table' | 'lean';
 
 export interface ArmAngles {
   ux: number;
@@ -92,6 +92,16 @@ export const POSES: Record<Pose, PoseAngles> = {
   read: {
     left: { ux: -0.4, uz: -0.12, lx: -1.35, ly: 0.55, lz: 0 },
     right: { ux: -0.4, uz: 0.12, lx: -1.35, ly: -0.55, lz: 0 },
+  },
+  // Both hands flat on the table in front (a stallholder over their wares): arms forward and down, palms down, fingers open.
+  table: {
+    left: { ux: -0.45, uz: -0.12, lx: -0.55, ly: 0.15, lz: 0, wf: -0.7, curl: -0.4 },
+    right: { ux: -0.45, uz: 0.12, lx: -0.55, ly: -0.15, lz: 0, wf: -0.7, curl: -0.4 },
+  },
+  // Easy on one leg: the +x hand on the hip, the other arm hanging.
+  lean: {
+    left: HANG(-1),
+    right: { ux: 0.05, uz: 0.6, lx: -0.1, ly: 0, lz: -1.3 },
   },
   // Seated: the upper arms by the sides, forearms forward, hands resting on the thighs.
   lap: {

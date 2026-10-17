@@ -22,6 +22,7 @@ import type { ZoneId } from './zoneIds';
 import { fnv1a, hashInts, random as liveRandom } from '@/random';
 import { dampFactor } from '@/math/damp';
 import { RoomReflection } from '@/graphics/RoomReflection';
+import { RENDER_TUNING } from '@/graphics/renderTuning';
 import { clearReflectionSource, setReflectionSource } from '@/graphics/Environment';
 
 /** Walls as seen from the default spawn: back = -z (shelves), front = +z, left = -x (TV), right = +x. */
@@ -157,6 +158,12 @@ const LAMP_TWIN_SHARE = 0.8;
 /** Height (m) the room's reflections are captured from, and the change of its light level that captures them again. */
 const REFLECTION_EYE = 1.5;
 const RECAPTURE_LEVEL = 0.12;
+/**
+ * The hemisphere's share once the room's own capture lights it (medium, high: `RoomReflection.lift`): the capture is
+ * then the main ambient, light from where the room really is bright (its windows, its lamps), and the even hemisphere,
+ * which lit every face alike and flattened the room, only a remainder. Until the first capture is in, the full share.
+ */
+const CAPTURED_AMBIENT = 0.58;
 
 /**
  * Floor, ceiling, four walls and the base lighting rig.
@@ -185,6 +192,8 @@ export class Room extends THREE.Group implements Updatable, OccupancyAware, Draw
   private lampTwin: THREE.PointLight | null = null;
   /** What the room reflects (medium, high: `graphics/RoomReflection`), and the light level it was last captured at. */
   private reflection: RoomReflection | null = null;
+  /** Whether the ambient was last set with the capture lighting the room (`CAPTURED_AMBIENT`): rechecked as the capture comes in. */
+  private capturedAmbient = false;
   private reflectedLevel = -1;
   private lampShadow!: ShadowRefresh;
   private ceilingMat!: THREE.MeshStandardMaterial;
@@ -311,6 +320,8 @@ export class Room extends THREE.Group implements Updatable, OccupancyAware, Draw
       this.lampLevel = this.lampOn ? Math.min(1, this.lampLevel + step) : Math.max(0, this.lampLevel - step);
       this.applyLighting();
     }
+    // The room's capture came in (or the comparison switch moved): the hemisphere hands over to it.
+    if (this.capturedAmbient !== this.capturing()) this.applyLighting();
     this.easeAmbient(dt);
     this.settleWallDetail(dt);
     if (this.occupied) {
@@ -395,6 +406,11 @@ export class Room extends THREE.Group implements Updatable, OccupancyAware, Draw
     return ambient / Math.max(1e-3, ambient + direct);
   }
 
+  /** Whether the room's own capture is lighting it now (occupied, a capture shown, not the comparison's old look). */
+  private capturing(): boolean {
+    return this.occupied && !RENDER_TUNING.legacy && (this.reflection?.ready ?? false);
+  }
+
   /** The sky's part of the ambient: through the windows by day, less with the curtains drawn. */
   private skylight(): number {
     return THREE.MathUtils.lerp(SKYLIGHT_NIGHT, SKYLIGHT_DAY, this.daylight) * THREE.MathUtils.lerp(SKYLIGHT_DRAWN, 1, this.skylightOpen);
@@ -406,7 +422,9 @@ export class Room extends THREE.Group implements Updatable, OccupancyAware, Draw
     if (this.skyHue) this.ambientColor.lerp(this.skyHue, SKY_HUE_WEIGHT);
     // Ambient: the sky, plus the lamp's bounce while it is lit. After dark with the lamp off only a
     // moonlit trace remains, so the room reads as genuinely switched off. `update` eases it there.
-    this.ambientIntensity = occupied ? this.skylight() + lampLevel * THREE.MathUtils.lerp(LAMP_BOUNCE_NIGHT, LAMP_BOUNCE_DAY, daylight) : 0;
+    this.capturedAmbient = this.capturing();
+    const share = this.capturedAmbient ? CAPTURED_AMBIENT : 1;
+    this.ambientIntensity = occupied ? (this.skylight() + lampLevel * THREE.MathUtils.lerp(LAMP_BOUNCE_NIGHT, LAMP_BOUNCE_DAY, daylight)) * share : 0;
     this.ceilingLamp.intensity = lampLevel * this.lampIntensity;
     // The ceiling's fake bounce is the lamp's; with it off only a little daylight reaches up there.
     // That daylight comes in by the windows, not from the lamp: the sky's colour, spread evenly

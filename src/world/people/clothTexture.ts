@@ -351,6 +351,16 @@ function thread(color: number): string {
  * What makes paint read as cloth: side seams and a neckline, soft folds where the fabric bunches
  * (at the waist, under the arms), and a fine weave of noise over everything.
  */
+/** The torso's gravity folds: where across (u), from how high (v from the top), half their width (px). */
+const GRAVITY_FOLDS: readonly (readonly [number, number, number])[] = [
+  [0.14, 0.42, 12],
+  [0.36, 0.5, 14],
+  [0.45, 0.62, 9],
+  [0.56, 0.58, 10],
+  [0.65, 0.47, 14],
+  [0.86, 0.42, 12],
+];
+
 function finish(ctx: CanvasRenderingContext2D, ribbedNeck: boolean, random: () => number): void {
   // Side seams: the fold in shadow, the ridge beside it catching the light.
   for (const u of [0.25, 0.75]) {
@@ -384,6 +394,30 @@ function finish(ctx: CanvasRenderingContext2D, ribbedNeck: boolean, random: () =
       ctx.quadraticCurveTo(W * (0.5 + side * 0.17), H * (0.35 + k * 0.05), W * (0.5 + side * (0.1 + k * 0.02)), H * (0.5 + k * 0.04));
       ctx.stroke();
     }
+  }
+  // Gravity folds: soft drapes hanging from the chest and the belly, each a shade with a lit ridge beside it, fading in from where they start.
+  for (const [u, from, w] of GRAVITY_FOLDS) {
+    const x = W * u;
+    const across = ctx.createLinearGradient(x - w, 0, x + w, 0);
+    across.addColorStop(0, 'rgba(0,0,0,0)');
+    across.addColorStop(0.42, 'rgba(0,0,0,0.075)');
+    across.addColorStop(0.62, 'rgba(255,255,255,0.04)');
+    across.addColorStop(1, 'rgba(255,255,255,0)');
+    ctx.fillStyle = across;
+    const top = H * from;
+    for (let band = 0; band < 4; band++) {
+      ctx.globalAlpha = (band + 1) / 4;
+      ctx.fillRect(x - w, top + band * 10, w * 2, band < 3 ? 10 : H - top - band * 10);
+    }
+    ctx.globalAlpha = 1;
+  }
+  // The cloth's own occlusion: darker under the arms, where it gathers and little light reaches.
+  for (const u of [0.25, 0.75]) {
+    const pit = ctx.createRadialGradient(W * u, H * 0.13, 0, W * u, H * 0.13, W * 0.08);
+    pit.addColorStop(0, 'rgba(0,0,0,0.2)');
+    pit.addColorStop(1, 'rgba(0,0,0,0)');
+    ctx.fillStyle = pit;
+    ctx.fillRect(W * (u - 0.08), 0, W * 0.16, H * 0.3);
   }
   const image = ctx.getImageData(0, 0, W, H);
   const data = image.data;

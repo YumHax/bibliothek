@@ -1,5 +1,5 @@
 import type { MoodId } from '@/social/socialPlan';
-import type { GiftKind, InteractionGroup, InteractionId } from '@/social/types';
+import type { GiftKind, InteractionGroup } from '@/social/types';
 import { raw, type Html } from '../panel/html';
 
 /*
@@ -48,6 +48,52 @@ const PATHS = {
   book: ['M4.5 4.5a1 1 0 0 1 1-1H18a1 1 0 0 1 1 1v15a1 1 0 0 1-1 1H6.5a2 2 0 0 1-2-2Z', 'M4.5 18.5a2 2 0 0 1 2-2H19', 'M9 7.5h6'],
   pin: ['M12 21s-6.5-6.2-6.5-11a6.5 6.5 0 0 1 13 0c0 4.8-6.5 11-6.5 11Z', 'M12 7.5a2.5 2.5 0 1 1 0 5 2.5 2.5 0 0 1 0-5Z'],
   people: ['M9 11a3.5 3.5 0 1 1 0-7 3.5 3.5 0 0 1 0 7Z', 'M2.5 20c.5-3.6 3.2-6 6.5-6s6 2.4 6.5 6', 'M16 4.3a3.5 3.5 0 0 1 0 6.4M18 14.3c2 .8 3.3 2.9 3.5 5.7'],
+  // Topics (`PersonTopic.icon`) and the player's news (`PlayerNews.icon`).
+  piano: ['M3.5 6.5h17a1 1 0 0 1 1 1v9a1 1 0 0 1-1 1h-17a1 1 0 0 1-1-1v-9a1 1 0 0 1 1-1Z', 'M6.5 6.5v6M10.5 6.5v6M14.5 6.5v6M18.5 6.5v6', 'M8.5 12.5v5M12.5 12.5v5M16.5 12.5v5'],
+  music: ['M9 18.5a2.5 2.5 0 1 1-2.5-2.5H9V5l11-2v13', 'M20 16a2.5 2.5 0 1 1-2.5-2.5H20', 'M9 9l11-2'],
+  cat: ['M5 20.5c-1-4 0-8 1-10L5 4l4.5 3.2a8 8 0 0 1 5 0L19 4l-1 6.5c1 2 2 6 1 10Z', 'M9.5 13h.01M14.5 13h.01', 'M11 16.5l1 .8 1-.8'],
+  dog: ['M7 8.5 4 5.5 3 11l3 1', 'M17 8.5l3-3 1 5.5-3 1', 'M6.5 9a5.5 5.5 0 0 1 11 0v4.5a5.5 5.5 0 0 1-11 0Z', 'M10 12h.01M14 12h.01', 'M11 15.5h2l-1 1Z'],
+  family: ['M7 7.5a2.5 2.5 0 1 1 0-5 2.5 2.5 0 0 1 0 5Z', 'M17 7.5a2.5 2.5 0 1 1 0-5 2.5 2.5 0 0 1 0 5Z', 'M12 13a2 2 0 1 1 0-4 2 2 0 0 1 0 4Z', 'M3 20.5c.3-4 1.8-9 4-9s3 2 3.5 3.5M21 20.5c-.3-4-1.8-9-4-9s-3 2-3.5 3.5', 'M9.5 20.5c.3-2.5 1.2-4.5 2.5-4.5s2.2 2 2.5 4.5'],
+  games: ['M7 8h10a4.5 4.5 0 0 1 4.3 5.8l-1 3.3a2.2 2.2 0 0 1-3.8.8L14.6 16H9.4l-1.9 1.9a2.2 2.2 0 0 1-3.8-.8l-1-3.3A4.5 4.5 0 0 1 7 8Z', 'M7.5 11v3M6 12.5h3M15.5 12h.01M17.5 13.5h.01'],
+  cards: ['M8 3.5h9a1 1 0 0 1 1 1v13a1 1 0 0 1-1 1H8a1 1 0 0 1-1-1v-13a1 1 0 0 1 1-1Z', 'M4 7.5l3 11.3a1 1 0 0 0 1.2.7l.8-.2', 'M12.5 8.5l-2 3 2 3 2-3Z'],
+  garden: ['M7 14.5h10l-1.5 6h-7Z', 'M12 14.5V8', 'M12 10c-3 0-5-2-5-5 3 0 5 2 5 5ZM12 8c0-3 2-5 5-5 0 3-2 5-5 5Z'],
+  cooking: ['M3.5 11.5h12a6 6 0 0 1-12 0Z', 'M15.5 12.5h5', 'M7.5 7.5c0-1 1-1.5 1-2.5M11.5 7.5c0-1 1-1.5 1-2.5'],
+  work: ['M4 8.5h16a1 1 0 0 1 1 1v9a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1v-9a1 1 0 0 1 1-1Z', 'M9 8.5V6a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2.5', 'M3 13h18'],
+  travel: ['M2.5 13.5l19-8-5 15-4-6Z', 'M12.5 14.5l9-9'],
+  sport: ['M12 3a9 9 0 1 1 0 18 9 9 0 0 1 0-18Z', 'M12 7.5l4 3-1.5 4.5h-5L8 10.5Z', 'M12 3v4.5M16 10.5l4.3-1.4M14.5 15l2.7 3.8M9.5 15l-2.7 3.8M8 10.5 3.7 9.1'],
+  building: ['M5 20.5V4.5a1 1 0 0 1 1-1h9a1 1 0 0 1 1 1v16', 'M16 9.5h3a1 1 0 0 1 1 1v10', 'M3 20.5h18', 'M8.5 7h.01M12.5 7h.01M8.5 10.5h.01M12.5 10.5h.01M8.5 14h.01M12.5 14h.01', 'M9.5 20.5v-3h2v3'],
+  money: ['M3 6.5h18v11H3Z', 'M12 9.5a2.5 2.5 0 1 1 0 5 2.5 2.5 0 0 1 0-5Z', 'M6 9.5v.01M18 14.5v.01'],
+  history: ['M7 3.5h10M7 20.5h10', 'M8 3.5c0 4 8 5 8 8.5s-8 4.5-8 8.5M16 3.5c0 4-8 5-8 8.5s8 4.5 8 8.5'],
+  film: ['M3.5 9.5h17v10a1 1 0 0 1-1 1h-15a1 1 0 0 1-1-1Z', 'M3.5 9.5l-.5-3 16-3 .9 3', 'M7 5.8l2.6 3.2M12 4.9l2.6 3.2'],
+  art: ['M12 3.5a8.5 8.5 0 0 0 0 17c1.4 0 2-1 1.5-2-.6-1.2.2-2.5 1.6-2.5H17a3.5 3.5 0 0 0 3.5-3.5c0-5-3.8-9-8.5-9Z', 'M7.5 11.5h.01M9.5 7.5h.01M14.5 7.5h.01M17 11h.01'],
+  school: ['M2.5 9l9.5-4.5L21.5 9 12 13.5Z', 'M6.5 11v4.5c1.5 1.5 3.5 2 5.5 2s4-.5 5.5-2V11', 'M21.5 9v5'],
+  health: ['M9.5 3.5h5v6h6v5h-6v6h-5v-6h-6v-5h6Z'],
+  coffee: ['M4.5 9.5h12v5a5 5 0 0 1-5 5h-2a5 5 0 0 1-5-5Z', 'M16.5 11h1.5a2.5 2.5 0 0 1 0 5h-2', 'M8 3.5c0 1.5 1.5 1.5 1.5 3M12 3.5c0 1.5 1.5 1.5 1.5 3'],
+  car: ['M3.5 15.5v-3l2-5h13l2 5v3a1 1 0 0 1-1 1h-15a1 1 0 0 1-1-1Z', 'M3.5 12.5h17', 'M7.5 16.5v2M16.5 16.5v2', 'M7 14h.01M17 14h.01'],
+  star: ['M12 3l2.7 5.6 6.1.9-4.4 4.3 1 6.1L12 17l-5.4 2.9 1-6.1-4.4-4.3 6.1-.9Z'],
+  flower: ['M12 21v-7', 'M12 14c-4 0-5-3-5-6l2.5 1.5L12 5l2.5 4.5L17 8c0 3-1 6-5 6Z', 'M12 18.5c-2-1-3.5-1-5-.5'],
+  radio: ['M4 9.5h16a1 1 0 0 1 1 1v8a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1v-8a1 1 0 0 1 1-1Z', 'M6 9.5 17 4', 'M8.5 12.5a2 2 0 1 1 0 4 2 2 0 0 1 0-4Z', 'M14 13h4M14 16h4'],
+  camera: ['M4 7.5h3l1.5-2h7l1.5 2h3a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1v-10a1 1 0 0 1 1-1Z', 'M12 9.5a3.5 3.5 0 1 1 0 7 3.5 3.5 0 0 1 0-7Z'],
+  tools: ['M14.5 4a4.5 4.5 0 0 0-4.2 6.1L3.8 16.6a1.8 1.8 0 0 0 2.6 2.6l6.5-6.5A4.5 4.5 0 0 0 19 8.5l-2.8 2.8-2.7-.8-.8-2.7L15.5 5Z'],
+  sea: ['M2.5 17c1.5 1 3 1 4.75 0s3.25-1 4.75 0 3 1 4.75 0 3.25-1 4.75 0', 'M2.5 20.5c1.5 1 3 1 4.75 0s3.25-1 4.75 0 3 1 4.75 0 3.25-1 4.75 0', 'M6 13.5h12l-2 2.5H8Z', 'M12 13.5V4l5 7h-5'],
+  stamp: ['M9.5 11.5c0-2-1.5-3-1.5-5a4 4 0 0 1 8 0c0 2-1.5 3-1.5 5Z', 'M4.5 11.5h15a1 1 0 0 1 1 1v3h-17v-3a1 1 0 0 1 1-1Z', 'M5.5 19.5h13'],
+  arcade: ['M7 2.5h10l1 4v14H6v-14Z', 'M8 6.5h8v6H8Z', 'M9.5 16h.01M12 15l2 1.5', 'M6 20.5h12'],
+  baby: ['M4 10.5h13a6.5 6.5 0 0 1-13 0Z', 'M4 10.5A6.5 6.5 0 0 1 10.5 4v6.5', 'M17 10.5l2-4h2', 'M7 19.5a1.5 1.5 0 1 1 0 .01M14 19.5a1.5 1.5 0 1 1 0 .01'],
+  rain: ['M7 14.5a4 4 0 0 1-.4-8 5.5 5.5 0 0 1 10.6.4 3.8 3.8 0 0 1-.2 7.6Z', 'M8 17.5l-1 2.5M12 17.5l-1 2.5M16 17.5l-1 2.5'],
+  moon: ['M20 14.5A8.5 8.5 0 1 1 9.5 4a6.5 6.5 0 0 0 10.5 10.5Z'],
+  bike: ['M6 17.5a3.5 3.5 0 1 1 0-.01M18 17.5a3.5 3.5 0 1 1 0-.01', 'M6 17.5l3.5-7h5L18 17.5', 'M9.5 10.5 12 17.5h6', 'M13.5 7.5h2.5'],
+  parcel: ['M3.5 7.5 12 3.5l8.5 4v9l-8.5 4-8.5-4Z', 'M3.5 7.5 12 11.5l8.5-4M12 11.5v9', 'M7.8 5.5l8.5 4'],
+  // What the player does: a joke, an apology, a sharp word; a promise's ticket; the rest of the list.
+  laugh: ['M12 3a9 9 0 1 1 0 18 9 9 0 0 1 0-18Z', 'M7.5 13h9a4.5 4.5 0 0 1-9 0Z', 'M8 9.5l1.5-1 1.5 1M13 9.5l1.5-1 1.5 1'],
+  sorry: ['M12 20s-7.5-4.6-7.5-10A4.3 4.3 0 0 1 12 7.4 4.3 4.3 0 0 1 19.5 10c0 5.4-7.5 10-7.5 10Z', 'M9 12.5l2 2 4-4'],
+  insult: ['M13 2.5L4.5 13.5h6l-1 8 8.5-11h-6Z'],
+  ticket: ['M3.5 7.5a1 1 0 0 1 1-1h15a1 1 0 0 1 1 1V10a2 2 0 0 0 0 4v2.5a1 1 0 0 1-1 1h-15a1 1 0 0 1-1-1V14a2 2 0 0 0 0-4Z', 'M9.5 6.5v2M9.5 11v2M9.5 15.5v2'],
+  more: ['M6 12h.01M12 12h.01M18 12h.01'],
+  // Moods: faces, nothing else wears them.
+  moodGood: ['M12 3a9 9 0 1 1 0 18 9 9 0 0 1 0-18Z', 'M8 14c1 1.6 2.4 2.4 4 2.4s3-.8 4-2.4', 'M8.5 10l1-1 1 1M13.5 10l1-1 1 1'],
+  moodFine: ['M12 3a9 9 0 1 1 0 18 9 9 0 0 1 0-18Z', 'M8.5 14.5c.9 1 2.1 1.5 3.5 1.5s2.6-.5 3.5-1.5', 'M9 9.5h.01M15 9.5h.01'],
+  moodLow: ['M12 3a9 9 0 1 1 0 18 9 9 0 0 1 0-18Z', 'M8.5 16c.9-1.2 2.1-1.7 3.5-1.7s2.6.5 3.5 1.7', 'M9 10h.01M15 10h.01'],
+  moodCross: ['M12 3a9 9 0 1 1 0 18 9 9 0 0 1 0-18Z', 'M8.5 16h7', 'M7.5 8.5l3 1.5M16.5 8.5l-3 1.5'],
 } as const satisfies Record<string, readonly string[]>;
 
 export type IconName = keyof typeof PATHS;
@@ -58,36 +104,25 @@ export function icon(name: IconName, size = 1.15): Html {
   return raw(`<svg class="social-icon" viewBox="0 0 24 24" width="${size}em" height="${size}em" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">${paths}</svg>`);
 }
 
-/** Each interaction's icon. */
-export const INTERACTION_ICONS: Record<InteractionId, IconName> = {
-  chat: 'chat',
-  askDay: 'sun',
-  talkGames: 'pad',
-  compliment: 'sparkle',
-  joke: 'smile',
-  gossip: 'whisper',
-  complain: 'storm',
-  apologise: 'mend',
-  askNumber: 'phone',
-  askFavour: 'hand',
-  askTip: 'bulb',
-  askDiscount: 'tag',
-  tease: 'wink',
-  insult: 'bolt',
-  challenge: 'trophy',
-  giveGift: 'gift',
-  giveGame: 'cart',
-  giveCoins: 'coin',
-};
+/** Whether `name` is one of the icons (a topic's or a piece of news's, which are written as strings in data). */
+function isIconName(name: string): name is IconName {
+  return Object.hasOwn(PATHS, name);
+}
 
-/** Each group's icon (its heading, and the place's own entries of that group). */
+/** The icon `name`, else `fallback` (a topic's icon not drawn yet). */
+export function iconNamed(name: string, fallback: IconName = 'chat'): IconName {
+  return isIconName(name) ? name : fallback;
+}
+
+/** Each group's icon (the button row, and the place's own entries of that group). */
 export const GROUP_ICONS: Record<InteractionGroup, IconName> = {
-  talk: 'chat',
+  talk: 'whisper',
   give: 'gift',
   ask: 'hand',
+  promise: 'ticket',
   trade: 'swap',
   invite: 'door',
-  mean: 'horns',
+  mean: 'more',
 };
 
 /** What a gift from the pocket looks like in the Give list (the rest: the gift box). */
@@ -97,12 +132,14 @@ export const GIFT_ICONS: Partial<Record<GiftKind, IconName>> = {
   treats: 'fish',
   scrap: 'bone',
   cake: 'cake',
+  coffee: 'coffee',
+  record: 'music',
 };
 
-/** Each mood's weather. */
+/** Each mood's face. */
 export const MOOD_ICONS: Record<MoodId, IconName> = {
-  good: 'sun',
-  fine: 'partly',
-  low: 'cloud',
-  annoyed: 'storm',
+  good: 'moodGood',
+  fine: 'moodFine',
+  low: 'moodLow',
+  annoyed: 'moodCross',
 };

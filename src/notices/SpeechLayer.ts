@@ -72,6 +72,8 @@ export class SpeechLayer {
   private readonly eye = new THREE.Vector3();
   /** A conversation is going on: a line to the player replaces the speaker's current one (`converse`). */
   private conversing = false;
+  /** The speaker the conversation draws the balloon of (`mute`): no bubble here for them. */
+  private muted: THREE.Object3D | null = null;
 
   constructor(container: HTMLElement, private readonly camera: THREE.Camera) {
     this.layer = document.createElement('div');
@@ -100,6 +102,19 @@ export class SpeechLayer {
     this.conversing = on;
   }
 
+  /**
+   * `anchor`'s lines show no bubble here while set (the conversation draws the speaker's balloon itself); the line still
+   * "shows" (its `onShow`: their mouth, their murmur) and is still kept for "What was said". Null: nobody is muted.
+   */
+  mute(anchor: THREE.Object3D | null): void {
+    this.muted = anchor;
+    const bubble = anchor ? this.bubbles.get(anchor) : undefined;
+    if (anchor && bubble) {
+      bubble.queue.length = 0;
+      this.next(anchor, bubble);
+    }
+  }
+
   /** What hides a speaker behind a wall (the interactor's occluders). */
   setLineOfSight(blocked: (from: THREE.Vector3, to: THREE.Vector3) => boolean): void {
     this.blocked = blocked;
@@ -115,6 +130,14 @@ export class SpeechLayer {
       cleared = true;
     }
     return cleared;
+  }
+
+  /** Every line said and waiting goes, bubbles and subtitles (a trip elsewhere: what was said there stays there). */
+  clearAll(): void {
+    for (const [key, bubble] of this.bubbles) {
+      bubble.queue.length = 0;
+      this.next(key, bubble);
+    }
   }
 
   update(dt: number, attending: boolean): void {
@@ -138,6 +161,10 @@ export class SpeechLayer {
     if (!text) return;
     const addressed = options.addressed === true;
     if (addressed) noteSaid({ name: options.name, text }); // to read again under the pause menu's "What was said"
+    if (anchor && anchor === this.muted) {
+      options.onShow?.();
+      return;
+    }
     const key = anchor ?? `voice:${options.name ?? ''}`;
     const line: Line = { text, name: options.name, addressed, ms: addressed ? readMs(text) : Math.max((options.seconds ?? 2.2) * 1000, readMs(text) * 0.7), onShow: options.onShow };
     let bubble = this.bubbles.get(key);

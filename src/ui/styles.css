@@ -161,6 +161,43 @@
   .hover-label__cap--touch { border-radius: 50%; width: 1.1rem; min-width: 0; padding: 0; }
   .hover-label__cap--touch::before { content: ''; width: 0.45rem; height: 0.45rem; border-radius: 50%; background: var(--ui-text); }
 
+  /* A known person (`Overlay.renderPersonCaption`): two lines, their face in their tier's ring, never cut (it wraps). */
+  .hover-label--person {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.2rem;
+    padding: 0.35rem 0.85rem 0.45rem 0.4rem;
+    /* The conversation's name tag in small: ink, an outline, a flat offset shadow. */
+    border: 2px solid var(--ink-speech);
+    border-radius: 1.2rem;
+    background: color-mix(in srgb, var(--ink-speech) 92%, transparent);
+    color: var(--paper-speech);
+    box-shadow: 3px 4px 0 var(--shade-45);
+    font-family: var(--ui-font-talk);
+    font-size: max(0.875rem, 14px);
+    white-space: normal;
+  }
+  .hover-label--person .hover-label__verb { color: color-mix(in srgb, var(--paper-speech) 72%, transparent); }
+  .hover-label--person .hover-label__who { font-family: var(--ui-font-print); font-weight: 400; font-size: max(1.05rem, 16px); }
+  .hover-label__line {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.4rem;
+  }
+  .hover-label__line--state:empty { display: none; }
+  .hover-label__line--state { padding-left: calc(30px + 0.4rem + 6px); font-size: max(0.875rem, 14px); }
+  .hover-label__place { color: var(--ui-text-dim); }
+  .hover-label__face {
+    display: inline-grid;
+    flex: none;
+    padding: 3px;
+    border-radius: 50%;
+    background: var(--tier, var(--ui-border-strong));
+  }
+  .hover-label__who { font-weight: 600; }
+  .hover-label__state { color: var(--paper-speech); }
+
   /* Looking at a playing screen: keep the caption out of the picture, along the top edge (out of the column). */
   .hover-label--edge {
     position: fixed;

@@ -1,5 +1,8 @@
 import { gameDayRandom } from '@/time/daily';
 import { randomLook, type Age, type Dress, type PersonLook } from '../../people/looks';
+import { castDress } from '@/world/people/castLook';
+import { personAtDoor } from '@/social/people';
+import { REGULARS } from '../townsfolk/regularsPlan';
 import { fnv1a } from '@/random';
 import { currentSeason } from '@/time/season';
 
@@ -45,7 +48,7 @@ export interface ResidentCast {
 
 /** A resident in the crowd: the face and gait the stairs know them by (`stairwell/Neighbours`), a coat on to go out in winter. */
 export function residentMember(r: ResidentCast): CastMember {
-  const look = randomLook(r.seed + 900, 'shopper', { season: currentSeason().name });
+  const look = randomLook(r.seed + 900, 'shopper', castDress(personAtDoor(r.key), { season: currentSeason().name }));
   return { seed: r.seed, look, age: 'adult', speed: 0.75 + (r.seed % 5) * 0.05, dog: false, umbrella: true, companion: null, follows: false, stranger: false, resident: r };
 }
 
@@ -71,8 +74,8 @@ const TEEN_SHARE = 0.14;
 export function castCrowd({ regulars, strangers, companions, dogs, day, season }: CastOptions): CastMember[] {
   const cast: CastMember[] = [];
   const member = (seed: number, age: Age, stranger: boolean): CastMember => {
-    // The look a `Walker` of this seed has always had (seed + 200), dressed for today.
-    const look = randomLook(seed + 200, 'shopper', { season, age });
+    // The look a `Walker` of this seed has always had (seed + 200), dressed for today; a regular with a card drawn as who they are.
+    const look = randomLook(seed + 200, 'shopper', castDress(REGULARS.find((r) => r.seed === seed)?.person, { season, age }));
     const r = (fnv1a(`pace:${seed}`) % 1000) / 1000;
     const speed = age === 'elder' ? PACE.elder + r * 0.15 : PACE.adult + (r - 0.5) * PACE.spread;
     return { seed, look, age, speed, dog: false, umbrella: seed % 2 === 0, companion: null, follows: false, stranger };

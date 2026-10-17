@@ -131,7 +131,7 @@ function duboisNews(day: number): string {
     for (const id of residents()) {
       if (id === 'dubois' || !isMet(id)) continue;
       const s = standing(id);
-      const fact = findPerson(id)?.facts?.find((f) => !s.known.includes(f.id) && (f.from === undefined || f.from === 'stranger' || f.from === 'acquaintance'));
+      const fact = findPerson(id)?.facts?.find((f) => !s.known.includes(f.id) && (f.from === undefined || f.from === 'polite' || f.from === 'acquaintance'));
       if (fact && learn(id, fact.id)) return fill(plan.duboisNews.secret, { name: shortName(id), says: fact.says });
     }
   }

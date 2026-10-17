@@ -5,10 +5,15 @@ import type { SessionActions } from '@/game/SessionActions';
 import type { Furniture } from '../Furniture';
 import { PersonModel } from './PersonModel';
 import { randomLook, type PersonLook } from './looks';
+import { castDress } from './castLook';
+import { rememberLook } from '@/social/lookBook';
 import type { Pose } from './poses';
 import { SpeechBubble } from './SpeechBubble';
 import { Attention, type AttentionRange } from './attention';
 import type { SocialHook } from './socialHook';
+import { SocialSelf } from './socialSelf';
+import type { SocialAct } from './motion/repertoire';
+import type { Fit } from '@/social/types';
 import type { FaceKey, GestureName } from './motion/gestures';
 import { random } from '@/random';
 
@@ -46,7 +51,11 @@ const BUBBLE_Y = 2.05;
 /** Seconds between two cries at a player hanging about, drawn in this range. */
 const CALL_OUT_EVERY: [number, number] = [18, 40];
 /** How a stallholder stands while waiting; they change their mind every so often. */
-const STANCES: Pose[] = ['stand', 'crossed', 'hips', 'pockets', 'crossed'];
+const STANCES: Pose[] = ['stand', 'table', 'crossed', 'hips', 'pockets', 'lean', 'table'];
+/** Seconds a stance is held (bounds): long enough to read as a stance, short enough that nobody freezes in one. */
+const STANCE_HOLD: readonly [number, number] = [8, 20];
+/** Now and then, waiting with their hands free, they tidy the wares in front of them (seconds between, bounds). */
+const TIDY_EVERY: readonly [number, number] = [14, 34];
 
 /**
  * The stallholder: stands behind the table facing the aisle, shifts their weight, looks over
@@ -70,6 +79,7 @@ export class Vendor extends THREE.Group implements Furniture, Interactable, Upda
   private nextLine: number;
   private glanceTimer = 0;
   private stanceTimer = 0;
+  private tidyIn = TIDY_EVERY[0];
   private glance = new THREE.Vector3();
   private readonly bubble = new SpeechBubble();
   private readonly callOuts: readonly string[];
@@ -77,6 +87,8 @@ export class Vendor extends THREE.Group implements Furniture, Interactable, Upda
   private readonly viewerPos = new THREE.Vector3();
   private readonly local = new THREE.Vector3();
   private readonly attention: Attention;
+  /** Their body as the social interface: the aim's face, a conversation's, greetings, a witness's look (`socialSelf`). */
+  private readonly socialSelf: SocialSelf;
   private stance: Pose;
 
   constructor(options: VendorOptions) {
@@ -91,7 +103,10 @@ export class Vendor extends THREE.Group implements Furniture, Interactable, Upda
     this.focus = options.focus ? new THREE.Vector3(...options.focus) : TABLE_POINT.clone();
     const seed = options.seed ?? 1;
     this.nextLine = seed;
-    this.model = new PersonModel(options.look ?? randomLook(seed, 'vendor'), this.viewer, seed);
+    const look = options.look ?? randomLook(seed, 'vendor', castDress(options.social?.person));
+    this.model = new PersonModel(look, this.viewer, seed);
+    // Their portrait is the face met (`social/lookBook`).
+    if (options.social?.person) rememberLook(options.social.person, look);
     this.add(this.model);
     // Under the hips and each foot, sized to them.
     this.model.groundShadow();
@@ -106,7 +121,19 @@ export class Vendor extends THREE.Group implements Furniture, Interactable, Upda
     this.attention = new Attention(seed + 500);
     this.stance = STANCES[seed % STANCES.length]!;
     this.model.setPose(this.stance);
-    this.stanceTimer = 8 + (seed % 7) * 3;
+    this.stanceTimer = STANCE_HOLD[0] + (seed % 7) * 2;
+    this.tidyIn = TIDY_EVERY[0] + (seed % 5) * 4;
+    this.socialSelf = new SocialSelf(
+      {
+        root: this,
+        body: this.model,
+        attend: (seconds) => this.attention.engage(seconds),
+        say: (text) => this.say(text, 1.8),
+        shown: () => this.visible && this.model.visible,
+      },
+      this.social,
+      this.viewer,
+    );
   }
 
   get footprint(): THREE.Box3 {
@@ -114,6 +141,7 @@ export class Vendor extends THREE.Group implements Furniture, Interactable, Upda
   }
 
   update(dt: number): void {
+    this.socialSelf.update(dt);
     const looking = this.attention.update(dt, this, this.viewer, ATTENTION, this.viewerPos);
     // Noticing the player: a nod sometimes, and folded arms come undone.
     if (this.attention.takeNotice()) {
@@ -131,16 +159,25 @@ export class Vendor extends THREE.Group implements Furniture, Interactable, Upda
         this.say(this.callOuts[Math.floor(random() * this.callOuts.length)]!);
       }
     }
-    if (looking) {
+    const witnessing = this.socialSelf.gazeTarget();
+    if (witnessing) {
+      this.model.gaze(witnessing);
+    } else if (looking) {
       this.model.gaze(this.viewerPos);
     } else {
       this.glanceTimer -= dt;
       if (this.glanceTimer <= 0) this.pickGlance();
       this.model.gaze(this.localToWorld(this.local.copy(this.glance)));
     }
+    // Waiting with nothing to do, the wares get squared up now and then.
+    this.tidyIn -= dt;
+    if (this.tidyIn <= 0) {
+      this.tidyIn = THREE.MathUtils.lerp(TIDY_EVERY[0], TIDY_EVERY[1], random());
+      if (!looking && !this.attention.inConversation && !this.model.gesturing && (this.stance === 'table' || this.stance === 'stand')) this.model.gesture('tidy');
+    }
     this.stanceTimer -= dt;
     if (this.stanceTimer <= 0) {
-      this.stanceTimer = 12 + random() * 25;
+      this.stanceTimer = THREE.MathUtils.lerp(STANCE_HOLD[0], STANCE_HOLD[1], random());
       // Talking with the player, nobody folds their arms.
       const stances = this.attention.inConversation ? STANCES.filter((pose) => pose !== 'crossed') : STANCES;
       this.stance = stances[Math.floor(random() * stances.length)]!;
@@ -192,6 +229,28 @@ export class Vendor extends THREE.Group implements Furniture, Interactable, Upda
     this.model.nod();
   }
 
+  /** A conversation's moment (a loved topic, a polite "meh", an insult), `strength` 0..1, in their own measure. */
+  socialReact(act: SocialAct, strength: number): void {
+    this.socialSelf.reacted();
+    this.model.socialReact(act, strength);
+  }
+
+  /** Their face before the player chooses what to say (`fit`: how they would take it), or back to listening (null). */
+  anticipate(fit: Fit | null): void {
+    this.socialSelf.anticipate(fit);
+  }
+
+  /** Kept in a conversation (eyes on the player, arms unfolded), or let go. */
+  converse(on: boolean): void {
+    this.socialSelf.converse(on);
+    if (on) this.unfold();
+  }
+
+  /** Off the social layer's register (their zone unloads). */
+  dispose(): void {
+    this.socialSelf.dispose();
+  }
+
   /** Arms folded come down (to the sides, the talking hands free). */
   private unfold(): void {
     if (this.stance !== 'crossed') return;
@@ -200,8 +259,9 @@ export class Vendor extends THREE.Group implements Furniture, Interactable, Upda
     this.stanceTimer = Math.max(this.stanceTimer, 10);
   }
 
-  setHovered(): void {
-    // A person does not glow; the caption says it all.
+  setHovered(hovered: boolean): void {
+    // A person does not glow: aimed at, they look up with the face of how they stand with the player.
+    this.socialSelf.hover(hovered);
   }
 
   label(): string {

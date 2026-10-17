@@ -25,7 +25,7 @@ import { findPerson } from '@/social/people';
 import { has } from '@/social/perks';
 import { isMet, nudge } from '@/social/standing';
 import type { SocialServices, TalkExtra, TalkSession } from '@/social/talk';
-import { actReaction } from '../people/socialHook';
+import { bodyOf } from '../people/socialHook';
 import { favouriteRequest, giveTape, noteRequest, tapeGiven } from './buskerBook';
 import { formatTickets } from '@/text/money';
 import { loudness } from '@/audio/hearing';
@@ -120,7 +120,7 @@ export class Busker extends THREE.Group implements Furniture, Updatable, Interac
   constructor(private readonly dayNight: DayNight, private readonly options: BuskerOptions) {
     super();
     this.name = 'Busker';
-    this.person = new Walker({ viewer: options.viewer, seed: options.seed ?? 77, look: streetLook(options.seed ?? 77), label: 'Busker · tip' });
+    this.person = new Walker({ viewer: options.viewer, seed: options.seed ?? 77, look: streetLook(options.seed ?? 77, undefined, 'shopper', 'busker'), label: 'Busker · tip' });
     this.add(this.person);
     this.person.stand(0, 'play', null, () => this.handPoints(), 0.12);
     this.hitboxes = this.person.hitboxes;
@@ -279,7 +279,7 @@ export class Busker extends THREE.Group implements Furniture, Updatable, Interac
     return {
       person: ME,
       place: 'street',
-      body: { speak: (line) => this.person.speak(line, this.speaker()), react: (reaction) => actReaction(this.person, reaction), anchor: this.person.speechAnchor },
+      body: { ...bodyOf(this.person), speak: (line) => this.person.speak(line, this.speaker()) },
       extras,
     };
   }

@@ -33,7 +33,7 @@ export class StairsRace implements Updatable {
       if (storeys < RACE.minStoreys) return [];
       const extra: TalkExtra = {
         id: 'girard-race',
-        group: 'mean',
+        group: 'invite',
         label: 'Race you up!',
         disabled: () => (doneOn('girard-race', day) ? 'He has run enough today' : null),
         run: () => {

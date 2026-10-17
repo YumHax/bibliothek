@@ -77,7 +77,8 @@ export const MARKET_PLAN = {
 
   /** Factory pendants down the aisle, over each pair of stalls; one switch for all of them and the hall's light. */
   pendants: STALL_X.map((x) => ({ ceiling: [x, 0] }) as Placement),
-  pendant: { drop: 1, color: 0x2f4f3f, intensity: 7 } as IndustrialPendantOptions,
+  /** Brighter than a room's: the pools they throw on the tables are the hall's light (their beams show it, down to table height). */
+  pendant: { drop: 1, color: 0x2f4f3f, intensity: 9, beam: { length: 1.25, foot: 0.95 } } as IndustrialPendantOptions,
 
   /**
    * One stall per platform, in `PLATFORM_LIST` order, both rows facing the aisle: the back row
@@ -225,7 +226,7 @@ export const MARKET_PLAN = {
     { kind: 'flyer', at: { wall: 'front', along: 1.9, y: 1.95 }, options: { title: 'OPEN', lines: ['every day', 'first light till late'], accent: 0x2a4a6b, seed: 5 } },
 
     // Plants in the far corners.
-    { kind: 'plant', at: { corner: 'back-left', inset: 0.5 }, options: { kind: 'yucca', pot: 'terracotta', seed: 21 } },
+    { kind: 'plant', at: { corner: 'back-left', inset: 0.62 }, options: { kind: 'yucca', pot: 'terracotta', seed: 21, scale: 0.85 } },
     { kind: 'plant', at: { corner: 'back-right', inset: 0.5 }, options: { kind: 'fig', pot: 'terracotta', seed: 22 } },
   ] as DecorEntry[],
 };

@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { QUALITY } from '@/graphics/quality';
 import { markShared } from './sharedResources';
 import { fabric, scuffed, wood } from './finishes';
+import { brushed } from './brushed';
 import { envBoost } from './envBoost';
 import { paintMottle } from './paintMottle';
 
@@ -108,13 +109,18 @@ export const METAL = {
   brass: (): THREE.MeshStandardMaterial => standard({ color: 0xc9a75b, metalness: 1, roughness: 0.32 }),
   /** Old, darker brass: display cabinets, the collector's binder, market fittings. */
   agedBrass: (): THREE.MeshStandardMaterial => standard({ color: 0xb8892a, metalness: 1, roughness: 0.45 }),
-  /** Brushed steel: appliances, bins, rails. */
-  steel: (): THREE.MeshStandardMaterial => standard({ color: 0xc4c7cb, metalness: 1, roughness: 0.4 }),
+  /** Brushed steel: appliances, bins, rails (its strokes with `QUALITY.detailedMaterials`: `brushed`). */
+  steel: (): THREE.MeshStandardMaterial => brushedMetal({ color: 0xc4c7cb, metalness: 1, roughness: 0.4 }),
   /** Satin steel, duller: coat hooks, umbrella stands, door furniture. */
-  satinSteel: (): THREE.MeshStandardMaterial => standard({ color: 0xb9bcc0, metalness: 1, roughness: 0.5 }),
+  satinSteel: (): THREE.MeshStandardMaterial => brushedMetal({ color: 0xb9bcc0, metalness: 1, roughness: 0.5 }),
   /** Bright chrome: taps, jukebox trim, radio grilles. */
   chrome: (): THREE.MeshStandardMaterial => standard({ color: 0xd8dadd, metalness: 1, roughness: 0.15 }),
 } as const;
+
+/** A shared brushed metal: the strokes of `brushed` on `standard(parameters)`'s look, or the plain look without detailed materials. */
+function brushedMetal(parameters: THREE.MeshStandardMaterialParameters): THREE.MeshStandardMaterial {
+  return QUALITY.detailedMaterials ? standardVariant('brushed', parameters, brushed) : standard(parameters);
+}
 
 /**
  * For a cut-out material with `alphaToCoverage` on: its edge fragments keep an alpha below 1 (the

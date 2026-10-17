@@ -8,6 +8,7 @@ import { whiteBalance } from './whiteBalance';
 import { brightnessStops } from './brightness';
 import { framedLift, framedSubject, setFrameKey } from './framing';
 import { GlassMask } from './glassMask';
+import { RENDER_TUNING } from './renderTuning';
 import { AO_FRAGMENT, AO_BLUR_FRAGMENT, DOF_FRAGMENT, LUMINANCE_FRAGMENT, METER_DOWNSAMPLE_FRAGMENT, OUTPUT_FRAGMENT, QUAD_VERTEX } from './postFxShaders';
 import { damp, dampFactor } from '@/math/damp';
 
@@ -41,6 +42,12 @@ const BLOOM_KNEE = 0.15;
 /** Ambient occlusion: how far a crease darkens (metres) and how dark it gets. */
 const AO_RADIUS = 0.32;
 const AO_INTENSITY = 1.15;
+/**
+ * Its second, wider scale (same pass, half the taps): the room's own shade, under a market table, behind the cartons,
+ * in the corners where two walls meet the floor, which the 0.32 m crease never reached. Gentler than the contact scale.
+ */
+const AO_WIDE_RADIUS = 1.2;
+const AO_WIDE_INTENSITY = 0.6;
 /** Depth of field: blur radius in pixels at full strength, and how fast it comes and goes. */
 const DOF_MAX_RADIUS = 5;
 const DOF_RATE = 3;
@@ -205,7 +212,7 @@ export class PostFx implements FramePipeline, Updatable {
       this.aoMaterial = new THREE.ShaderMaterial({
         ...common,
         fragmentShader: AO_FRAGMENT,
-        defines: { SAMPLES: quality.ssaoSamples },
+        defines: { SAMPLES: quality.ssaoSamples, WIDE_SAMPLES: Math.max(4, Math.round(quality.ssaoSamples / 2)) },
         uniforms: {
           ...depthUniforms(),
           projection: { value: new THREE.Matrix4() },
@@ -214,6 +221,8 @@ export class PostFx implements FramePipeline, Updatable {
           aspect: { value: w / h },
           radius: { value: AO_RADIUS },
           intensity: { value: AO_INTENSITY },
+          radiusWide: { value: AO_WIDE_RADIUS },
+          intensityWide: { value: AO_WIDE_INTENSITY },
           uvScale: { value: this.aoScale },
           uvLimit: { value: this.uvLimit },
         },
@@ -393,6 +402,7 @@ export class PostFx implements FramePipeline, Updatable {
     this.prepMaterial.uniforms.fogDensity!.value = fog && (fog as THREE.FogExp2).isFogExp2 ? fog.density : 0;
 
     if (this.aoMaterial && this.aoBlurMaterial && this.aoTarget && this.aoBlurTarget) {
+      this.aoMaterial.uniforms.intensityWide!.value = RENDER_TUNING.legacy ? 0 : AO_WIDE_INTENSITY;
       this.pass(this.aoMaterial, this.aoTarget);
       this.pass(this.aoBlurMaterial, this.aoBlurTarget);
       if (this.glass && this.camera) this.glass.render(renderer, scene, this.camera, this.aoTarget.viewport);

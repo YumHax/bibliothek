@@ -232,6 +232,55 @@ export const GESTURES = {
       { at: 0.95, r: [-0.85, 0.04, -2.35, -0.55, 0, 0.3, 0.3, -0.3], face: { browsUp: 0.6, frown: 0.3 } },
     ],
   },
+  // --- A conversation's moments (`repertoire.respondSocial`, `socialSelf`) ----------------------
+  /** A real laugh: the head thrown back twice, the shoulders bouncing with it, the eyes creased. */
+  laugh: {
+    length: 1.6,
+    keys: [
+      { at: 0.15, head: [-0.14, 0, 0.03], spine: -0.06, shrug: 0.08, face: { smile: 1, squint: 0.7, jaw: 0.35 } },
+      { at: 0.32, head: [-0.06, 0, 0], spine: -0.02, shrug: 0.02 },
+      { at: 0.5, head: [-0.14, 0, -0.03], spine: -0.05, shrug: 0.08, face: { smile: 1, squint: 0.8, jaw: 0.3 } },
+      { at: 0.72, head: [-0.04, 0, 0], shrug: 0.02 },
+      { at: 1.0, head: [0.04, 0, 0], face: { smile: 0.8, squint: 0.4 } },
+    ],
+  },
+  /** The hands joined before the chest a moment, the head bowed a touch: thank you, really. */
+  handsJoin: {
+    length: 1.7,
+    touches: { l: 'clasp', r: 'clasp' },
+    keys: [
+      { at: 0.35, touch: 1, head: [0.1, 0, 0], face: { smile: 0.9, browsUp: 0.4 } },
+      { at: 1.1, touch: 1, head: [0.05, 0, 0] },
+    ],
+  },
+  /** A look aside and a little down, polite: not their thing. */
+  glanceAway: {
+    length: 1.3,
+    keys: [
+      { at: 0.3, head: [0.08, 0.38, 0.03] },
+      { at: 0.8, head: [0.06, 0.32, 0.02] },
+    ],
+    ownGaze: true,
+  },
+  /** Come here: a hand forward, palm up, the fingers curling in twice. */
+  beckon: {
+    length: 1.4,
+    keys: [
+      { at: 0.25, r: [-0.75, 0.15, -1.25, 0, 0, -0.2, 1.3, -0.5], head: [0, 0, 0.08], face: { smile: 0.5, browsUp: 0.4 } },
+      { at: 0.45, r: [-0.75, 0.15, -1.6, 0, 0, 0.5, 1.3, 0.6] },
+      { at: 0.65, r: [-0.75, 0.15, -1.25, 0, 0, -0.2, 1.3, -0.5] },
+      { at: 0.85, r: [-0.75, 0.15, -1.6, 0, 0, 0.5, 1.3, 0.6], face: { smile: 0.5, browsUp: 0.3 } },
+    ],
+  },
+  /** A word in the ear of whoever is beside them: a hand by the mouth, the head on one side, leaning in. */
+  whisper: {
+    length: 2,
+    touches: { r: 'lips' },
+    keys: [
+      { at: 0.45, touch: [0, 0.55], spine: 0.08, head: [0.05, 0, 0.12], face: { smirk: 0.3, press: 0.2 } },
+      { at: 1.4, touch: [0, 0.55], spine: 0.08, head: [0.06, 0, 0.12] },
+    ],
+  },
   // --- Fidgets -----------------------------------------------------------------------------------
   scratchHead: {
     length: 2.3,
@@ -302,6 +351,16 @@ export const GESTURES = {
       { at: 0.45, both: [-0.06, 0.14, -0.3, 0, 0, 0, 0, -0.4], head: [0.15, 0, 0] },
       { at: 0.65, both: [0.14, 0.14, -0.3, 0, 0, 0, 0, -0.4], head: [0.12, 0, 0] },
       { at: 0.85, both: [-0.06, 0.14, -0.3, 0, 0, 0, 0, -0.4], head: [0.1, 0, 0] },
+    ],
+  },
+  /** Tidying the table in front: a lean over it, the hands squaring a box or two, a look down at the wares. */
+  tidy: {
+    length: 2.6,
+    keys: [
+      { at: 0.45, both: [-0.6, 0.1, -0.5, -0.2, 0, -0.5, 0, -0.2], spine: 0.14, head: [0.38, 0, 0] },
+      { at: 0.95, l: [-0.62, -0.06, -0.48, 0.25, 0, -0.5, 0, 0.3], r: [-0.55, 0.16, -0.58, -0.3, 0, -0.4, 0, 0.3], spine: 0.15, head: [0.4, 0.08, 0] },
+      { at: 1.5, l: [-0.55, -0.14, -0.6, 0.3, 0, -0.4, 0, 0.3], r: [-0.63, 0.06, -0.46, -0.22, 0, -0.5, 0, 0.3], spine: 0.15, head: [0.4, -0.08, 0] },
+      { at: 2.0, both: [-0.5, 0.1, -0.5, -0.2, 0, -0.4, 0, -0.1], spine: 0.08, head: [0.25, 0, 0] },
     ],
   },
   /** Pinball: the hips bump the cabinet, hands stay on the buttons. */

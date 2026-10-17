@@ -77,37 +77,51 @@
     top: 0;
     transform-origin: 50% 100%;
     max-width: min(22rem, 60vw);
-    padding: 0.5rem 0.85rem 0.55rem;
-    margin-bottom: 0.7rem;
-    border-radius: 14px;
+    padding: 0.5rem 0.95rem 0.6rem;
+    margin-bottom: 0.85rem;
+    /* A comic balloon: ink outline, a flat offset shadow, the speech face (the same as the conversation's). */
+    border: 2.5px solid var(--speech-ink);
+    border-radius: 1.3rem;
     background: var(--speech-paper);
     color: var(--speech-ink);
-    box-shadow: 0 4px 18px var(--shade-45), 0 0 0 2px var(--speech-ink);
-    font-size: var(--fs-7);
-    line-height: 1.3;
+    box-shadow: 4px 5px 0 var(--shade-45);
+    font-family: var(--ui-font-comic);
+    font-size: max(1.15rem, 17px);
+    line-height: 1.2;
     text-align: left;
     white-space: pre-line;
     animation: speech-in var(--dur-quick) var(--ui-ease);
     transition: opacity var(--dur-settle) ease;
   }
-  /* The tail, pointing down at the speaker. */
+  /* The tail, pointing down at the speaker: an ink wedge with the paper inside. */
   .speech::after {
     content: '';
     position: absolute;
     left: 50%;
-    bottom: -0.62rem;
-    width: 0.9rem;
+    bottom: -0.9rem;
+    width: 1.2rem;
     height: 0.9rem;
-    transform: translateX(-50%) rotate(45deg);
+    transform: translateX(-50%);
+    background: var(--speech-ink);
+    clip-path: polygon(0 0, 100% 0, 35% 100%);
+  }
+  .speech::before {
+    content: '';
+    position: absolute;
+    left: 50%;
+    bottom: -0.55rem;
+    z-index: var(--z-above);
+    width: 0.72rem;
+    height: 0.62rem;
+    transform: translateX(-50%);
     background: var(--speech-paper);
-    box-shadow: 2px 2px 0 0 var(--speech-ink);
-    border-radius: 0 0 3px 0;
+    clip-path: polygon(0 0, 100% 0, 33% 100%);
   }
   .speech__name {
     display: block;
     margin-bottom: 0.15rem;
     font-family: var(--ui-font-display);
-    font-size: var(--fs-3);
+    font-size: var(--fs-5);
     letter-spacing: 0.04em;
     /* Dark enough on the cream bubble (about 7:1). */
     color: var(--ui-gold-deep);
@@ -119,10 +133,9 @@
   }
   /* A word in passing: small, comic, no name. */
   .speech--passing {
-    padding: 0.3rem 0.7rem;
+    padding: 0.3rem 0.75rem;
     font-family: var(--ui-font-comic);
-    font-weight: 700;
-    font-size: var(--fs-5);
+    font-size: max(1rem, 15px);
     text-align: center;
     opacity: 0.94;
   }
@@ -157,6 +170,7 @@
     max-width: 100%;
     margin: 0;
     padding: 0.45rem 0.95rem;
+    border: 0;
     border-radius: var(--ui-radius-sm);
     background: var(--ui-panel-dense);
     color: var(--ui-white);
@@ -167,12 +181,13 @@
     text-align: center;
     text-shadow: 0 1px 2px var(--shade-90);
   }
-  .speech--subtitle::after { display: none; }
+  .speech--subtitle::after,
+  .speech--subtitle::before { display: none; }
   .speech--subtitle .speech__name {
     display: inline;
     margin: 0 0.5rem 0 0;
     color: var(--ui-accent);
-    font-size: var(--fs-3);
+    font-size: var(--fs-5);
   }
   .speech--subtitle .speech__name::after { content: ':'; }
   body:has(.prompt-line:not([hidden])) .subtitles { bottom: 4.7rem; }

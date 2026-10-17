@@ -42,6 +42,8 @@ import { effectValue } from '@/social/perks';
 import { clerkOf, priced, shopFactor } from '@/social/street/streetPerks';
 import { talkHook } from '../people/socialHook';
 import { clerkTalk } from './clerkTalk';
+import { randomLook } from '@/world/people/looks';
+import { castDress } from '@/world/people/castLook';
 
 /** What a walk-in shop's builder reads of the `BuildContext`: the sky and the camera (its sounds), the till's panel, the day, what the flat owns, the money, the consoles and the people. */
 type ShopBuild = Pick<BuildContext, 'sky' | 'listener' | 'acoustics' | 'panels' | 'today' | 'classifieds' | 'social' | 'collection'> & { home: Pick<HomeContext, 'upgrades' | 'household'>; money: Pick<MoneyContext, 'wallet' | 'purse'>; market: Pick<MarketContext, 'lots'> };
@@ -189,9 +191,9 @@ function placeCounterAndClerk(zone: Zone, ctx: ShopBuild, plan: ShopPlan): { cou
   const home = zone.toLocal(counter.localToWorld(CLERK_AT.clone()));
   const { seed, lines, callOuts, thanks, chores } = plan.clerk;
   const clerkId = clerkOf(plan.shop);
-  const talk = { shop: plan.shop, openTill, day: () => ctx.today.gameDay, catName: ctx.home.household?.catName, catHome: () => upgrades?.has('cat') ?? true, workshop: ctx.classifieds?.workshop, karim: karimTrade(ctx) };
+  const talk = { shop: plan.shop, openTill, day: () => ctx.today.gameDay, hour: () => ctx.social?.hour() ?? 12, catName: ctx.home.household?.catName, catHome: () => upgrades?.has('cat') ?? true, workshop: ctx.classifieds?.workshop, karim: karimTrade(ctx) };
   const social = clerkId ? talkHook(ctx.social, clerkId, (session) => clerkTalk({ ...talk, clerk }, session)) : undefined;
-  const clerk: ShopClerk = zone.place(new ShopClerk({ viewer: listener, seed, lines, callOuts, thanks, chores, home: { at: home.clone(), yaw: counter.rotation.y }, label: 'The shopkeeper · chat', ...(social ? { social } : {}) }), home, counter.rotation.y);
+  const clerk: ShopClerk = zone.place(new ShopClerk({ viewer: listener, seed, look: randomLook(seed, 'vendor', castDress(clerkId)), lines, callOuts, thanks, chores, home: { at: home.clone(), yaw: counter.rotation.y }, label: 'The shopkeeper · chat', ...(social ? { social } : {}) }), home, counter.rotation.y);
   const sold = (): void => {
     clerk.thank();
     playTill();

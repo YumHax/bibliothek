@@ -949,8 +949,8 @@ export class StreetCrowd extends THREE.Group implements Furniture, Updatable {
       passer.dog?.setFade(amount * walker.shownShare);
       passer.lead?.setFade(amount * walker.shownShare);
       this.dress(passer, false);
-      // A known face passing the player: a nod, a wave from a friend (once a trip).
-      if (!passer.greeted && passer.door >= 1 && greets(passer.member, walker, this.eye)) passer.greeted = true;
+      // A known face passing the player greets them by how they stand (once a trip).
+      if (!passer.greeted && passer.door >= 1 && greets(walker)) passer.greeted = true;
       if (passer.bark && bait) this.eyeOnBait(passer, bait);
     }
   }

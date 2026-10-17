@@ -6,10 +6,12 @@ import { attr, html, type Html } from '../panel/html';
 import { formatCoins } from '@/text/money';
 import { standing } from '@/social/standing';
 import { tierInfo, tierOf } from '@/social/tiers';
+import { tierBadge } from '../social/badge';
 import { icon } from '../social/icons';
 import { portrait } from '../social/portrait';
 import '../social/social.css';
 import './household.css';
+import './phoneContacts.css';
 
 /** What the phone reaches: the people whose number the player has, the market's stalls (which know the player), the friends. */
 interface PhoneDeps {
@@ -32,12 +34,21 @@ interface PhoneDeps {
   ads?: PhoneAds;
   /** The people whose number the player has (docs/social.md): ringing one opens the conversation. Absent: no page. */
   contacts?: PhoneContacts;
+  /** The messages friends left when nobody picked up (`social/phoneCalls`). Absent: none. */
+  voicemail?: PhoneVoicemail;
+}
+
+/** The messages left on the phone, played once (they are gone once heard). */
+export interface PhoneVoicemail {
+  count(): number;
+  /** Plays them, oldest first: who, when (words), what they said. */
+  play(): readonly { id: string; name: string; when: string; text: string }[];
 }
 
 /** The address book as the phone reaches it (`social/`). */
 export interface PhoneContacts {
-  /** Everyone whose number the player has: who, a note (their tier, whether they pick up at this hour). */
-  list(): readonly { id: string; name: string; note: string }[];
+  /** Everyone whose number the player has: who, whether they pick up now and a note saying so ("asleep until 8:00"), those who do first. */
+  list(): readonly { id: string; name: string; note: string; picks: boolean }[];
   /** Rings them: null when they picked up (the conversation opens over the phone), else why not ("Asleep at this hour"). */
   call(id: string): string | null;
 }
@@ -86,6 +97,8 @@ export class PhonePanel extends CardPanel {
   private page: Html = html``;
   private friends: PhoneFriends | undefined;
   private events: PhoneEvents | undefined;
+  /** The messages just played, shown as paper slips until the phone goes down. */
+  private played: ReturnType<PhoneVoicemail['play']> = [];
 
   constructor(container: HTMLElement, private readonly deps: PhoneDeps) {
     super(container, { className: 'household-panel', cardClass: 'household-panel__card ui-card', title: '☎ The phone', label: 'The phone', dismiss: 'Put it down', dismissAutofocus: true });
@@ -104,6 +117,7 @@ export class PhonePanel extends CardPanel {
 
   protected override onOpened(): void {
     this.message = '';
+    this.played = [];
     this.stall = null;
     this.page = this.homePage();
     super.onOpened();
@@ -130,6 +144,10 @@ export class PhonePanel extends CardPanel {
     else if (action === 'back') this.showHome();
     else if (action === 'hold' && id) this.hold(id);
     else if (action === 'invite' && id) this.invite(id);
+    else if (action === 'voicemail' && this.deps.voicemail) {
+      this.played = this.deps.voicemail.play();
+      this.showHome();
+    }
     else if (action === 'contact' && id && this.deps.contacts) {
       const why = this.deps.contacts.call(id);
       if (why !== null) {
@@ -150,7 +168,7 @@ export class PhonePanel extends CardPanel {
     super.repaint();
     for (const slot of this.body.querySelectorAll<HTMLElement>('[data-portrait]')) {
       const s = standing(slot.dataset.portrait!);
-      slot.appendChild(portrait(slot.dataset.portrait!, 36, tierInfo(tierOf(s.warmth, s.trust)).colour));
+      slot.appendChild(portrait(slot.dataset.portrait!, Number(slot.dataset.size ?? 36), tierInfo(tierOf(s.warmth, s.trust)).colour));
     }
   }
 
@@ -189,18 +207,24 @@ export class PhonePanel extends CardPanel {
     const book = !contacts
       ? ''
       : contactRows.length
-        ? html`<h3>Contacts</h3><div class="social-contacts">${contactRows.map((c) => {
+        ? html`<h3>Contacts</h3><div class="phone-contacts">${contactRows.map((c) => {
             const s = standing(c.id);
             const tier = tierInfo(tierOf(s.warmth, s.trust));
-            return html`<button type="button" class="social-contact" data-action="contact" data-id="${c.id}" aria-label="Ring ${c.name}, ${c.note}" style="--tier:${tier.colour}">
-              <span class="social-contact__face" data-portrait="${c.id}"></span>
-              <span class="social-contact__who"><b>${c.name}</b><small>${c.note}</small></span>
-              <span class="social-tier" style="--tier:${tier.colour}">${tier.name}</span>
-              <span class="social-contact__ring">${icon('phone', 1)}</span>
+            return html`<button type="button" class="phone-contact${c.picks ? '' : ' phone-contact--away'}" data-action="contact" data-id="${c.id}" aria-label="Ring ${c.name}: ${c.note}" style="--tier:${tier.colour}">
+              <span class="phone-contact__face" data-portrait="${c.id}"></span>
+              <span class="phone-contact__who"><b>${c.name}</b><small>${c.note}</small></span>
+              ${tierBadge(tierOf(s.warmth, s.trust), c.id, { small: true })}
+              <span class="phone-contact__ring">${icon('phone', 1)}</span>
             </button>`;
           })}</div>`
         : html`<h3>Contacts</h3><p class="household-panel__dim">No numbers yet. Get to know people, then ask for theirs.</p>`;
-    return html`${book}<h3>The market</h3>${market}${people}${gatherings}${small}`;
+    const waiting = this.deps.voicemail?.count() ?? 0;
+    const slips = this.played.length
+      ? html`<h3>Messages</h3><ul class="phone-slips">${this.played.map((m) => html`<li class="phone-slip"><span class="phone-slip__face" data-portrait="${m.id}" data-size="32"></span><span><b>${m.name}</b><small>${m.when}</small><q>${m.text}</q></span></li>`)}</ul>`
+      : waiting
+        ? html`<h3>Messages</h3><button type="button" class="ui-btn phone-voicemail" data-action="voicemail"><span class="phone-voicemail__light" aria-hidden="true"></span>${waiting === 1 ? 'Play the message' : `Play the ${waiting} messages`}</button>`
+        : '';
+    return html`${slips}${book}<h3>The market</h3>${market}${people}${gatherings}${small}`;
   }
 
   /** A stall picks up: what is on its table today that it could put aside. */

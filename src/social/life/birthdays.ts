@@ -10,7 +10,7 @@ import { life, saveLife } from './lifeStore';
 
 /*
  * Birthdays (docs/social.md "Birthdays"): every card has one in the social year (`mood.isBirthday`). The player
- * learns one when a chat lands in the week before it (they mention it); the old friends' are known from the start.
+ * learns one when a chat or a topic lands in the week before it (they mention it); the old friends' are known from the start.
  * The hall's board wishes the residents theirs, signed by those who like them; the journal lists the coming ones the
  * player knows; on the day, wishing them happy birthday warms them once (more when the player knew ahead).
  */
@@ -18,7 +18,7 @@ import { life, saveLife } from './lifeStore';
 /** How many game days ahead a chat brings a birthday up, and the journal lists it. */
 const AHEAD = 7;
 /** What a wish moves: more for a birthday the player knew of. */
-const WISH = { warmth: 6, known: 6, trust: 1 } as const;
+const WISH = { warmth: 6, known: 6 } as const;
 
 /** Whether the player knows `id`'s birthday (the People book shows it then). */
 export function knowsBirthday(id: PersonId): boolean {
@@ -32,7 +32,7 @@ function when(days: number): string {
 /** Starts the birthdays: learned in talk, the board's notes, the wish in conversation. */
 export function startBirthdays(): void {
   onInteraction((id, interaction, outcome, ctx) => {
-    if ((interaction !== 'chat' && interaction !== 'askDay') || !outcome.ok || outcome.tired || knowsBirthday(id)) return;
+    if ((interaction !== 'chat' && interaction !== 'topic') || !outcome.ok || knowsBirthday(id)) return;
     const days = daysToBirthday(id, ctx.day);
     if (days > AHEAD) return;
     life().birthdays.push(id);
@@ -59,7 +59,7 @@ export function startBirthdays(): void {
         life().wished[ctx.person] = ctx.day;
         if (!ahead) life().birthdays.push(ctx.person);
         saveLife();
-        nudge(ctx.person, { warmth: WISH.warmth + (ahead ? WISH.known : 0), trust: WISH.trust, why: ahead ? 'touched you remembered their birthday' : 'pleased with the birthday wishes', day: ctx.day, memory: 'you wished me a happy birthday', memoryWeight: 10 });
+        nudge(ctx.person, { warmth: WISH.warmth + (ahead ? WISH.known : 0), why: ahead ? 'touched you remembered their birthday' : 'pleased with the birthday wishes', day: ctx.day, memory: 'you wished me a happy birthday', memoryWeight: 10 });
         return { line: ahead ? 'You remembered! Oh, thank you. That’s made my day.' : 'How did you know? Thank you!' };
       },
     }];

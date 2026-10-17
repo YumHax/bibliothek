@@ -61,7 +61,7 @@ export const FURNITURE_SHOP: ShopPlan = {
     { kind: 'prop', prop: 'panelledDado', options: { height: 0.9, color: 0x9aa58c, rail: 0xf2ead8 }, at: { floor: [0, 0] } },
     { kind: 'prop', prop: 'panelledDado', options: { height: 2.72, railOnly: true, rail: 0x6a5a48 }, at: { floor: [0, 0] } },
     // Cushions and table lamps on the front wall's shelf, the rugs still rolled up in the back corner, the sack truck by the counter.
-    { kind: 'goodsShelf', at: { wall: 'front', along: 2.6, y: 0 }, options: { width: 1.4, shelves: 4, stock: 'homewares', seed: 17 } },
+    { kind: 'goodsShelf', at: { wall: 'front', along: 2.6, y: 0, offset: 0.035 }, options: { width: 1.4, shelves: 4, stock: 'homewares', seed: 17 } },
     { kind: 'rugRolls', at: { floor: [4.92, -3.9], rotationY: -Math.PI / 2 }, options: { count: 4, seed: 23 } },
     { kind: 'trolley', at: { floor: [4.45, 3.55], rotationY: -Math.PI / 2 } },
     // Not on show yet: a wardrobe under a dust sheet in the back corner, kept for Mr. Dupont; a job lot of café chairs, sold, by the counter.

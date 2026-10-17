@@ -72,7 +72,7 @@ export const SELLER_FLAT_PLAN = {
     { kind: 'radiator', at: { wall: 'right', along: -0.9, y: 0 }, options: { style: 'column', width: 0.8 } },
     { kind: 'wallCalendar', at: { wall: 'back', along: 0.3, y: 1.5 }, options: { seed: 12 } },
     { kind: 'smokeDetector', at: { ceiling: [-1.2, -1.0] } },
-    { kind: 'plant', at: { corner: 'front-right', inset: 0.35 }, options: { kind: 'yucca', pot: 'ceramic', seed: 31 } },
+    { kind: 'plant', at: { corner: 'front-right', inset: 0.66 }, options: { kind: 'yucca', pot: 'ceramic', seed: 31, scale: 0.8 } },
     { kind: 'wallSocket', at: { wall: 'right', along: 0.9, y: 0 }, options: { gangs: 2 } },
   ] as DecorEntry[],
 

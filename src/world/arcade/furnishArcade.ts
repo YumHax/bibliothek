@@ -46,6 +46,7 @@ import { LightPool } from '../lighting/LightPool';
 import { effect } from '@/social/perks';
 import { type SocialHook, talkHook } from '../people/socialHook';
 import { randomLook } from '../people/looks';
+import { castDress } from '@/world/people/castLook';
 import { FRIENDS } from '../visitors/friendsPlan';
 import { ATTENDANT, KID, attendantTalk, hugoTalk, kidMood, kidTalk, kidWhipRound, walkerTalk } from './arcadeTalk';
 import { HALL_REGULARS, regularFor } from '@/economy/hallRegulars';
@@ -369,11 +370,11 @@ function placeGuests(zone: Zone, { listener, social, today, sky }: ArcadeBuild, 
   // The bodies they have elsewhere: Marco's at the flat's door (`visitors/friendsPlan`), Hugo's in the courtyard.
   const marcoPlan = FRIENDS.find((f) => f.id === 'marco');
   const marcoBody: Walker = zone.place(
-    new Walker({ viewer: listener, ...(marcoPlan ? { seed: marcoPlan.seed, look: { ...randomLook(marcoPlan.seed, 'shopper'), ...marcoPlan.look } } : {}), lines: marco.lines.clicked, label: 'Marco · chat', speaker: 'Marco', ...withHook(talkHook(social, 'marco', () => walkerTalk('marco', marcoBody, 'Marco'))) }),
+    new Walker({ viewer: listener, ...(marcoPlan ? { seed: marcoPlan.seed, look: { ...randomLook(marcoPlan.seed, 'shopper', castDress('marco')), ...marcoPlan.look } } : {}), lines: marco.lines.clicked, label: 'Marco · chat', speaker: 'Marco', ...withHook(talkHook(social, 'marco', () => walkerTalk('marco', marcoBody, 'Marco'))) }),
     atDoor.clone(),
     Math.PI,
   );
-  const hugoLook = { ...(rememberedLook('hugo') ?? randomLook(findPerson('hugo')?.look?.seed ?? 0, 'shopper', { age: 'child' })) };
+  const hugoLook = { ...(rememberedLook('hugo') ?? randomLook(findPerson('hugo')?.look?.seed ?? 0, 'shopper', castDress('hugo', { age: 'child' }))) };
   hugoLook.height = hugo.height;
   hugoLook.headScale = 1.22 - (hugo.height - 1.05) * 0.3;
   hugoLook.bag = undefined;

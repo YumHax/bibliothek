@@ -15,7 +15,7 @@ import { Footing } from './motion/footing';
 import { Gait } from './motion/gait';
 import { blankFace, FACE_CHANNELS, GesturePlayer, type FaceKey, type GestureName } from './motion/gestures';
 import { ankleOver, orientFoot, solveArm, solveLeg, type ArmSolution } from './motion/ik';
-import { idleFidget, listenFidget, respond, type Context } from './motion/repertoire';
+import { idleFidget, listenFidget, respond, respondSocial, type Context, type SocialAct } from './motion/repertoire';
 import { Breath } from './motion/breath';
 import { touchPoint, TOUCH_SPOTS } from './motion/touch';
 import { smooth } from '@/math/scalar';
@@ -101,9 +101,9 @@ const LISTEN_NOD = 0.45;
 const LISTEN_NOD_EVERY: readonly [number, number] = [2.2, 6];
 const LISTEN_FIDGET_EVERY: readonly [number, number] = [4, 9];
 /** Standing, the body sways over the planted feet by about this much (metres), as people never stand quite still. */
-const POSTURAL_SWAY = 0.006;
+const POSTURAL_SWAY = 0.009;
 /** Standing, the weight rests on one leg or the other, the hips over it by this much (metres), changing every few seconds. */
-const WEIGHT_SHIFT = 0.028;
+const WEIGHT_SHIFT = 0.04;
 const WEIGHT_EVERY: readonly [number, number] = [4, 11];
 /** A deep crouch lowers the hips this far (reference metres); up on the toes raises them this far. */
 const CROUCH_DROP = 0.3;
@@ -233,6 +233,12 @@ export class PersonModel extends THREE.Group implements Performer {
 
   // The director's asks (`lean`, `crouch`, ...) and the springs that ease the body onto them.
   private leanAngle = 0;
+  /** A conversation's lean in (+) or back (-) and look aside (radians), asked by `attitude`, eased (`attLean`, `attAside`). */
+  private attLeanGoal = 0;
+  private attAsideGoal = 0;
+  private attAside = 0;
+  /** Seconds the attitude asked is held (`Infinity`: until asked again). */
+  private attitudeLeft = 0;
   private crouchAmount = 0;
   private riseAmount = 0;
   private readonly spineSpring = new Spring(0, 6, 0.9);
@@ -424,6 +430,7 @@ export class PersonModel extends THREE.Group implements Performer {
     this.face = new Face(rig.face, rig.morphs, rig.eyes, 0.03 + liveRandom() * 0.05 + (look.age === 'elder' ? 0.05 : 0), rig.mouthOpen, rig.wrinkles);
     // Their own smile: a trace of one at rest for a smiley person, one side leading (from the seed, so always the same).
     this.face.setCharacter(look.smile ? 0.15 + (Math.abs(s * 0.618) % 1) * 0.15 : 0, (Math.abs(s * 0.377) % 1) * 2 - 1);
+    this.face.setExpressiveness(this.temper.expressive);
     this.armSprings = rig.arms.map((arm) => {
       const c = arm.current;
       const make = (value: number, omega: number, zeta = 0.9): Spring => new Spring(value, omega, zeta);
@@ -506,9 +513,38 @@ export class PersonModel extends THREE.Group implements Performer {
     this.gestures.play(name, this.temper.tempo);
   }
 
-  /** Shows a feeling on the face for `seconds`. */
-  feel(expression: FaceKey, seconds: number): void {
-    if (this.built) this.face.feel(expression, seconds);
+  /** Shows a feeling on the face for `seconds`, then lets it fade over `fade` seconds. */
+  feel(expression: FaceKey, seconds: number, fade?: number): void {
+    if (this.built) this.face.feel(expression, seconds, fade);
+  }
+
+  /** 0..1: how readily their face and body show what they feel (their temperament's). */
+  get expressiveness(): number {
+    return this.temper.expressive;
+  }
+
+  /**
+   * A conversation's moment (`respondSocial`): a loved topic lights them up, a polite "meh" is a look away, scaled
+   * by `strength` (0..1) and by how expressive they are (the reserved smile where others laugh).
+   */
+  socialReact(act: SocialAct, strength: number): void {
+    const response = respondSocial(act, strength, this.context(), this.random);
+    if (response.gesture) this.gesture(response.gesture);
+    this.feel(response.face, response.seconds, response.fade);
+    if (response.nod) this.nod();
+    if (response.lean) this.attitude(response.lean, 0, response.seconds);
+    this.fidgetIn = Math.max(this.fidgetIn, 4);
+  }
+
+  /**
+   * How they hold themselves towards the player in a conversation: leaning in (+, radians) or back (-), the head and
+   * eyes turned aside (`aside`, radians: a look away), for `seconds` (default until asked again). Eased; 0, 0 is
+   * listening as usual.
+   */
+  attitude(lean: number, aside: number, seconds = Infinity): void {
+    this.attLeanGoal = lean;
+    this.attAsideGoal = aside;
+    this.attitudeLeft = seconds;
   }
 
   /** Something happened to them: they show it in their own way (a gesture, a face, a nod). */
@@ -1006,8 +1042,10 @@ export class PersonModel extends THREE.Group implements Performer {
   private carriage(dt: number, f: Frame, g: GestureFrame): Carriage {
     const { w, seated, walking, reaching, tempo } = f;
     const slouch = this.temper.slouch;
+    this.attitudeLeft -= dt;
+    if (this.attitudeLeft <= 0) this.attLeanGoal = this.attAsideGoal = 0;
     const spine = this.spineSpring.step(
-      (seated ? this.leanAngle : this.leanAngle * (1 - w)) + g.spine + slouch * 0.1 + 0.05 * w * this.gait.amount + RUN_LEAN * w * this.gait.run + (reaching ? 0.03 : 0),
+      (seated ? this.leanAngle : this.leanAngle * (1 - w)) + this.attLeanGoal * (1 - w) + g.spine + slouch * 0.1 + 0.05 * w * this.gait.amount + RUN_LEAN * w * this.gait.run + (reaching ? 0.03 : 0),
       dt,
       6 * tempo,
     );
@@ -1058,7 +1096,7 @@ export class PersonModel extends THREE.Group implements Performer {
       'YXZ',
     );
     // The chest fills about its emptied rest (a sigh much more), the back straightening a touch with the breath in.
-    const breath = (this.breath.fill - 0.45) * 0.024;
+    const breath = (this.breath.fill - 0.45) * 0.034;
     rig.chest.rotation.x -= this.breath.fill * 0.008 - this.breath.sighing * 0.03;
     rig.spine.update(rig.lumbar, rig.chest, rig.trunk.position, breath, CHEST_CENTRE);
   }
@@ -1327,7 +1365,7 @@ export class PersonModel extends THREE.Group implements Performer {
     const raised = Math.max(0, -c.ux - 1.3) * 0.2 + Math.max(0, Math.abs(c.uz) - 0.4) * 0.15;
     const forward = Math.max(0, -c.ux - 0.4) * 0.1;
     // The shoulders rise a little with each breath in, and drop as a sigh goes out.
-    const breathing = this.breath.fill * 0.014 - this.breath.sighing * 0.03;
+    const breathing = this.breath.fill * 0.02 - this.breath.sighing * 0.03;
     const shrug = this.shrugSprings[i]!.step(this.gestures.frame.shrug[i]! + talk * 0.02 * Math.sin(t * 3.1 + i) + breathing, dt, 10 * tempo);
     arm.clavicle.rotation.set(0, -side * forward, side * (raised + shrug), 'YXZ');
     arm.shoulder.rotation.set(c.ux, 0, c.uz, 'YXZ');
@@ -1419,7 +1457,10 @@ export class PersonModel extends THREE.Group implements Performer {
     }
     if (talk) nod += talk * Math.max(0, Math.sin(t * 4.1) * Math.sin(t * 1.3 + 0.7)) * 0.06;
     const tilt = talk ? talk * this.drift(t, 1) * 0.06 : this.drift(t, 0) * 0.02;
-    head.rotation.set(this.pitch + nod + extra[0]!, this.yaw + extra[1]!, tilt + extra[2]!, 'YXZ');
+    // A look aside (`attitude`): the head turns a little and the eyes go further, then come back.
+    this.attAside += (this.attAsideGoal - this.attAside) * dampFactor(6, dt);
+    head.rotation.set(this.pitch + nod + extra[0]!, this.yaw + extra[1]! + this.attAside * 0.6, tilt + extra[2]!, 'YXZ');
+    eyeYaw += this.attAside * 0.6;
     // The eyes stay on what they look at through a nod and a gesture's turn of the head (as eyes do through any move of it), as far as they can turn.
     if (target) {
       eyePitch = THREE.MathUtils.clamp(eyePitch - nod - extra[0]!, -EYE_PITCH, EYE_PITCH);

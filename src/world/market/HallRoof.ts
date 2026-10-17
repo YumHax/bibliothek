@@ -1,5 +1,8 @@
 import * as THREE from 'three';
+import { QUALITY } from '@/graphics/quality';
 import type { RoomOptions } from '../Room';
+import type { SkyState } from '../props/DayNight';
+import { SunShaft } from '../props/SunShaft';
 import { boxMesh } from '../meshUtils';
 import { Prop } from '../props/Prop';
 import { standard } from '../materials/palette';
@@ -16,6 +19,14 @@ export interface HallRoofOptions {
 }
 
 const CHORD = 0.08;
+/**
+ * The roof light's beams (`SunShaft` laid flat): their share of the sun (frosted glass spreads it; low, because the
+ * eye walks inside this volume and its dust adds up over metres of it, which would veil the whole hall), and how far the
+ * sun's slant is kept from the vertical (a low sun through a roof light still falls steeply into the hall).
+ */
+const SHAFT_SHARE = 0.2;
+const SHAFT_SLANT = 0.42;
+const SHAFT_MIN_DROP = 0.55;
 const WEB = 0.05;
 
 // Painted ironwork: dielectrics (metalness 0).
@@ -34,6 +45,10 @@ export class HallRoof extends Prop {
   /** Wraps the whole shell. */
   readonly contactShadow = false;
   private readonly glass: THREE.MeshStandardMaterial | null = null;
+  /** The sunbeams falling through the roof light and the dust in them (`QUALITY.lightShafts`), or null. */
+  private readonly shaft: SunShaft | null = null;
+  private readonly towardSun = new THREE.Vector3();
+  private readonly worldQuaternion = new THREE.Quaternion();
 
   constructor(room: RoomOptions, options: HallRoofOptions = {}) {
     super();
@@ -92,6 +107,13 @@ export class HallRoof extends Prop {
       const bars = Math.round(glazedL / 0.8);
       for (let b = 1; b < bars; b++) this.add(boxMesh(glazedW, 0.03, 0.03, GLAZING_BAR, { y: height - 0.02, z: -glazedL / 2 + (b / bars) * glazedL }));
       this.add(boxMesh(0.03, 0.03, glazedL, GLAZING_BAR, { y: height - 0.02 }));
+      if (QUALITY.lightShafts) {
+        // Laid flat under the glass: its local +z (into the room) is down, its local y runs the hall's depth.
+        this.shaft = new SunShaft({ width: glazedW, height: glazedL, columns: 2, rows: bars, floorY: 0, drop: height - 0.05 });
+        this.shaft.rotation.x = Math.PI / 2;
+        this.shaft.position.y = height - 0.05;
+        this.add(this.shaft);
+      }
     }
 
     this.traverse((obj) => {
@@ -103,5 +125,26 @@ export class HallRoof extends Prop {
   setDaylight(daylight: number, skyHue?: THREE.Color): void {
     if (!this.glass) return;
     lightDaylitGlass(this.glass, daylight, skyHue);
+  }
+
+  /**
+   * The sun through the roof light: `towardSun` the world direction towards it (`Outdoors.lightDirection`), steepened
+   * (a roof light lets the beams fall almost straight down), brought into the beams' frame; none at night.
+   */
+  setSun(sky: SkyState, towardSun: THREE.Vector3): void {
+    const shaft = this.shaft;
+    if (!shaft) return;
+    const toward = this.towardSun.copy(towardSun);
+    toward.x *= SHAFT_SLANT;
+    toward.z *= SHAFT_SLANT;
+    toward.y = Math.max(toward.y, SHAFT_MIN_DROP);
+    toward.normalize();
+    shaft.getWorldQuaternion(this.worldQuaternion).invert();
+    toward.applyQuaternion(this.worldQuaternion);
+    shaft.setSun(toward, sky.lightColor, sky.night ? 0 : sky.lightIntensity * SHAFT_SHARE);
+  }
+
+  update(dt: number): void {
+    this.shaft?.update(dt);
   }
 }

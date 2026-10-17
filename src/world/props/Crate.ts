@@ -83,6 +83,9 @@ function woodCrate(w: number, h: number, d: number, random: () => number): THREE
   return g;
 }
 
+/** The width of a carton's painted faces: about 1000 px a metre on a 0.5 m box, so the marker word is sharp at arm's length. */
+const CARTON_PX = 512;
+
 /** A tan box, a tape stripe over the closed top flaps, a marker word on the front. */
 function cardboardBox(w: number, h: number, d: number, label: string, random: () => number): THREE.Group {
   const g = new THREE.Group();
@@ -101,33 +104,38 @@ function cardboardBox(w: number, h: number, d: number, label: string, random: ()
 }
 
 function paintTop(card: THREE.Color, random: () => number): THREE.Texture {
-  const [canvas, ctx] = createCanvas(256, 256);
+  const S = CARTON_PX;
+  const k = S / 256;
+  const [canvas, ctx] = createCanvas(S, S);
   ctx.fillStyle = `#${card.getHexString()}`;
-  ctx.fillRect(0, 0, 256, 256);
+  ctx.fillRect(0, 0, S, S);
   // The seam between the flaps, and the tape holding them.
   ctx.fillStyle = 'rgba(0,0,0,0.25)';
-  ctx.fillRect(126, 0, 4, 256);
+  ctx.fillRect(126 * k, 0, 4 * k, S);
   ctx.fillStyle = TAPE;
-  ctx.fillRect(108, 0, 40, 256);
-  if (random() < 0.5) ctx.fillRect(0, 100 + random() * 50, 256, 34);
+  ctx.fillRect(108 * k, 0, 40 * k, S);
+  if (random() < 0.5) ctx.fillRect(0, (100 + random() * 50) * k, S, 34 * k);
   return toTexture(canvas, 'facing');
 }
 
 function paintFront(card: THREE.Color, label: string, random: () => number): THREE.Texture {
-  const [canvas, ctx] = createCanvas(256, 200);
+  const W = CARTON_PX;
+  const k = W / 256;
+  const H = 200 * k;
+  const [canvas, ctx] = createCanvas(W, H);
   ctx.fillStyle = `#${card.getHexString()}`;
-  ctx.fillRect(0, 0, 256, 200);
+  ctx.fillRect(0, 0, W, H);
   // A scuff or two.
   ctx.fillStyle = 'rgba(80,60,30,0.15)';
-  for (let i = 0; i < 3; i++) ctx.fillRect(random() * 200, random() * 180, 20 + random() * 60, 4 + random() * 10);
+  for (let i = 0; i < 3; i++) ctx.fillRect(random() * 200 * k, random() * 180 * k, (20 + random() * 60) * k, (4 + random() * 10) * k);
   ctx.save();
-  ctx.translate(128, 100);
+  ctx.translate(W / 2, H / 2);
   ctx.rotate((random() - 0.5) * 0.12);
   ctx.fillStyle = '#2a2622';
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
-  ctx.font = `bold 46px ${FONT}`;
-  ctx.fillText(label, 0, 0, 220);
+  ctx.font = `bold ${46 * k}px ${FONT}`;
+  ctx.fillText(label, 0, 0, 220 * k);
   ctx.restore();
   return toTexture(canvas, 'facing');
 }

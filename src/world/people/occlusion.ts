@@ -21,7 +21,8 @@ import type { Rig } from './rig';
  * Also here: the face's specular occlusion (no reflections in the eye sockets, under the nose and the
  * lower lip; `faceSpecularOcclusion`), and the portrait light of a conversation: the person framed
  * (`graphics/framing`) takes a soft warm fill from the camera's side and a faint rim, as a film lights
- * its dialogue, scaled to the frame's key so it reads the same in any room. Never a shadowed light.
+ * its dialogue, scaled to the frame's key so it reads the same in any room. Never a shadowed light. And always a faint
+ * rim of the room's own light on the silhouette (`AMBIENT_RIM`), so people stand off the walls behind them.
  */
 
 /** Capsules per person (fixed: one shader program for everyone). */
@@ -33,6 +34,11 @@ const PORTRAIT_FILL = 0.35;
 const PORTRAIT_COLOR = new THREE.Color(1, 0.86, 0.72);
 const PORTRAIT_RIM = 0.5;
 const PORTRAIT_RATE = 3;
+/**
+ * A faint rim of the room's own light where the body turns away from the viewer (always, not only in a conversation):
+ * people stand off the walls behind them instead of melting into them. Times the ambient they already get.
+ */
+const AMBIENT_RIM = 0.45;
 /** The capsules ease out between these distances from the viewer (m): further, an armpit or a chin's shade is under a pixel. */
 const OCCLUSION_REACH = [8, 12] as const;
 /** The framed subject belongs to this person when its owner is theirs and it is within this far (m, on the floor). */
@@ -55,6 +61,7 @@ uniform vec4 personOccB[${OCCLUDERS}];
 uniform float personOccNear;
 uniform vec3 personPortrait;
 uniform float personRim;
+uniform float personAmbientRim;
 `;
 
 /** After three's own ambient occlusion: the capsules' occlusion, then the portrait light (itself a little occluded). */
@@ -84,6 +91,12 @@ const FRAGMENT_APPLY = /* glsl */ `
   }
   reflectedLight.indirectDiffuse *= occ;
   reflectedLight.indirectSpecular *= occ;
+  {
+    // The room's light at this point, as the ambient brought it (its colour, its level), wrapping the silhouette, lit from above.
+    float edge = 1.0 - clamp(dot(normal, normalize(vViewPosition)), 0.0, 1.0);
+    vec3 roomLight = min(reflectedLight.indirectDiffuse / max(material.diffuseColor, vec3(0.03)), vec3(4.0));
+    reflectedLight.indirectDiffuse += roomLight * (material.diffuseColor * 0.55 + 0.035) * (edge * edge * edge) * clamp(normal.y * 0.5 + 0.6, 0.0, 1.0) * personAmbientRim;
+  }
   reflectedLight.directDiffuse *= mix(1.0, occ, ${DIRECT_SHARE.toFixed(2)});
   #ifdef USE_SHEEN
     sheenSpecularIndirect *= occ;
@@ -151,6 +164,7 @@ export class PersonOcclusion {
     personOccNear: { value: 1 },
     personPortrait: { value: new THREE.Color(0, 0, 0) },
     personRim: { value: PORTRAIT_RIM },
+    personAmbientRim: { value: AMBIENT_RIM },
   };
   private lastFrame = -1;
   private portrait = 0;

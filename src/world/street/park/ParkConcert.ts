@@ -11,6 +11,7 @@ import type { Furniture } from '../../Furniture';
 import type { DayNight } from '../../props/DayNight';
 import { Walker } from '../../people/Walker';
 import { randomLook } from '../../people/looks';
+import { castDress } from '@/world/people/castLook';
 import { random } from '@/random';
 import { bodyOf, talkHook } from '../../people/socialHook';
 import { boxMesh, cylinderMesh, invisibleHitbox } from '../../meshUtils';
@@ -96,7 +97,7 @@ export class ParkConcert extends THREE.Group implements Furniture, Updatable, In
       const person: Walker = new Walker({
         viewer: options.viewer,
         seed,
-        look: randomLook(seed, i === 0 && lou ? lou.look.role : 'shopper'),
+        look: randomLook(seed, i === 0 && lou ? lou.look.role : 'shopper', i === 0 && lou ? castDress('lou') : undefined),
         label: i === 0 ? 'Lou, on bass' : 'The band',
         talk: () => BAND_LINES[this.line++ % BAND_LINES.length]!,
         labelWithin: 6,

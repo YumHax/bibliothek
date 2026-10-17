@@ -15,7 +15,7 @@ import type { PlayerMoves } from './player';
 import type { Interaction } from './input';
 import { HudIdle } from '@/ui/HudIdle';
 import { KeysCard } from '@/ui/KeysCard';
-import { installDebugPanel } from './debug';
+import { exposeRoomUse, installDebugPanel } from './debug';
 
 /**
  * The rules: the Session is handed every part it routes to (see `SessionParts`), then hears every
@@ -113,6 +113,7 @@ export function createSession(services: Services, parts: { player: FirstPersonCo
   session.bindInput(input);
   // A trip whose destination would not load: back where the player stood, told so (not only in the console).
   moves.travel.onFailed = () => ui.notices.refuse('The door sticks. Try again.');
+  moves.travel.onDepart = () => ui.notices.speech.clearAll();
   // The day stands still while the player is out of the room (the pause menu, the start card, the opening) or in a panel.
   sky.holdClock(() => player.isLocked && !session.modalOpen);
   // Watching from a seat with nothing pressed, the crosshair, its caption and the prompt line step back.
@@ -125,5 +126,7 @@ export function createSession(services: Services, parts: { player: FirstPersonCo
   refundLapsedHoldsDaily(services.tx, services.today, ui.notices);
   // `?debug`: the debug panel on its key (every progression's switch, the votes, events now, a trip anywhere).
   if (services.debug) installDebugPanel(services, { input, openPanel: (panel) => session.openPanel(panel), modalOpen: () => session.modalOpen, travel: moves.travel });
+  // `?debug`: what a click at the crosshair does, for a browser driven by a script (`bibliothek.room.use()`).
+  if (services.debug) exposeRoomUse(() => interaction.interactor.select());
   return session;
 }

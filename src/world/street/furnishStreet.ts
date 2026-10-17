@@ -47,6 +47,7 @@ import { StreetRounds } from './life/StreetRounds';
 import { StreetReactions } from './life/StreetReactions';
 import { pigeonPerches } from './life/pigeonPerches';
 import { randomLook } from '../people/looks';
+import { castDress } from '@/world/people/castLook';
 import { findPerson } from '@/social/people';
 import { STAIRWELL_PLAN } from '../stairwell/stairwellPlan'; // imports-ok: the building's residents walk Front Street at their hours: the street reads who they are
 import { movedAway, residentName } from '@/building/residentsHome';
@@ -568,7 +569,7 @@ function placeLife(site: StreetSite): void {
       place: placeWalker,
       talk,
       feed,
-      remi: remi ? { name: remi.short ?? remi.name, lines: [remi.intro, ...(remi.facts ?? []).map((f) => f.says)], look: randomLook(remi.look.seed, remi.look.role, { season: season.name }) } : undefined,
+      remi: remi ? { name: remi.short ?? remi.name, lines: [remi.intro, ...(remi.facts ?? []).map((f) => f.says)], look: randomLook(remi.look.seed, remi.look.role, castDress('remi', { season: season.name })) } : undefined,
       onDoor,
       ...seen,
     }),

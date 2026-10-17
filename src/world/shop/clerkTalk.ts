@@ -8,10 +8,10 @@ import { has } from '@/social/perks';
 import { findPerson } from '@/social/people';
 import { isMet, tier } from '@/social/standing';
 import { atLeast } from '@/social/tiers';
-import { clerkOf, onceToday, shopFactor, usedToday } from '@/social/street/streetPerks';
+import { askDiscount, clerkOf, discountAskable, onceToday, shopFactor, usedToday } from '@/social/street/streetPerks';
 import type { TalkExtra, TalkSession } from '@/social/talk';
 import type { PersonId } from '@/social/types';
-import { actReaction } from '../people/socialHook';
+import { bodyOf } from '../people/socialHook';
 import type { Game } from '@/catalog/types';
 import { formatCoins } from '@/text/money';
 import { STREET_SHOPS } from '@/streetShops/rules';
@@ -32,6 +32,8 @@ interface ClerkTalkOptions {
   /** Opens the till's list (the shop's `HomeShopPanel`), or refuses with why. */
   openTill: (session: SessionActions) => void;
   day: () => number;
+  /** The game hour (their mood decides a discount asked). */
+  hour?: () => number;
   catName?: () => string;
   /** Whether a cat lives in the flat (adopted at the pet shop). */
   catHome?: () => boolean;
@@ -74,7 +76,7 @@ export function clerkTalk(options: ClerkTalkOptions, session: SessionActions): T
   return {
     person: id,
     place: 'shop',
-    body: { speak: (line) => clerk.speak(line, speakerOf(id)), react: (reaction) => actReaction(clerk, reaction), anchor: clerk.speechAnchor },
+    body: { ...bodyOf(clerk), speak: (line) => clerk.speak(line, speakerOf(id)) },
     extras: extrasOf(id, options, session),
   };
 }
@@ -84,6 +86,17 @@ function extrasOf(id: PersonId, options: ClerkTalkOptions, session: SessionActio
   const factor = shopFactor(options.shop);
   const priceWord = factor < 1 ? ` (${Math.round((1 - factor) * 100)}% off for you)` : factor > 1 ? ` (${Math.round((factor - 1) * 100)}% more for you)` : '';
   const extras: TalkExtra[] = [{ id: 'till', group: 'trade', label: `See everything for the flat${priceWord}`, opensPanel: true, run: () => options.openTill(session) }];
+  // Once a day from Friendly: no draw, their standing and their day decide (a friend always obliges).
+  extras.push({
+    id: 'discount',
+    group: 'ask',
+    icon: 'coin',
+    label: 'Any chance of a discount today?',
+    disabled: () => (discountAskable(id, day) ? null : 'Not today'),
+    run: () => (askDiscount(id, day, options.hour?.() ?? 12)
+      ? { line: 'Go on then. Ten percent off at the till, today only. Don’t tell anyone.' }
+      : { line: 'Not today, sorry. It’s been one of those days.' }),
+  });
   if (options.shop === 'pets') {
     extras.push({
       id: 'treats',

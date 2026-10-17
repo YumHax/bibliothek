@@ -43,8 +43,30 @@ const SPILL = { color: 0xeef4ff, intensity: 1.1, distance: 2.4 };
 const BULB = standard({ color: 0xfffaf0, emissive: 0xfff3dc, emissiveIntensity: 1.6, roughness: 0.3 });
 
 /**
+ * Where friends' keepsakes go on the fridge door's face (`fridgeKeepsakes`), in face coordinates from the fridge's
+ * centre line (x) and the door's bottom (y): two columns of four under the shopping list, clear of the handle.
+ */
+const KEEPSAKE_COLUMNS = [-0.13, 0.13] as const;
+const KEEPSAKE_ROWS_FROM_TOP = [0.48, 0.68, 0.88, 1.08] as const;
+
+/** The fridge door's face as the keepsakes see it: its panel, where each one sits on it and in the fridge, and whether it is shut. */
+interface FridgeFace {
+  /** The door's panel: a keepsake's look goes in it, so it swings with the door. */
+  readonly panel: THREE.Object3D;
+  /** The slots, centre of each: in the panel's coordinates (on its front face) and in the fridge's (for a click target in front of the shut door). */
+  readonly slots: readonly { inPanel: THREE.Vector3; inFridge: THREE.Vector3 }[];
+  /** The part of the door the keepsakes cover, in the fridge's coordinates (its centre on the door's front), clear of the handle: what a close look frames. */
+  readonly area: { readonly centre: THREE.Vector3; readonly width: number; readonly height: number };
+  /** Whether the door is shut (a click target in front of it would be in the way of the open fridge's insides). */
+  readonly shut: boolean;
+  /** Calls `cb` whenever the door moves. Returns the unsubscribe. */
+  onMove(cb: () => void): () => void;
+}
+
+/**
  * A brushed-steel fridge-freezer: freezer door on top, fridge door below, both hung on one side
- * (`hinge`) with a long vertical bar handle on the other, a few magnets holding a note, and the compressor
+ * (`hinge`) with a long vertical bar handle on the other, two magnets holding a shopping list and room under it for
+ * friends' keepsakes (`face`), and the compressor
  * grille at the back. Both doors open on a click (`leaves`, placed by the builder with
  * `placeLeaves`) onto a glowing white liner, shelves and the week's shopping; the insides are only
  * drawn while a door is ajar. Wall-hung with `y: 0`: origin on the floor at the wall, +z into the
@@ -54,6 +76,9 @@ export class Fridge extends THREE.Group implements Furniture {
   readonly footprint: THREE.Box3;
   /** The fridge door, then the freezer door. */
   readonly leaves: SwingLeaf[];
+  /** The fridge door's face, where friends' keepsakes are put (`fridgeKeepsakes`). */
+  readonly face: FridgeFace;
+  private readonly doorMoves = new Set<() => void>();
 
   constructor(options: FridgeOptions = {}) {
     super();
@@ -87,7 +112,11 @@ export class Fridge extends THREE.Group implements Furniture {
 
     // Two doors on the hinge side: fridge (below), freezer (top).
     const reveal = revealWhileOpen(interior, 2);
-    const fridgeDoor = this.buildDoor(width, fridgeH, hinge, 'fridge', reveal(0));
+    const showFridge = reveal(0);
+    const fridgeDoor = this.buildDoor(width, fridgeH, hinge, 'fridge', (openness) => {
+      showFridge(openness);
+      for (const cb of [...this.doorMoves]) cb();
+    });
     fridgeDoor.position.set(hingeX, FEET, bodyD);
     const freezerDoor = this.buildDoor(width, freezer, hinge, 'freezer', reveal(1));
     freezerDoor.position.set(hingeX, FEET + fridgeH + GAP, bodyD);
@@ -95,8 +124,36 @@ export class Fridge extends THREE.Group implements Furniture {
     fridgeDoor.stash = stashBehind(fridgeDoor, stash.fridge);
     freezerDoor.stash = stashBehind(freezerDoor, stash.freezer);
     this.decorateFridgeDoor(fridgeDoor, width, fridgeH, hingeX);
+    this.face = this.keepsakeFace(fridgeDoor, fridgeH, hingeX, bodyD);
 
     this.footprint = new THREE.Box3(new THREE.Vector3(-width / 2, 0, 0), new THREE.Vector3(width / 2, height, depth + 0.05));
+  }
+
+  /** The keepsakes' slots on the fridge door (`FridgeFace`). */
+  private keepsakeFace(door: SwingLeaf, h: number, hingeX: number, bodyD: number): FridgeFace {
+    const front = DOOR_THICKNESS;
+    const slots = KEEPSAKE_ROWS_FROM_TOP.flatMap((down) => KEEPSAKE_COLUMNS.map((x) => ({
+      inPanel: new THREE.Vector3(x - hingeX, h - down, front),
+      inFridge: new THREE.Vector3(x, FEET + h - down, bodyD + front),
+    })));
+    const moves = this.doorMoves;
+    // The keepsakes' rows and columns with half a keepsake round them; the handle's strip on the free edge stays the door's.
+    const span = (KEEPSAKE_COLUMNS[1] - KEEPSAKE_COLUMNS[0]) + 0.18;
+    const top = KEEPSAKE_ROWS_FROM_TOP[0] - 0.1;
+    const bottom = KEEPSAKE_ROWS_FROM_TOP[KEEPSAKE_ROWS_FROM_TOP.length - 1]! + 0.1;
+    const area = { centre: new THREE.Vector3((KEEPSAKE_COLUMNS[0] + KEEPSAKE_COLUMNS[1]) / 2, FEET + h - (top + bottom) / 2, bodyD + front), width: span, height: bottom - top };
+    return {
+      panel: door.panel,
+      slots,
+      area,
+      get shut() {
+        return door.openness < 0.01;
+      },
+      onMove: (cb) => {
+        moves.add(cb);
+        return () => moves.delete(cb);
+      },
+    };
   }
 
   /** A steel door with its gasket behind and its bar handle on the free edge. */
@@ -127,11 +184,10 @@ export class Fridge extends THREE.Group implements Furniture {
     const noteY = h - 0.25;
     part(panel, 0.1, 0.14, 0.002, paint(0xfaf6ea, 0.9), { x: at(0.08), y: noteY, z: front + 0.001 }).castShadow = false;
     for (let i = 0; i < 4; i++) part(panel, 0.008, 0.004, 0.09, paint(0x7a8ba0, 0.7), { x: at(0.05), y: noteY + 0.045 - i * 0.025, z: front + 0.0025 }).castShadow = false;
+    // The shopping list's two magnets; the rest of the face is the keepsakes' (`face`).
     const magnetSpots: [number, number][] = [
       [0.035, noteY + 0.06],
       [0.125, noteY + 0.06],
-      [-0.1, h - 0.6],
-      [0.15, h - 0.9],
     ];
     magnetSpots.forEach(([x, y], i) => {
       const magnet = cylinderMesh(0.014, 0.008, paint(MAGNET_COLOURS[i]!, 0.4), { x: at(x), y, z: front + 0.004 }, { segments: 14 });

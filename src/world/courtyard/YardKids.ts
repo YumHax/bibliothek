@@ -16,6 +16,7 @@ import { rememberLook } from '@/social/lookBook';
 import type { SocialServices, TalkExtra, TalkSession } from '@/social/talk';
 import type { Furniture } from '../Furniture';
 import { randomLook, type PersonLook } from '../people/looks';
+import { castDress } from '@/world/people/castLook';
 import { bodyOf, metName, talkHook } from '../people/socialHook';
 import { disposeTree } from '../props/Prop';
 import { YardKid } from './YardKid';
@@ -196,7 +197,7 @@ export class YardKids extends THREE.Group implements Furniture, Updatable {
   private lookOf(kid: KidPlan): PersonLook {
     const known = this.looks.get(kid.id);
     if (known) return known;
-    const look = randomLook(kid.look.seed, 'shopper', { season: this.options.season(), age: 'child' });
+    const look = randomLook(kid.look.seed, 'shopper', castDress(kid.id, { season: this.options.season(), age: 'child' }));
     look.height = kid.look.height;
     look.headScale = 1.22 - (kid.look.height - 1.05) * 0.3;
     look.bag = undefined;

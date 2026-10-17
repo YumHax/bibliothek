@@ -4,12 +4,12 @@ import type { PlatformId } from '@/catalog/types';
 import { KEYS, PersistedStore } from '@/persistence';
 import { addPerson, findPerson } from './people';
 import { countedToday, nudge, warmth } from './standing';
-import type { PersonCard, PersonId, Trait } from './types';
+import type { PersonCard, PersonId, PersonTopic, Trait } from './types';
 
 /*
  * The small ads' sellers as people (docs/social.md "Small-ad sellers"): each seller met is a person of a visit
- * (`seller:<ad id>`), added at run time with their kind's temper. A pleasant visit (a chat, a compliment, a gift
- * that landed) eases their haggle; an insulting offer sours them; a seller left happy rings back with a follow-up ad
+ * (`seller:<ad id>`), added at run time with their kind's temper and the one topic their kind lights up about. A
+ * pleasant visit (a good talk, a gift that landed) eases their haggle; an insulting offer sours them; a seller left happy rings back with a follow-up ad
  * ("my brother has a box too") a few days later.
  */
 
@@ -29,6 +29,14 @@ const KINDS: Record<SellerKind, { traits: readonly Trait[]; intro: string; likes
   mover: { traits: ['funny', 'businesslike'], intro: 'Hi! Sorry about the boxes. I’m off on Friday, so everything goes.', likes: ['coffee', 'croissant'] },
   collector: { traits: ['collector', 'proud', 'neat'], intro: 'Good evening. Please, mind the boxes: everything is complete.', likes: ['record', 'coffee'] },
   loft: { traits: ['nostalgic', 'shy', 'generous'], intro: 'Hello, dear. They were all in Dad’s loft. I hope they mean something to someone.', likes: ['flowers', 'croissant'] },
+};
+
+/** What each kind lights up about, open from the doorstep (a light person's one topic: docs/social.md "Two depths"). */
+const TOPICS: Record<SellerKind, PersonTopic> = {
+  clearOut: { id: 'son', name: 'Their son’s old games', say: 'Did your son play all of these?', icon: 'family', fit: 'loves', obvious: true, answers: ['Every one! Weekends in his pyjamas, I couldn’t get him off. Now he has a beard and a mortgage.', 'He still phones about them, you know. “Mum, don’t give away the grey one.” Too late, darling.'], memory: 'you asked about my son' },
+  mover: { id: 'move', name: 'The move', say: 'Where are you off to on Friday?', icon: 'travel', fit: 'loves', obvious: true, answers: ['Lisbon! New job, a flat with a view of the river and no room for any of this.', 'Somewhere with sun. Honestly, I’ve packed so much I’ve forgotten where.'], memory: 'you asked about my move' },
+  collector: { id: 'complete', name: 'Keeping things complete', say: 'Everything still has its manual. How do you do it?', icon: 'book', fit: 'loves', obvious: true, answers: ['Discipline. Every box in a sleeve, every manual flat, every cart dusted on Sundays.', 'Nobody ever asks that. They ask the price. Thank you. It’s forty years of care.'], memory: 'you noticed how I keep them' },
+  loft: { id: 'dad', name: 'Their dad’s loft', say: 'Your dad kept all these?', icon: 'family', fit: 'loves', obvious: true, answers: ['Every one, in the original boxes. He never threw anything out. Not one thing.', 'He used to play them with me after school. I’d forgotten until I opened the box.'], memory: 'you asked about my dad' },
 };
 
 /** How a visit sways their haggle: from this warmth up, the lowest share moves by `floor` and they hear `patience` more offers. */
@@ -83,7 +91,10 @@ function addCard(ad: SellerAd, chat?: readonly string[]): void {
     group: 'street',
     whereabouts: 'At home in Park Corner Mansions, the hours of their ad',
     intro: kind.intro,
+    depth: 'light',
+    trade: 'regular',
     traits: kind.traits,
+    topics: [TOPICS[ad.kind]],
     ...(ad.platform ? { tastes: { platforms: [ad.platform] } } : {}),
     likes: kind.likes,
     dislikes: ['scrap'],

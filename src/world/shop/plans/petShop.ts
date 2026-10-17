@@ -69,13 +69,15 @@ export const PET_SHOP: ShopPlan = {
     // White tiles round the lower walls with a teal band, and a batten over the food aisle.
     { kind: 'prop', prop: 'tiledWainscot', options: { height: WAINSCOT, tile: 0xf2f2ec, grout: 0xd8d8d0, accent: 0x2f6a6a }, at: { floor: [0, 0] } },
     { kind: 'prop', prop: 'tubeBatten', options: { length: 1.2, tubes: 2, diffuser: true, light: 0.5 }, at: { ceiling: [-1.3, -1.6] } },
+    // Warm spots on the wall of tanks: the brightest thing in the shop, so the eye goes there first.
+    { kind: 'prop', prop: 'trackSpots', options: { length: 1.3, count: 2, aim: 0.6, reach: 1.1, light: 0.9 }, at: { ceiling: [0.95, -1.3], rotationY: Math.PI } },
     // What the floor gathers: a trodden patch in from the door, heel marks at the counter, shavings by the hamster.
     { kind: 'prop', prop: 'floorScuffs', options: { kind: 'grime', width: 1.1, depth: 0.6, amount: 0.5 }, at: { floor: [0, 1.55] } },
     { kind: 'prop', prop: 'floorScuffs', options: { kind: 'heels', width: 0.5, depth: 0.9, amount: 0.5 }, at: { floor: [1.45, -0.55] } },
     { kind: 'prop', prop: 'floorScuffs', options: { kind: 'sawdust', width: 0.45, depth: 0.8, amount: 0.35 }, at: { floor: [-2.45, 1.95] } },
 
     // The back wall: the food shelves, the wall of tanks and its card.
-    { kind: 'goodsShelf', at: { wall: 'back', along: -1.3, y: 0 }, options: { width: 2.2, stock: 'pets', seed: 3 } },
+    { kind: 'goodsShelf', at: { wall: 'back', along: -1.3, y: 0, offset: 0.035 }, options: { width: 2.2, stock: 'pets', seed: 3 } },
     { kind: 'prop', prop: 'aquariumWall', options: { width: 2.0 }, at: { wall: 'back', along: 0.95, y: 0 } },
     { kind: 'prop', prop: 'notice', options: { lines: ['PLEASE', 'don’t tap the glass', 'the fish are napping'], paper: 0xfff3a6, ink: 0x1e3a6a }, at: { wall: 'back', along: 1.5, y: 1.98 } },
 
@@ -83,7 +85,7 @@ export const PET_SHOP: ShopPlan = {
     { kind: 'birdcage', at: { floor: [-2.75, -2.25], rotationY: -Math.PI / 4 } },
     { kind: 'prop', prop: 'terrarium', options: { width: 0.8 }, at: { wall: 'left', along: -1.15, y: 0 } },
     { kind: 'prop', prop: 'notice', options: { lines: ['SPRINT', 'tortoise, 41', 'not for sale!'], width: 0.12, height: 0.15, hand: 'hand' }, at: { wall: 'left', along: -0.95, y: 1.45 } },
-    { kind: 'goodsShelf', at: { wall: 'left', along: 0.6, y: 0 }, options: { width: 1.4, stock: 'pets', seed: 7 } },
+    { kind: 'goodsShelf', at: { wall: 'left', along: 0.6, y: 0, offset: 0.035 }, options: { width: 1.4, stock: 'pets', seed: 7 } },
     { kind: 'prop', prop: 'hamsterCage', options: { width: 0.8 }, at: { wall: 'left', along: 1.95, y: 0 } },
     {
       kind: 'prop',

@@ -5,17 +5,22 @@ import { gameDayRandom } from '@/time/daily';
 import { onInteraction } from './conversation';
 import { addExtras } from './extras';
 import type { TalkExtra } from './talk';
+import { dueWords } from './life/due';
 import { has } from './perks';
-import { nudge } from './standing';
+import { PROMISE } from './socialPlan';
+import { nudge, standing } from './standing';
+import { addThreadSource } from './threads';
+import { tierOf, tierRank } from './tiers';
 import { COFFEE_PRICE } from '@/economy/pricing';
 import { formatCoins } from '@/text/money';
-import { makeWager, payEspresso, playerOwesEspresso, victorOwesEspresso, wagerOpen, welshed } from './street/wager';
+import { espressoOwed, makeWager, payEspresso, playerOwesEspresso, victorOwesEspresso, wagerOpen, welshed } from './street/wager';
 
 /*
  * Victor Crane's side of the social layer (docs/social.md "Victor"): how talking to him lands the day the player
- * beat him (a kind word is respected, a gloat makes a nemesis), and the arc's end: once he is a close friend he
- * asks the player round to see his collection, and gives them one of his duplicates. The rivalry's own nudges
- * (a copy taken, a copy lost) are in `economy/rivalCollector`.
+ * beat him (a topic or a chat that lands is respected, a tease is a gloat), his wager offered in conversation (a
+ * promise: the loser's espresso), and the arc's end: once he is a close friend he asks the player round to see his
+ * collection, and gives them one of his duplicates. The rivalry's own nudges (a copy taken, a copy lost) are in
+ * `economy/rivalCollector`.
  */
 
 const VICTOR = 'victor';
@@ -35,22 +40,23 @@ interface RivalryDeps {
 /** Wires the rivalry's talk and the collection's invitation. Call once at start-up. */
 export function wireRivalry(deps: RivalryDeps): void {
   const { rival } = deps;
+  rivalRef = rival;
   onInteraction((id, interaction, outcome, ctx) => {
-    if (id !== VICTOR) return;
-    // His challenge taken up (and not a gloat on a day he was beaten): a wager on his next hunt at the flea market.
-    if (interaction === 'challenge' && outcome.ok && !rival.beatenOn(ctx.day) && makeWager(ctx.day)) {
-      nudge(VICTOR, { trust: 2, why: 'likes a sporting bet', reason: 'wager', day: ctx.day, memory: 'you took my wager' });
-      return;
-    }
-    if (!rival.beatenOn(ctx.day)) return;
-    if (outcome.ok && (interaction === 'compliment' || interaction === 'talkGames' || interaction === 'chat')) {
-      nudge(VICTOR, { warmth: 4, trust: 3, why: 'respected you being gracious about it', reason: 'gracious', day: ctx.day, memory: 'you were gracious when you won' });
-    } else if (interaction === 'tease' || interaction === 'challenge') {
-      nudge(VICTOR, { warmth: -12, trust: -4, why: 'you gloated', reason: 'gloat', day: ctx.day, memory: 'you gloated', memoryWeight: -14 });
+    if (id !== VICTOR || !rival.beatenOn(ctx.day)) return;
+    if (outcome.ok && (interaction === 'topic' || interaction === 'chat')) {
+      nudge(VICTOR, { warmth: 4, why: 'respected you being gracious about it', reason: 'gracious', day: ctx.day, memory: 'you were gracious when you won' });
+    } else if (interaction === 'tease') {
+      nudge(VICTOR, { warmth: -12, why: 'you gloated', reason: 'gloat', day: ctx.day, memory: 'you gloated', memoryWeight: -14 });
     }
   });
+  // An espresso owed past its days is a promise broken.
   deps.onNewDay?.((day) => {
-    if (welshed(day)) nudge(VICTOR, { warmth: -6, trust: -6, why: 'you never paid the espresso you owed him', day, memory: 'you welshed on our wager', memoryWeight: -10 });
+    if (welshed(day)) nudge(VICTOR, { ...PROMISE.broken, why: 'you never paid the espresso you owed him', day, memory: 'you welshed on our wager', memoryWeight: -10 });
+  });
+  // The espresso owed, as a promise in the People book.
+  addThreadSource((id, day) => {
+    const owed = id === VICTOR ? espressoOwed() : null;
+    return owed?.state === 'open' ? [{ person: VICTOR, kind: 'promise', text: 'Buy me the espresso you owe me. A wager is a wager.', due: dueWords(owed.due, day), day: owed.made }] : [];
   });
   // The wager: how it stands in a word, and the espresso the player owes him, bought here.
   addExtras((ctx) => {
@@ -61,6 +67,8 @@ export function wireRivalry(deps: RivalryDeps): void {
         id: 'victor:espresso',
         group: 'give',
         label: `Buy him the espresso you owe (${formatCoins(COFFEE_PRICE)})`,
+        icon: 'coffee',
+        fit: 'loves',
         run: () => {
           if (!ctx.session) return { line: 'Later, then. I never forget a debt.' };
           // Settled only once the coins are actually spent (`pay` refuses when the pockets are short).
@@ -74,7 +82,8 @@ export function wireRivalry(deps: RivalryDeps): void {
           });
           if (!paid) return { line: 'Can’t stretch to an espresso? I’ll wait. Not for ever.' };
           payEspresso();
-          nudge(VICTOR, { warmth: 5, trust: 3, why: 'you paid your wager like a gentleman', day: ctx.day, memory: 'you paid up', memoryWeight: 5 });
+          // A wager paid is a promise kept: a stamp of trust, whole.
+          nudge(VICTOR, { ...PROMISE.kept, raw: true, why: 'you paid your wager like a gentleman', day: ctx.day, memory: 'you paid up', memoryWeight: 8 });
           return { line: 'A debt honoured. Sit down, you can watch me enjoy it.' };
         },
       });
@@ -82,6 +91,20 @@ export function wireRivalry(deps: RivalryDeps): void {
       out.push({ id: 'victor:owes', group: 'talk', label: 'About that espresso you owe me…', run: () => ({ line: 'Yes, yes. It’s behind the counter at the café, under your name. Don’t make a song of it.' }) });
     } else if (wagerOpen()) {
       out.push({ id: 'victor:bet', group: 'talk', label: 'Still on for our bet?', run: () => ({ line: 'Next time I go hunting at the flea market. First to the copy I’m after. Set your alarm.' }) });
+    } else if (wagerOffered(ctx.day)) {
+      // His wager, offered when the rivalry allows it: never the day he was beaten (that would be a gloat), never by an enemy.
+      out.push({
+        id: 'victor:wager',
+        group: 'invite',
+        label: 'Fancy a wager on the next market?',
+        icon: 'trophy',
+        fit: 'loves',
+        run: () => {
+          if (!makeWager(ctx.day)) return { line: 'One wager at a time. Settle the last one first.' };
+          nudge(VICTOR, { warmth: 3, why: 'likes a sporting bet', reason: 'wager', day: ctx.day, memory: 'you took my wager', memoryWeight: 4 });
+          return { line: 'A wager? Next market day, first to the copy I’m after. Loser buys the espresso.' };
+        },
+      });
     }
     return out;
   });
@@ -95,6 +118,16 @@ export function wireRivalry(deps: RivalryDeps): void {
     }];
   });
 }
+
+/** Whether Victor would take a wager on `day`: none going, not the day he was beaten, and he is not cold or worse with the player. */
+function wagerOffered(day: number): boolean {
+  if (wagerOpen() || playerOwesEspresso() || victorOwesEspresso() || rivalRef?.beatenOn(day)) return false;
+  const s = standing(VICTOR);
+  return tierRank(tierOf(s.warmth, s.trust)) >= tierRank('polite');
+}
+
+/** The rival's file, for the wager's offer (set by `wireRivalry`). */
+let rivalRef: RivalCollector | null = null;
 
 /** The visit to his collection: a card about it, and a duplicate of his for the player. */
 function showCollection(deps: RivalryDeps): { line: string } {

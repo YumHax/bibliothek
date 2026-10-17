@@ -8,6 +8,7 @@ import { HEARING, loudness } from '@/audio/hearing';
 import type { SoundOcclusion } from '../acoustics/SoundOcclusion';
 import type { DoorRinger, Doorstep } from '../hallway/Doorstep';
 import { randomLook } from '../people/looks';
+import { castDress } from '../people/castLook';
 import { Prop } from '../props/Prop';
 import { StairWalker, type StairWalkerOptions } from './StairWalker';
 import { liftGate } from './stairRoutes';
@@ -70,7 +71,7 @@ export class Postman extends Prop implements Updatable, DoorRinger {
     this.name = 'Postman';
     const self = this;
     // Clicked on the landing: the same as opening the door to him (with someone to talk to, the conversation's first entry).
-    const look = { ...randomLook(plan.postman.seed, 'vendor'), apron: undefined, bag: 'tote' as const };
+    const look = { ...randomLook(plan.postman.seed, 'vendor', castDress(PERSON)), apron: undefined, bag: 'tote' as const };
     rememberLook(PERSON, look);
     const here = (): boolean => self.state === 'waiting' || self.state === 'coming';
     const take = (session: SessionActions): void => {

@@ -3,6 +3,8 @@ import type { Held } from '../../people/held';
 import { randomLook, type Age, type PersonLook } from '../../people/looks';
 import type { SkyState } from '../../props/DayNight';
 import { currentSeason } from '@/time/season';
+import { castDress } from '../../people/castLook';
+import type { PersonId } from '@/social/types';
 
 /*
  * How the street's people dress for the day: the look a `Walker` of a seed has always had (seed + 200), in the
@@ -16,9 +18,9 @@ const UMBRELLA_ABOVE = 0.12;
 const HOOD_SNOW = 0.15;
 const HOOD_RAIN = 0.5;
 
-/** The look of a walker of `seed`, dressed for the season (and `age`, if not a grown-up). */
-export function streetLook(seed: number, age?: Age, role: 'vendor' | 'shopper' = 'shopper'): PersonLook {
-  return randomLook(seed + 200, role, { season: currentSeason().name, age });
+/** The look of a walker of `seed`, dressed for the season (and `age`, if not a grown-up); `person`: someone known, drawn as who they are. */
+export function streetLook(seed: number, age?: Age, role: 'vendor' | 'shopper' = 'shopper', person?: PersonId): PersonLook {
+  return randomLook(seed + 200, role, castDress(person, { season: currentSeason().name, age }));
 }
 
 /**

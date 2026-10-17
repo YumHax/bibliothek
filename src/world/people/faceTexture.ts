@@ -63,13 +63,15 @@ function paint(look: PersonLook): THREE.CanvasTexture {
     [-0.06, 0.2, -0.46, 0.12, 0.05], // the fold from nose to mouth
     [-0.04, 0.38, 0.07, 0.13, 0.04], // under the eyes
   ] as const;
+  // Kept light on fair skin, where a flush shows most and too much reads as a doll's painted pink.
+  const flush = fairness(look.skin) > 0.82 ? 0.72 : 0.85;
   const bloods = [
-    [child ? 0.42 : elder ? 0.26 : 0.32, 0.55, -0.22, 0.17, 0.14], // cheeks
-    [0.28, 0, -0.3, 0.06, 0.07], // tip of the nose
-    [0.22, 0.15, -0.36, 0.05, 0.04], // the nose's wings
-    [0.12, 0, -0.9, 0.18, 0.1], // chin
-    [0.18, 0.34, 0.2, 0.2, 0.1], // eyelids
-  ] as const;
+    [(child ? 0.42 : elder ? 0.26 : 0.32) * flush, 0.55, -0.22, 0.17, 0.14], // cheeks
+    [0.28 * flush, 0, -0.3, 0.06, 0.07], // tip of the nose
+    [0.22 * flush, 0.15, -0.36, 0.05, 0.04], // the nose's wings
+    [0.12 * flush, 0, -0.9, 0.18, 0.1], // chin
+    [0.18 * flush, 0.34, 0.2, 0.2, 0.1], // eyelids
+  ];
   const melanins = [
     [child ? 0.04 : elder ? 0.3 : 0.16, 0.38, 0.07, 0.14, 0.045], // under the eyes
     [0.06, 0.18, -0.56, 0.22, 0.08], // round the mouth
@@ -380,4 +382,9 @@ function mix(a: RGB, b: RGB, t: number): RGB {
 
 function css(c: RGB, alpha = 1): string {
   return `rgba(${Math.round(c[0])},${Math.round(c[1])},${Math.round(c[2])},${alpha})`;
+}
+
+/** How light a skin tone is (0 dark .. 1 fair): its luma. */
+function fairness(rgb: number): number {
+  return (0.299 * ((rgb >> 16) & 255) + 0.587 * ((rgb >> 8) & 255) + 0.114 * (rgb & 255)) / 255;
 }

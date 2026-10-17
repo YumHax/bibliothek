@@ -1,12 +1,9 @@
-import type * as THREE from 'three';
 import { personAtDoor } from '@/social/people';
 import { rememberLook } from '@/social/lookBook';
 import { has } from '@/social/perks';
-import { isMet, tier } from '@/social/standing';
 import { mansionGossip } from '@/social/street/mansionDoors';
 import type { SocialServices, TalkExtra } from '@/social/talk';
 import type { PersonId } from '@/social/types';
-import { atLeast } from '@/social/tiers';
 import { inHours } from '@/time/clock';
 import { bodyOf, talkHook, type SocialHook } from '../../people/socialHook';
 import type { Walker } from '../../people/Walker';
@@ -17,12 +14,9 @@ import { leadToday } from './streetLeads';
 /*
  * The faces in Front Street's crowd the player can know (docs/social.md "Front Street and the arcade"): the
  * building's residents out at their hours (`personAtDoor`, the same people as on the stairs) and the regulars who
- * keep hours (`regularsPlan`: Théo the commuter, Mrs Hall and Biscuit). A click opens the conversation in the street
- * (place `street`); met and warm enough, they nod or wave as they pass the player (`greets`).
+ * keep hours (`regularsPlan`: Bastien the commuter, Mrs Hall and Biscuit). A click opens the conversation in the street
+ * (place `street`); met, they greet the player passing by how they stand with them (`greets`).
  */
-
-/** Within this of the player, a known face passing greets them, once a trip. */
-const GREET_WITHIN = 6;
 
 /** Who `member` is to the social layer: a resident's person, a regular's, or null (a stranger). */
 export function personOf(member: CastMember): PersonId | null {
@@ -42,7 +36,7 @@ export function outNow(member: CastMember, hours: number): boolean {
   return !own || own.some((span) => inHours(hours, span));
 }
 
-/** What `person` adds to a talk in the street: Théo's word from the platform, Mrs Hall's on the Mansions. */
+/** What `person` adds to a talk in the street: Bastien's word from the platform, Mrs Hall's on the Mansions. */
 function extrasOf(person: PersonId, day: number, owns: (id: string) => boolean): TalkExtra[] {
   if (person === 'theo') {
     return [{
@@ -80,16 +74,10 @@ export function knownFaceHook(member: CastMember, walker: () => Walker, social: 
 }
 
 /**
- * A known face passing the player (within `GREET_WITHIN`, `eye` zone-local): a nod from an acquaintance, a wave from a
- * friend. Returns whether they greeted (once a trip: the caller remembers).
+ * A known face passing the player: they greet them by how they stand (`Walker.greetIfNear`, `socialSelf`: a look away
+ * from the hostile, a nod, a wave, a close friend calling out). Returns whether they greeted (once a trip: the caller
+ * remembers).
  */
-export function greets(member: CastMember, walker: Walker, eye: THREE.Vector3): boolean {
-  const person = personOf(member);
-  if (!person || !isMet(person) || !walker.drawn) return false;
-  if (Math.hypot(walker.position.x - eye.x, walker.position.z - eye.z) > GREET_WITHIN) return false;
-  const standing = tier(person);
-  if (atLeast(standing, 'friend')) walker.gesture('wave');
-  else if (atLeast(standing, 'acquaintance')) walker.nod();
-  else return false;
-  return true;
+export function greets(walker: Walker): boolean {
+  return walker.drawn && walker.greetIfNear();
 }

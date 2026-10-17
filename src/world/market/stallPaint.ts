@@ -1,7 +1,9 @@
 import * as THREE from 'three';
 import { createCanvas, toTexture, repeatTexture } from '@/covers/generated/canvasUtils';
 import { fabric } from '@/world/materials/finishes';
+import { QUALITY } from '@/graphics/quality';
 import { shared } from '../materials/palette';
+import { WEAVE_TILE_M, weaveBump } from '../materials/weave';
 
 /**
  * Shared painting and layout helpers of the market's stall styles (`GlassCaseStall`,
@@ -59,9 +61,15 @@ export function paintStallSign(text: string, accent: number, options: StallSignO
   return { map: toTexture(canvas, 'facing'), width: W / pxPerMetre, height: H / pxPerMetre };
 }
 
-/** Gingham: the cloth colour crossed by paler bands, one tile = 0.5 m of cloth. */
+/** Metres of cloth one tile of the gingham covers. */
+const GINGHAM_TILE_M = 0.5;
+
+/**
+ * Gingham: the cloth colour crossed by paler bands, one tile = 0.5 m of cloth, at about 1000 px a metre (sharp at
+ * arm's length over the table) and filtered for the slant it is seen at.
+ */
 export function paintGingham(cloth: THREE.Color): THREE.Texture {
-  const S = 256;
+  const S = 512;
   const [canvas, ctx] = createCanvas(S, S);
   ctx.fillStyle = `#${cloth.getHexString()}`;
   ctx.fillRect(0, 0, S, S);
@@ -73,7 +81,7 @@ export function paintGingham(cloth: THREE.Color): THREE.Texture {
   }
   ctx.fillStyle = 'rgba(0,0,0,0.07)';
   for (let y = 0; y < S; y += 3) ctx.fillRect(0, y, S, 1);
-  return toTexture(canvas, 'facing');
+  return toTexture(canvas, 'grazing');
 }
 
 /** A plain woollen or cotton cloth of `color` (velvet lining, clothes, a stool's seat): one shared material per colour. */
@@ -81,13 +89,19 @@ export function plainCloth(color: number, roughness = 0.95): THREE.MeshStandardM
   return shared(`fabric|${color}|${roughness}`, () => fabric({ color, roughness }));
 }
 
-/** A material carrying `map` repeated `u` x `v` times over its face (its own clone of the texture). */
+/**
+ * A cloth carrying `map` repeated `u` x `v` times over its face (its own clone of the texture), one repeat being
+ * `GINGHAM_TILE_M` of cloth: a fabric (sheen on high), and with `QUALITY.detailedMaterials` the shared weave as its
+ * relief at the same scale as the upholstery's (one bump: inside the lit shaders' texture budget).
+ */
 export function tiledMaterial(map: THREE.Texture, u: number, v: number, roughness = 0.95): THREE.MeshStandardMaterial {
   const tex = map.clone();
   repeatTexture(tex);
   tex.repeat.set(u, v);
   tex.needsUpdate = true;
-  return new THREE.MeshStandardMaterial({ map: tex, roughness });
+  if (!QUALITY.detailedMaterials) return fabric({ map: tex, roughness });
+  const weaves = GINGHAM_TILE_M / WEAVE_TILE_M;
+  return fabric({ map: tex, roughness, bumpMap: weaveBump([u * weaves, v * weaves]), bumpScale: 0.003 });
 }
 
 /** Boxes `boxWidth` wide, `gap` apart, that fit in a run `length` long with `margin` kept free at either end. */

@@ -52,7 +52,7 @@ export const FIRST_DAY_STEPS: readonly FirstDayStep[] = [
     id: 'arcade',
     todo: 'Find the arcade on Front Street',
     tips: {
-      stairwell: 'Down the stairs or the lift: the street door is in the entrance hall.',
+      stairwell: 'Down the stairs or the lift: the street door is in the entrance hall, past the concierge’s lodge.',
       street: 'The arcade is a few doors along on our side, under the neon. The fingerpost by our door points the way.',
     },
   },

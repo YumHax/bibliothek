@@ -58,8 +58,12 @@ doors (`StreetDoor`) are real leaves too, frames in the shop's joinery colour ro
 travel sounds like a door (`travel/travelSounds`: the latch, a shop's bell when either end is a shop, the arcade or
 the market, the door shut on arrival) and crossfades the room's sound under its curtain (`audio/audioContext.duckScene`).
 The curtain (`ui/Fader`) falls in the light of where the trip goes (`travel/travelTint`: warm for a shop, the arcade,
-the market or the saleroom, the sky's grey-blue for the street by day, near black at night), names the destination
-with ticking dots if it is still down 0.8 s after falling (the first trip to the street, its shaders compiling), and a
+the market or the saleroom, the sky's grey-blue for the street by day, near black at night) and, if it is still down
+0.35 s after falling, shows the destination's travel card (`travel/travelCards`): a postcard with where it is
+("Front Street"), its name, a photo of it as the player last left it (the frame grabbed on the way out, a small JPEG
+under `KEYS.travelCardsCache`, never in the save) and a bar that fills as the module is fetched, the zone built and its
+shaders compiled, creeping between those marks at the pace the last trip there took. Each trip logs where its time
+went (`[travel] market in 3120 ms: curtain …, load …, build …, prime …`). A
 trip whose destination will not load comes back with a refusal ("The door sticks", `Travel.onFailed`). A trip may play
 an interlude over the fallen curtain while the destination builds (`TravelOptions.interlude`: the bus ride to Mémé's
 and back, `ui/busRide`); the curtain lifts once it has ended. In the flat every zone neighbours every other
@@ -928,6 +932,21 @@ RETRO GAMES keeps `SHOP_HOURS`).
   adds the coming week: the saleroom, a garage sale, the collector, the concert, the Anchor's gig, the Local's quiz, the
   greengrocer's market mornings (Wednesday, Saturday), the neighbours' party (five pasted, eight read out). Line 38 has two stops: when both are on, `ui/street/ChoicePanel` asks
   which (`StreetBus` `ride.choose`).
+
+## Light in the places (render pass, 2026-10-17)
+
+No new shadow-casting light anywhere; what was added is additive air or a rebalance of existing lights.
+- **The flea market**: the roof light throws the sun into the hall as beams with dust in them (`HallRoof.setSun`,
+  a `SunShaft` laid flat with `drop`: the sun's slant steepened by `SHAFT_SLANT`, `SHAFT_SHARE` of its strength;
+  `QUALITY.lightShafts`, so medium and high). Each pendant shows the warm air under its shade
+  (`IndustrialPendantBeam`, the plan's `pendant.beam`: an additive cone to table height, its far wall only) and
+  throws a stronger pool (`intensity` 9).
+- **The stairwell**: the globes' two real lights are brighter (`INTENSITY` 13) and the shaft's hemisphere lower
+  (`AMBIENT`), so each lit landing pools and the flights between fall into shade.
+- **The street**: the golden hour warms the sun towards `GOLDEN` and cools the shade towards `COOL_SHADE` while the sun
+  is under `GOLDEN_UNTIL` of its height; the night's sky ambient is lower (`SKY_NIGHT`), the lamps stronger
+  (`INTENSITY` 68) and their pools brighter at the heart (`POOL_OPACITY`, a steeper `radialGlow`).
+- **The pet shop**: warm track spots on the wall of tanks (a `PooledLight` of its `glowLights`).
 
 ## REPLAY, across town (`src/world/replay/`, travelled)
 

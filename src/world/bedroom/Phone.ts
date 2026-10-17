@@ -17,6 +17,8 @@ const LED_NIGHT = 2.2;
 const SCREEN_NIGHT = 0.08;
 /** The lit screen of a call coming in. */
 const SCREEN_CALL = 0.9;
+/** The notification light of a message waiting (a red dot beside the charge LED, blinking). */
+const NOTICE_LIT = 3;
 
 const GLASS = standard({ color: 0x0b0c10, roughness: 0.15, metalness: 0 });
 const CABLE = paint(0xeeeeea, 0.5);
@@ -25,10 +27,12 @@ const CABLE = paint(0xeeeeea, 0.5);
  * A phone lying face up on charge: a slim case, the dark glass, a white cable out of its bottom
  * edge running back over the top and down its far edge. After dark (`setDark`, the builder wires
  * the dusk) a tiny green LED glows at its top and the lock screen gives off the faintest light:
- * emissive only, no light of its own. Origin under its middle, the bottom edge (cable) towards -z.
+ * emissive only, no light of its own. A message waiting (`setNotice`, the caller blinks it) lights a red dot
+ * beside it. Origin under its middle, the bottom edge (cable) towards -z.
  */
 export class Phone extends Prop {
   private readonly led: THREE.MeshStandardMaterial;
+  private readonly notice: THREE.MeshStandardMaterial;
   private readonly screen: THREE.MeshStandardMaterial;
   /** The dusk's glow and a call's (`setRinging`): the screen shows the brighter. */
   private darkness = 0;
@@ -45,6 +49,8 @@ export class Phone extends Prop {
     part(this, 0.012, 0.0012, 0.002, GLASS, { y: T + 0.001, z: L / 2 - 0.006 }); // the earpiece slot
     this.led = new THREE.MeshStandardMaterial({ color: 0x1a3a1a, emissive: 0x5cff7a, emissiveIntensity: 0 });
     part(this, 0.003, 0.0014, 0.003, this.led, { x: W / 2 - 0.012, y: T + 0.001, z: L / 2 - 0.006 });
+    this.notice = new THREE.MeshStandardMaterial({ color: 0x3a1414, emissive: 0xff3b2e, emissiveIntensity: 0 });
+    part(this, 0.003, 0.0014, 0.003, this.notice, { x: W / 2 - 0.018, y: T + 0.001, z: L / 2 - 0.006 }); // convention-ok: the message dot beside the charge LED, lifted as it is
 
     // The cable: out of the bottom edge, along the top to the far edge, then down it.
     part(this, 0.008, 0.005, 0.012, CABLE, { y: T / 2, z: -L / 2 - 0.006 });
@@ -61,6 +67,11 @@ export class Phone extends Prop {
     this.darkness = darkness;
     this.led.emissiveIntensity = darkness * LED_NIGHT;
     this.showScreen();
+  }
+
+  /** 0 .. 1: the red dot of a message waiting (the caller blinks it). */
+  setNotice(level: number): void {
+    this.notice.emissiveIntensity = level * NOTICE_LIT;
   }
 
   /** 0 .. 1: the screen lit by a call coming in (the caller pulses it with the ring). */

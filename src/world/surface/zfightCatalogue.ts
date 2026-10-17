@@ -7,6 +7,7 @@ import { DisplayColumn } from '../showcase/DisplayColumn';
 import { HomeVitrine } from '../collector/HomeVitrine';
 import { CollectorsBook } from '../collector/CollectorsBook';
 import { Radio } from '../kitchen/Radio';
+import { Corkboard } from '../kitchen/Corkboard';
 import { Seat } from '../Seat';
 import { SasShell } from '../airlock/SasShell';
 import { ShopCounter } from '../shop/ShopCounter';
@@ -140,6 +141,8 @@ const PIECES: Record<string, () => unknown> = {
   // Mémé's things (`furnishGrandmaDecor`): the clock, the cabinet, the kitchenette, the set, the Sunday table...
   grandmaDressing: () => grandmaDressingSample((clock ??= new DayNight())),
   radio: () => new Radio(),
+  // The kitchen's pinboard for friends' keepsakes, once bought (`kitchen/fridgeKeepsakes`).
+  corkboard: () => new Corkboard(),
   seat: () => new Seat(),
   sasShell: () => new SasShell(),
   shopCounter: () => new ShopCounter({ front: 0.4, label: 'TILL', open: () => {} }),

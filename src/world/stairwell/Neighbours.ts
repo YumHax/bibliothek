@@ -5,6 +5,7 @@ import { Timers } from '@/core/Timers';
 import type { OccupancyAware } from '../Furniture';
 import type { NeighbourTrades } from '@/economy/NeighbourTrades';
 import { randomLook } from '../people/looks';
+import { castDress } from '@/world/people/castLook';
 import { Prop } from '../props/Prop';
 import { mainsOn } from '@/building/mains';
 import { COLD, friendship } from '@/building/friendship';
@@ -118,8 +119,8 @@ export class Neighbours extends Prop implements Updatable, OccupancyAware {
       const door = doorKey(r.k, r.i);
       // Each starts somewhere of their own in their lines, so two neighbours never open alike.
       const resident: Resident = { plan: r, who, door, at: 'home', going: null, hold: null, greeted: false, nextHello: r.seed % r.hello.length, nextLine: r.seed % r.lines.length } as Resident;
-      const look = randomLook(r.seed + 900, 'shopper');
       const person = personAtDoor(door);
+      const look = randomLook(r.seed + 900, 'shopper', castDress(person));
       if (person) rememberLook(person, look);
       resident.walker = new StairWalker({
         viewer: options.viewer,

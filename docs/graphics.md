@@ -11,7 +11,7 @@ Firefox -> medium, else high). Materials and passes are built from it, so changi
 
 | | low | medium | high |
 | --- | --- | --- | --- |
-| Pipeline | plain forward render to the canvas (canvas MSAA), the look's exposure only | `PostFx`: HDR target (MSAA 4) + FXAA, bloom, grade, auto exposure, depth of field, cheap SSAO (quarter size, 6 taps) | SSAO at half size, 12 taps |
+| Pipeline | plain forward render to the canvas (canvas MSAA), the look's exposure only | `PostFx`: HDR target (MSAA 4) + FXAA, bloom, grade, auto exposure, depth of field, cheap SSAO (quarter size, 6 taps + 4 wide) | SSAO at half size, 12 taps + 6 wide |
 | Materials | plain | plaster, wood grain + dust, floor wear, creases, scuffs, bevels | + clearcoat (boxes), sheen (fabric, fur) |
 | Extras | env reflections (one, scaled per look), contact shadows, haze, every material dithered, lamp halos (`LampHalo`), a plain twin of each ceiling lamp | + sun shafts and dust, reflections tinted per look, each room's own reflections (`RoomReflection`), window daylight spots, sun-patch bounce, paint mottle | + area lights (windows, TV) instead of the daylight spots, real mirrors, glossy market floor, cat fur shells, contact-hardening window sun shadows |
 | Pixel ratio | 1.25, down to 0.75 while GPU-bound | 1.5, down to 1 | 1.5, down to 1 |
@@ -92,6 +92,9 @@ per unit the frame is stretched to the screen, `devicePixelRatio / (pixel ratio 
 linear HDR before tone mapping; 60 mireds per unit, luminance kept), exposure, ACES (three.js's fit), sRGB, grade
 (lift / gain, contrast, saturation), vignette, grain, straight to the canvas.
 
+- The AO has two scales in one pass: the contact crease (`AO_RADIUS` 0.32 m, `AO_INTENSITY` 1.15, the quality's taps)
+  and a wider, gentler one (`AO_WIDE_RADIUS` 1.2 m, `AO_WIDE_INTENSITY` 0.6, half the taps, offset half a turn) for a
+  room's own shade under tables, behind cartons and in the corners.
 - The AO spares glowing pixels (`mix(ao, 1, smoothstep(1, 3, luma))`: a lamp or a screen is light, not a crease), the
   window panes (`graphics/glassMask`: panes register with `markGlass`, `RoomWindow` and `OutlookView` do; a proxy of
   each shown pane is drawn at the AO's resolution where its depth matches the scene's, so a mullion or curtain in front
@@ -146,7 +149,7 @@ warm; default `shop`); the saleroom has `saleroom`.
   0.5, the market 0.4, the shops 0.25, the arcade none.
 - **Tone mapper** (`Look.neutralTone`, 0 ACES .. 1 Khronos PBR Neutral, mixed in the output pass): Neutral keeps a
   printed red red where ACES bleaches saturated colours towards white; its input is scaled by 1.4 so a mid grey lands
-  where ACES puts it. The shops 1, the market 0.5, the rest ACES. Medium and high only (`low` stays ACES: switching
+  where ACES puts it. The shop 0.7, the florist and the pet shop 0.8, the market 0.25, the rest ACES. Medium and high only (`low` stays ACES: switching
   the renderer's tone mapping would recompile every program). A look tuned for ACES changes if it is raised.
 
 Looks: `home` (warm den; its temperature is only 0.07 because the lamps, the gain 0xfff6ea and the reflection tint are
@@ -224,6 +227,10 @@ scene (density 0 in the flat, so no recompile at doorways), its colour scaled by
   (a sparse async read of the cube) and brought to the studio map's (`ReflectionSource.gain`, clamped 0.25..4), so the
   strengths tuned on the studio still hold and only the picture changes. Captured again 0.6 s after the room's light
   level moved by 0.12 (a lamp, the curtains, the day); two maps alternate, swapped under `Environment`'s dip.
+  Once a capture is in, it is the room's main ambient: `Environment` lights with it at `ReflectionSource.lift`
+  (`AMBIENT_LIFT` 2.4) times the studio's strength, and the room's hemisphere drops to `CAPTURED_AMBIENT` (0.58) of its
+  share, so the light comes from where the room really is bright (the window side over the back, the walls round a
+  lit lamp in its colour) instead of the even hemisphere lighting every face alike. Low keeps the hemisphere whole.
 - `Environment`: `RoomEnvironment` prefiltered (PMREM, one per look's tint on medium / high) as `scene.environment`;
   `environmentIntensity` follows the player's room `Room.lightLevel` (0 dark .. 1 lamp or sun), max 0.24 times the
   look's `reflections.strength`, so a dark room does not glow.
@@ -378,3 +385,10 @@ album: docs/grandma.md); black under the alpha cut-outs (a playing screen is a h
 canvas onto the CSS layer, which a canvas read cannot see). Keys are the action table's (`input/actions`: `photoMode` P to enter and leave,
 the `photo` context while active); the Session's `PhotoControl` route (right after the arcade's) hands every key to
 `handleKey` while it is on; held ones are read each frame. Made in `bootstrap/input`.
+
+## Comparing the image (`?debug`)
+
+`bibliothek.render.legacy(true)` puts the image back as it was before the render pass of 2026-10-17 (the hemisphere
+whole instead of the room's capture as ambient, one occlusion scale, the looks' old contrast, saturation, vignette and
+Neutral share: `graphics/renderTuning`, `grade.useLegacyLooks`); `legacy(false)` brings it back. For before / after
+screenshots from the same spot (`bibliothek.room.go(x, z)`, `look(yaw, pitch)`).

@@ -10,6 +10,9 @@ uniform vec2 depthTexel;
 uniform float aspect;
 uniform float radius;
 uniform float intensity;
+// The wider, gentler scale (a room's own shade under tables and in corners); intensityWide 0 turns it off.
+uniform float radiusWide;
+uniform float intensityWide;
 uniform float cameraNear;
 uniform float cameraFar;
 uniform vec2 uvScale;
@@ -64,5 +67,20 @@ void main() {
     occlusion += max(0.0, dot(v, n) * inversesqrt(vv + 1e-5) - 0.12) * falloff;
   }
   float ao = clamp(1.0 - intensity * occlusion / float(SAMPLES), 0.0, 1.0);
+  if (intensityWide > 0.001) {
+    // The same spiral, wider and sparser, offset half a turn so its taps fall between the near ones.
+    float reachWide = min(radiusWide * projection[1][1] * 0.5 / -p.z, 0.22);
+    float wide = 0.0;
+    for (int i = 0; i < WIDE_SAMPLES; i++) {
+      float t = (float(i) + 0.5) / float(WIDE_SAMPLES);
+      float angle = float(i) * 2.3999632 + spin + 3.14159265;
+      vec2 offset = vec2(cos(angle) / aspect, sin(angle)) * (0.3 + 0.7 * t) * reachWide;
+      vec3 v = viewAt(st + offset * uvScale) - p;
+      float vv = dot(v, v);
+      float falloff = max(0.0, 1.0 - vv / (radiusWide * radiusWide));
+      wide += max(0.0, dot(v, n) * inversesqrt(vv + 1e-5) - 0.2) * falloff;
+    }
+    ao *= clamp(1.0 - intensityWide * wide / float(WIDE_SAMPLES), 0.0, 1.0);
+  }
   gl_FragColor = vec4(vec3(ao), 1.0);
 }

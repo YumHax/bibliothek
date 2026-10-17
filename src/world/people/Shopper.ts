@@ -8,6 +8,7 @@ import { PersonModel } from './PersonModel';
 import { randomLook, type PersonLook } from './looks';
 import type { Pose } from './poses';
 import { random } from '@/random';
+import { talkingWith } from '@/social/talkState';
 
 /** A place to stand and browse: a spot on the floor (zone-local) and the way to face there, in radians about y (0 = facing +z). */
 export interface BrowseSpot {
@@ -47,8 +48,13 @@ const TURN_RATE = 4;
 const ARRIVE = 0.05;
 /** Walkers keep to the right of the aisle's centre line by this much, so two never walk through each other. */
 const LANE = 0.28;
-/** A player this close ahead of a walker makes them stop and wait (up to `YIELD_PATIENCE` seconds, then they squeeze past). */
-const YIELD_RANGE = 0.75;
+/**
+ * The room a shopper leaves the player (m): nobody walks or stands closer, more while the player is in a conversation
+ * (nobody steps into the shot). Walking towards the player inside it, they stop and wait; after `YIELD_PATIENCE`
+ * seconds they go somewhere else instead of squeezing through.
+ */
+const PERSONAL = 0.9;
+const PERSONAL_TALKING = 1.6;
 const YIELD_PATIENCE = 2.5;
 /** What the arms do in front of a table, and while waiting in the aisle. */
 const BROWSE_POSES: Pose[] = ['think', 'think', 'stand', 'pockets', 'crossed'];
@@ -193,6 +199,7 @@ export class Shopper extends THREE.Group implements Furniture, Updatable {
         break;
       case 'browse':
         this.state.left -= dt;
+        this.makeRoom(this.state);
         this.face(this.state.spot.yaw, dt);
         this.model.setSpeed(0);
         this.browseGaze(dt);
@@ -200,6 +207,7 @@ export class Shopper extends THREE.Group implements Furniture, Updatable {
         break;
       case 'linger':
         this.state.left -= dt;
+        this.makeRoom(this.state);
         this.model.setSpeed(0);
         this.idleGaze(dt);
         if (this.state.left <= 0) this.setOff();
@@ -306,7 +314,9 @@ export class Shopper extends THREE.Group implements Furniture, Updatable {
   private setOff(): void {
     this.release();
     const here = this.position;
-    const free = this.spots.filter((s) => !this.claims.has(s) && Math.hypot(s.at[0] - here.x, s.at[1] - here.z) >= 0.5);
+    const player = this.playerLocal();
+    const room = this.personal() + 0.3;
+    const free = this.spots.filter((s) => !this.claims.has(s) && Math.hypot(s.at[0] - here.x, s.at[1] - here.z) >= 0.5 && Math.hypot(s.at[0] - player.x, s.at[1] - player.z) >= room);
     const spot = random() < 0.2 ? undefined : free[Math.floor(random() * free.length)];
     const x = spot ? spot.at[0] : THREE.MathUtils.lerp(this.aisle.x[0], this.aisle.x[1], random());
     // Keep right: heading +x walks on one side of the centre line, heading -x on the other.
@@ -326,20 +336,45 @@ export class Shopper extends THREE.Group implements Furniture, Updatable {
     this.claimed = null;
   }
 
-  /** The player stands just ahead in the walking direction: wait a moment, then go on regardless. */
-  private blocked(dirX: number, dirZ: number, dt: number): boolean {
+  /** Standing in the player's room (the player came up to them, or a conversation began nearby): they move on soon. */
+  private makeRoom(state: { left: number }): void {
+    const player = this.playerLocal();
+    if (Math.hypot(player.x - this.position.x, player.z - this.position.z) < this.personal()) state.left = Math.min(state.left, 0.8);
+  }
+
+  /** The player's room right now (`PERSONAL`, more mid-conversation). */
+  private personal(): number {
+    return talkingWith() ? PERSONAL_TALKING : PERSONAL;
+  }
+
+  /** Where the player stands, in this shopper's zone frame (scratch: `viewerPos`). */
+  private playerLocal(): THREE.Vector3 {
     this.viewer.getWorldPosition(this.viewerPos);
-    const mine = this.getWorldPosition(this.mine);
-    const px = this.viewerPos.x - mine.x;
-    const pz = this.viewerPos.z - mine.z;
-    // The walking direction is zone-local; the zone is never rotated, so it is also the world direction.
+    return this.parent ? this.parent.worldToLocal(this.viewerPos) : this.viewerPos;
+  }
+
+  /**
+   * The way ahead comes within the player's room: wait a moment; past `YIELD_PATIENCE`, give the walk up for another
+   * (a pause first), never through them.
+   */
+  private blocked(dirX: number, dirZ: number, dt: number): boolean {
+    const player = this.playerLocal();
+    const px = player.x - this.position.x;
+    const pz = player.z - this.position.z;
+    const room = this.personal();
     const ahead = px * dirX + pz * dirZ;
     const aside = Math.abs(px * dirZ - pz * dirX);
-    if (ahead > 0 && ahead < YIELD_RANGE && aside < 0.4 && this.waited < YIELD_PATIENCE) {
+    if (ahead > 0 && ahead < room + 0.5 && aside < room) {
       this.waited += dt;
+      if (this.waited >= YIELD_PATIENCE) {
+        this.waited = 0;
+        this.release();
+        this.state = { kind: 'linger', left: 1 + random() * 2 };
+        this.model.setPose(LINGER_POSES[Math.floor(random() * LINGER_POSES.length)]!);
+      }
       return true;
     }
-    if (ahead <= 0 || ahead >= YIELD_RANGE || aside >= 0.4) this.waited = 0;
+    this.waited = 0;
     return false;
   }
 

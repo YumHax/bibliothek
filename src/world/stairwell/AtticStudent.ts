@@ -5,6 +5,7 @@ import { rememberLook } from '@/social/lookBook';
 import type { SocialServices } from '@/social/talk';
 import type { OccupancyAware } from '../Furniture';
 import { randomLook, type PersonLook } from '../people/looks';
+import { castDress } from '../people/castLook';
 import { metName, bodyOf, talkHook } from '../people/socialHook';
 import { Prop } from '../props/Prop';
 import { StairWalker, type StairWalkerOptions } from './StairWalker';
@@ -25,7 +26,7 @@ const LINES = [
 
 /** His look: a hoodie, headphones round the neck (the hat's place stays free), messy hair. */
 function studentLook(): PersonLook {
-  return { ...randomLook(who.seed, 'shopper'), top: 'hoodie', hairStyle: 'curly', hat: undefined, bag: 'backpack' };
+  return { ...randomLook(who.seed, 'shopper', castDress(PERSON)), top: 'hoodie', hairStyle: 'curly', hat: undefined, bag: 'backpack' };
 }
 
 interface AtticStudentOptions extends Omit<StairWalkerOptions, 'look' | 'seed' | 'label' | 'speaker' | 'lines' | 'social'> {

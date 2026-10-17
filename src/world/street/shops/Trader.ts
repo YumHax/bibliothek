@@ -26,6 +26,8 @@ import type { DayNight } from '../../props/DayNight';
 import type { Furniture } from '../../Furniture';
 import { ForSaleBox } from '../../market/ForSaleBox';
 import { Walker } from '../../people/Walker';
+import { randomLook } from '../../people/looks';
+import { castDress } from '../../people/castLook';
 import { outOfSight } from '../life/sight';
 import { random as liveRandom } from '@/random';
 
@@ -122,7 +124,7 @@ export class Trader extends THREE.Group implements Furniture, Updatable, Interac
   constructor(private readonly dayNight: DayNight, private readonly options: TraderOptions) {
     super();
     this.name = 'Trader';
-    this.person = new Walker({ viewer: options.viewer, seed: RIVAL_COLLECTOR.seed, label: `${RIVAL_COLLECTOR.label} · chat`, speaker: RIVAL_COLLECTOR.short, fade: true });
+    this.person = new Walker({ viewer: options.viewer, seed: RIVAL_COLLECTOR.seed, look: randomLook(RIVAL_COLLECTOR.seed + 200, 'shopper', castDress('victor')), label: `${RIVAL_COLLECTOR.label} · chat`, speaker: RIVAL_COLLECTOR.short, fade: true });
     this.person.traverse((o) => {
       o.castShadow = false;
     });

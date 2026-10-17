@@ -7,6 +7,7 @@ import { paint, timber } from '../materials/palette';
 import { QUALITY } from '@/graphics/quality';
 import { lcg } from '@/random';
 import { cartTray, cashTin, pinnedCard, stencilMaterial, tangledPad, thermos } from './stallDressing';
+import { paintGingham, tiledMaterial } from './stallPaint';
 
 interface MarketStallOptions {
   /** Text on the sign hung from the awning (a platform's name). */
@@ -112,11 +113,11 @@ export class MarketStall extends THREE.Group implements StallLike {
     }
     this.add(boxMesh(w, TOP_THICKNESS, DEPTH, WOOD, { y: TOP_HEIGHT - TOP_THICKNESS / 2 }));
     // Cloth: the top and the flap hanging down the front, a checked weave in the stall's colour.
-    const check = paintCheck(clothColor);
-    const clothTop = boxMesh(w + 0.04, 0.01, DEPTH + 0.02, tiled(check, (w + 0.04) / 0.5, (DEPTH + 0.02) / 0.5), { y: TOP_HEIGHT + 0.005 });
+    const check = paintGingham(clothColor);
+    const clothTop = boxMesh(w + 0.04, 0.01, DEPTH + 0.02, tiledMaterial(check, (w + 0.04) / 0.5, (DEPTH + 0.02) / 0.5), { y: TOP_HEIGHT + 0.005 });
     clothTop.castShadow = false;
     const flapH = TOP_HEIGHT * 0.7;
-    const flap = boxMesh(w + 0.04, flapH, 0.01, tiled(check, (w + 0.04) / 0.5, flapH / 0.5), { y: TOP_HEIGHT - flapH / 2, z: DEPTH / 2 + 0.012 });
+    const flap = boxMesh(w + 0.04, flapH, 0.01, tiledMaterial(check, (w + 0.04) / 0.5, flapH / 0.5), { y: TOP_HEIGHT - flapH / 2, z: DEPTH / 2 + 0.012 });
     flap.castShadow = false;
     this.add(clothTop, flap);
     // Crates at the back the boxes lean against, the platform stencilled on their faces.
@@ -278,24 +279,6 @@ function tiled(map: THREE.Texture, u: number, v: number): THREE.MeshStandardMate
   tex.repeat.set(u, v);
   tex.needsUpdate = true;
   return new THREE.MeshStandardMaterial({ map: tex, roughness: 0.95 });
-}
-
-/** Gingham: the cloth colour crossed by paler bands, one tile = 0.5 m of cloth. */
-function paintCheck(cloth: THREE.Color): THREE.Texture {
-  const S = 256;
-  const [canvas, ctx] = createCanvas(S, S);
-  ctx.fillStyle = `#${cloth.getHexString()}`;
-  ctx.fillRect(0, 0, S, S);
-  ctx.fillStyle = 'rgba(255,245,225,0.22)';
-  const cell = S / 8;
-  for (let i = 0; i < 8; i += 2) {
-    ctx.fillRect(i * cell, 0, cell, S);
-    ctx.fillRect(0, i * cell, S, cell);
-  }
-  // Weave: fine threads.
-  ctx.fillStyle = 'rgba(0,0,0,0.07)';
-  for (let y = 0; y < S; y += 3) ctx.fillRect(0, y, S, 1);
-  return toTexture(canvas, 'facing');
 }
 
 /** Two awning stripes (cloth colour, cream) per tile; `scalloped` cuts the bottom edge into half-discs for the valance. */

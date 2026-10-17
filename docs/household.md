@@ -23,9 +23,27 @@ friend coming round), never a daily chore. What is worn or set stays so (saved) 
 | Bedroom phone | Call a stall where the player is a regular (`phone.regularFrom`) in market hours | It reads out today's table and puts a copy aside for the hold deposit, as if held at the stall | `PhonePanel`, `Transactions.holdCopy` |
 | Bedroom phone | Ask a friend round, once a market day before `phone.friendsUntil` | They come `phone.inHours` later (a visit on demand: loans, tips, the cake) | `Visitors.invite`, `VisitBook.invite` |
 | Bedroom phone | It rings: Mémé, a photo of her album ready (or her message after) | The conversation opens on her news; let ring out, her message is read at the next click | `world/bedroom/memeRing` (docs/grandma.md) |
+| Bedroom phone | It rings: a friend, at the hour of the day `social/phoneCalls` drew (never over Mémé, never mid-conversation) | Picked up, the conversation over the phone on their first word; let ring out (or rung while the player was out), a message waits, a red dot blinking on the phone, played on paper slips in the phone's panel | `world/bedroom/friendCalls`, `PhonePanel` `voicemail` (docs/social.md "The phone") |
+| Bedroom phone | Ring a contact | Who picks up now first; asleep or at work, in words, greyed, the line says why | `social/phoneCalls.phoneState`, `social/whereNow` |
 | Bedroom phone | Have everyone round tonight; ring THE GAMING WEEKLY for an open house | A games night (PADDLE WARS on the TV, a photo), an open house two days on (coins at the door, the paper's article) | `Gatherings.phoneRows`, `call` (docs/visitors.md "Gatherings") |
 | Market stalls | Some ordinary copies carry an old price sticker (`STICKER.odds`) | Sold at `STICKER.factor`: a bargain once peeled off at home | `MarketStock.priced` (its own hash) |
 | Bedroom wardrobe (door open) | Choose an outfit | Arcade tee: +10 % tickets. Bargain hunter's jacket: every haggle opens lower. Sunday best: the glass case opens whatever the reputation. Mémé's scarf: she beams when it is worn to hers. Each is earned (a trophy, reputation, 25 games, Mémé close) | `outfits.ts`, `WardrobePanel` |
+
+### The fridge door and the corkboard
+
+The fridge door is where friends' keepsakes go (docs/social.md "Keepsakes"; `world/kitchen/fridgeKeepsakes.ts`):
+eight places in two columns under the shopping list (`Fridge.face`), each a keepsake under a magnet in the door's panel
+(it swings with the door), its click target (`KeepsakeSlot`) in the room only while the door is shut and something is
+there. Its face is painted from its kind (`keepsakeTextures.ts`: a polaroid, a postcard, a ticket, a crayon drawing, a
+recipe card, sheet music, a card…), a photo's print drawn in once it has loaded. Hovered: whose it is and the tier now;
+clicked: their words, read; clicked again before looking away: their page in the People book. Between them, a click
+on the shut door ("Friends' keepsakes · look closer", `FridgeLook` over `Fridge.face.area`, clear of the handle's
+strip, which still opens it) is a close look at them all (`player/closeUp`, `KITCHEN_PLAN.fridgeLook`): the view
+turns to the door and draws in, the keepsakes clicked as before, and it lets go on a second click ("step back"), on
+walking off, on looking well away, on Esc or a panel, when the door opens or the kitchen is left; the mouse turns the
+view the whole time. The corkboard
+(`Corkboard`, the furniture shop's, 15 coins, on the left wall past the sink run: `KITCHEN_PLAN.corkboard`) holds the
+next twenty, pinned, neighbours on two layers (`WALL.print` / `WALL.overlay`) since they may overlap.
 
 ### Doors and drawers
 

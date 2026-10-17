@@ -92,7 +92,7 @@ export class ModalStack implements KeyRoute {
     }
     // E closes the open panel as well (the focus in it, `ModalPanel` takes the key itself): a gesture, so the mouse lock
     // comes straight back, where Esc asks for a click. Not while typing: the search bar and text fields keep their letters.
-    if (isAction(code, 'putBack') && this.current && !e.repeat && !isTyping(e.target)) {
+    if (isAction(code, 'putBack') && this.current && !this.current.keepsOnUse && !e.repeat && !isTyping(e.target)) {
       this.current.close();
       return true;
     }

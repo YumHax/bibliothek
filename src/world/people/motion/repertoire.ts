@@ -58,6 +58,63 @@ interface Response {
   nod?: boolean;
 }
 
+/**
+ * What a conversation's moment does to them (the social layer's reactions, `social/conversation` `Reaction`):
+ * a loved topic lights them up, a polite "meh" is a look away, an insult hurts. Named here so the body needs no
+ * social import.
+ */
+export type SocialAct = 'delighted' | 'pleased' | 'laugh' | 'thanks' | 'nod' | 'bored' | 'shrug' | 'annoyed' | 'hurt' | 'restless' | 'bye';
+
+/** A social reaction's response: the gesture, the face (scaled), how long it holds and fades, a lean in or back (radians, held as long). */
+interface SocialResponse extends Response {
+  fade: number;
+  lean: number;
+}
+
+/**
+ * How they take a conversation's moment `act`, `strength` 0..1 (a little warmth, a big moment), in their own
+ * measure: an expressive person laughs, claps, shakes their head where a reserved one smiles, presses their lips;
+ * hands that are busy (holding something, on a machine) leave the arms out of it.
+ */
+export function respondSocial(act: SocialAct, strength: number, ctx: Context, random: () => number): SocialResponse {
+  const s = Math.max(0, Math.min(1, strength));
+  const e = ctx.expressive;
+  // The bigger the moment and the more expressive the person, the likelier it shows in the body.
+  const body = !ctx.handsBusy && !ctx.holding && !ctx.seated && random() < e * (0.35 + 0.65 * s);
+  const amp = (0.55 + 0.45 * s) * (0.75 + 0.35 * e);
+  const face = (f: FaceKey): FaceKey => {
+    const out: FaceKey = {};
+    for (const [k, v] of Object.entries(f) as [keyof FaceKey, number][]) out[k] = Math.min(1, v * amp);
+    return out;
+  };
+  switch (act) {
+    case 'delighted':
+      return { gesture: body && s >= 0.8 ? 'clap' : null, face: face({ smile: 1, browsUp: 0.7, wide: 0.25 }), seconds: 2.2, fade: 1.4, nod: !body, lean: 0.07 * amp };
+    case 'pleased':
+      return { gesture: null, face: face({ smile: 0.75, browsUp: 0.3 }), seconds: 1.6, fade: 1.2, nod: true, lean: 0.02 };
+    case 'laugh':
+      if (body) return { gesture: 'laugh', face: face({ smile: 1, squint: 0.6, jaw: 0.3 }), seconds: 1.8, fade: 1, lean: 0 };
+      // The reserved chuckle: a smile, the eyes narrowing, no more.
+      return { gesture: null, face: face({ smile: 0.8, smirk: 0.35, squint: 0.35 }), seconds: 1.6, fade: 1, nod: random() < 0.5, lean: 0 };
+    case 'thanks':
+      return { gesture: body && s >= 0.8 ? 'handsJoin' : null, face: face({ smile: 0.9, browsUp: 0.45 }), seconds: 1.8, fade: 1.2, nod: true, lean: 0.03 };
+    case 'nod':
+      return { gesture: null, face: face({ smile: 0.3, smirk: 0.25 }), seconds: 1.1, fade: 1, nod: true, lean: 0 };
+    case 'bored':
+      return { gesture: 'glanceAway', face: face({ smirk: 0.3, press: 0.15 }), seconds: 1.3, fade: 0.8, lean: -0.01 };
+    case 'shrug':
+      return { gesture: body || random() < 0.4 ? 'shrug' : null, face: face({ browsUp: 0.4, smirk: 0.45 }), seconds: 1.3, fade: 0.9, lean: 0 };
+    case 'annoyed':
+      return { gesture: body ? 'headShake' : random() < 0.5 ? 'wince' : null, face: face({ frown: 0.7, press: 0.6 }), seconds: 2, fade: 1.4, lean: -0.04 };
+    case 'hurt':
+      return { gesture: body ? pick(random, ['facepalm', 'headShake']) : 'wince', face: face({ frown: 0.45, sad: 0.9, squint: 0.3 }), seconds: 3, fade: 2, lean: -0.05 };
+    case 'restless':
+      return { gesture: ctx.holding ? null : 'checkWatch', face: face({ browsUp: 0.3, press: 0.4 }), seconds: 1.5, fade: 1, lean: 0 };
+    case 'bye':
+      return { gesture: ctx.holding || ctx.handsBusy ? null : 'wave', face: face({ smile: 0.6 }), seconds: 1.4, fade: 1, nod: ctx.holding || ctx.handsBusy, lean: 0 };
+  }
+}
+
 /** How they take `reaction`: a gesture (or none), a face, maybe a nod. */
 export function respond(reaction: Reaction, ctx: Context, random: () => number): Response {
   const body = random() < ctx.expressive;

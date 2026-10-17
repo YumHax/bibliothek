@@ -61,6 +61,21 @@ function maps(kind: 'weave' | 'ticking'): { map: THREE.Texture; bumpMap: THREE.T
   return { map, bumpMap };
 }
 
+/**
+ * The weave's relief alone, for a cloth whose colour map is its own (a stall's gingham): the shared bump, cloned to
+ * `repeat` (a clone shares the image, only the repeat is its own; dispose it with the material). `repeat` is the
+ * count of weave tiles across the face's uvs; `WEAVE_TILE_M` metres of cloth each.
+ */
+export function weaveBump(repeat: readonly [number, number]): THREE.Texture {
+  const bump = sharedCanvasTexture('cloth-weave-bump', weaveCanvas, { data: true, repeat: [1 / TILE, 1 / TILE] }).clone();
+  bump.repeat.set(repeat[0], repeat[1]);
+  bump.needsUpdate = true;
+  return bump;
+}
+
+/** Metres of cloth one tile of the weave covers. */
+export const WEAVE_TILE_M = TILE;
+
 /** A woven cloth of `color` (armchairs, cushions, bedding, a throw): the shared twin of `fabric()` with the weave. */
 export function wovenCloth(color: THREE.ColorRepresentation, roughness = 1): THREE.MeshStandardMaterial {
   const hex = typeof color === 'number' ? color.toString(16) : String(color);

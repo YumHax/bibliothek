@@ -116,6 +116,19 @@ export const KITCHEN_PLAN = {
   fridge: { at: { wall: 'back', along: 1.3, y: 0 } as Placement, hinge: 'left' as const },
 
   /**
+   * A close look at the fridge door's keepsakes (`player/closeUp`): how far the view draws in, and how far the player
+   * may look off it (radians) or step away (m) before it lets go.
+   */
+  fridgeLook: { zoom: 2, leaveAngle: 0.45, leaveDistance: 0.4 },
+
+  /**
+   * The corkboard for friends' keepsakes past the fridge's eight (docs/social.md "Keepsakes"), once bought: on the left
+   * wall past the sink run (z 0.5 on), over the near chair, its 0.72 m between z 0.48 and 1.2, clear of the corner's
+   * yucca (its leaves from about z 0.35, under the board: the small yucca stands 1 m high).
+   */
+  corkboard: { wall: 'left', along: 0.84, y: 1.5 } as Placement,
+
+  /**
    * One window over the sink on the left wall, glass starting above the worktop (`sill` is the
    * height of the bottom of its frame). No curtains, they would hang in the sink: a roller blind
    * (click the window) that comes down no lower than the glass, 64 mm off the wall, in front of the
@@ -206,6 +219,7 @@ export const KITCHEN_PLAN = {
     radio: 'radio' as Owned,
     crt: 'crt' as Owned,
     catWater: 'cat' as Owned,
+    corkboard: 'corkboard' as Owned,
   },
 
   decor: [
@@ -214,7 +228,7 @@ export const KITCHEN_PLAN = {
     // is a millimetre over the rug's top, so the two no longer fight either way).
     { kind: 'rug', at: { floor: [0, -0.4] }, options: { width: 1.5, depth: 0.6, field: 0x6e7b8c, border: 0x3e4a5c, motif: 0x9aa5b4 }, upgrade: 'kitchenRug' },
     // A yucca in the front-left corner, by the window end of the room, and a small pot on the sink run's drawers.
-    { kind: 'plant', at: { corner: 'front-left', inset: 0.32 }, options: { kind: 'yucca', pot: 'terracotta', seed: 21 }, upgrade: { good: 'houseplant', nth: 8 } },
+    { kind: 'plant', at: { corner: 'front-left', inset: 0.5 }, options: { kind: 'yucca', pot: 'terracotta', seed: 21, scale: 0.65 }, upgrade: { good: 'houseplant', nth: 8 } },
     { kind: 'plant', at: { wall: 'left', along: 0.35, y: WORKTOP, offset: 0.3 }, options: { kind: 'small', pot: 'ceramic', seed: 27, collides: false }, upgrade: { good: 'houseplant', nth: 9 } },
     // A framed print over the table.
     { kind: 'pictureFrame', at: { wall: 'front', along: -0.15, y: 1.5 }, options: { motif: 'stillLife', seed: 6, width: 0.5, height: 0.38, frameColor: 0xc9b28a }, upgrade: { good: 'framedPrint', nth: 7 } },

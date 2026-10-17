@@ -34,7 +34,7 @@ function leadsOn(day: number, owns: (id: string) => boolean): (Lead | null)[] {
   ];
 }
 
-/** The day's lead told on asking (a regular's word: Théo's), said or not before; null when there is none. */
+/** The day's lead told on asking (a regular's word: Bastien's), said or not before; null when there is none. */
 export function leadToday(day: number, owns: (id: string) => boolean): Lead | null {
   return leadsOn(day, owns).find((l): l is Lead => l !== null) ?? null;
 }

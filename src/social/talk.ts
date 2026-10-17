@@ -2,7 +2,7 @@ import type * as THREE from 'three';
 import type { ModalLike } from '@/game/SessionParts';
 import type { SessionActions } from '@/game/SessionActions';
 import type { Reaction } from './conversation';
-import type { InteractionGroup, PersonId, SocialPlace } from './types';
+import type { Fit, InteractionGroup, PersonId, SocialPlace } from './types';
 
 /** The point over someone's head their words come from (their `SpeechBubble`): what the panel sits beside and frames. */
 export type SocialAnchor = THREE.Object3D;
@@ -20,7 +20,15 @@ export type SocialAnchor = THREE.Object3D;
  */
 export interface SocialBody {
   speak(line: string): void;
-  react?(reaction: Reaction): void;
+  /** Acts what was said to them; `strength` 0..1 scales it (a little warmth, a big moment), their temperament too. */
+  react?(reaction: Reaction, strength?: number): void;
+  /**
+   * The player is about to say something they would take this way (a row of the menu hovered or focused): a small
+   * sign of it before the click (leaning in, brows up, a half smile, a look away, a wince); null: back to listening.
+   */
+  anticipate?(fit: Fit | null): void;
+  /** While a conversation is open they stay where they are and keep their eyes on the player (`false`: free again). */
+  hold?(on: boolean): void;
   /** Where their words come from (a body in the room): the panel turns the view to them, sits beside them, shows the hearts by their face. */
   anchor?: SocialAnchor;
 }
@@ -41,6 +49,16 @@ export interface TalkExtra {
   disabled?: () => string | null;
   /** A word on the row's right for something of the moment ("news"): words, never a symbol. */
   tag?: string;
+  /** Its own icon (`ui/social/icons`), else its group's. */
+  icon?: string;
+  /**
+   * A promise (group `promise`) or something done for good: the panel shows it as a ticket (with `due`, "by Thursday
+   * evening") and it takes a long press, never a plain click.
+   */
+  once?: boolean;
+  due?: string;
+  /** How they would take it, for their face before the click (`SocialBody.anticipate`). */
+  fit?: Fit;
   /** It opens a panel of its own (the swap, the haggle, a sub-shop): the conversation closes first, then `run`. */
   opensPanel?: boolean;
   run(): ExtraResult | void;

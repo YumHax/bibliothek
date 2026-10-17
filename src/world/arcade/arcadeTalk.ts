@@ -7,7 +7,7 @@ import { isMet, nudge } from '@/social/standing';
 import { onceToday, usedToday } from '@/social/street/streetPerks';
 import type { TalkExtra, TalkSession } from '@/social/talk';
 import type { PersonId } from '@/social/types';
-import { actReaction, vendorBody } from '../people/socialHook';
+import { bodyOf, vendorBody } from '../people/socialHook';
 import type { Vendor } from '../people/Vendor';
 import type { Walker } from '../people/Walker';
 import type { KidMood } from './HallKid';
@@ -93,7 +93,7 @@ export function walkerTalk(person: PersonId, walker: Walker, fallback: string, e
   return {
     person,
     place: 'arcade',
-    body: { speak: (line) => walker.speak(line, speakerOf(person, fallback)), react: (reaction) => actReaction(walker, reaction), anchor: walker.speechAnchor },
+    body: { ...bodyOf(walker), speak: (line) => walker.speak(line, speakerOf(person, fallback)) },
     ...(extras ? { extras } : {}),
   };
 }

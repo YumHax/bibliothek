@@ -63,10 +63,10 @@ export const SALEROOM_PLAN = {
     { kind: 'flyer', at: { wall: 'right', along: -0.8, y: 1.7 }, options: { title: 'VIEWING', lines: ['lots on view', 'every day the hall is open'], accent: 0x4f6b3a, seed: 63 } },
     { kind: 'flyer', at: { wall: 'back', along: -1.7, y: 2.35 }, options: { style: 'cloth', width: 2.2, height: 0.42, title: 'SALEROOM', lines: ['auctioneers & valuers'], accent: 0x6b1f2a } },
     // Lots in waiting along the walls, palms in the corners.
-    { kind: 'crate', at: { floor: [-3.65, -3.2], rotationY: 0.2 }, options: { style: 'wood', stack: 2, seed: 71, label: 'LOTS' } },
+    { kind: 'crate', at: { floor: [-3.65, -2.5], rotationY: 0.2 }, options: { style: 'wood', stack: 2, seed: 71, label: 'LOTS' } },
     { kind: 'crate', at: { floor: [3.65, -2.9], rotationY: -0.15 }, options: { style: 'cardboard', stack: 3, seed: 72 } },
     { kind: 'crate', at: { floor: [-3.65, 2.6], rotationY: -0.1 }, options: { style: 'cardboard', stack: 2, seed: 73 } },
-    { kind: 'plant', at: { corner: 'back-left', inset: 0.45 }, options: { kind: 'yucca', pot: 'terracotta', seed: 74 } },
+    { kind: 'plant', at: { corner: 'back-left', inset: 0.62 }, options: { kind: 'yucca', pot: 'terracotta', seed: 74, scale: 0.82 } },
     { kind: 'plant', at: { corner: 'back-right', inset: 0.45 }, options: { kind: 'fig', pot: 'terracotta', seed: 75 } },
     { kind: 'plant', at: { corner: 'front-left', inset: 0.45 }, options: { kind: 'fig', pot: 'terracotta', seed: 76 } },
   ] as DecorEntry[],

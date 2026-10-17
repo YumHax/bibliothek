@@ -6,6 +6,8 @@ import { bumpFinish } from './bumpFinish';
 import { markShared } from '../props/Prop';
 import { lcg } from '@/random';
 
+/** How much a wall's roughness wanders across it (share: `bumpFinish`'s mottle, read off the plaster bump's uv). */
+const WALL_SHEEN_MOTTLE = 0.12;
 /** Metres of wall covered by one tile of the plaster texture. */
 const PLASTER_TILE_M = 1.2;
 const PLASTER_PX = 512;
@@ -162,8 +164,9 @@ export function wallMaterial(color: number, surface: WallSurface): THREE.MeshSta
   if (!QUALITY.detailedMaterials) return material;
   material.bumpMap = plasterBumpMap();
   material.bumpScale = 0.35;
-  // The plaster's relief thins out where a pixel covers more of it (a long wall at a grazing angle would sparkle).
-  bumpFinish(material);
+  // The plaster's relief thins out where a pixel covers more of it (a long wall at a grazing angle would sparkle),
+  // and its roughness wanders (±12 %): a painted wall never catches the window's light evenly.
+  bumpFinish(material, { mottle: WALL_SHEEN_MOTTLE });
 
   const [ghostA, ghostB] = drawGhosts(surface, []);
   // Each opening: x of its centre, half its width, its top (from the floor); w 1 when used.

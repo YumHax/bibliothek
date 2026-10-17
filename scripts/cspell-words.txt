@@ -181,6 +181,7 @@ homeworlds
 hoskins
 hoskins's
 hoverable
+hyperlegible
 hyrule
 igdb
 inès
@@ -556,3 +557,18 @@ SNEK
 TOXIK
 ZEKONE
 gamebag
+setlist
+Fécamp
+Brunos
+Satie
+BILDING
+métro
+convo
+Askable
+callbtn
+inkstamp
+notetext
+stamprow
+todaystrip
+usframe
+WCAG

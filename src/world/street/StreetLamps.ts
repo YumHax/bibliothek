@@ -62,7 +62,9 @@ const SWITCH_SLACK = 0.03;
 const HEAD_DAY = 0.25;
 const HEAD_LIT = 2.85;
 /** A lamp's candela and reach (the light's `distance`). */
-const INTENSITY = 55;
+const INTENSITY = 68;
+/** How much the pool under a lit lamp adds (its texture's heart): the street at night is read by these. */
+const POOL_OPACITY = 0.75;
 const REACH = 24;
 /** Seconds between two choices of which lamps are real lights, and to fade a light out of one lamp (and into the next). */
 const CHOOSE_EVERY = 0.5;
@@ -160,7 +162,8 @@ export class StreetLamps extends THREE.Group implements Furniture, Updatable, Oc
       // Per lamp, instance colours carry how warmed up it is (0 off).
       additive(
         new THREE.MeshBasicMaterial({
-          map: radialGlow({ width: 128, height: 128, stops: [[0, 0.9], [0.35, 0.45], [0.7, 0.12], [1, 0]] }),
+          // A pool with a brighter heart under the lamp and a long soft edge (sodium on wet stone, not a flat disc).
+          map: radialGlow({ width: 128, height: 128, stops: [[0, 1], [0.22, 0.62], [0.5, 0.24], [0.78, 0.07], [1, 0]] }),
           color: WARM.clone(),
           opacity: 0,
           fog: true,
@@ -290,7 +293,7 @@ export class StreetLamps extends THREE.Group implements Furniture, Updatable, Oc
     const s = this.dayNight.state;
     const nightness = nightnessOf(s);
     const night = THREE.MathUtils.smoothstep(nightness, 0.25, 0.6);
-    this.pools.opacity = 0.55 * (1 - 0.5 * s.snowCover);
+    this.pools.opacity = POOL_OPACITY * (1 - 0.5 * s.snowCover);
     // The air round the lamps: fog most, then falling snow, then rain; only once they are lit.
     this.mist.value = night * Math.min(1.4, 1.1 * s.fog + 0.45 * s.rain + 0.6 * s.snow);
     for (const mesh of this.mistMeshes) mesh.visible = this.mist.value > 0.01;

@@ -19,6 +19,11 @@ interface SunShaftOptions {
   rows: number;
   /** Local y of the floor (the window's origin is the centre of the glass). */
   floorY: number;
+  /**
+   * A roof light instead of a window: the glass lies flat and the beams go down its local +z, this far to the floor
+   * (`floorY` is then unused), whatever the sun's height.
+   */
+  drop?: number;
 }
 
 /** Longest beam: a low sun would otherwise throw a shaft across the whole flat. */
@@ -132,15 +137,16 @@ export class SunShaft extends THREE.Group {
    */
   setSun(towardSun: THREE.Vector3, color: THREE.Color, intensity: number): void {
     const inward = this.uniforms.rayDir.value.copy(towardSun).negate();
-    // Only a sun in front of the wall and above the horizon throws a beam into the room.
-    this.visible = intensity > 0 && inward.z > 0.05 && inward.y < -0.02;
+    // Only a sun in front of the wall and above the horizon throws a beam into the room (any sun, through a roof light).
+    const { drop } = this.options;
+    this.visible = intensity > 0 && inward.z > 0.05 && (drop !== undefined || inward.y < -0.02);
     if (!this.visible) return;
     this.uniforms.color.value.copy(color);
     this.uniforms.strength.value = intensity * BEAM_STRENGTH;
     const { width: w, height: h, floorY } = this.options;
     // Until the rays from the top of the glass reach the floor (the far edge of the sun patch), no
     // longer than MAX_LENGTH; the part of the volume that dips under the floor is hidden by it.
-    const length = Math.min(MAX_LENGTH, Math.max(0.5, (floorY - h / 2) / inward.y));
+    const length = Math.min(MAX_LENGTH, Math.max(0.5, drop !== undefined ? drop / inward.z : (floorY - h / 2) / inward.y));
     this.uniforms.beamLength.value = length;
     const position = this.beam.geometry.getAttribute('position') as THREE.BufferAttribute;
     const corners: [number, number][] = [

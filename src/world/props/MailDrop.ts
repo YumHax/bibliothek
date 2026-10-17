@@ -22,6 +22,8 @@ export interface MailPiece {
   place?: string;
   /** A letter's hand. */
   hand?: 'pen' | 'typewriter' | 'print';
+  /** What it changes, in bold under it once read (a neighbour's note on what bad blood costs now). */
+  effect?: string;
 }
 
 /** The piece as a card to read (`ReadingNotice`): its look, colour, sender and place carried over. */
@@ -94,7 +96,10 @@ export class MailDrop extends Prop implements Interactable {
   label(): string | null {
     const n = this.pile.length;
     if (!n) return null;
-    return n === 1 ? 'Flyer on the mat · read' : `${n} flyers on the mat · read one`;
+    // A note or a letter slipped under the door is no flyer (a neighbour's, a friend's envelope).
+    const top = this.pile[n - 1]!.piece.look;
+    const what = top === 'letter' || top === 'note' ? 'Note' : top === 'postcard' ? 'Postcard' : 'Flyer';
+    return n === 1 ? `${what} on the mat · read` : `${n} pieces on the mat · read one`;
   }
 
   activate(session: SessionActions): void {
@@ -102,7 +107,7 @@ export class MailDrop extends Prop implements Interactable {
     if (!top) return;
     this.remove(top.sheet);
     disposeTree(top.sheet);
-    session.read(mailCard(top.piece, { effect: 'Read, and into the recycling.' }));
+    session.read(mailCard(top.piece, { effect: top.piece.effect ?? 'Read, and into the recycling.' }));
     this.refresh();
   }
 

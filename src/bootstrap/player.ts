@@ -46,6 +46,11 @@ export function createPlayerMoves(services: Services, parts: { world: GameWorld;
     },
     // The curtain falls in the light of where the player goes: a shop's warm lamps, the street's sky.
     tint: (id) => travelTint(zonePlan(id).kind, sky.dayNight.state.daylight),
+    // The place left, drawn once more and read at once (the canvas keeps no drawing buffer): the photo on its travel card.
+    snapshot: () => {
+      engine.renderFrame();
+      return engine.renderer.domElement;
+    },
     // Line 38 to Mémé's and back (docs/story.md "Mémé"): the ride from a seat by the window over the curtain, with the
     // line's regulars of the hour, and some mornings Mémé herself on her way back from the market (docs/grandma.md).
     interlude: (from, to) => {

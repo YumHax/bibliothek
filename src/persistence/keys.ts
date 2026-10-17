@@ -104,6 +104,8 @@ export const KEYS = {
   milestones: save('milestones.v1'),
   valueHistory: save('valueHistory.v1'),
   firstDay: save('firstDay.v1'),
+  /** Mme Pereira's welcome on the first day: asked, the parcel promised to Mrs Roux, kept or not (`onboarding/firstWelcome`). */
+  firstWelcome: save('firstWelcome.v1'),
   /** The opening cutscene was seen (`src/intro`): it plays once per game. */
   intro: save('intro.v1'),
   post: save('post.v1'),
@@ -205,6 +207,18 @@ export const KEYS = {
   socialDigest: save('socialDigest.v1'),
   /** What each person has offered the player in a conversation (a new entry is marked once), the first conversation's tip shown (`social/noticed`). */
   socialNoticed: save('socialNoticed.v1'),
+  /** The marks on people's moods today, with their cause (the power cut, a noisy night: `social/mood`). */
+  socialMood: save('socialMood.v1'),
+  /** The player's recent news people can be told (a find, a high score, a visit: `social/news`), and who heard which. */
+  socialNews: save('socialNews.v1'),
+  /** What friends left the player for the fridge (their keepsakes, a photo of the two of you), the tier scenes still to come (`social/keepsakes`, `social/scenes`). */
+  socialKeepsakes: save('socialKeepsakes.v1'),
+  /** The building's quarrels the player was drawn into and whose side they took, the votes promised at the co-owners' meeting (`social/conflicts`). */
+  socialConflicts: save('socialConflicts.v1'),
+  /** The friends' calls to the flat: the day's caller and hour, who rang today, the messages left on the phone (`social/phoneCalls`). */
+  phoneCalls: save('phoneCalls.v1'),
+  /** What the People book showed of each person last time (facts, memories, needs, the page's look), for its "new" ribbons (`social/bookSeen`). */
+  peopleBookSeen: save('peopleBookSeen.v1'),
   /** What a stallholder lent the player on credit, and when it is due (`social/market`). */
   marketCredit: save('marketCredit.v1'),
   /** The friends' side of the social layer: games borrowed from them, Inès' postcards, a word put in (`social/friendsLife`). */
@@ -231,6 +245,8 @@ export const KEYS = {
   reviewsCache: `${CACHE_PREFIX}reviews.v1`,
   /** How long each step of the page's start took on this browser, for the loading bar's pace (`ui/loading`). */
   loadTimesCache: `${CACHE_PREFIX}loadTimes.v1`,
+  /** Each place's travel card: a small photo of it as last left, and how long the last trip there took (`world/travel/travelCards`). */
+  travelCardsCache: `${CACHE_PREFIX}travelCards.v1`,
 } as const;
 
 /** Preferences, not progress: a new game keeps them. */

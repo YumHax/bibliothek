@@ -1,8 +1,8 @@
 import { KEYS, PersistedStore } from '@/persistence';
 import { findPerson, personAtDoor } from './people';
 import { grapevine } from './gossip';
-import { BATTERY, DRIFT, GAIN, MEMORY, TIERS, TRAITS, TRUST, WARMTH } from './socialPlan';
-import { atLeast, tierOf } from './tiers';
+import { DRIFT, GAIN, MEMORY, TIERS, TRAITS, TRUST, WARMTH } from './socialPlan';
+import { atLeast, isTier, tierOf } from './tiers';
 import type { Memory, PersonId, PersonState, SocialChange, TierId, Trait } from './types';
 
 /*
@@ -25,7 +25,7 @@ const listeners = new Set<(change: SocialChange) => void>();
 
 function loaded(): SocialSave {
   if (state) return state;
-  store = new PersistedStore<SocialSave>({ key: KEYS.social, version: 1, defaults: () => ({ people: fromFriendship(), settled: 0 }), read: readSave });
+  store = new PersistedStore<SocialSave>({ key: KEYS.social, version: 2, defaults: () => ({ people: fromFriendship(), settled: 0 }), read: readSave, migrate: { 1: fromV1 } });
   state = store.load();
   return state;
 }
@@ -46,7 +46,6 @@ function fresh(id: PersonId): PersonState {
     traitsKnown: [],
     memories: [],
     last: {},
-    battery: { day: -1, used: 0, warmed: 0 },
     lastSeen: 0,
     told: tierOf(startWarmth, card?.startTrust ?? 0),
     number: card?.listed === 'always' && card.phone === true,
@@ -68,6 +67,21 @@ function fromFriendship(): Record<PersonId, PersonState> {
     out[id] = s;
   }
   return out;
+}
+
+/**
+ * A save from before social v2: Friendly needed 10 trust then and needs a whole stamp (15) now; whoever was Friendly
+ * or warmer on 10..15 trust keeps their tier (else they would read as cooled the moment the game loads).
+ */
+function fromV1(data: unknown): unknown {
+  const people = (data as { people?: Record<string, { warmth?: unknown; trust?: unknown }> } | null)?.people;
+  if (!people || typeof people !== 'object') return data;
+  const friendly = TIERS.find((t) => t.id === 'friendly');
+  for (const p of Object.values(people)) {
+    if (!p || typeof p.warmth !== 'number' || typeof p.trust !== 'number' || !friendly) continue;
+    if (p.warmth >= friendly.from && p.trust >= 10 && p.trust < friendly.trust) p.trust = friendly.trust;
+  }
+  return data;
 }
 
 function readSave(data: unknown): SocialSave | null {
@@ -93,11 +107,13 @@ function readPerson(id: PersonId, value: unknown): PersonState | null {
   s.met = typeof v.met === 'number' ? v.met : null;
   s.known = Array.isArray(v.known) ? v.known.filter((k): k is string => typeof k === 'string') : [];
   s.traitsKnown = Array.isArray(v.traitsKnown) ? v.traitsKnown.filter((t): t is Trait => typeof t === 'string' && t in TRAITS) : [];
-  s.memories = Array.isArray(v.memories) ? v.memories.filter((m): m is Memory => !!m && typeof m.text === 'string' && typeof m.day === 'number' && typeof m.weight === 'number') : [];
+  s.memories = Array.isArray(v.memories) ? v.memories.filter((m): m is Memory => !!m && typeof m.text === 'string' && typeof m.day === 'number' && typeof m.weight === 'number' && (m.game === undefined || typeof m.game === 'string')) : [];
+  // Talk's old daily battery (`battery`) is not read back: a conversation is three exchanges now (`TALK.exchanges`).
   if (v.last && typeof v.last === 'object') for (const [r, d] of Object.entries(v.last)) if (typeof d === 'number') s.last[r] = d;
-  if (v.battery && typeof v.battery.day === 'number' && typeof v.battery.used === 'number') s.battery = { day: v.battery.day, used: v.battery.used, warmed: typeof v.battery.warmed === 'number' ? v.battery.warmed : 0 };
   s.lastSeen = typeof v.lastSeen === 'number' ? v.lastSeen : 0;
-  s.told = typeof v.told === 'string' ? v.told : tierOf(s.warmth, s.trust);
+  // `stranger` was the id of `polite` before social v2.
+  const told: unknown = v.told === ('stranger' as unknown) ? 'polite' : v.told;
+  s.told = isTier(told) ? told : tierOf(s.warmth, s.trust);
   s.number = v.number === true;
   return s;
 }
@@ -146,8 +162,12 @@ interface Nudge {
   /** Something they will remember ("you lent me Zelda"), and how much it mattered (default: the warmth moved). */
   memory?: string;
   memoryWeight?: number;
+  /** The game the memory is about (its id: the book shows its cover). */
+  memoryGame?: string;
   /** The people tied to them hear of it (`gossip.grapevine`). Default false. */
   gossip?: boolean;
+  /** Not slowed as it grows (`GAIN`): a promise kept is a whole stamp of trust. */
+  raw?: boolean;
 }
 
 /**
@@ -160,8 +180,8 @@ export function nudge(id: PersonId, n: Nudge): SocialChange | null {
     if (s.last[n.reason] === n.day) return null;
     s.last[n.reason] = n.day;
   }
-  const change = apply(id, s, n.warmth ?? 0, n.trust ?? 0, n.day, n.why);
-  if (n.memory) remember(s, n.day, n.memory, n.memoryWeight ?? n.warmth ?? 0);
+  const change = apply(id, s, n.warmth ?? 0, n.trust ?? 0, n.day, n.why, n.raw);
+  if (n.memory) remember(s, n.day, n.memory, n.memoryWeight ?? n.warmth ?? 0, n.memoryGame);
   save();
   emit(change);
   if (n.gossip) {
@@ -169,6 +189,7 @@ export function nudge(id: PersonId, n: Nudge): SocialChange | null {
       const other = entry(heard.id);
       const c = apply(heard.id, other, heard.warmth, 0, n.day, `heard about it from ${findPerson(id)?.short ?? findPerson(id)?.name ?? id}`);
       c.heard = true;
+      c.from = id;
       save();
       emit(c);
     }
@@ -186,15 +207,15 @@ function slowed(s: Readonly<PersonState>, dw: number, dt: number): [number, numb
   return [dw > 0 ? dw * warmthGain(s.warmth) : dw, dt > 0 ? dt * Math.max(GAIN.trustFloor, 1 - s.trust / GAIN.trustSpan) : dt];
 }
 
-function apply(id: PersonId, s: PersonState, dw: number, dt: number, day: number, why?: string, raw = false): SocialChange {
+function apply(id: PersonId, s: PersonState, dw: number, dt: number, day: number, why?: string, raw = false, exact = false): SocialChange {
   const before = s.told;
   const w0 = s.warmth;
   const t0 = s.trust;
-  if (!raw) [dw, dt] = slowed(s, dw, dt);
+  if (!raw && !exact) [dw, dt] = slowed(s, dw, dt);
   s.warmth = roundInto(s.warmth + dw, familyFloor(id), WARMTH.max);
   s.trust = roundInto(s.trust + dt, TRUST.min, TRUST.max);
   s.lastSeen = Math.max(s.lastSeen, day);
-  const after = raw ? tierOf(s.warmth, s.trust) : toldTier(s);
+  const after = exact ? tierOf(s.warmth, s.trust) : toldTier(s);
   s.told = after;
   return { id, warmth: s.warmth - w0, trust: s.trust - t0, why, before, after };
 }
@@ -216,8 +237,8 @@ function toldTier(s: PersonState): TierId {
   return now;
 }
 
-function remember(s: PersonState, day: number, text: string, weight: number): void {
-  s.memories.unshift({ day, text, weight });
+function remember(s: PersonState, day: number, text: string, weight: number, game?: string): void {
+  s.memories.unshift(game ? { day, text, weight, game } : { day, text, weight });
   if (s.memories.length > MEMORY.keep) {
     // The mildest goes first, not the oldest: a grudge outlives a chat.
     let mildest = 0;
@@ -296,47 +317,31 @@ export function hasNumber(id: PersonId): boolean {
 }
 
 /** A memory of `id`'s, without moving the standing. */
-export function addMemory(id: PersonId, day: number, text: string, weight: number): void {
-  remember(entry(id), day, text, weight);
+export function addMemory(id: PersonId, day: number, text: string, weight: number, game?: string): void {
+  remember(entry(id), day, text, weight, game);
   save();
 }
 
-/** The social battery `id` has in them on `day` (`BATTERY.perDay` × their traits), and what is left. */
-function batteryOf(id: PersonId, day: number): { size: number; left: number } {
-  const card = findPerson(id);
-  const factor = (card?.traits ?? []).reduce((f, t) => f * (TRAITS[t].battery ?? 1), 1);
-  const size = Math.max(2, Math.round(BATTERY.perDay * factor));
-  const s = standing(id);
-  return { size, left: s.battery.day === day ? Math.max(0, size - s.battery.used) : size };
+/** How many times `key` happened with `id` (a topic talked about: `topicN:<id>`). Kept with `last`. */
+export function countOf(id: PersonId, key: string): number {
+  return standing(id).last[`n:${key}`] ?? 0;
 }
 
-/** How much talk `id` has left in them on `day`, read only (the conversation shows them restless, then wanting to go). */
-export function talkLeft(id: PersonId, day: number): number {
-  return batteryOf(id, day).left;
-}
-
-/** Draws `cost` from `id`'s battery on `day`; returns whether it was past empty (the talk then costs warmth). */
-export function drawBattery(id: PersonId, day: number, cost: number): boolean {
-  const { left } = batteryOf(id, day);
+/** One more time `key` happened with `id`; returns the count before it. */
+export function bumpCount(id: PersonId, key: string): number {
   const s = entry(id);
-  if (s.battery.day !== day) s.battery = { day, used: 0, warmed: 0 };
-  s.battery.used += cost;
+  const n = s.last[`n:${key}`] ?? 0;
+  s.last[`n:${key}`] = n + 1;
   save();
-  return cost > 0 && left < cost;
+  return n;
 }
 
-/**
- * How much of `wanted` warmth from talk `id` still takes on `day` (`GAIN.talkPerDay` a day), recorded as taken.
- * A loss is never capped.
- */
-export function talkWarmth(id: PersonId, day: number, wanted: number): number {
-  if (wanted <= 0) return wanted;
+/** Records that `reason` counted for `id` on `day`, moving nothing (the day's first conversation: `conversation.begin`). */
+export function markCounted(id: PersonId, reason: string, day: number): void {
   const s = entry(id);
-  if (s.battery.day !== day) s.battery = { day, used: 0, warmed: 0 };
-  const take = Math.max(0, Math.min(wanted, GAIN.talkPerDay - s.battery.warmed));
-  s.battery.warmed += take;
+  s.last[reason] = day;
+  s.lastSeen = Math.max(s.lastSeen, day);
   save();
-  return take;
 }
 
 /** Everyone with a standing saved (met or touched), for the book and the debug table. */
@@ -394,7 +399,7 @@ export function settleDay(day: number): void {
 export function setStanding(id: PersonId, warmthValue: number, trustValue: number, day: number, quiet = false): void {
   const s = entry(id);
   if (s.met === null) s.met = day;
-  const change = apply(id, s, warmthValue - s.warmth, trustValue - s.trust, day, 'debug', true);
+  const change = apply(id, s, warmthValue - s.warmth, trustValue - s.trust, day, 'debug', true, true);
   save();
   if (!quiet) emit(change);
 }

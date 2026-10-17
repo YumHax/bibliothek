@@ -20,7 +20,9 @@
   /* A pen on paper: the to-do list, the journal, the first day's tips. */
   --ui-font-hand: 'Caveat', 'Segoe Print', 'Bradley Hand', cursive;
   /* A word said in passing, comic-book style. */
-  --ui-font-comic: 'Comic Sans MS', 'Chalkboard SE', system-ui, sans-serif;
+  --ui-font-comic: 'Patrick Hand', 'Comic Sans MS', 'Chalkboard SE', system-ui, sans-serif;
+  /* The conversation's own words (choices, the name tag): a face built to be read at a glance. */
+  --ui-font-talk: 'Atkinson Hyperlegible', system-ui, sans-serif;
   /* Figures and tables (the payout overlay, the till slip). */
   --ui-font-mono: ui-monospace, 'SF Mono', Menlo, monospace;
   /* A radio's printout, a typewriter. */

@@ -1,8 +1,8 @@
-import type { GiftKind, InteractionGroup, InteractionId, SocialPlace, TierId, Trait } from './types';
+import type { Fit, GiftKind, InteractionGroup, InteractionId, SocialPlace, TierId, Trait } from './types';
 
 /*
- * The numbers of the social layer (docs/social.md): the tiers, the traits, what each interaction does, the
- * battery, the drift, the gossip, the gifts. Data only: `standing`, `conversation`, `drift`, `gossip` read it.
+ * The numbers of the social layer (docs/social.md): the tiers, the traits, what each choice does, the drift, the
+ * gossip, the gifts, the promises. Data only: `standing`, `conversation`, `gossip`, `mood` read it.
  */
 
 /** Warmth and trust run over these ranges. */
@@ -11,125 +11,138 @@ export const TRUST = { min: 0, max: 100 } as const;
 
 /**
  * The warmth tiers, coldest first: `from` is the lowest warmth of the tier. A tier above `acquaintance` also needs
- * `trust` at least: short of it, they stay a tier lower (a charmer who is liked but not relied on). `name` is what
- * the player reads (the ids stay as saved: `stranger` reads "Polite", someone met but neither warm nor cold);
- * `colour` says the side at a glance, the same everywhere: reds and a cold blue below, grey in the middle, greens
- * above, gold for a close friend (red never means a friend).
+ * `trust` at least, which only promises kept bring (`PROMISE`: one is `STAMP` of trust): Friendly one, Friend two,
+ * a close friend three. Short of it they stay a tier lower. `name` is what the player reads; `colour` says the side at
+ * a glance, the same everywhere: reds and a cold blue below, grey in the middle, greens above, gold for a close
+ * friend (red never means a friend). `light` is the short ladder a light person is read on (`tiers.tierName`).
  */
-export const TIERS: readonly { id: TierId; from: number; trust: number; name: string; colour: string }[] = [
-  { id: 'nemesis', from: -100, trust: 0, name: 'Nemesis', colour: '#8f1d2c' },
-  { id: 'hostile', from: -70, trust: 0, name: 'Hostile', colour: '#c0392b' },
-  { id: 'cold', from: -40, trust: 0, name: 'Cold', colour: '#5d8aa8' },
-  { id: 'stranger', from: -15, trust: 0, name: 'Polite', colour: '#8a8f99' },
-  { id: 'acquaintance', from: 10, trust: 0, name: 'Acquaintance', colour: '#9db58a' },
-  { id: 'friendly', from: 30, trust: 10, name: 'Friendly', colour: '#6cbf5a' },
-  { id: 'friend', from: 55, trust: 30, name: 'Friend', colour: '#2fa86a' },
-  { id: 'close', from: 80, trust: 55, name: 'Close friend', colour: '#e2b33c' },
+export const TIERS: readonly { id: TierId; from: number; trust: number; name: string; light: string; colour: string }[] = [
+  { id: 'nemesis', from: -100, trust: 0, name: 'Nemesis', light: 'Hostile', colour: '#8f1d2c' },
+  { id: 'hostile', from: -70, trust: 0, name: 'Hostile', light: 'Hostile', colour: '#c0392b' },
+  { id: 'cold', from: -40, trust: 0, name: 'Cold', light: 'Cold', colour: '#5d8aa8' },
+  { id: 'polite', from: -15, trust: 0, name: 'Polite', light: 'New face', colour: '#8a8f99' },
+  { id: 'acquaintance', from: 10, trust: 0, name: 'Acquaintance', light: 'New face', colour: '#9db58a' },
+  { id: 'friendly', from: 30, trust: 15, name: 'Friendly', light: 'Regular', colour: '#6cbf5a' },
+  { id: 'friend', from: 55, trust: 30, name: 'Friend', light: 'Regular', colour: '#2fa86a' },
+  { id: 'close', from: 80, trust: 45, name: 'Close friend', light: 'Old friend', colour: '#e2b33c' },
 ];
 
-/** The bonds read off both axes (`tiers.bondOf`): warm is `warm` or more, trusted `trusted` or more. */
-export const BOND = { warm: 30, cold: -15, trusted: 35 } as const;
+/** Trust a promise kept is worth, and one stamp of the book's and the card's (`tiers.stampsOf`). */
+export const STAMP = 15;
 
-/** How a trait bends an interaction: a factor on the odds and on the warmth it moves; `hour` limits it to some hours. */
+/**
+ * Promises (docs/social.md "Promises"): a favour said yes to is a promise; kept, it is a stamp of trust (raw, not
+ * slowed) and warmth; broken, the stamp goes and it stings.
+ */
+export const PROMISE = { kept: { trust: STAMP, warmth: 5 }, broken: { trust: -STAMP, warmth: -6 } } as const;
+
+/** A trait's say on one choice: how it lands (`fit`), maybe only at some game hours (a night owl at 8 a.m.). */
 interface TraitBend {
-  odds?: number;
-  warmth?: number;
-  /** Only between these game hours (a night owl at 8 a.m.). */
+  fit: Fit;
   hours?: [number, number];
 }
 
-/** What each trait does, and how the book shows it. */
-export const TRAITS: Record<Trait, { name: string; blurb: string; bends: Partial<Record<InteractionId, TraitBend>>; battery?: number; grudge?: number; gossipOut?: number }> = {
-  chatty: { name: 'Chatty', blurb: 'Loves a long talk', bends: { chat: { odds: 1.25, warmth: 1.3 }, askDay: { odds: 1.2 } }, battery: 1.6 },
-  grumpy: { name: 'Grumpy', blurb: 'Hard to please, especially early', bends: { joke: { odds: 0.6 }, compliment: { odds: 0.8 }, chat: { odds: 0.75, hours: [6, 11] }, complain: { odds: 1.4, warmth: 1.3 } }, battery: 0.7 },
-  nightOwl: { name: 'Night owl', blurb: 'Not a morning person', bends: { chat: { odds: 0.6, hours: [6, 11] }, joke: { odds: 0.6, hours: [6, 11] } } },
-  earlyBird: { name: 'Early bird', blurb: 'Bright in the morning, done by evening', bends: { chat: { odds: 0.7, hours: [20, 24] } } },
-  nostalgic: { name: 'Nostalgic', blurb: 'Lights up about the old days', bends: { talkGames: { odds: 1.3, warmth: 1.4 }, giveGame: { warmth: 1.3 } } },
-  competitive: { name: 'Competitive', blurb: 'Lives for a challenge', bends: { challenge: { odds: 1.5, warmth: 1.5 }, tease: { odds: 1.3 } } },
-  proud: { name: 'Proud', blurb: 'Holds a grudge', bends: { tease: { odds: 0.5 }, joke: { odds: 0.85 }, apologise: { odds: 0.7 }, giveCoins: { odds: 0.4 } }, grudge: 2 },
-  generous: { name: 'Generous', blurb: 'Gives as good as they get', bends: { askFavour: { odds: 1.3 }, askTip: { odds: 1.3 }, askDiscount: { odds: 1.2 } } },
-  gossip: { name: 'Gossip', blurb: 'Knows everything, tells everyone', bends: { gossip: { odds: 1.5, warmth: 1.6 } }, gossipOut: 2 },
-  catPerson: { name: 'Cat person', blurb: 'Asks after the cat', bends: { chat: { odds: 1.1 }, giveGift: { warmth: 1.1 } } },
-  neat: { name: 'Neat', blurb: 'Notices noise and mess', bends: { complain: { odds: 1.2 }, joke: { odds: 0.9 } } },
-  collector: { name: 'Collector', blurb: 'Talks shop gladly', bends: { talkGames: { odds: 1.4, warmth: 1.3 }, giveGame: { warmth: 1.4 } } },
-  shy: { name: 'Shy', blurb: 'Warms up slowly', bends: { chat: { odds: 0.85, warmth: 0.7 }, joke: { odds: 0.8 }, compliment: { odds: 0.9 } }, battery: 0.6 },
-  businesslike: { name: 'Businesslike', blurb: 'Coins talk louder than words', bends: { giveCoins: { odds: 1.6, warmth: 1.4 }, chat: { warmth: 0.7 }, askDiscount: { odds: 0.8 } } },
-  romantic: { name: 'Romantic', blurb: 'A soft spot for flowers', bends: { compliment: { odds: 1.3, warmth: 1.3 }, giveGift: { warmth: 1.2 } } },
-  funny: { name: 'Funny', blurb: 'Always up for a laugh', bends: { joke: { odds: 1.5, warmth: 1.5 }, tease: { odds: 1.3, warmth: 1.2 } } },
+/** What the player's news is about (`news.ts`): a trait likes or minds some kinds. */
+export type NewsTag = 'games' | 'collection' | 'arcade' | 'bargain' | 'cat' | 'family' | 'building' | 'party' | 'street' | 'music';
+
+/**
+ * What each trait does and how the book shows it: how small talk lands with them (`bends`), the news they like or
+ * mind, how long they hold a grudge, how far they carry gossip. A mood at some hours is `mood.ts`'s.
+ */
+export const TRAITS: Record<Trait, { name: string; blurb: string; bends: Partial<Record<'chat' | 'joke' | 'tease' | 'giveCoins' | 'apologise', TraitBend>>; news?: { likes?: readonly NewsTag[]; minds?: readonly NewsTag[] }; grudge?: number; gossipOut?: number }> = {
+  chatty: { name: 'Chatty', blurb: 'Loves a long talk', bends: { chat: { fit: 'loves' } }, news: { likes: ['building', 'family', 'street'] } },
+  grumpy: { name: 'Grumpy', blurb: 'Hard to please, especially early', bends: { joke: { fit: 'dislikes' }, chat: { fit: 'meh', hours: [6, 11] }, tease: { fit: 'dislikes' } }, news: { minds: ['party', 'arcade'] } },
+  nightOwl: { name: 'Night owl', blurb: 'Not a morning person', bends: { chat: { fit: 'meh', hours: [6, 11] }, joke: { fit: 'meh', hours: [6, 11] } }, news: { likes: ['music', 'party'] } },
+  earlyBird: { name: 'Early bird', blurb: 'Bright in the morning, done by evening', bends: { chat: { fit: 'meh', hours: [20, 24] } } },
+  nostalgic: { name: 'Nostalgic', blurb: 'Lights up about the old days', bends: {}, news: { likes: ['collection', 'family', 'music'] } },
+  competitive: { name: 'Competitive', blurb: 'Lives for a challenge', bends: { tease: { fit: 'loves' } }, news: { likes: ['arcade', 'games'] } },
+  proud: { name: 'Proud', blurb: 'Holds a grudge', bends: { tease: { fit: 'dislikes' }, giveCoins: { fit: 'dislikes' }, apologise: { fit: 'meh' } }, grudge: 2 },
+  generous: { name: 'Generous', blurb: 'Gives as good as they get', bends: { apologise: { fit: 'loves' } }, news: { likes: ['family', 'building'] } },
+  gossip: { name: 'Gossip', blurb: 'Knows everything, tells everyone', bends: { chat: { fit: 'loves' } }, news: { likes: ['building', 'street', 'party'] }, gossipOut: 2 },
+  catPerson: { name: 'Cat person', blurb: 'Asks after the cat', bends: {}, news: { likes: ['cat'] } },
+  neat: { name: 'Neat', blurb: 'Notices noise and mess', bends: { joke: { fit: 'meh' } }, news: { minds: ['party', 'music'] } },
+  collector: { name: 'Collector', blurb: 'Talks shop gladly', bends: {}, news: { likes: ['games', 'collection', 'bargain'] } },
+  shy: { name: 'Shy', blurb: 'Warms up slowly', bends: { joke: { fit: 'meh' }, tease: { fit: 'dislikes' } } },
+  businesslike: { name: 'Businesslike', blurb: 'Coins talk louder than words', bends: { giveCoins: { fit: 'loves' }, chat: { fit: 'meh' } }, news: { likes: ['bargain'] } },
+  romantic: { name: 'Romantic', blurb: 'A soft spot for flowers', bends: {}, news: { likes: ['family', 'music'] } },
+  funny: { name: 'Funny', blurb: 'Always up for a laugh', bends: { joke: { fit: 'loves' }, tease: { fit: 'loves' } } },
 };
 
 /**
- * One interaction of the conversation panel: its group, the odds it lands (`odds`, before mood, warmth and traits),
- * what it moves when it lands and when it does not (`win` / `lose`: warmth, trust), what it costs of the day's battery,
- * the warmth it needs (`from`: an apology is open to anyone; a favour is not asked of a stranger), where it is offered.
+ * One choice of the conversation panel: its group and label, where it is offered, from or below which tier, what it
+ * moves when it is not a matter of fit (`win`: an insult, a number given, an apology). Topics, news and small talk
+ * move by `TALK.fit`; gifts by `gifts.giftWarmth`.
  */
 interface InteractionRule {
   group: InteractionGroup;
   label: string;
-  odds: number;
   win: { warmth: number; trust?: number };
-  lose: { warmth: number; trust?: number };
-  battery: number;
   /** The tier it needs (inclusive). */
   from?: TierId;
-  /** Only below this tier (an apology to someone cross, a tease that is not yet a friendship's). */
+  /** Only below this tier (an apology to someone cross). */
   below?: TierId;
-  /** Counts once a game day towards the standing (the rest of the day it is talk, no more). */
-  daily?: boolean;
   /** Not offered at these places. */
   notAt?: readonly SocialPlace[];
   /** A deed the grapevine passes on (gossip reaches their ties). */
   heard?: boolean;
+  /** How it lands when no trait says otherwise. */
+  fit?: Fit;
 }
 
 export const INTERACTIONS: Record<InteractionId, InteractionRule> = {
-  chat: { group: 'talk', label: 'Chat', odds: 0.85, win: { warmth: 3 }, lose: { warmth: -1 }, battery: 1, daily: true },
-  askDay: { group: 'talk', label: 'Ask about their day', odds: 0.8, win: { warmth: 3, trust: 1 }, lose: { warmth: -1 }, battery: 1, daily: true },
-  talkGames: { group: 'talk', label: 'Talk games', odds: 0.6, win: { warmth: 5 }, lose: { warmth: -2 }, battery: 2, daily: true },
-  compliment: { group: 'talk', label: 'Pay a compliment', odds: 0.7, win: { warmth: 4 }, lose: { warmth: -2 }, battery: 1, daily: true },
-  joke: { group: 'talk', label: 'Tell a joke', odds: 0.55, win: { warmth: 6 }, lose: { warmth: -3 }, battery: 1, daily: true },
-  gossip: { group: 'talk', label: 'Gossip about…', odds: 0.6, win: { warmth: 5 }, lose: { warmth: -3, trust: -2 }, battery: 2, from: 'acquaintance', daily: true },
-  complain: { group: 'talk', label: 'Complain about the building', odds: 0.5, win: { warmth: 4 }, lose: { warmth: -2 }, battery: 1, daily: true },
-  apologise: { group: 'talk', label: 'Apologise', odds: 0.6, win: { warmth: 10, trust: 3 }, lose: { warmth: 0 }, battery: 2, below: 'stranger', daily: true },
-  askNumber: { group: 'ask', label: 'Ask for their number', odds: 0.75, win: { warmth: 1, trust: 2 }, lose: { warmth: -1 }, battery: 1, from: 'acquaintance', notAt: ['phone'] },
-  askFavour: { group: 'ask', label: 'Ask a favour', odds: 0.6, win: { warmth: 0, trust: 2 }, lose: { warmth: -2 }, battery: 2, from: 'friendly' },
-  askTip: { group: 'ask', label: 'Ask for a tip', odds: 0.55, win: { warmth: 0 }, lose: { warmth: -1 }, battery: 2, from: 'acquaintance', daily: true },
-  askDiscount: { group: 'ask', label: 'Ask for a discount', odds: 0.4, win: { warmth: -1 }, lose: { warmth: -3 }, battery: 2, from: 'friendly', daily: true },
-  tease: { group: 'mean', label: 'Tease', odds: 0.45, win: { warmth: 4 }, lose: { warmth: -8 }, battery: 1, daily: true },
-  insult: { group: 'mean', label: 'Insult', odds: 1, win: { warmth: -18, trust: -6 }, lose: { warmth: -18, trust: -6 }, battery: 1, heard: true },
-  challenge: { group: 'mean', label: 'Challenge them', odds: 0.6, win: { warmth: 5 }, lose: { warmth: -3 }, battery: 2, daily: true, notAt: ['phone'] },
-  giveGift: { group: 'give', label: 'Give…', odds: 1, win: { warmth: 6, trust: 1 }, lose: { warmth: -3 }, battery: 0, notAt: ['phone'], heard: true },
-  giveGame: { group: 'give', label: 'Give a game', odds: 1, win: { warmth: 14, trust: 4 }, lose: { warmth: -2 }, battery: 0, from: 'acquaintance', notAt: ['phone'], heard: true },
-  giveCoins: { group: 'give', label: 'Give a few coins', odds: 0.5, win: { warmth: 4 }, lose: { warmth: -4 }, battery: 0, notAt: ['phone'] },
+  topic: { group: 'talk', label: 'Their topic', win: { warmth: 0 } },
+  news: { group: 'talk', label: 'Your news', win: { warmth: 0 } },
+  chat: { group: 'talk', label: 'Small talk', win: { warmth: 0 }, fit: 'likes' },
+  joke: { group: 'talk', label: 'A joke', win: { warmth: 0 }, fit: 'likes' },
+  apologise: { group: 'talk', label: 'Apologise', win: { warmth: 10 }, below: 'polite', fit: 'likes' },
+  askNumber: { group: 'ask', label: 'Ask for their number', win: { warmth: 1 }, from: 'acquaintance', notAt: ['phone'] },
+  tease: { group: 'mean', label: 'Tease', win: { warmth: 0 }, from: 'friend', fit: 'likes' },
+  insult: { group: 'mean', label: 'Insult', win: { warmth: -18, trust: -6 }, heard: true },
+  giveGift: { group: 'give', label: 'Give…', win: { warmth: 0 }, notAt: ['phone'], heard: true },
+  giveGame: { group: 'give', label: 'Give a game', win: { warmth: 0 }, from: 'acquaintance', notAt: ['phone'], heard: true },
+  giveCoins: { group: 'give', label: 'Give a few coins', win: { warmth: 4 }, notAt: ['phone'], fit: 'likes' },
 };
 
 /**
- * The daily social battery: how much talk a person has in them a game day (`TRAITS[t].battery` multiplies it).
- * Past it, every more costs `over` warmth.
+ * How talk moves warmth (docs/social.md "How a choice lands"): by fit, scaled by their mood (a gain only: a bad day
+ * dulls the good, it does not sharpen the bad), give or take `variance` of the amount, never of its sign. Only the day's
+ * first conversation with someone counts (`exchanges` choices of it; after them they have to go), and two hits of
+ * them make a good talk (`goodTalk`). A topic said again in a conversation drops a step each time; one talked about
+ * within `repeatDays` drops a step.
  */
-export const BATTERY = { perDay: 6, over: -2 } as const;
+export const TALK = {
+  fit: { loves: 3, likes: 1.5, meh: 0, dislikes: -1.5 } as Record<Fit, number>,
+  mood: { good: 1.25, fine: 1, low: 0.7, annoyed: 0.4 },
+  variance: 0.15,
+  exchanges: 3,
+  goodTalk: { hits: 2, warmth: 1 },
+  repeatDays: 2,
+  /** How many of their topics and of the player's news the menu offers at once. */
+  topics: 3,
+  news: 2,
+} as const;
 
 /**
- * Mood of the day (`mood.ts`): drawn per person and game day, moved by the weather and by the events of the day
- * (`markMood`). Each mood bends the odds of everything.
+ * Mood of the day (`mood.ts`): fine by default; good or low only with a cause the panel says (their card's `moods`,
+ * the hour for a night owl, a mark of the day, their birthday). Each mood scales what talk brings (`TALK.mood`).
  */
 export const MOODS = {
-  good: { name: 'In a good mood', glyph: '☀', odds: 1.2 },
-  fine: { name: 'Fine', glyph: '⛅', odds: 1 },
-  low: { name: 'Feeling low', glyph: '☁', odds: 0.85 },
-  annoyed: { name: 'Annoyed', glyph: '⚡', odds: 0.65 },
+  good: { name: 'In a good mood' },
+  fine: { name: 'Fine' },
+  low: { name: 'Feeling low' },
+  annoyed: { name: 'Annoyed' },
 } as const;
 export type MoodId = keyof typeof MOODS;
 
-/**
- * Gains slow as they grow: every warmth gained is × (1 - warmth / `span`) ^ `power` (never under `floor`), every trust gained
- * × (1 - trust / `trustSpan`) (never under `trustFloor`); and talk (the Talk and Mean groups) brings one person
- * `talkPerDay` warmth a game day at most, however well it goes. Gifts, favours and deeds are not capped.
- */
-export const GAIN = { span: 120, power: 1.2, floor: 0.15, trustSpan: 160, trustFloor: 0.3, talkPerDay: 4 } as const;
+/** The day's draw of a mood with a cause from their card (`PersonCard.moods`): this share of days good, this low. */
+export const MOOD_DAYS = { good: 0.18, low: 0.1 } as const;
 
-/** How warmth and odds pull each other: every point of warmth adds this to the odds (capped by `oddsRange`). */
-export const ODDS = { perWarmth: 0.004, range: [0.05, 0.97] as [number, number] } as const;
+/**
+ * Gains slow as they grow: every warmth gained is × (1 - warmth / `span`) ^ `power` (never under `floor`), every trust
+ * gained × (1 - trust / `trustSpan`) (never under `trustFloor`), but for a promise kept (raw). Gifts, favours and
+ * deeds are slowed like talk.
+ */
+export const GAIN = { span: 120, power: 1.5, floor: 0.08, trustSpan: 160, trustFloor: 0.3 } as const;
 
 /**
  * Drift: after `graceDays` game days without contact (a game day is ten minutes of play), warmth slides `perDay` a
@@ -164,12 +177,13 @@ export const GIFTS: Record<GiftKind, { name: string; warmth: number }> = {
   plush: { name: 'a plush', warmth: 5 },
   record: { name: 'a record', warmth: 8 },
 };
-export const GIFT_LIKE = { liked: 2, disliked: -6, perDay: 2 } as const;
+/** A loved gift counts this many times, an unwanted one is a flat loss. One gift a day counts; more are only polite. */
+export const GIFT_LIKE = { liked: 1.5, disliked: -6 } as const;
 
 /** Coins handed over by `giveCoins`. */
 export const COIN_GIFT = 5;
 
-/** The odds and warmth of a game given, by how well it fits their tastes (`gifts.gameFit`, 0..1). */
+/** The warmth of a game given, by how well it fits their tastes (`gifts.gameFit`, 0..1). */
 export const GAME_GIFT = { base: 0.5, fit: 1.2 } as const;
 /** A game given in the Christmas stall's paper and ribbon (`holidays/giftWrap`) means this much more. */
 export const WRAPPED_GIFT = 1.35;

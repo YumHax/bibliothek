@@ -60,6 +60,8 @@ export interface ModalLike {
   addOpenListener?(listener: (open: boolean) => void): () => void;
   /** Works on the box in hand (haggle, swap): it stays in hand while the panel has the mouse. */
   readonly keepsHeld?: boolean;
+  /** The room's use key (E) does not close it, wherever the focus is (a conversation: only Goodbye and Esc end it). */
+  readonly keepsOnUse?: boolean;
 }
 
 /** The cat: the session calls it with a key and tells it which armchair the player sits in. */

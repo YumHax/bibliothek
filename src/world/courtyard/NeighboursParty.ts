@@ -4,6 +4,7 @@ import type { SessionActions } from '@/game/SessionActions';
 import type { Furniture } from '../Furniture';
 import { Vendor } from '../people/Vendor';
 import { randomLook } from '../people/looks';
+import { castDress } from '@/world/people/castLook';
 import type { StringLights } from './StringLights';
 import { PARTY_TALK, partyGuests, type partyStage } from '@/building/neighboursParty';
 import { STAIRWELL_PLAN } from '../stairwell/stairwellPlan'; // imports-ok: the residents who come down to the party are the stairwell's
@@ -120,7 +121,7 @@ export class NeighboursParty extends THREE.Group implements Furniture, Updatable
             } }],
           }))
         : undefined;
-      const vendor: PartyGuest = new PartyGuest(social ? () => {} : chatted, { viewer, lines, seed: guest.seed, look: randomLook(guest.seed + 900, 'shopper'), label: `${guest.name} · chat`, speaker: guest.name, focus: [0, 1.0, 1.2], social });
+      const vendor: PartyGuest = new PartyGuest(social ? () => {} : chatted, { viewer, lines, seed: guest.seed, look: randomLook(guest.seed + 900, 'shopper', castDress(person)), label: `${guest.name} · chat`, speaker: guest.name, focus: [0, 1.0, 1.2], social });
       return host.place(vendor, spot.at.clone(), spot.yaw);
     });
   }

@@ -8,6 +8,9 @@ import type { PersonLook } from '../people/looks';
 import { SpeechBubble } from '../people/SpeechBubble';
 import { Attention, type AttentionRange } from '../people/attention';
 import type { SocialHook } from '../people/socialHook';
+import { SocialSelf } from '../people/socialSelf';
+import type { SocialAct } from '../people/motion/repertoire';
+import type { Fit } from '@/social/types';
 import type { FaceKey, GestureName } from '../people/motion/gestures';
 import type { Reaction } from '../people/performer';
 import type { HandheldModel } from './handheldModel';
@@ -66,6 +69,8 @@ export class YardKid extends THREE.Group implements Furniture, Interactable, Upd
   private nextLine = 0;
   /** Whether they are watching their screen (else the player). */
   private onScreen = true;
+  /** Their body as the social interface: the aim's face, a conversation's, greetings, a witness's look (`socialSelf`). */
+  private readonly socialSelf: SocialSelf;
 
   constructor(private readonly options: YardKidOptions) {
     super();
@@ -94,6 +99,11 @@ export class YardKid extends THREE.Group implements Furniture, Interactable, Upd
     this.moment = MOMENTS[0] + random() * (MOMENTS[1] - MOMENTS[0]);
     this.gripsLocal = handheld?.grips ?? [new THREE.Vector3(), new THREE.Vector3()];
     this.screenLocal = handheld?.screen ?? new THREE.Vector3();
+    this.socialSelf = new SocialSelf(
+      { root: this, body: this.model, attend: (seconds) => this.attention.engage(seconds), say: (text) => this.say(text, 1.8), shown: () => this.visible && this.model.visible },
+      options.social ?? null,
+      options.viewer,
+    );
   }
 
   get footprint(): THREE.Box3 {
@@ -106,6 +116,7 @@ export class YardKid extends THREE.Group implements Furniture, Interactable, Upd
   }
 
   update(dt: number): void {
+    this.socialSelf.update(dt);
     const looking = this.attention.update(dt, this, this.options.viewer, NOTICE, this.viewerPos);
     if (this.attention.takeNotice()) this.model.nod();
     if (this.attention.inConversation) this.model.listen(0.5);
@@ -116,7 +127,11 @@ export class YardKid extends THREE.Group implements Furniture, Interactable, Upd
       this.model.reach([this.device.localToWorld(this.grips[0].copy(l)), this.device.localToWorld(this.grips[1].copy(r))]);
       this.device.localToWorld(this.screen.copy(this.screenLocal));
     }
-    if (looking) {
+    const witnessing = this.socialSelf.gazeTarget();
+    if (witnessing) {
+      this.model.eyesOn(null);
+      this.model.gaze(witnessing);
+    } else if (looking) {
       this.model.eyesOn(null);
       this.model.gaze(this.viewerPos);
     } else {
@@ -135,10 +150,28 @@ export class YardKid extends THREE.Group implements Furniture, Interactable, Upd
 
   dispose(): void {
     this.options.handheld?.dispose();
+    this.socialSelf.dispose();
   }
 
-  setHovered(): void {
-    // A person does not glow; the caption says it all.
+  setHovered(hovered: boolean): void {
+    // A person does not glow: aimed at, they look up with the face of how they stand with the player.
+    this.socialSelf.hover(hovered);
+  }
+
+  /** A conversation's moment, `strength` 0..1, in their own measure. */
+  socialReact(act: SocialAct, strength: number): void {
+    this.socialSelf.reacted();
+    this.model.socialReact(act, strength);
+  }
+
+  /** Their face before the player chooses what to say, or back to listening (null). */
+  anticipate(fit: Fit | null): void {
+    this.socialSelf.anticipate(fit);
+  }
+
+  /** Kept in a conversation (eyes on the player), or let go. */
+  converse(on: boolean): void {
+    this.socialSelf.converse(on);
   }
 
   label(): string {

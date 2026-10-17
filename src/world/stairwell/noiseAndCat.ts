@@ -11,6 +11,7 @@ import { BuildingSpaces, flatStairwellRoute } from './flatHeard';
 import type { StairWalkerOptions } from './StairWalker';
 import { STAIRWELL_PLAN as plan } from './stairwellPlan';
 import { landingY } from '@/world/measures/building';
+import type { PersonLook } from '../people/looks';
 
 /** What the cat's outings need of the stairwell (`world/cat/escapes`, wired in `bootstrap/world.ts`). */
 export interface StairLife {
@@ -18,6 +19,8 @@ export interface StairLife {
   origin: THREE.Vector3;
   /** Mrs Dubois, who brings the cat back from in her flat. */
   catReturner: DoorVisitor;
+  /** Someone else coming up to the door (a friend's tier scene, `social/scenes/tierScenes`): placed once asked for. */
+  visitor(look: PersonLook): DoorVisitor;
   /** Whether whoever lives behind a door (its key) is in. */
   isHome: (key: string) => boolean;
   /** Where things are, building-wise (the flat, the stairwell). */
@@ -44,8 +47,8 @@ export function placeNoiseAndCatWays(zone: Zone, ctx: Pick<BuildContext, 'listen
   // Who comes up to the door (the building's doorstep: no doorstep, nobody): the neighbour from under the living room, Mrs Dubois with the cat.
   if (!building) return null;
   const door = zone.toWorld(new THREE.Vector3(plan.strip.x0 + 0.05, landingY(0) + 1.1, plan.frontDoor.z));
-  const visitor = (seed: number): DoorVisitor => {
-    const v = zone.place(new DoorVisitor({ viewer: listener, doorstep: building.doorstep, ground: people.ground, acoustics, door, seed }), new THREE.Vector3());
+  const visitor = (seed: number, look?: PersonLook): DoorVisitor => {
+    const v = zone.place(new DoorVisitor({ viewer: listener, doorstep: building.doorstep, ground: people.ground, acoustics, door, seed, ...(look ? { look } : {}) }), new THREE.Vector3());
     zone.place(v.walker, v.walker.position.clone());
     return v;
   };
@@ -53,5 +56,5 @@ export function placeNoiseAndCatWays(zone: Zone, ctx: Pick<BuildContext, 'listen
   const catReturner = visitor(CAT_OUTING.neighbour.seed);
   const notices = home.household?.notices;
   zone.place(new NoiseWatch({ listener, inFlat, visitor: complainer, slipNote: (piece) => building.doorstep.slipNote(piece), hours, day, ...(notices ? { notices } : {}) }), new THREE.Vector3());
-  return { origin, catReturner, isHome: people.isHome, spaces };
+  return { origin, catReturner, visitor: (look) => visitor(0, look), isHome: people.isHome, spaces };
 }

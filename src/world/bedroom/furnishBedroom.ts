@@ -24,6 +24,8 @@ import { SideTable } from '../props/SideTable';
 import { ReadingLamp } from './ReadingLamp';
 import { Phone, duskDarkness } from './Phone';
 import { placeMemeRing, type MemeRing } from './memeRing';
+import { placeFriendCalls, type FriendCalls } from './friendCalls';
+import { RING } from '@/grandma/hintLines';
 import { UnseenSwap } from './UnseenSwap';
 import { NightLight } from './NightLight';
 import { placeLeaves, placeWith, floorPointsToWorld } from '../zone/attach';
@@ -214,7 +216,12 @@ export function furnishBedroom(zone: Zone, ctx: Pick<BuildContext, 'sky' | 'cssL
   }
 
   // Mémé rings it when a photo of her album is ready (docs/grandma.md "Hints toward the next memory").
-  if (household) furnishBedroomLife(zone, household, { stands, nightstands, phone, wardrobe, ring: placeMemeRing(zone, ctx, phone, () => stands.owned) });
+  // Friends ring it too, never over her: picked up, the conversation; missed, a message and a red light (docs/social.md "The phone").
+  if (household) {
+    const ring = placeMemeRing(zone, ctx, phone, () => stands.owned);
+    const calls = placeFriendCalls(zone, ctx, phone, () => stands.owned, () => ring?.label() === RING.calling);
+    furnishBedroomLife(zone, household, { stands, nightstands, phone, wardrobe, ring, calls });
+  }
   furnishDecor(zone, ctx, plan.decor);
   // The neighbours through the party wall, talking now and then (rarely at night).
   zone.placeAt(pointSound(ctx, new NeighbourVoices({ night: () => sky.dayNight.state.night }), { maxDistance: 6 }), plan.neighbours);
@@ -283,7 +290,7 @@ function furnishBookcases(
  * night ends at) and the phone on the nightstands, once they stand; the wardrobe's rail behind its doors
  * (what to wear). The reading chair is the chair's own click.
  */
-function furnishBedroomLife(zone: Zone, household: HouseholdContext, parts: { stands: Placer; nightstands: readonly Nightstand[]; phone: Phone; wardrobe: Wardrobe; ring: MemeRing | null }): void {
+function furnishBedroomLife(zone: Zone, household: HouseholdContext, parts: { stands: Placer; nightstands: readonly Nightstand[]; phone: Phone; wardrobe: Wardrobe; ring: MemeRing | null; calls: FriendCalls | null }): void {
   const { life, notices } = household;
   const { alarm: alarmAt, phoneSpot, rail } = BEDROOM_PLAN.household;
   const { stands, nightstands } = parts;
@@ -311,10 +318,10 @@ function furnishBedroomLife(zone: Zone, household: HouseholdContext, parts: { st
     if (rang > 0) zone.after(rang + 0.12, () => playAlarmButton(0.08));
   });
 
-  const { ring } = parts;
-  const call = new ClickSpot({ size: phoneSpot, label: () => ring?.label() ?? 'Phone · make a call', onClick: () => undefined });
+  const { ring, calls } = parts;
+  const call = new ClickSpot({ size: phoneSpot, label: () => ring?.label() ?? calls?.label() ?? 'Phone · make a call', onClick: () => undefined });
   call.activate = (session) => {
-    if (!ring?.answer(session)) session.openPanel(household.phone);
+    if (!ring?.answer(session) && !calls?.answer(session)) session.openPanel(household.phone);
   };
   const { phone } = parts;
   stands.placeWith(nightstands[BEDROOM_PLAN.phone.stand]!, call, phone.position.clone().setY(phone.position.y + phoneSpot[1] / 2));

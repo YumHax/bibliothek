@@ -14,6 +14,7 @@ import type { Furniture } from '../Furniture';
 import { ForSaleBox, type ForSaleBoxOptions } from '../market/ForSaleBox';
 import { Walker } from '../people/Walker';
 import { randomLook } from '../people/looks';
+import { castDress } from '../people/castLook';
 import { rememberLook } from '@/social/lookBook';
 import type { SocialServices } from '@/social/talk';
 import { bodyOf, talkHook } from '../people/socialHook';
@@ -113,7 +114,7 @@ export class EstateSale extends THREE.Group implements Furniture, Updatable {
     this.table = new SaleFurniture(saleTable(), new THREE.Box3(new THREE.Vector3(-TABLE.length / 2, 0, -TABLE.depth / 2), new THREE.Vector3(TABLE.length / 2, TABLE.height, TABLE.depth / 2)));
     this.crate = new SaleFurniture(openCrate(), new THREE.Box3(new THREE.Vector3(-CRATE.width / 2, 0, -CRATE.depth / 2), new THREE.Vector3(CRATE.width / 2, CRATE.height, CRATE.depth / 2)));
     const { seller } = options.spots;
-    const look = randomLook(seller.seed + 900, 'shopper');
+    const look = randomLook(seller.seed + 900, 'shopper', castDress(CLAIRE));
     rememberLook(CLAIRE, look);
     let next = 0;
     const social = talkHook(options.social, CLAIRE, () => ({

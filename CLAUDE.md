@@ -65,7 +65,7 @@ npm run scene-lint  # the same subjects: light budgets, sunk / floating / overla
 | Materials, how parts meet, anything flat on a surface (z-fighting), hiding lamps | `docs/props.md` "Materials, joints and layers" |
 | What each check enforces (conventions, imports, docs paths, data, zfight, scene-lint, bundle, lint), its baseline and opt-out, adding a rule | `docs/checks.md` |
 | A panel or menu (the kit: CardPanel / SheetPanel, the `html` tag, widgets, confirm twice, dialogs), the CSS tokens and components | `docs/ui.md` |
-| People, relationships, talking, perks and penalties (warmth and trust, tiers, the conversation panel, the People book, the phone's contacts) | `docs/social.md` |
+| People, relationships, talking, perks and penalties (warmth, trust as promises kept, tiers, topics and fits, the player's news, the conversation panel, faces before the click, witnesses, conflicts, keepsakes on the fridge, tier scenes, the People book, the phone) | `docs/social.md` |
 
 Layer order, outermost first: `worldPlan.ts` + the plan files (data) -> `layout.ts` + `src/world/<kind>/furnish<Kind>.ts`
 (zone builders, the only wiring) -> zones (`src/world/zone/`: a room loads and unloads as one; positions are zone-local) ->
@@ -95,6 +95,8 @@ Content work stays in the first two layers; the engine is never touched for cont
 - A `patchShader` whose source holds a variable array size (`uniform vec4 x[${n}]`) needs `n` in its key, or two
   materials share one program and three.js reads past the shorter array (`array[i] is undefined` in `setValueV4fArray`).
 - The canvas's alpha is the video cut-out: every post pass and additive effect must keep it (see `docs/graphics.md`).
+- One NaN in a shader (a `pow` of a base nudged below 0 by interpolation, a `normalize` of zero) is spread by the
+  bloom's mips into black rectangles on medium and high (low has no post passes, so it hides it): clamp every `pow` base.
 - `visible` on point, spot and hemisphere lights belongs to the `LightCuller` (fixed count per kind, `QUALITY.lights`):
   dim a light with `intensity`; live shadow maps go through `lighting/shadowRefresh`, never `shadow.autoUpdate = true`.
 - Lights ignore wall planes: a room's lamp shines into the next room unless the wall is in `RoomOptions.opaqueWalls`; a

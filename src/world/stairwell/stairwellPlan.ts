@@ -252,7 +252,8 @@ export const STAIRWELL_PLAN = {
    */
   lodge: {
     door: { z: 2.0 },
-    window: { z: 3.3, width: 1.1, sill: 1.0, height: 1.25, curtain: 0.55 },
+    // A café curtain: the lace below her shoulders, so the hall sees her face and her hands over it (1.6 m tall, her head at about 1.5 m).
+    window: { z: 3.3, width: 1.1, sill: 1.0, height: 1.25, curtain: 0.26 },
     room: { x0: 3.6, x1: 5.3, z0: 1.5, z1: 4.1, height: 2.7 },
     stand: [4.1, 3.3] as [number, number],
     tipBox: { z: 3.7, price: 10 },

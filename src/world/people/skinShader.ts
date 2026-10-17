@@ -25,7 +25,7 @@ import type { Age } from './looks';
 type SkinPart = 'face' | 'body' | 'hands' | 'ears';
 
 /** How far the light wraps past the terminator per channel on skin (red scatters deepest under it). */
-const SKIN_WRAP = 'vec3(0.42, 0.2, 0.14)';
+const SKIN_WRAP = 'vec3(0.36, 0.19, 0.14)';
 
 /** How old the skin looks (0 a child's .. 1 an elder's): static lines, deeper folds, drier. */
 export function skinAgeOf(age: Age | undefined): number {

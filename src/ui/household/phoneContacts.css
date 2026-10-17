@@ -1,0 +1,136 @@
+/*
+ * The phone's contacts and messages (docs/social.md "The phone"): a row a person, their face in their tier's ring,
+ * their name and whether they pick up now in words ("asleep until 8:00"), the one tier badge, the ring button; someone
+ * who will not pick up is dimmed, their face greyed (asleep, at work). The messages left: a blinking light until
+ * played, then each on a paper slip.
+ */
+@layer tokens, base, components, panels;
+@layer panels {
+  .phone-contacts {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+  }
+  .phone-contact {
+    --tier: var(--ui-text-dim);
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr) auto auto;
+    align-items: center;
+    gap: var(--sp-3);
+    width: 100%;
+    padding: 0.35rem 0.6rem 0.35rem 0.4rem;
+    border: 1px solid transparent;
+    border-radius: var(--ui-radius-md);
+    background: var(--ui-fill);
+    color: var(--ui-text);
+    font: inherit;
+    text-align: left;
+    cursor: pointer;
+    transition: background var(--dur-hover) ease, border-color var(--dur-hover) ease;
+  }
+  .phone-contact:hover,
+  .phone-contact:focus-visible {
+    background: var(--ui-fill-hover);
+    border-color: color-mix(in srgb, var(--tier) 55%, transparent);
+  }
+  .phone-contact__face {
+    padding: 2px;
+    border-radius: 50%;
+    background: var(--tier);
+  }
+  .phone-contact__who {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+  }
+  .phone-contact__who small {
+    overflow: hidden;
+    color: var(--ui-text-dim);
+    font-size: max(var(--fs-5), 14px);
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .phone-contact__ring {
+    display: grid;
+    place-items: center;
+    width: 1.9rem;
+    height: 1.9rem;
+    border-radius: 50%;
+    background: color-mix(in srgb, var(--ui-success) 22%, transparent);
+    color: var(--ui-success);
+  }
+  .phone-contact:hover .phone-contact__ring {
+    background: var(--ui-success);
+    color: var(--ui-on-accent);
+  }
+  /* Asleep or at work: the row dimmed, the face greyed with its eyes as good as shut. */
+  .phone-contact--away .phone-contact__face .social-portrait {
+    filter: grayscale(0.85) brightness(0.75);
+  }
+  .phone-contact--away .phone-contact__ring {
+    background: var(--ui-fill);
+    /* contrast-ok: an inactive control's icon (3:1 for inactive ones), the words beside it say why they won't pick up */
+    color: var(--ui-text-dim);
+  }
+
+  .phone-voicemail {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--sp-2);
+  }
+  /* The light of a message waiting: a slow red blink. */
+  .phone-voicemail__light {
+    width: 0.65rem;
+    height: 0.65rem;
+    border-radius: 50%;
+    background: var(--ui-danger);
+    box-shadow: 0 0 6px var(--ui-danger);
+    animation: phone-blink var(--dur-drift) ease-in-out infinite alternate;
+  }
+  @keyframes phone-blink {
+    from { opacity: 1; }
+    to { opacity: 0.25; }
+  }
+  .reduce-motion .phone-voicemail__light {
+    animation: none;
+  }
+  .phone-slips {
+    list-style: none;
+    margin: 0 0 var(--sp-3);
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: var(--sp-2);
+  }
+  /* A message played: a paper slip, their face, who and when, their words in their voice. */
+  .phone-slip {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    gap: var(--sp-2);
+    padding: 0.5rem 0.7rem;
+    border: 1px dashed var(--paper-note-line);
+    border-radius: var(--ui-radius-sm);
+    background: var(--paper-letter);
+    color: var(--ink-journal);
+    font-size: max(var(--fs-5), 14px);
+  }
+  .phone-slip__face {
+    padding: 2px;
+    border-radius: 50%;
+    align-self: start;
+  }
+  .phone-slip b {
+    font-family: var(--ui-font-print);
+    font-weight: 400;
+  }
+  .phone-slip small {
+    margin-left: 0.5em;
+    color: color-mix(in srgb, var(--ink-journal) 72%, var(--paper-letter));
+  }
+  .phone-slip q {
+    display: block;
+    margin-top: 0.15rem;
+    font-family: var(--ui-font-serif);
+    line-height: 1.35;
+  }
+}

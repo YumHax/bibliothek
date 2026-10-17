@@ -72,6 +72,11 @@ notes and more: docs/social.md "The building".
   lift's overhaul, the fibre, a doormat, a mirror. The agenda goes up on the board 3 days before.
 - **Sway.** A resident who is the player's Friend votes with their ballot, a Close one brings another round, a
   Hostile one votes against it; a Friend syndic breaks a tie their way (docs/social.md "The building").
+- **Votes promised** (`social/conflicts/votes`). While the ballot is open, each resident met (Acquaintance or warmer)
+  with a fixed leaning on one of the agenda's resolutions asks for the player's vote ("You'll vote with me on the stair
+  carpet, won't you?", their need in the People book); two of them may want opposite things. "I'll vote … like you" is
+  a promise (a ticket due at the meeting); the day after it sat, the player's ballot keeps it (warmth and a stamp of
+  trust) or breaks it (the stamp lost, remembered). Not answering costs nothing.
 - **Voting.** The ballot is open until the meeting's day ends. The ten households vote by nature (`Voter.leans`, shown
   on the ballot) or by a mind of their own drawn per meeting. The player has one vote, two once Mrs Roux's flat is
   theirs (hers is then no longer cast), plus up to 3 bought votes a resolution at 25 coins each.
@@ -84,6 +89,23 @@ notes and more: docs/social.md "The building".
   stone's wear then shows), and plants, two bikes, the gilt mirror, the doormat, the fibre box and the lift's overhaul
   plate shown or hidden. `coproChoice('lift') === 'overhaul'` runs the lift 1.5 times as fast with quiet gates;
   `coproChoice('fibre') === 'yes'` brings the roof's fibre channel.
+
+## The quarrels
+
+Three quarrels draw the player in, one after the other (`social/conflicts`, `KEYS.socialConflicts`; docs/social.md
+"Conflicts"), each once both sides are met, 3 game days on and not before its day (4, 9, 14):
+- **The noise**: Mr Leclerc wants his sleep, Théo in the attic his music. Sign Leclerc's letter to the syndic, or lend
+  Théo your speakers for his party.
+- **The rumour**: Mrs Dubois has a story going round about Pascal Girard (the lodge's missing parcels). Pass it on, or
+  stand up for him, to him or to her face.
+- **The hunt**: Mrs Haddad and Victor are after the same game (one of her platforms, drawn at the start). Promise to
+  tell her first, or tip Victor off.
+
+Each side tells theirs when asked ("You look tired. Bad night?") and then offers the player to take it (a long press):
+the side taken gains warmth and a stamp of trust (`CONFLICT.won`), the other cools (`CONFLICT.lost`); taken in public,
+the people around see it (`witnesses`). While it is on the two grow further apart (a tie offset), so the grapevine
+carries more. Nothing taken in 6 game days, it blows over and both cool a little. Afterwards the winner tells how it
+went, the loser says their piece and, 5 days on, offers a way back (warmth, a memory of peace made).
 
 ## The power cut
 

@@ -22,6 +22,7 @@ import { controlsGroupOf, zoneName } from '@/ui/menu/zoneNames';
 import { formatNumber } from '@/text/count';
 import { gameDateLabel } from '@/time/gameDateLabel';
 import { version } from '../../package.json';
+import { installRoomDebug } from './debug';
 import { late, type Late } from './late';
 import type { Services } from './services';
 import { lastSavedAt } from '@/persistence';
@@ -77,6 +78,7 @@ export function createMenus(services: Services, player: FirstPersonController, h
   const notices = new Notices(container, { camera: engine.camera, attending: () => !document.hidden && (overlay.isPlaying || overlay.isModal) });
   engine.addUpdatable(notices);
   const lockFlow = lockFlowRef.set(new PointerLockFlow(player, overlay, engine.renderer.domElement, input, notices));
+  if (services.debug) installRoomDebug(() => lockFlow.enter('gamepad'), player);
   overlay.addSetting('display', 'Graphics', new QualityPicker((options) => overlay.confirm(options)).element, QualityPicker.NOTE);
   addGameSettings(overlay, settings, { onEraseProgress: eraseProgress, version });
   overlay.addSetting('game', 'Cat', new CatSettingsForm(catSettings).element);

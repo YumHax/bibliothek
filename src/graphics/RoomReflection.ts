@@ -11,6 +11,12 @@ const GAIN_MIN = 0.25;
 const GAIN_MAX = 4;
 /** Seconds after the room was asked to recapture (a lamp switched, the zone just in) before it does: the light settles first. */
 const DEFAULT_DELAY = 0.6;
+/**
+ * The capture's strength over the studio's once it is the room's main ambient (`Room` turns its hemisphere down by
+ * `Room`'s `CAPTURED_AMBIENT` while one is shown): the window side of the room lights brighter than its back, a lit
+ * lamp colours the walls round it, where the even hemisphere lit every face alike.
+ */
+const AMBIENT_LIFT = 2.4;
 
 /** The studio room's mean luminance, measured once (the yardstick every room's capture is scaled to). */
 let studioMean: number | null = null;
@@ -57,6 +63,15 @@ export class RoomReflection implements ReflectionSource {
   /** The factor that brings this capture's brightness to the studio map's. */
   gain(): number {
     return this.gainValue;
+  }
+
+  lift(): number {
+    return AMBIENT_LIFT;
+  }
+
+  /** Whether a capture is ready to be shown (the room's first one comes a moment after the player walks in). */
+  get ready(): boolean {
+    return this.shown >= 0;
   }
 
   update(renderer: THREE.WebGLRenderer, dt: number): THREE.Texture | null {

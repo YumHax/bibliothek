@@ -774,6 +774,8 @@ export const HOME_GOOD_PRICES = {
   kitchenTable: 40, kitchenRug: 12, bathMat: 6, hallStand: 18, bistroSet: 35,
   // The displays for the collection's showpieces, and the label maker for the shelves (`world/showcase`, `world/labels`).
   displayCase: 55, pedestal: 40, labelMaker: 5,
+  // The kitchen's corkboard, for friends' keepsakes past the fridge's eight (`world/kitchen/fridgeKeepsakes`).
+  corkboard: 15,
   // The TV repair shop.
   crt: 180, projector: 330, speakers: 70, bedroomTv: 90, radio: 25, appliances: 28, homeArcade: 250,
   // The TV repair shop's region converters (`economy/regionLock`): a Japanese copy runs at home with its platform's.

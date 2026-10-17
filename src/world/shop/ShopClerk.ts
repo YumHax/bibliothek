@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { loudness } from '@/audio/hearing';
 import { Walker } from '../people/Walker';
 import type { SocialHook } from '../people/socialHook';
-import { randomLook } from '../people/looks';
+import { randomLook, type PersonLook } from '../people/looks';
 import type { Pose } from '../people/poses';
 import { playChore, type ChoreSound } from './shopSounds';
 import { random, within } from '@/random';
@@ -37,6 +37,8 @@ interface ShopClerkOptions {
   label: string;
   /** The clerk as someone to talk to (docs/social.md): the social caption, a click opens the conversation. */
   social?: SocialHook;
+  /** Their look (a known clerk's, drawn for who they are: `castLook.castDress`); else one from `seed`. */
+  look?: PersonLook;
 }
 
 /** Seconds between two chores, drawn in this range; never while the player is at the counter. */
@@ -69,7 +71,7 @@ export class ShopClerk extends Walker {
   private readonly mine = new THREE.Vector3();
 
   constructor(options: ShopClerkOptions) {
-    super({ viewer: options.viewer, seed: options.seed, look: randomLook(options.seed, 'vendor'), speed: 0.7, lines: options.lines, label: options.label, speaker: 'Shopkeeper', ...(options.social ? { social: options.social, stopsToTalk: true } : {}) });
+    super({ viewer: options.viewer, seed: options.seed, look: options.look ?? randomLook(options.seed, 'vendor'), speed: 0.7, lines: options.lines, label: options.label, speaker: 'Shopkeeper', ...(options.social ? { social: options.social, stopsToTalk: true } : {}) });
     this.name = 'ShopClerk';
     this.home = options.home;
     this.chores = options.chores;

@@ -39,6 +39,30 @@ F11/F27), and the world's own press-twice copies (Purchases, CopyOpening, ForSal
 ProgramPlay, WallClock, NoticeDismiss). A panel registry (one `openPanel(id, data)` through the Session instead of the
 seven "give it data then open" verbs) needs the Session's routing first.
 
+## Social pieces
+
+Who someone is to the player reads the same everywhere (the conversation, the People book, the phone, the hover
+caption, the banners) through `src/ui/social/`:
+- **The tier badge** (`badge.ts` `tierBadge(tier, person, { paper, small })`): a pastille edged in the tier's colour,
+  a ring of it, the word in neutral ink (`tiers.tierName`: a light person reads New face / Regular / Old friend), so
+  every tier passes 4.5:1; `paper` for a cream page. Never colour the word itself.
+- **The bar** (`meters.ts` `relationMeter(s)`): the way to the next tier, full and striped while trust holds them;
+  `trustStamps(s)` the stamps of trust beside it (one a promise kept's worth).
+- **Portraits** (`portrait.ts` `portrait(id, size, ring, expression)`), painted at rest, smiling, frowning or surprised.
+- **Icons** (`icons.ts`): one drawing per meaning (topics, moods, groups, gifts); `iconNamed(name)` for a name written
+  in data.
+- **The comic page** (`ConversationPanel`, `conversation/menu.ts`, `nameTag.ts`, `placement.ts`): the conversation's
+  look, also the speech bubbles' (`notices.css` `.speech`) and the person's hover caption: cream paper (`--talk-paper`)
+  with an ink outline (`--talk-ink`) and a flat offset shadow (`--talk-shadow`), the speech face `--ui-font-comic`
+  (Patrick Hand) for what is said, `--ui-font-talk` (Atkinson Hyperlegible) for the rest, the name tag in ink with the
+  print face. Its slot variables are in `social.css`'s theme block.
+- **Long press** (`conversation/hold.ts` `HoldPress`): what is done for good in a conversation (a promise, a game or coins
+  given away, an insult) is held 600 ms, its ring filling; the mouse, a key (Enter, Space, its digit) and the controller's
+  A hold alike. It replaces the press-twice arming there.
+
+Text in these pieces is never under 14 px (`--social-small`), what is read is 16 px (`--social-read`), and reduced
+motion is the game's setting (`.reduce-motion`, `settings/motion.reduceMotion()`), never a media query of its own.
+
 ## The tokens
 
 `src/ui/design/tokens.css` holds every colour (`--ui-*`: text, the three panel surfaces, four backdrops, borders,

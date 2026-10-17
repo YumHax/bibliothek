@@ -8,17 +8,22 @@ import { giftName } from '../gifts';
 import { everyone, findPerson, personAtDoor, shortName } from '../people';
 import { isMet, lastCounted, nudge, onSocial, standing } from '../standing';
 import type { TalkExtra } from '../talk';
+import { addThreadSource, type Thread } from '../threads';
+import { witnessed } from '../witnesses';
 import { atLeast, tierOf, tierRank } from '../tiers';
-import type { PersonCard, PersonId } from '../types';
-import { AMENDS_LINES, FAVOUR_DAYS, FAVOUR_EXTRAS, FAVOUR_LINES, FAVOURS, FETCHABLE } from './favoursPlan';
+import type { PersonCard, PersonId, SocialPlace } from '../types';
+import { dueWords } from './due';
+import { AMENDS_LINES, FAVOUR_DAYS, FAVOUR_EXTRAS, FAVOUR_LINES, FAVOUR_VOICES, FAVOURS, FETCHABLE, type FavourVoice } from './favoursPlan';
 import { life, saveLife, type Favour, type FavourKind } from './lifeStore';
 
 /*
- * Favours (docs/social.md "Favours"): on a game day a few people the player knows have something to ask. It comes
- * up in conversation ("What can I do for you?"), the player takes it on or not; done, it is the surest way to their
- * trust (and sometimes a few coins); let lapse after a yes, it costs a little. Someone cross with the player offers
- * one way to make up, once. Completion is read from what the player does anyway: a gift given in the panel, a game
- * given, a knock on their door, the lodge's parcel carried up.
+ * Favours, the promises (docs/social.md "Promises"): on a game day a few people the player knows have something to
+ * ask. It shows as their need (a note in the People book, they beckon), comes up in conversation ("What can I do for
+ * you?"), and the player says yes (a promise: a ticket with its day, a long press) or no (nothing lost). Kept, it is
+ * a stamp of trust, the only way to it (`PROMISE.kept`, not slowed), and sometimes a few coins; broken, the stamp is
+ * lost and they remember. Someone cross with the player offers one way to make up, once. Completion is read from what
+ * the player does anyway: a gift given in the panel, a game given, a knock on their door, the lodge's parcel carried
+ * up; kept in public, those around see it (`witnesses`).
  */
 
 /** What favours need of the game. */
@@ -46,18 +51,37 @@ export function startFavours(d: FavourDeps): void {
   deps = d;
   settle(d.day());
   d.onNewDay((day) => settle(day));
-  addExtras((ctx) => extrasOf(ctx.person, ctx.day));
+  addExtras((ctx) => extrasOf(ctx.person, ctx.day, ctx.place));
+  addThreadSource(favourThreads);
   onInteraction((id, interaction, outcome, ctx, extra) => {
     if (interaction !== 'giveGift' && interaction !== 'giveGame') return;
     const f = open(id).find((x) => x.accepted !== null && ((x.kind === 'fetch' && interaction === 'giveGift' && extra.gift === x.thing) || (x.kind === 'findGame' && interaction === 'giveGame' && extra.game?.title === x.game?.title)));
     if (!f) return;
-    outcome.line = fill(FAVOUR_LINES[f.kind].thanks, f);
-    complete(f, ctx.day);
+    outcome.line = fill(lineOf(f, 'thanks'), f);
+    complete(f, ctx.day, ctx.place);
   });
   // A knock on their door (`neighbourFlat/visits` counts it for the asker) answers a check-in.
   onSocial((change) => {
     for (const f of open(change.id)) if (f.kind === 'checkIn' && f.accepted !== null && (lastCounted(f.person, 'knock') ?? -1) > f.accepted) complete(f, d.day());
   });
+}
+
+/**
+ * `id`'s threads from favours (the People book, their beckoning): a promise going as a ticket in their words with its
+ * day, a favour offered and not answered yet as their need, the make-amends offer as a word.
+ */
+function favourThreads(id: PersonId, day: number): Thread[] {
+  const out: Thread[] = [];
+  for (const f of open(id)) {
+    if (f.accepted !== null) {
+      if (f.kind === 'lend' && f.stage === 1) continue;
+      out.push({ person: id, kind: 'promise', text: fill(lineOf(f, 'note'), f), due: dueWords(f.due, day), day: f.accepted });
+    } else {
+      out.push({ person: id, kind: 'need', text: fill(lineOf(f, 'need'), f), day: f.day });
+    }
+  }
+  if (amendsOpen(id)) out.push({ person: id, kind: 'word', text: AMENDS_LINES.word, day });
+  return out;
 }
 
 /** The favours with `id` still going (offered or accepted, not ended). */
@@ -73,6 +97,27 @@ export function favoursToDo(): readonly Favour[] {
 /** What a favour asks, as the To-do says it. */
 export function todoText(f: Favour): string {
   return fill(FAVOUR_LINES[f.kind].todo, f);
+}
+
+/** The trades that keep someone at a counter or a stall: the ones who "can't leave the counter". */
+const COUNTER_TRADES: ReadonlySet<string> = new Set(['clerk', 'stall', 'barista', 'shopkeeper', 'attendant']);
+
+/** Who `f`'s asker is, for their words (`FAVOUR_VOICES`): old, a kid, at work, an old friend, or anyone. */
+function voiceOf(f: Favour): FavourVoice | null {
+  const card = findPerson(f.person);
+  if (!card) return null;
+  if (card.look.age === 'elder') return 'elder';
+  if (card.look.age === 'child' || card.look.age === 'teen') return 'kid';
+  if (card.group === 'friends') return 'friend';
+  // Behind a counter or a stall all day (not the busker, the postman, a bidder).
+  if (card.trade && COUNTER_TRADES.has(card.trade)) return 'trade';
+  return null;
+}
+
+/** `f`'s line `key` in its asker's voice, else the shared one. */
+function lineOf(f: Favour, key: 'ask' | 'need' | 'note' | 'thanks'): string {
+  const voice = voiceOf(f);
+  return (voice ? FAVOUR_VOICES[voice][f.kind]?.[key] : undefined) ?? FAVOUR_LINES[f.kind][key];
 }
 
 function fill(text: string, f: Favour): string {
@@ -108,9 +153,13 @@ function draw(day: number): void {
   const state = life();
   if (state.favours.some((f) => f.day === day && !f.amends)) return;
   let made = 0;
-  for (const card of everyone()) {
+  // A fresh order each day: the cast's order in its files must not decide who asks (the last cards never would).
+  const turn = (id: PersonId): number => gameDayRandom(`favourTurn:${id}`, day)();
+  const order = [...everyone()].sort((a, b) => turn(a.id) - turn(b.id));
+  for (const card of order) {
     if (made >= FAVOURS.perDay) break;
-    if (!isMet(card.id) || open(card.id).length) continue;
+    // Family (Mémé) asks nothing that could be broken: she loses nothing over a missed promise.
+    if (card.family || !isMet(card.id) || open(card.id).length) continue;
     const s = standing(card.id);
     if (!atLeast(tierOf(s.warmth, s.trust), 'acquaintance')) continue;
     const last = Math.max(-Infinity, ...state.favours.filter((f) => f.person === card.id).map((f) => f.done ?? f.failed ?? f.day));
@@ -169,15 +218,16 @@ function makeFavour(card: PersonCard, day: number, rand: () => number, amends: b
 }
 
 /** What a favour adds to the conversation with `id` (and, at the lodge, the parcels to collect). */
-function extrasOf(id: PersonId, day: number): TalkExtra[] {
+function extrasOf(id: PersonId, day: number, place: SocialPlace): TalkExtra[] {
   const out: TalkExtra[] = [];
-  for (const f of open(id)) out.push(...extrasFor(f, day));
+  for (const f of open(id)) out.push(...extrasFor(f, day, place));
   if (id === CONCIERGE) {
     for (const f of life().favours) {
       if (f.kind !== 'parcel' || f.accepted === null || f.stage !== 0 || f.done !== undefined || f.failed !== undefined) continue;
       out.push({
         id: `favour-collect-${f.id}`,
         group: 'ask',
+        icon: 'parcel',
         label: fill(FAVOUR_EXTRAS.collect, f),
         run: () => {
           f.stage = 1;
@@ -192,18 +242,19 @@ function extrasOf(id: PersonId, day: number): TalkExtra[] {
   return out;
 }
 
-function extrasFor(f: Favour, day: number): TalkExtra[] {
+function extrasFor(f: Favour, day: number, place: SocialPlace): TalkExtra[] {
   if (f.accepted === null) {
     if (!f.asked) {
-      return [{ id: `favour-ask-${f.id}`, group: 'ask', label: FAVOUR_EXTRAS.ask, run: () => {
+      return [{ id: `favour-ask-${f.id}`, group: 'ask', label: FAVOUR_EXTRAS.ask, tag: 'a favour', fit: 'likes', run: () => {
         f.asked = true;
         saveLife();
-        return { line: fill(FAVOUR_LINES[f.kind].ask, f) };
+        return { line: fill(lineOf(f, 'ask'), f) };
       } }];
     }
     return [
-      { id: `favour-yes-${f.id}`, group: 'ask', label: FAVOUR_EXTRAS.accept, run: () => accept(f, day) },
-      { id: `favour-no-${f.id}`, group: 'ask', label: FAVOUR_EXTRAS.decline, run: () => {
+      // Saying yes is a promise: a ticket with its day, confirmed by a long press.
+      { id: `favour-yes-${f.id}`, group: 'promise', label: FAVOUR_EXTRAS.accept, once: true, due: dueWords(day + FAVOUR_DAYS[f.kind], day), fit: 'loves', run: () => accept(f, day) },
+      { id: `favour-no-${f.id}`, group: 'promise', label: FAVOUR_EXTRAS.decline, fit: 'meh', run: () => {
         f.declined = true;
         saveLife();
         return { line: FAVOUR_EXTRAS.declined };
@@ -216,35 +267,41 @@ function extrasFor(f: Favour, day: number): TalkExtra[] {
       id: `favour-lend-${f.id}`,
       group: 'give',
       label: fill(FAVOUR_EXTRAS.lendIt, f),
+      fit: 'loves',
       disabled: () => (deps?.collection.find(game.id)?.status ?? 'owned') === 'owned' && deps?.collection.owns(game.id) ? null : FAVOUR_EXTRAS.lendGone,
       run: () => {
         deps?.collection.setStatus(game.id, 'lent');
         f.stage = 1;
         f.back = day + FAVOURS.lendDays;
-        nudge(f.person, { trust: 4, warmth: 3, why: `trusted with ${game.title}`, day });
+        nudge(f.person, { warmth: 3, why: `trusted with ${game.title}`, day });
         saveLife();
         return { line: fill(FAVOUR_LINES.lend.thanks, f) };
       },
     }];
   }
   if (f.kind === 'parcel' && f.stage === 1) {
-    return [{ id: `favour-deliver-${f.id}`, group: 'give', label: FAVOUR_EXTRAS.deliver, run: () => {
-      complete(f, day);
+    return [{ id: `favour-deliver-${f.id}`, group: 'give', label: FAVOUR_EXTRAS.deliver, icon: 'parcel', fit: 'loves', run: () => {
+      complete(f, day, place);
       return { line: fill(FAVOUR_LINES.parcel.thanks, f) };
     } }];
   }
   return [];
 }
 
+/** Whether `id`, cross with the player, still offers a way to make up (once each). */
+function amendsOpen(id: PersonId): boolean {
+  const s = standing(id);
+  return tierRank(tierOf(s.warmth, s.trust)) <= tierRank('hostile') && !life().amends.includes(id) && !open(id).length && !!findPerson(id);
+}
+
 /** The make-amends offer of someone cross with the player, once each. */
 function amendsExtra(id: PersonId, day: number): TalkExtra | null {
-  const s = standing(id);
-  if (tierRank(tierOf(s.warmth, s.trust)) > tierRank('hostile') || life().amends.includes(id) || open(id).length) return null;
   const card = findPerson(id);
-  if (!card) return null;
+  if (!card || !amendsOpen(id)) return null;
   return {
     id: `favour-amends-${id}`,
     group: 'talk',
+    fit: 'likes',
     label: AMENDS_LINES.extra,
     run: () => {
       const state = life();
@@ -256,7 +313,7 @@ function amendsExtra(id: PersonId, day: number): TalkExtra | null {
       }
       state.favours.push(f);
       saveLife();
-      return { line: `${AMENDS_LINES.ask} ${fill(FAVOUR_LINES[f.kind].ask, f)}` };
+      return { line: `${AMENDS_LINES.ask} ${fill(lineOf(f, 'ask'), f)}` };
     },
   };
 }
@@ -272,14 +329,18 @@ function accept(f: Favour, day: number): { line: string } {
   return { line: f.kind === 'lend' ? 'Oh, thank you! Whenever suits.' : 'Thank you! I knew I could count on you.' };
 }
 
-/** Done: their trust (much), warmth, sometimes coins; a make-amends favour lifts them out of the cold. */
-function complete(f: Favour, day: number): void {
+/**
+ * Done, a promise kept: a stamp of trust (whole: `raw`), warmth, sometimes coins; a make-amends favour lifts them
+ * out of the cold. Kept in a public `place`, whoever is around sees it.
+ */
+function complete(f: Favour, day: number, place?: SocialPlace): void {
   if (f.done !== undefined) return;
   f.done = day;
   saveLife();
   const s = standing(f.person);
   const warmth = f.amends ? Math.max(FAVOURS.done.warmth, FAVOURS.amendsTo - s.warmth) : FAVOURS.done.warmth;
-  nudge(f.person, { warmth, trust: FAVOURS.done.trust, why: f.amends ? 'you made it up to them' : 'grateful for the favour', day, memory: f.amends ? 'you made it up to me' : 'you did me a favour', memoryWeight: 12, gossip: !f.amends });
+  nudge(f.person, { warmth, trust: FAVOURS.done.trust, raw: true, why: f.amends ? 'you made it up to them' : 'you kept your word', day, memory: f.amends ? 'you made it up to me' : 'you kept your word to me', memoryWeight: 12, gossip: !f.amends });
+  if (place) witnessed(f.person, 'promise', place, day);
   const rand = gameDayRandom(`favour-pay:${f.id}`, day);
   const coins = !f.amends && rand() < FAVOURS.coins.odds ? Math.round(FAVOURS.coins.min + rand() * (FAVOURS.coins.max - FAVOURS.coins.min)) : 0;
   if (coins) deps?.wallet.earnCoins(coins);
@@ -290,10 +351,15 @@ function complete(f: Favour, day: number): void {
   deps?.note(f.amends ? `Made it up to ${name}` : `Did ${name} a favour`);
 }
 
-/** Missed after a yes: a little trust and warmth lost, and they remember. */
+/** Missed after a yes, a promise broken: its stamp of trust lost, some warmth, and they remember. */
 function fail(f: Favour, day: number): void {
   f.failed = day;
-  nudge(f.person, { warmth: FAVOURS.failed.warmth, trust: FAVOURS.failed.trust, why: 'you forgot their favour', day, memory: 'you forgot my favour', memoryWeight: -8 });
+  // Family never pays for a promise missed (an old favour of hers from before): it simply lapses.
+  if (findPerson(f.person)?.family) {
+    saveLife();
+    return;
+  }
+  nudge(f.person, { warmth: FAVOURS.failed.warmth, trust: FAVOURS.failed.trust, why: 'you broke your word', day, memory: 'you broke your promise', memoryWeight: -10 });
   deps?.note(`Forgot ${shortName(f.person)}’s favour`);
 }
 

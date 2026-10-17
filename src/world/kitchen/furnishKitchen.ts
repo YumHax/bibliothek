@@ -37,6 +37,8 @@ import { regionLockFor } from '@/economy/regionLock';
 import { furnishKitchenRepair } from '../repair/furnishRepair';
 import { rummageIn } from '../build/rummage';
 import { furnishMemeRecipes } from './memeRecipes';
+import { Corkboard } from './Corkboard';
+import { furnishKeepsakes } from './fridgeKeepsakes';
 
 /** The chronicle's card comes up this long after the jingle starts (ms). */
 const CHRONICLE_AFTER_MS = 1500;
@@ -135,6 +137,24 @@ export function furnishKitchen(zone: Zone, ctx: KitchenBuild): ZoneHandle {
 
   // 8. What the kitchen is used for (docs/household.md): the cleaning kit, a cake, the cat's treats, the radio's chronicle.
   if (household) furnishKitchenLife(zone, ctx, household, { table, furnished, catThings, radio });
+  // Friends' keepsakes: the fridge door's eight, the corkboard's twenty once it is bought (docs/social.md "Keepsakes").
+  if (household) {
+    const pinboard = placerFor(zone, upgrades, plan.upgrades.corkboard);
+    const board = pinboard.placeAt(new Corkboard(), plan.corkboard);
+    const bought = new Set<() => void>();
+    pinboard.onOwned(() => {
+      for (const cb of [...bought]) cb();
+    });
+    furnishKeepsakes(zone, fridge, {
+      notices: household.notices,
+      day: () => ctx.today.gameDay,
+      onDayChange: (cb) => ctx.sky.dayNight.onChange(cb),
+      board: { board, owned: () => pinboard.owned, onOwned: (cb) => {
+        bought.add(cb);
+        return () => bought.delete(cb);
+      } },
+    });
+  }
   // Mémé's recipes, once she has taught one: her tin, the dish cooked (docs/grandma.md).
   if (household) furnishMemeRecipes(zone, ctx, household);
   // A console bought broken waits on the right-hand chair, to be mended on the table (docs/household.md "Repairing a console").

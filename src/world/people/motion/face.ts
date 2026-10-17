@@ -24,6 +24,11 @@ const BLINK_CLOSE = 0.07;
 const BLINK_OPEN = 0.15;
 /** How fast expressions come and go (rad/s of their springs). */
 const EXPRESSION_OMEGA = 9;
+/** The face's own life at rest: a passing look (a half smile, brows up, lips pressed, a squint) now and then (s between, bounds; how strong; how long held). */
+const IDLE_EVERY: readonly [number, number] = [4, 11];
+const IDLE_AMOUNT: readonly [number, number] = [0.14, 0.3];
+const IDLE_HOLD: readonly [number, number] = [0.8, 1.9];
+const IDLE_CHANNELS = ['smirk', 'browsUp', 'press', 'squint', 'smile'] as const satisfies readonly (keyof FaceKey)[];
 /** The longest a line's words keep the mouth going (s). */
 const MAX_LINE = 6;
 
@@ -71,6 +76,9 @@ export class Face {
   private uneven = 0.1;
   /** How far each eye turns in (`setFocus`). */
   private vergence = 0.012;
+  /** How big their feelings show (`setExpressiveness`): a reserved face a little under 1, an open one over. */
+  private gain = 1;
+  private idleIn = IDLE_EVERY[0] + random() * (IDLE_EVERY[1] - IDLE_EVERY[0]);
 
   constructor(
     private readonly mesh: THREE.Mesh | null,
@@ -101,6 +109,11 @@ export class Face {
     this.uneven = 0.06 + 0.12 * Math.min(1, Math.abs(lean));
   }
 
+  /** How readily the face shows what they feel, 0 (reserved) .. 1 (open): every expression's size, and how often a passing look crosses it at rest. */
+  setExpressiveness(expressive: number): void {
+    this.gain = 0.85 + 0.55 * Math.min(1, Math.max(0, expressive));
+  }
+
   /** Says `text`: the mouth shapes its sounds from now on, at a speaking pace. Returns how long that takes (s, capped). */
   say(text: string): number {
     const { data, beats } = visemeTrack(text);
@@ -126,6 +139,17 @@ export class Face {
    */
   update(dt: number, t: number, talk: number, gesture: Expression, eyeYaw: number, eyePitch: number): void {
     this.feelingLeft -= dt;
+    // Nothing felt and nothing said: now and then a passing look, as a face never quite rests (no allocation: the feeling's own slots).
+    if (talk <= 0 && this.feelingLeft < -this.feelingFade) {
+      this.idleIn -= dt * this.gain;
+      if (this.idleIn <= 0) {
+        this.idleIn = IDLE_EVERY[0] + random() * (IDLE_EVERY[1] - IDLE_EVERY[0]);
+        for (const name of FACE_CHANNELS) this.feeling[name] = 0;
+        this.feeling[IDLE_CHANNELS[Math.floor(random() * IDLE_CHANNELS.length)]!] = IDLE_AMOUNT[0] + random() * (IDLE_AMOUNT[1] - IDLE_AMOUNT[0]);
+        this.feelingLeft = IDLE_HOLD[0] + random() * (IDLE_HOLD[1] - IDLE_HOLD[0]);
+        this.feelingFade = 0.9;
+      }
+    }
     const held = this.feelingLeft > 0 ? 1 : Math.max(0, 1 + this.feelingLeft / this.feelingFade);
     let speechJaw = 0;
     let speechPucker = 0;
@@ -222,7 +246,7 @@ export class Face {
 
   /** What the feeling (as far as it still holds) and the gesture ask of one channel. */
   private goal(name: keyof FaceKey, held: number, gesture: Expression): number {
-    return this.feeling[name] * held + gesture[name];
+    return Math.min(1.2, (this.feeling[name] * held + gesture[name]) * this.gain);
   }
 
   private set(index: number, value: number): void {

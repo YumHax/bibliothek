@@ -5,6 +5,7 @@ import { duckScene } from '@/audio/audioContext';
 import { inFlat, zonePlan } from '../worldPlan';
 import { playDoorShut, playLatch, playShopBell } from './travelSounds';
 import { takeArrival } from './nextArrival';
+import { cardOf, placeWords, rememberPhoto, rememberTripTime } from './travelCards';
 
 /** A place a door can take the player to: a zone's arrival spot (world space) and the way to face. */
 export interface TravelStop extends TravelChoice<ZoneId> {
@@ -26,12 +27,25 @@ interface Traveller {
   movementEnabled: boolean;
 }
 
+/** The card the curtain shows of where a trip goes (`ui/Fader`): its name, where it is, its photo, how long it takes. */
+export interface TravelCard {
+  label: string;
+  /** Where it is, a few words ("Front Street"), or none. */
+  place?: string;
+  /** A small photo of it as the player last left it (a JPEG data URL). */
+  photo?: string;
+  /** How long the last trip there took (ms): the card's bar is paced on it. */
+  expectMs?: number;
+}
+
 interface Curtain {
   /** Covers the view, in `tint` (a CSS colour) if given. */
   out(ms?: number, tint?: string): Promise<void>;
   in(): Promise<void>;
-  /** Names where the trip goes, shown only if the curtain is still down a moment later. */
-  destination?(label: string): void;
+  /** Shows where the trip goes (its card), only if the curtain is still down a moment later. */
+  destination?(card: TravelCard): void;
+  /** How far the trip is behind the curtain, 0..1 (the card's bar). */
+  progress?(share: number): void;
 }
 
 interface TravelOptions {
@@ -51,6 +65,8 @@ interface TravelOptions {
    * `ui/busRide`), the destination building behind it; the curtain lifts once it has ended. Null: a plain trip.
    */
   interlude?: (from: ZoneId, to: ZoneId) => (() => Promise<void>) | null;
+  /** The 3D view drawn now, grabbed on the way out for the card of the place left (`travelCards`); none: no photos. */
+  snapshot?: () => HTMLCanvasElement | null;
 }
 
 /**
@@ -72,8 +88,11 @@ export class Travel {
   private readonly prepare: () => Promise<void>;
   private readonly tint: (id: ZoneId) => string | undefined;
   private readonly interlude: NonNullable<TravelOptions['interlude']>;
+  private readonly snapshot: () => HTMLCanvasElement | null;
   /** Called when a trip could not be made (the destination would not load): the player is told, back where they stood. */
   onFailed: (() => void) | null = null;
+  /** Called once the curtain is down on the way out: what belonged where the player was goes (the words said there). */
+  onDepart: (() => void) | null = null;
 
   constructor(options: TravelOptions) {
     this.stops = options.stops;
@@ -84,6 +103,7 @@ export class Travel {
     this.prepare = options.prepare ?? (async () => {});
     this.tint = options.tint ?? (() => undefined);
     this.interlude = options.interlude ?? (() => null);
+    this.snapshot = options.snapshot ?? (() => null);
   }
 
   /** Everywhere but here. */
@@ -123,14 +143,35 @@ export class Travel {
       const from = this.here();
       const shopDoor = isShop(from) || isShop(stop.id);
       const interlude = this.interlude(from, stop.id);
+      // The place being left, as it looks now: the photo on its card next time (the sas, sleeping: no trip, no photo).
+      try {
+        rememberPhoto(from, this.snapshot());
+      } catch {
+        // No frame to grab (a lost context): the card goes without.
+      }
+      const started = performance.now(); // convention-ok: a trip's measured time, not an animation
+      const timings: string[] = [];
+      const lap = (what: string, since: number): number => {
+        const now = performance.now(); // convention-ok: the same measure
+        timings.push(`${what} ${Math.round(now - since)} ms`);
+        return now;
+      };
       playLatch();
       if (shopDoor) playShopBell(0.09, 0.12);
       duckScene(0, CURTAIN_S);
       await this.curtain.out(undefined, this.tint(stop.id));
+      this.onDepart?.();
       // A ride over the curtain (the bus to Mémé's) while the destination builds; else its name, should it take a while.
       const played = interlude?.() ?? null;
-      if (!played) this.curtain.destination?.(stop.label);
-      if (!(await loaded)) {
+      const card = cardOf(stop.id);
+      const place = placeWords(zonePlan(stop.id).kind);
+      if (!played) this.curtain.destination?.({ label: stop.label, place: place === stop.label ? undefined : place, photo: card.photo, expectMs: card.ms });
+      this.curtain.progress?.(0.1);
+      let mark = lap('curtain', started);
+      const ok = await loaded;
+      mark = lap('load', mark);
+      this.curtain.progress?.(0.45);
+      if (!ok) {
         await played;
         duckScene(1, CURTAIN_S);
         await this.curtain.in();
@@ -144,9 +185,17 @@ export class Travel {
       // now, and one more frame to draw it.
       await nextFrame();
       await nextFrame();
+      mark = lap('build', mark);
+      this.curtain.progress?.(0.75);
       await this.prepare();
       await nextFrame();
+      lap('prime', mark);
+      this.curtain.progress?.(1);
       await played;
+      const took = performance.now() - started; // convention-ok: the same measure
+      if (!played) rememberTripTime(stop.id, took);
+      // Where a slow trip spends its time: the module's fetch, the zone's build, the shaders' compile.
+      console.info(`[travel] ${stop.id} in ${Math.round(took)} ms: ${timings.join(', ')}`);
       // The other side: the door shut behind the player (a shop's bell still bobbing), the new room's sound coming up.
       // Off a ride the bus's doors were the last thing heard.
       if (!played) playDoorShut(shopDoor ? 0.18 : 0.25);

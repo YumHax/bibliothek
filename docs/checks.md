@@ -2,8 +2,9 @@
 
 There is no test suite: the checks below are the net. They run in two bands, both from `package.json`:
 
-- `npm run typecheck` (about 12 s), after every change: `tsc` (src, then `api/`), then the scripts that read the tree or
-  build it headless: `check-conventions`, `check-imports`, `check-docs`, `check-data`, `check-glsl`, `zfight`, `scene-lint`.
+- `npm run typecheck` (about 15 s), after every change: `tsc` (src, then `api/`), then the scripts that read the tree or
+  build it headless: `check-conventions`, `check-contrast`, `check-imports`, `check-docs`, `check-data`, `check-glsl`,
+  `social-sim`, `zfight`, `scene-lint`.
 - `npm run lint` (about 20 s), before a commit and inside `npm run build`: `eslint`, `cspell`, `knip`.
 - `npm run build` = typecheck + lint + `vite build` + `check-bundle`.
 
@@ -22,11 +23,13 @@ A reviewed case is accepted by rewriting the baseline, never by loosening the ru
 | zfight | `scripts/zfight-baseline.json` | `npm run zfight -- --write-baseline` |
 | scene-lint | `scripts/scene-baseline.json` | `npm run scene-lint -- --write-baseline` |
 | check-bundle | `scripts/bundle-baseline.json` | `node scripts/check-bundle.mjs --write-baseline` |
+| check-contrast | `scripts/contrast-baseline.json` | `node scripts/check-contrast.mjs --write-baseline` |
 
 | Opt-out | Where | Means |
 | --- | --- | --- |
 | `// convention-ok: <why>` | a source line | check-conventions skips the line |
 | `// imports-ok: <why>` | an import line | check-imports drops that edge from every rule, cycles included |
+| `/* contrast-ok: <why> */` | inside a CSS rule | check-contrast skips the rule (a reading it gets wrong) |
 | `/** @public */` | an export's JSDoc | knip does not report it unused (the debug console, a script's import) |
 | `scripts/cspell-words.txt` | one word a line | cspell knows the word (a game, a neighbour, a GLSL chunk) |
 | `MyThing`, `<kind>` | a doc | check-docs reads the path as a placeholder |
@@ -60,6 +63,23 @@ per shop, `--focus` for a theme's ring) and reads it with `var()`. A time TypeSc
 (`--search-fade: 140ms`). `!important` is for the few overrides that say why (`/* convention-ok: <why> */`): `[hidden]`,
 the renderer's inline style, the reduce-motion clamp, pad-mode cursor, the photo dim. A legacy class listed beside a
 `.ui-*` selector in components.css goes when its template says `.ui-*`.
+
+## Contrast and text size (`scripts/check-contrast.mjs`)
+
+The social UI must read without effort (docs/social.md "Clarity"). Every rule that sets a text colour in
+`src/ui/social/` (every sheet under it) and in the social part of `src/notices/notices.css` (the speech bubbles, the
+subtitles, the reward banner: selectors naming social, people, reward, speech, subtitle, bubble) is read against the
+background it sits on and must reach the WCAG 4.5:1, or 3:1 for large text (24 px, or 18.66 px bold); and no rule there
+sets a font size under 14 px. Tokens resolve through `ui/design/tokens.css` and the sheet's own custom properties;
+sizes are read at the 16 px root (`rem`, `em`, `max()` / `min()` / `clamp()` / `calc()`; a `%` or a `vw` is skipped);
+`color-mix()` and translucent colours are laid over what is under them. The tier colour the code sets (`--tier`) is
+tried for every tier of `socialPlan.TIERS`, the worst one decides and is named. The background is the rule's own over
+the nearest class of its selector that another rule of the sheet paints (its own compound, its ancestors right to
+left, then the BEM blocks they belong to: `.speech__name` sits in a `.speech`), else the sheet's ground (`GROUNDS`: the
+card's for `social.css`, the page's for the book; a frame such as the book's leather is not a ground, `FRAMES`). It is a
+reading, not a browser: a rule it reads wrong takes `/* contrast-ok: <why> */`. Findings are keyed by sheet, selector
+and kind (`contrast|ui/social/social.css|.social-talk__level`), compared with the baseline; `--list` prints them all
+with their numbers.
 
 ## Import rules (`scripts/check-imports.mjs`)
 
@@ -142,13 +162,30 @@ shell and plan decor; the browser's `[lights]` monitor (`lighting/lightBudget`) 
 
 ## Social sim (`scripts/social-sim.mjs`, `npm run social`)
 
-Not part of the typecheck: run it after touching `social/socialPlan.ts`, a card's effects or the talk rules. Bundles
-`src/headless/social.ts` (a fresh copy per run: the standing is a module-level store) and plays the cast through the
-real rules: a typical player (a few meetings a day) for 60 game days, a diligent one (everyone daily, gifts, favours)
-for 120. It prints each person's warmth, trust, tier and perks in force, notes when casual play saturates warmth, and
-fails when a perk is out of the diligent player's reach or one day's spam (30 interactions with one stranger) gains
-more than 20 warmth. `--days`, `--seed`. Each person draws from their own stream (the seed and their id), so a newcomer
-to the cast leaves everyone else's results as they were.
+Part of the typecheck (about 8 s). Bundles `src/headless/social.ts` afresh for each run (the standing is a
+module-level store) and plays the cast through the real rules (`conversation.choicesFor` / `say` / `endConversation`,
+gifts, the drift, the favours drawn as `life/favours` draws them (in a fresh order each day), said yes to and kept or
+broken as promises, the co-owners' meeting's vote promises (one camp of each resolution, asked when the resident is met
+while the ballot is open), beating the rival to a copy now and then, a deal now and then with a light person as the
+trades move them). It prints each person's warmth, trust, tier and perks in force, and fails when:
+
+- a perk is out of reach of two diligent players (120 game days: everyone daily, the best-looking choice every time,
+  gifts, every favour said yes to and kept; a perk counts as reachable when either gets it, the two being asked other
+  favours);
+- the typical player (60 game days: a few people a day, the best-looking choice three times in four, a gift now and
+  then, most promises kept) has a share of the deep people at Friendly or more outside 40-60 % by more than 10 points,
+  the mean of three such players (Friendly rests on one promise kept, one event a person: one run is too few people to
+  say it; a note inside the tolerance), or more than 25 % of everyone at 95 warmth or more (20 % wanted);
+- a careless clicker (30 choices in a row with each deep person on day 1, anything offered but a long press, a new
+  conversation whenever one ends) gains more than one conversation at its best (12.5 warmth: `TALK`'s three exchanges
+  of a loved topic in a good mood, and the good talk), or ends the day more than 3 warmth down (a disliked choice
+  costs a little, its face showed it; a dip on the way is a note);
+- the coverage: a deep person with fewer than four topics or none obvious, a topic without an answer or words, a
+  topic teaching or opening on a fact the card does not have, a choice the engine offers that gets no answer or a number
+  asked that is not given (each choice said from every warm tier), a place entry with no words.
+
+`--days`, `--seed`. Each person draws from their own stream (the seed and their id), so a newcomer to the cast leaves
+everyone else's results as they were.
 
 ## Bundle size (`scripts/check-bundle.mjs`)
 
@@ -194,3 +231,11 @@ endless night, the neighbours' party today, the estate sale today, a bulky-waste
 stop, those only their own door reaches included (`Travel.everyStop`). In the console besides: `bibliothek.coins(n)`,
 `blackout()`, `endlessStairs()`, `party()`, `estateSale()`, `bulkyDay()`, `social.table()` / `social.set(id, warmth, trust)`,
 `zfight()`; typing 5 0 0 0 still gives 5000 coins. A new progression is one entry in `PROGRESSIONS`.
+
+*Social lab* (`cheats/socialLab`; `?debug&social-lab` opens the panel on it at boot) acts on one person: the one being
+talked to, else the last talked to, else the one picked with its Previous / Next buttons. It sets their tier outright
+(quietly), marks their mood for the day with a cause, opens the conversation each way (`OpeningKind`) and plays each
+outcome in it (loved, liked, polite, disliked, "they'll remember that", a fact to the book, a promise ticket, a tier up in
+the card, having to go), stages their tier's scene, and toggles the largest text and reduced motion. The conversation
+panel and the tier scenes register what they can play (`registerLabConversation`, `registerLabScenes`); a button whose
+side is not registered says so.

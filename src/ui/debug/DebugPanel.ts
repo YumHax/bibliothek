@@ -3,14 +3,16 @@ import { html, type Html } from '../panel/html';
 import { nextTab, tabs } from '../panel/widgets';
 import { CHOICES, PROGRESSIONS, type DebugSubjects, type Progression } from '@/cheats/progress/progressions';
 import { applyDebugProgress } from '@/cheats/progress/debugProgress';
+import type { LabGroup } from '@/cheats/socialLab';
 import './DebugPanel.css';
 
-type Tab = 'progress' | 'votes' | 'events' | 'places';
+type Tab = 'progress' | 'votes' | 'events' | 'places' | 'social';
 const TABS: readonly { id: Tab; label: string }[] = [
   { id: 'progress', label: 'Progress' },
   { id: 'votes', label: 'Votes' },
   { id: 'events', label: 'Now' },
   { id: 'places', label: 'Go to' },
+  { id: 'social', label: 'Social lab' },
 ];
 
 /** Something `?debug` can make happen at once (a power cut, a party, coins). */
@@ -28,6 +30,8 @@ interface DebugPanelDeps {
   places(): readonly { id: string; label: string }[];
   go(id: string): void;
   reload(): void;
+  /** The social lab: whom it acts on, and its buttons (`cheats/socialLab`). */
+  lab: { who(): string; groups: readonly LabGroup[] };
 }
 
 /**
@@ -43,6 +47,11 @@ export class DebugPanel extends CardPanel {
 
   constructor(container: HTMLElement, private readonly deps: DebugPanelDeps) {
     super(container, { className: 'debug-panel', cardClass: 'debug-panel__card ui-card', title: 'Debug' });
+  }
+
+  /** Opens on `tab` next time (`?social-lab` opens on the lab). */
+  showTab(tab: 'social'): void {
+    this.tab = tab;
   }
 
   protected override onOpened(): void {
@@ -81,6 +90,10 @@ export class DebugPanel extends CardPanel {
         return html`<div class="debug-panel__grid">${this.deps.events.map((e, i) => html`<button type="button" class="ui-btn" data-action="event" data-index="${i}">${e.label}</button>`)}</div>`;
       case 'places':
         return html`<div class="debug-panel__grid">${this.deps.places().map((p) => html`<button type="button" class="ui-btn" data-action="go" data-id="${p.id}">${p.label}</button>`)}</div>`;
+      case 'social':
+        return html`<p class="debug-panel__label">Acting on: ${this.deps.lab.who()}</p>${this.deps.lab.groups.map(
+          (g, gi) => html`<h3 class="debug-panel__group">${g.label}</h3><div class="debug-panel__grid">${g.events.map((e, i) => html`<button type="button" class="ui-btn" data-action="lab" data-group="${gi}" data-index="${i}">${e.label}</button>`)}</div>`,
+        )}`;
     }
   }
 
@@ -118,6 +131,12 @@ export class DebugPanel extends CardPanel {
         event.run();
         if (event.reload) this.reloadDue = true;
         this.setStatus(event.reload ? `${event.label}: shows after a reload.` : `${event.label}: done.`, 'ok');
+        return this.refresh();
+      }
+      case 'lab': {
+        const event = this.deps.lab.groups[Number(el.dataset.group)]?.events[Number(el.dataset.index)];
+        if (!event) return;
+        this.setStatus(event.run(), 'ok');
         return this.refresh();
       }
       case 'go':

@@ -15,6 +15,7 @@ import { buildPiece } from '../shop/displayPieces';
 import { Birdcage } from '../shop/Birdcage';
 import { Walker, type WalkerOptions } from '../people/Walker';
 import { randomLook } from '../people/looks';
+import { castDress } from '../people/castLook';
 import { disposeTree } from '../materials/sharedResources';
 import { GameShelf } from './GameShelf';
 import { FavouriteGame } from './FavouriteGame';
@@ -163,8 +164,8 @@ export class FlatDressing extends THREE.Group implements Furniture, Updatable {
     const at = resolvePlacement(plan.room, plan.shelf.at);
     shelf.position.copy(at.position);
     shelf.rotation.y = at.rotationY;
-    const look = randomLook(host.seed + 900, 'shopper');
     const person = personAtDoor(key);
+    const look = randomLook(host.seed + 900, 'shopper', castDress(person));
     if (person) rememberLook(person, look);
     walker = new HostWalker(host, this.ctx, {
       viewer: this.ctx.listener,

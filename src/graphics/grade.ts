@@ -89,13 +89,13 @@ export const NEUTRAL_LOOK: Look = {
 export const LOOKS: Record<LookName, Look> = {
   home: {
     exposure: 0,
-    contrast: 1.05,
-    saturation: 1.04,
+    contrast: 1.08,
+    saturation: 1.06,
     // Mild: the lamps (`lighting/lampColours`), the gain and the reflections are warm already.
     temperature: 0.07,
     shadows: 0x0a0604,
     highlights: 0xfff6ea,
-    vignette: 0.28,
+    vignette: 0.24,
     grain: 0.018,
     bloom: 0.28,
     haze: { color: 0x000000, density: 0 },
@@ -120,26 +120,26 @@ export const LOOKS: Record<LookName, Look> = {
   },
   market: {
     exposure: 0,
-    contrast: 0.98,
-    saturation: 0.95,
+    contrast: 1.08,
+    saturation: 1.03,
     temperature: -0.04,
     shadows: 0x05070a,
     highlights: 0xfffaf0,
-    vignette: 0.22,
+    vignette: 0.16,
     grain: 0.022,
     bloom: 0.25,
     haze: { color: 0xb9b4aa, density: 0.01 },
     reflections: { tint: 0xf4f6fa, strength: 1 },
     // Tables of boxes under daylight: the printed colours kept a little truer.
     night: 0.4,
-    neutralTone: 0.5,
+    neutralTone: 0.25,
   },
   // Outdoors: natural, a touch of contrast and bloom for the lamps and neon at night. The haze
   // is only the starting point: the street's lighting drives the fog from the weather (`StreetLighting`).
   street: {
     exposure: 0,
-    contrast: 1.04,
-    saturation: 1.02,
+    contrast: 1.07,
+    saturation: 1.05,
     temperature: 0,
     shadows: 0x04060a,
     highlights: 0xfffaf2,
@@ -154,12 +154,12 @@ export const LOOKS: Record<LookName, Look> = {
   // The building's common parts: cold daylight from the stair windows, painted concrete, dust in the air.
   stairwell: {
     exposure: 0,
-    contrast: 1.03,
-    saturation: 0.9,
+    contrast: 1.08,
+    saturation: 0.95,
     temperature: -0.08,
     shadows: 0x05070a,
     highlights: 0xf6f8fb,
-    vignette: 0.26,
+    vignette: 0.22,
     grain: 0.022,
     bloom: 0.26,
     haze: { color: 0x8e9196, density: 0.012 },
@@ -169,7 +169,7 @@ export const LOOKS: Record<LookName, Look> = {
   // A shop floor: even light, true colours, clean edges.
   shop: {
     exposure: 0,
-    contrast: 1.06,
+    contrast: 1.08,
     saturation: 1.02,
     temperature: 0,
     shadows: 0x040404,
@@ -180,7 +180,7 @@ export const LOOKS: Record<LookName, Look> = {
     haze: { color: 0x000000, density: 0 },
     reflections: { tint: 0xffffff, strength: 1 },
     // The goods as printed: Neutral keeps the box art's reds and blues where ACES bleaches them.
-    neutralTone: 1,
+    neutralTone: 0.7,
     night: 0.25,
   },
   // TV REPAIR: a dim, warm workshop, valve-amber and solder smoke, the sets' glow the brightest thing in it.
@@ -202,7 +202,7 @@ export const LOOKS: Record<LookName, Look> = {
   // The florist: bright, cool and fresh, a faint mist off the buckets.
   florist: {
     exposure: 0.06,
-    contrast: 1.02,
+    contrast: 1.05,
     saturation: 1.08,
     temperature: -0.1,
     shadows: 0x030607,
@@ -218,7 +218,7 @@ export const LOOKS: Record<LookName, Look> = {
   // PAWS & CLAWS: warm and soft, sawdust and lamp light.
   petShop: {
     exposure: 0.02,
-    contrast: 1.04,
+    contrast: 1.07,
     saturation: 1.04,
     temperature: 0.14,
     shadows: 0x060403,
@@ -248,3 +248,26 @@ export const LOOKS: Record<LookName, Look> = {
     night: 0,
   },
 };
+
+/**
+ * The looks' values before the render pass of 2026-10-17 (denser mid-tones, less vignette, Neutral kept for the
+ * shops' box art only), for the comparison switch (`renderTuning`, `?debug` `bibliothek.render.legacy`).
+ */
+const LEGACY_LOOKS: Partial<Record<LookName, Partial<Look>>> = {
+  home: { contrast: 1.05, saturation: 1.04, vignette: 0.28 },
+  market: { contrast: 0.98, saturation: 0.95, vignette: 0.22, neutralTone: 0.5 },
+  street: { contrast: 1.04, saturation: 1.02 },
+  stairwell: { contrast: 1.03, saturation: 0.9, vignette: 0.26 },
+  shop: { contrast: 1.06, neutralTone: 1 },
+  florist: { contrast: 1.02 },
+  petShop: { contrast: 1.04 },
+};
+/** What the looks hold now, kept to put back when the comparison is switched off. */
+const CURRENT_LOOKS: Partial<Record<LookName, Partial<Look>>> = Object.fromEntries(
+  Object.entries(LEGACY_LOOKS).map(([name, old]) => [name, Object.fromEntries(Object.keys(old).map((key) => [key, LOOKS[name as LookName][key as keyof Look]]))]),
+);
+
+/** The looks as they were before the render pass (`on`) or as they are now: changed in place, the pipeline eases to them. */
+export function useLegacyLooks(on: boolean): void {
+  for (const [name, values] of Object.entries(on ? LEGACY_LOOKS : CURRENT_LOOKS)) Object.assign(LOOKS[name as LookName], values);
+}

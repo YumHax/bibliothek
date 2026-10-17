@@ -39,6 +39,8 @@ export class RugRolls extends THREE.Group implements Furniture {
       const along = 0.14 + i * 0.2;
       roll.position.set(along, 0, 0.12 + random() * 0.08);
       roll.rotation.set(-0.08 - random() * 0.06, 0, 0.1 + random() * 0.06);
+      // Tilted, the rim's low edge would dip under the floor: stand it on that edge instead.
+      roll.position.y = r * Math.sin(Math.hypot(roll.rotation.x, roll.rotation.z));
       this.add(roll);
       reach = Math.max(reach, along + r + 0.15);
     }

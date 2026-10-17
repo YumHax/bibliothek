@@ -9,6 +9,12 @@ import type { PersonLook } from '@/world/people/looks';
 
 type G = CanvasRenderingContext2D;
 
+/**
+ * How the face is painted: at rest (their look's own smile or not), smiling, frowning, surprised. A voice in the
+ * conversation (a call, a door) shows what they make of each choice this way (`portrait`'s `expression`).
+ */
+export type Expression = 'rest' | 'smile' | 'frown' | 'surprise';
+
 function rgb(colour: number, factor = 1, alpha = 1): string {
   const r = Math.min(255, Math.round(((colour >> 16) & 255) * factor));
   const g = Math.min(255, Math.round(((colour >> 8) & 255) * factor));
@@ -27,8 +33,8 @@ function parseHex(css: string): number {
   return m ? parseInt(m[1]!, 16) : 0x777777;
 }
 
-/** Paints `look` on `g`, `s` pixels square, on a backdrop of `backdrop` (the tier's colour, `#rrggbb`). */
-export function paintFace(g: G, s: number, look: PersonLook, backdrop: string): void {
+/** Paints `look` on `g`, `s` pixels square, on a backdrop of `backdrop` (the tier's colour, `#rrggbb`), with `expression`. */
+export function paintFace(g: G, s: number, look: PersonLook, backdrop: string, expression: Expression = 'rest'): void {
   g.save();
   g.scale(s / 100, s / 100);
   backdropOf(g, parseHex(backdrop));
@@ -47,7 +53,7 @@ export function paintFace(g: G, s: number, look: PersonLook, backdrop: string): 
   head(g, look, old);
   hair(g, look, old);
   if (look.hat) hat(g, look);
-  features(g, look, old);
+  features(g, look, old, expression);
   g.restore();
   vignette(g, s);
 }
@@ -370,16 +376,18 @@ function hat(g: G, look: PersonLook): void {
   }
 }
 
-function features(g: G, look: PersonLook, old: boolean): void {
+function features(g: G, look: PersonLook, old: boolean, expression: Expression): void {
   const skin = look.skin;
-  // Brows.
+  // Brows: raised for surprise (a little for a smile), their inner ends drawn down for a frown.
+  const lift = expression === 'surprise' ? -2.6 : expression === 'smile' ? -0.8 : 0;
+  const inner = expression === 'frown' ? 1.6 : 0;
   g.strokeStyle = rgb(old ? 0x9a9a9a : look.hair, 0.75);
   g.lineWidth = 1.7 * (look.brows ?? 1);
   g.lineCap = 'round';
   for (const side of [-1, 1]) {
     g.beginPath();
-    g.moveTo(50 + side * 4, 37.5);
-    g.quadraticCurveTo(50 + side * 8.5, 35, 50 + side * 13, 37);
+    g.moveTo(50 + side * 4, 37.5 + lift + inner);
+    g.quadraticCurveTo(50 + side * 8.5, 35 + lift * 1.2, 50 + side * 13, 37 + lift);
     g.stroke();
   }
   // Eyes: the white, the iris, the pupil, a catch-light, the upper lid.
@@ -387,7 +395,7 @@ function features(g: G, look: PersonLook, old: boolean): void {
     const x = 50 + side * 8.5;
     g.fillStyle = '#f7f3ee';
     g.beginPath();
-    g.ellipse(x, 42.5, 3.8, 2.4, 0, 0, Math.PI * 2);
+    g.ellipse(x, 42.5, 3.8, expression === 'surprise' ? 3 : 2.4, 0, 0, Math.PI * 2);
     g.fill();
     g.fillStyle = rgb(look.eyes);
     g.beginPath();
@@ -422,7 +430,22 @@ function features(g: G, look: PersonLook, old: boolean): void {
   g.fillStyle = 'rgba(160,70,70,0.55)';
   g.lineWidth = 1.2;
   g.beginPath();
-  if (look.smile) {
+  if (expression === 'surprise') {
+    g.ellipse(50, 57.6, 2.6, 3.1, 0, 0, Math.PI * 2);
+    g.fillStyle = 'rgba(90,30,30,0.75)';
+    g.fill();
+    g.stroke();
+  } else if (expression === 'frown') {
+    g.moveTo(45.5, 58.6);
+    g.quadraticCurveTo(50, 55.8, 54.5, 58.6);
+    g.stroke();
+  } else if (expression === 'smile') {
+    g.moveTo(44, 55.8);
+    g.quadraticCurveTo(50, 61.6, 56, 55.8);
+    g.quadraticCurveTo(50, 57.8, 44, 55.8);
+    g.fill();
+    g.stroke();
+  } else if (look.smile) {
     g.moveTo(45, 56.2);
     g.quadraticCurveTo(50, 60.4, 55, 56.2);
     g.quadraticCurveTo(50, 58, 45, 56.2);

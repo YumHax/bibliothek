@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { QUALITY } from '@/graphics/quality';
 import { createCanvas, canvasTexture } from '@/covers/generated/canvasUtils';
 import { afterChunk, patchShader, VALUE_NOISE } from './shaderPatch';
+import { envBoost } from './envBoost';
 import { markShared } from './sharedResources';
 import { lcg } from '@/random';
 
@@ -11,6 +12,18 @@ const GRAIN_ACROSS_M = 0.4;
 const GRAIN_PX = 512;
 /** Height of the grain's relief (bump scale, the fibre value being the height). */
 const WOOD_RELIEF = 0.35;
+/**
+ * Timber at or under this roughness is finished (varnish, lacquer, wax: furniture, frames, a
+ * counter): with `QUALITY.physicalMaterials` a thin clearcoat over the grain catches the window and
+ * the lamps as a second, sharper sheen. Rougher timber (crates, pallets, raw boards) stays bare.
+ */
+const VARNISHED_BELOW = 0.55;
+const VARNISH = { clearcoat: 0.3, clearcoatRoughness: 0.32 } as const;
+/**
+ * Cloth scatters what it reflects: its share of the room's reflections (`envBoost`), so the stronger
+ * environment light does not make a cushion or a stall cloth glint like painted wood.
+ */
+const CLOTH_REFLECTIONS = 0.55;
 
 let grainTexture: THREE.CanvasTexture | null = null;
 
@@ -69,7 +82,8 @@ function grain(): THREE.CanvasTexture {
  * and up-facing surfaces gather a little dust, more the higher they are (the top of a bookcase).
  */
 export function wood(color: THREE.ColorRepresentation, roughness = 0.6): THREE.MeshStandardMaterial {
-  return woodGrain(new THREE.MeshStandardMaterial({ color, roughness }));
+  const varnished = QUALITY.physicalMaterials && roughness <= VARNISHED_BELOW;
+  return woodGrain(varnished ? new THREE.MeshPhysicalMaterial({ color, roughness, ...VARNISH }) : new THREE.MeshStandardMaterial({ color, roughness }));
 }
 
 /** Adds the grain and dust of `wood()` to an existing material (whatever its colour or map). */
@@ -140,14 +154,15 @@ function woodGrain<M extends THREE.MeshStandardMaterial>(material: M): M {
 
 /**
  * Fabric: with `QUALITY.physicalMaterials`, a physical material with sheen (the soft rim light
- * of cloth and fur seen at a grazing angle); a plain standard one otherwise.
+ * of cloth and fur seen at a grazing angle); a plain standard one otherwise. Either way it takes
+ * only `CLOTH_REFLECTIONS` of the room's reflections.
  */
 export function fabric(parameters: THREE.MeshStandardMaterialParameters & { sheenTint?: THREE.ColorRepresentation }): THREE.MeshStandardMaterial {
   const { sheenTint, ...standard } = parameters;
-  if (!QUALITY.physicalMaterials) return new THREE.MeshStandardMaterial(standard);
+  if (!QUALITY.physicalMaterials) return envBoost(new THREE.MeshStandardMaterial(standard), CLOTH_REFLECTIONS);
   const base = new THREE.Color(parameters.color ?? 0xffffff);
   const sheenColor = sheenTint !== undefined ? new THREE.Color(sheenTint) : base.clone().lerp(new THREE.Color(0xffffff), 0.45);
-  return new THREE.MeshPhysicalMaterial({ ...standard, sheen: 1, sheenColor, sheenRoughness: 0.75 });
+  return envBoost(new THREE.MeshPhysicalMaterial({ ...standard, sheen: 1, sheenColor, sheenRoughness: 0.75 }), CLOTH_REFLECTIONS);
 }
 
 /** Share of the light on a leaf's far side that comes through it, and how it is tinted on the way (yellower, greener). */

@@ -3,6 +3,7 @@ import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment
 import type { Updatable } from '@/core/Engine';
 import type { Look } from './grade';
 import { damp } from '@/math/damp';
+import { RENDER_TUNING } from './renderTuning';
 
 /** Strength of the reflections in a fully lit room; the room's own lamps and hemisphere do the rest. */
 const MAX_INTENSITY = 0.24;
@@ -33,6 +34,11 @@ export interface ReflectionSource {
   update(renderer: THREE.WebGLRenderer, dt: number): THREE.Texture | null;
   /** A factor on the reflections' strength while this source's map is shown (a room's capture brought to the studio's brightness, `RoomReflection`). */
   gain?(): number;
+  /**
+   * How much more than the studio's strength this map lights the room by (`RoomReflection`: the room's own capture
+   * is its main ambient on medium and high, the hemisphere only a remainder, `Room`). Default 1.
+   */
+  lift?(): number;
 }
 let reflectionSource: ReflectionSource | null = null;
 export function setReflectionSource(source: ReflectionSource | null): void {
@@ -145,7 +151,8 @@ export class Environment implements Updatable {
 
   private target(): number {
     const gain = this.ownShown ? (reflectionSource?.gain?.() ?? 1) : 1;
-    return MAX_INTENSITY * this.strength * gain * THREE.MathUtils.clamp(this.level(), 0, 1);
+    const lift = this.ownShown && !RENDER_TUNING.legacy ? (reflectionSource?.lift?.() ?? 1) : 1;
+    return MAX_INTENSITY * this.strength * gain * lift * THREE.MathUtils.clamp(this.level(), 0, 1);
   }
 
   /** The studio room prefiltered with its light and glowing panels times `tint`, made once per tint. */

@@ -12,32 +12,83 @@
     place-items: center;
   }
 
-  /* Where the trip goes, shown only while the curtain stays down a moment (the first trip to the street). */
+  /* Where the trip goes: a postcard of the place (its photo as last left, else its name alone), shown once the curtain stays down. */
+  .fader__card {
+    margin: 0;
+    width: min(26rem, 82vw);
+    display: grid;
+    gap: 0;
+    border-radius: 0.5rem;
+    overflow: hidden;
+    background: var(--paper-speech);
+    color: var(--ink-speech);
+    box-shadow: 0 1.4rem 3rem var(--shade-45);
+    rotate: -1.2deg;
+    animation: fader-card-in var(--dur-settle) var(--ui-ease) both;
+  }
+
+  .fader__photo {
+    display: none;
+    aspect-ratio: 16 / 9;
+    background: var(--ui-black) center / cover no-repeat;
+    box-shadow: inset 0 0 2.5rem var(--shade-45);
+  }
+
+  .fader__card--photo .fader__photo {
+    display: block;
+    animation: fader-photo-drift var(--dur-creep) linear both;
+  }
+
+  .fader__caption {
+    display: grid;
+    gap: 0.35rem;
+    padding: 0.9rem 1.1rem 1rem;
+  }
+
+  .fader__place {
+    margin: 0;
+    font: 400 var(--fs-5) / 1.2 var(--ui-font-body);
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: color-mix(in srgb, var(--ink-speech) 72%, transparent);
+  }
+
   .fader__name {
     margin: 0;
-    font: 400 var(--fs-t2) / 1.2 var(--ui-font-body);
-    letter-spacing: 0.04em;
-    color: var(--ui-text-dim);
+    font: 400 var(--fs-t4) / 1.15 var(--ui-font-print);
+    text-wrap: balance;
   }
 
-  .fader__name::after {
-    content: '';
-    display: inline-block;
-    width: 1.5em;
-    text-align: left;
-    animation: fader-dots var(--dur-breathe) steps(4, end) infinite;
+  /* The trip's progress: a thin ink line filling as the place is fetched, built and lit. */
+  .fader__track {
+    margin-top: 0.35rem;
+    height: 0.2rem;
+    border-radius: 99px;
+    background: color-mix(in srgb, var(--ink-speech) 14%, transparent);
+    overflow: hidden;
   }
 
-  @keyframes fader-dots {
-    0% { content: ''; }
-    25% { content: '.'; }
-    50% { content: '..'; }
-    75% { content: '...'; }
+  .fader__bar {
+    height: 100%;
+    background: var(--ui-accent);
+    transform-origin: left center;
+    transform: scaleX(0);
+    transition: transform var(--dur-slow) var(--ui-ease);
   }
 
-  /* Reduced motion: the dots stand still. */
-  .reduce-motion .fader__name::after {
+  @keyframes fader-card-in {
+    from { opacity: 0; translate: 0 0.8rem; }
+  }
+
+  /* The photo drifts inside its own frame (its background, never its box: the caption below stays put). */
+  @keyframes fader-photo-drift {
+    from { background-size: 104%; background-position: 50% 50%; }
+    to { background-size: 114%; background-position: 46% 50%; }
+  }
+
+  /* Reduced motion: the card and its photo stand still. */
+  .reduce-motion .fader__card,
+  .reduce-motion .fader__card--photo .fader__photo {
     animation: none;
-    content: '...';
   }
 }

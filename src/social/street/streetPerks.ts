@@ -1,14 +1,15 @@
 import type { HomeShop } from '@/economy/homeGoods';
-import { discountToday } from '../conversation';
+import { moodOf } from '../mood';
 import { effectValue } from '../perks';
-import { countedToday, nudge } from '../standing';
+import { countedToday, nudge, tier } from '../standing';
+import { atLeast } from '../tiers';
 import type { PersonId } from '../types';
 
 /*
  * What Front Street's people do for the player (docs/social.md "Front Street and the arcade"): the walk-in shops'
  * prices by how the player stands with the clerk (a discount from Friendly, a markup from Cold), the discount talked
- * out of them today (`askDiscount`: 10% at the till, once), and the once-a-day gifts (a free coffee, a pouch of
- * treats, a free credit). Home goods are never sold back, so a discount cannot make buying to sell pay.
+ * out of them today ("Any chance of a discount today?", once a day from Friendly: 10% at the till, once), and the
+ * once-a-day gifts (a free coffee, a pouch of treats, a free credit). Home goods are never sold back, so a discount cannot make buying to sell pay.
  */
 
 /** Who stands behind each walk-in shop's counter. */
@@ -19,7 +20,7 @@ const SHOP_CLERKS: Partial<Record<HomeShop, PersonId>> = {
   florist: 'clerk-florist',
 };
 
-/** Today's discount talked out of a clerk (`askDiscount` landed): this much off at the till, once. */
+/** Today's discount talked out of a clerk (`askDiscount` agreed): this much off at the till, once. */
 const TALKED_DOWN = 0.9;
 
 /** The clerk of `shop`, or null (the market's household stall, the agency). */
@@ -37,12 +38,30 @@ export function shopFactor(shop: HomeShop): number {
 /** Whether the discount talked out of `shop`'s clerk today is still to be used at the till. */
 function talkedDown(shop: HomeShop, day: number): boolean {
   const clerk = clerkOf(shop);
-  return !!clerk && discountToday(clerk, day) && !countedToday(clerk, 'discountUsed', day);
+  return !!clerk && countedToday(clerk, 'talkedDown', day) && !countedToday(clerk, 'discountUsed', day);
 }
 
 /** The factor at `shop`'s till on `day`: the standing's, and today's discount on top while it is unused. */
 export function tillFactor(shop: HomeShop, day: number): number {
   return shopFactor(shop) * (talkedDown(shop, day) ? TALKED_DOWN : 1);
+}
+
+/** Whether a discount may be asked of clerk `id` on `day`: from Friendly, once a day. */
+export function discountAskable(id: PersonId, day: number): boolean {
+  return atLeast(tier(id), 'friendly') && !countedToday(id, 'discountAsked', day);
+}
+
+/**
+ * The player asks clerk `id` for a discount on `day` at game hour `hour`: no draw, their standing and their day decide.
+ * A friend always says yes; someone friendly unless their day is going badly. Once a day; true when they agreed.
+ */
+export function askDiscount(id: PersonId, day: number, hour: number): boolean {
+  if (!discountAskable(id, day)) return false;
+  nudge(id, { reason: 'discountAsked', day });
+  const mood = moodOf(id, day, hour).mood;
+  const yes = atLeast(tier(id), 'friend') || (mood !== 'low' && mood !== 'annoyed');
+  if (yes) nudge(id, { reason: 'talkedDown', day });
+  return yes;
 }
 
 /** `base` coins at `factor`, rounded, never under 1 (a free piece stays free). */

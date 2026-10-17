@@ -8,13 +8,18 @@ import { dampAngle } from '@/math/damp';
 import { Glance, idleGlance, nextLeg, roundCorners, stepAlong, viewerWithin, type Leg } from './locomotion';
 import { PersonModel } from './PersonModel';
 import { randomLook, type PersonLook } from './looks';
+import { castDress } from './castLook';
+import { rememberLook } from '@/social/lookBook';
 import type { Pose } from './poses';
 import type { Performer, Reaction } from './performer';
 import type { FaceKey, GestureName } from './motion/gestures';
 import type { Held } from './held';
 import { SpeechBubble } from './SpeechBubble';
 import { Attention, STANDING, WALKING } from './attention';
-import type { SocialHook } from './socialHook';
+import type { Greeting, SocialHook } from './socialHook';
+import { SocialSelf } from './socialSelf';
+import type { SocialAct } from './motion/repertoire';
+import type { Fit } from '@/social/types';
 
 export interface WalkerOptions {
   /** Whose passing to notice: the camera. */
@@ -186,6 +191,10 @@ export class Walker extends THREE.Group implements Furniture, Updatable, Interac
   private present = true;
   private focus: Focus = null;
   private readonly attention: Attention;
+  /** Their body as the social interface: the aim's face, a conversation's, greetings, a witness's look (`socialSelf`). */
+  private readonly socialSelf: SocialSelf;
+  /** Seconds a friend passing walks slower for (a wave from afar). */
+  private slowFor = 0;
   private hands: (() => readonly [THREE.Vector3, THREE.Vector3]) | null = null;
   private readonly glance = new Glance();
   private readonly leg: Leg = { dx: 0, dz: 0, dist: 0 };
@@ -200,7 +209,11 @@ export class Walker extends THREE.Group implements Furniture, Updatable, Interac
     this.speed = options.speed ?? 0.8;
     const seed = options.seed ?? 1;
     // The body is built over idle moments (`bodyQueue`): a crowd made with its zone never freezes the frame.
-    this.model = new PersonModel(options.look ?? randomLook(seed + 200, 'shopper'), this.viewer, seed + 200, { deferred: true });
+    // Someone known drawn as who they are (their card's sex and age), whatever the seed.
+    const look = options.look ?? randomLook(seed + 200, 'shopper', castDress(options.social?.person));
+    this.model = new PersonModel(look, this.viewer, seed + 200, { deferred: true });
+    // Their portrait is the face met (`social/lookBook`).
+    if (options.social?.person) rememberLook(options.social.person, look);
     this.add(this.model);
     // Under the hips and each foot, sized to them.
     this.blob = this.model.groundShadow();
@@ -224,6 +237,18 @@ export class Walker extends THREE.Group implements Furniture, Updatable, Interac
     this.fades = options.fade ?? false;
     this.nextLine = seed;
     this.attention = new Attention(seed);
+    this.socialSelf = new SocialSelf(
+      {
+        root: this,
+        body: this.model,
+        attend: (seconds) => this.attention.engage(seconds),
+        say: (text) => this.say(text, 1.8),
+        shown: () => this.present && this.model.visible,
+        greetMove: (greeting) => this.greetMove(greeting),
+      },
+      this.social,
+      this.viewer,
+    );
   }
 
   get footprint(): THREE.Box3 {
@@ -312,6 +337,41 @@ export class Walker extends THREE.Group implements Furniture, Updatable, Interac
   /** Something happened to them (a point, a record, a miss): they show it their own way. */
   react(reaction: Reaction): void {
     this.model.react(reaction);
+  }
+
+  /** A conversation's moment (a loved topic, a polite "meh", an insult), `strength` 0..1, in their own measure. */
+  socialReact(act: SocialAct, strength: number): void {
+    this.socialSelf.reacted();
+    this.model.socialReact(act, strength);
+  }
+
+  /** Their face before the player chooses what to say (`fit`: how they would take it), or back to listening (null). */
+  anticipate(fit: Fit | null): void {
+    this.socialSelf.anticipate(fit);
+  }
+
+  /** Kept in a conversation (they stay, turned to the player, eyes on them), or let go. */
+  converse(on: boolean): void {
+    this.socialSelf.converse(on);
+    if (this.state.kind !== 'walk') return;
+    this.halted = on ? Math.max(this.halted, 1) : Math.min(this.halted, 1);
+  }
+
+  /** Passing the player, a known face greets them by how they stand, once a pass; whether they did now. */
+  greetIfNear(): boolean {
+    return this.socialSelf.greetIfNear();
+  }
+
+  /** Off the social layer's register (their zone unloads). */
+  dispose(): void {
+    this.socialSelf.dispose();
+  }
+
+  /** A greeting's move: a friend slows as they pass, a close friend stops a moment, turned to the player. */
+  private greetMove(greeting: Greeting): void {
+    if (this.state.kind !== 'walk' || !this.stopsToTalk) return;
+    if (greeting === 'waveWarm') this.slowFor = 2.2;
+    else if (greeting === 'callOut') this.halted = Math.max(this.halted, 2.5);
   }
 
   /** A gesture now (a wave, a coin put in). */
@@ -495,6 +555,8 @@ export class Walker extends THREE.Group implements Furniture, Updatable, Interac
 
   update(dt: number): void {
     if (!this.present) return;
+    this.socialSelf.update(dt);
+    if (this.slowFor > 0) this.slowFor -= dt;
     if (Number.isNaN(this.heading)) this.heading = this.rotation.y;
     // Faded right out (beyond sight, through a door, held back by a budget): they still go where they go, but
     // their body is not posed, nor their eyes moved, until it shows again.
@@ -512,8 +574,9 @@ export class Walker extends THREE.Group implements Furniture, Updatable, Interac
     if (drawn) this.model.update(dt);
   }
 
-  setHovered(): void {
-    // A person does not glow; the caption says it all.
+  setHovered(hovered: boolean): void {
+    // A person does not glow: aimed at, they look up with the face of how they stand with the player.
+    this.socialSelf.hover(hovered);
   }
 
   label(): string | null {
@@ -547,8 +610,10 @@ export class Walker extends THREE.Group implements Furniture, Updatable, Interac
    * on past a point of the path into the next, so nobody halts a frame at every point.
    */
   private step(dt: number, state: { path: THREE.Vector3[]; then: (() => void) | null }, drawn = true): void {
-    const own = this.speed * this.pace;
+    const own = this.speed * this.pace * (this.slowFor > 0 ? 0.55 : 1);
     const first = state.path[0];
+    // In a conversation they stay where they stopped, however long it lasts.
+    if (this.socialSelf.inConversation) this.halted = Math.max(this.halted, 0.5);
     if (!first) return this.arrive(state);
     if (this.halted > 0) {
       // Stopped for a word with the player: brought to a stop, turned to them, then on again.
@@ -761,6 +826,12 @@ export class Walker extends THREE.Group implements Furniture, Updatable, Interac
     const atPlayer = this.attention.update(dt, this, this.viewer, walking ? WALKING : STANDING, this.viewerPos) && !busy;
     if (this.attention.takeNotice() && !busy) this.model.nod();
     if (this.attention.inConversation) this.model.listen(0.5);
+    // A witness's look (what the player did, a neighbour whispered to) wins for its moment.
+    const witnessing = this.socialSelf.gazeTarget();
+    if (witnessing) {
+      this.model.gaze(witnessing);
+      return;
+    }
     if (atPlayer) {
       this.model.gaze(this.viewerPos);
       return;

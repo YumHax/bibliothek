@@ -92,11 +92,19 @@ Read this to add or change something visible in the room. The recipe is in the `
   pane), `.pane` (a door's, a lodge's), `.shelf`, `.screen` (shower screen, bathroom shelves), `.ware` (jars, glasses),
   `.mirror`; `asGlass(mesh)` puts a see-through pane in the glass band (no shadow, clicked through). Roof and frosted
   glass lit by the sky: `skyGlassColour` / `daylitGlass` + `lightDaylitGlass`, one formula for every such pane.
+  With `QUALITY.detailedMaterials` the see-through panes turn reflective edge-on (a Fresnel rise of their opacity,
+  `GLASS_EDGE`) and blend without writing the canvas's alpha; `steel()` and `satinSteel()` are brushed (`brushed`:
+  fine strokes along each part's object x, as a roughness swing; ALU only); plain paint wanders ±0.12 in roughness and
+  ±4.5 % in colour (`paintMottle`), a wall's roughness ±12 % (`bumpFinish` mottle). With `QUALITY.physicalMaterials`
+  timber at roughness 0.55 or under (furniture, frames, counters) is varnished: a thin clearcoat over the grain (`wood`,
+  `VARNISHED_BELOW`); rougher timber stays bare. Every `fabric()` takes only `CLOTH_REFLECTIONS` (0.55) of the room's
+  reflections, so cloth never glints like wood. None of these adds a texture unit.
 - **Soft things** (bedding, cushions, clothes, a mattress, an armchair's cloth): `softPart()` / `softBlockGeometry()`
   (`world/props/softBlock.ts`): a welded box pulled onto a superellipsoid (`round`: 2 a roll, 3 a cushion, 6+ a
   mattress), pinched towards its rim (`pinch`), lumpy on top (`lumps`, `seed`), uvs in metres; shared per shape. Their
   cloth is `wovenCloth(color)` (`world/materials/weave.ts`: one shared weave map + bump for every colour;
-  `ownWovenCloth` for a garment dyed at runtime, `ticking()` for a mattress cover).
+  `ownWovenCloth` for a garment dyed at runtime, `ticking()` for a mattress cover). A cloth with a colour map of its own
+  takes the weave's relief alone, `weaveBump(repeat)` (the market's gingham, `market/stallPaint.tiledMaterial`).
 - **Joints** (`world/props/joinery.ts`): two parts never share a face. Pick per joint: *buried* (`INSET`, 1 mm into the
   other), *proud* (`PROUD`, 2 mm out: a top over its carcass, a rim over a body), *apart* (`SEAM`, 0.5 mm: two fronts side
   by side); `inset()`, `proud()`, `topOf(mesh)`, `partOn(parent, below, ...)` (a part resting on another, a seam above),

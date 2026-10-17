@@ -9,7 +9,7 @@ import { ReadingCard } from './ReadingCard';
 import { RewardBanner } from './RewardBanner';
 import { SlipLine } from './SlipLine';
 import { SpeechLayer } from './SpeechLayer';
-import { bindSpeech } from './speech';
+import { bindSpeech, isConversing, onConversingEnd } from './speech';
 import { TipBoard } from './TipBoard';
 import type { NoticeActions, NoticeDismissing, PromptOptions, ReadingNotice, RewardNotice, SlipNotice, TipOptions } from './types';
 import './notices.css';
@@ -52,6 +52,11 @@ export class Notices implements NoticeActions, NoticeDismissing, Updatable {
     this.rewards = new RewardBanner(container);
     this.alerts = new AlertBar(container);
     bindSpeech(this.speech);
+    // Nothing comes over a conversation: a banner or a card raised while one is open waits for its end, then they come in turn.
+    onConversingEnd(() => {
+      const held = this.held.splice(0);
+      for (const show of held) show();
+    });
     announceSaveProblems(this);
   }
 
@@ -69,8 +74,12 @@ export class Notices implements NoticeActions, NoticeDismissing, Updatable {
     this.line.show(text, 'no');
   }
 
+  /** What was raised during a conversation, in order (`isConversing`). */
+  private readonly held: (() => void)[] = [];
+
   reward(reward: RewardNotice): void {
-    this.rewards.show(reward);
+    if (isConversing()) this.held.push(() => this.rewards.show(reward));
+    else this.rewards.show(reward);
   }
 
   tip(text: string, options?: TipOptions): () => void {
@@ -87,7 +96,8 @@ export class Notices implements NoticeActions, NoticeDismissing, Updatable {
   }
 
   read(card: ReadingNotice): void {
-    this.reading.show(card);
+    if (isConversing()) this.held.push(() => this.reading.show(card));
+    else this.reading.show(card);
   }
 
   /** The game's own trouble (a save lost, the mouse lock refused): the red bar at the top; with `action`, a button (Retry) it waits for. */
