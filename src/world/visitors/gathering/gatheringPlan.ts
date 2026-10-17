@@ -41,14 +41,14 @@ export const GATHERING_RULES = {
   },
   openHouse: {
     /** Games in the collection (owned or lent) from which the paper takes an open house. */
-    minGames: 40,
+    minGames: 15,
     /** The paper prints it tomorrow: the open house is the day after (`aheadDays` from the call). */
     aheadDays: 2,
     /** Hours of the in-game clock it is held in (guests ring from `from`, none after `until`). */
     from: 14,
     until: 18.5,
     /** In-game days from one open house to the next at least. */
-    everyDays: 7,
+    everyDays: 4,
     /** Guests come in waves of `perWave`, `waves` of them, `waveGap` real seconds apart (from the last wave's coming in). */
     waves: 3,
     perWave: 2,
@@ -57,12 +57,12 @@ export const GATHERING_RULES = {
     inFlat: 4,
     /**
      * Each guest drops this many coins in the jar at the door: `entry`, one more for every `entryEvery` games the
-     * collection holds past `minGames` (a fuller flat draws a better crowd), never over `entryMax`. A small thing next
-     * to the arcade: the collection earning its keep, never a living.
+     * collection holds past `minGames` (a fuller flat draws a better crowd), never over `entryMax`: the collection
+     * earning its keep, 30 coins an afternoon at the start, over a hundred once the shelves are full.
      */
-    entry: 2,
-    entryEvery: 30,
-    entryMax: 6,
+    entry: 5,
+    entryEvery: 10,
+    entryMax: 20,
     /** They look round this many spots. */
     stops: 3,
     /** Real seconds after an unanswered wave rings before they go back down (they ring twice). */

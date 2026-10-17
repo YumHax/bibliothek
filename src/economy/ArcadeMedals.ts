@@ -1,5 +1,5 @@
 import { KEYS, PersistedStore, safeStorage } from '@/persistence';
-import { MEDAL_REWARD, PLATINUM } from './pricing';
+import { MASTERY, MEDAL_REWARD, PLATINUM } from './pricing';
 import { rivalScore } from './rivals';
 
 const ARCADE_MEDALS_KEY = KEYS.arcadeMedals;
@@ -43,8 +43,9 @@ interface ArcadeMedalsOptions {
  * third and first name of the machine's starting table (`rivals.ts`), each earned once and paid
  * once in tickets (`MEDAL_REWARD`); then **platinum**, the score that won the gold beaten by a fifth
  * (`PLATINUM`, frozen when the gold is won). Gold on every machine of the hall is **the hall's tour**:
- * its trophy goes home once (`takeTour`). The cabinets light a lamp per medal and name the next one on
- * their attract screen; the Session calls `award` after every play.
+ * its trophy goes home once (`takeTour`). A machine whose gold is held is **mastered**: it pays more for its score
+ * (`mastery`, `MASTERY`). The cabinets light a lamp per medal and name the next one on their attract screen; the
+ * Session calls `award` after every play.
  */
 export class ArcadeMedals {
   private state: MedalsFile;
@@ -120,6 +121,12 @@ export class ArcadeMedals {
   /** Whether the hall's tour is done (gold on every machine). */
   get tourDone(): boolean {
     return this.games.length > 0 && this.games.every((id) => this.earned(id).includes('gold'));
+  }
+
+  /** The share more `gameId` pays for its score once mastered: its gold, more with its platinum (`MASTERY`). */
+  mastery(gameId: string): number {
+    if (this.platinum(gameId)) return MASTERY.platinum;
+    return this.earned(gameId).includes('gold') ? MASTERY.gold : 0;
   }
 
   /** How many medals the player holds in all, platinum included (the league board and the attendant mention it). */

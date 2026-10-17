@@ -126,9 +126,12 @@ export function wirePlayerGround(player: FirstPersonController, world: GameWorld
   const streetGroup = world.zone('street').group;
   const streetLocal = new Vector3();
   const streetFloor = world.zone('street').floorBounds;
+  // Over the stairwell's box: set down in the attic's car (the old lift's code), the frame before the zone switches. Its
+  // lift's car, right under, would pull the feet back down the shaft to our landing, and the stairwell stay current.
+  const stairwellTop = world.zone('stairwell').bounds.max.y;
   player.setGround((x, z, feet) => {
     const here = manager.current.id;
-    if (here === 'stairwell') return onStairs(x, z, feet);
+    if (here === 'stairwell') return feet > stairwellTop ? feet : onStairs(x, z, feet);
     // On Front Street (not the frame the sas's twin crossing has just set them down in, before the zone switches).
     if (here !== 'street' || x < streetFloor.min.x || x > streetFloor.max.x || z < streetFloor.min.y || z > streetFloor.max.y) return feet;
     streetGroup.worldToLocal(streetLocal.set(x, feet, z));

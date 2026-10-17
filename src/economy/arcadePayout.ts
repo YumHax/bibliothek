@@ -40,6 +40,8 @@ interface PayoutBooks {
     award(gameId: string, score: number): readonly { tier: string; reward: number }[];
     /** Gold on every machine: true once, the first time it is asked after (its trophy goes home). */
     takeTour?(): boolean;
+    /** The share more a mastered machine pays for its score (0 until its gold). */
+    mastery?(gameId: string): number;
   };
   league?: {
     record(tickets: number): { days: number; punched: boolean; tokens: number; tier: string | null };
@@ -104,10 +106,12 @@ export function arcadePayout(machine: PayoutMachine, play: PayoutPlay, books: Pa
   if (lucky) settled.lines.push('Beginner’s luck! Keep at it.');
   payChallenge(settled, machine, play, books.daily);
   payMedals(settled, machine, play, books.medals);
+  const mastered = payMastery(settled, machine, books.medals);
   payUnfinished(settled, books.tournament);
   const card = punchCard(settled, books.league);
   const week = announceWeek(settled, books.league);
-  settled.notable = settled.bonuses.length > 0 || week || lucky || card || settled.prizes.length > 0;
+  // A mastered machine's extra comes with every play: on the end card, not news for the banner.
+  settled.notable = settled.bonuses.length > (mastered ? 1 : 0) || week || lucky || card || settled.prizes.length > 0;
   return settled;
 }
 
@@ -149,11 +153,25 @@ function payChallenge(settled: Settlement, machine: PayoutMachine, play: PayoutP
 function payMedals(settled: Settlement, machine: PayoutMachine, play: PayoutPlay, medals: PayoutBooks['medals']): void {
   for (const medal of machine.luck ? [] : (medals?.award(machine.game.id, play.score) ?? [])) {
     settled.bonus(`${medal.tier.toUpperCase()} MEDAL`, medal.reward, `${capitalise(medal.tier)} medal on ${machine.game.title}: +${formatTickets(medal.reward)}!`);
+    if (medal.tier === 'gold') settled.lines.push(`${machine.game.title} is mastered: it pays you more from now on.`);
   }
   if (medals?.takeTour?.()) {
     settled.prizes.push(HALL_TOUR.prize);
     settled.lines.push('Gold on every machine in the hall: the hall’s tour is yours, and its trophy goes home with you.');
   }
+}
+
+/**
+ * A mastered machine (its gold held, the play that wins it included) pays a share more of the score's tickets: an end
+ * card line of its own, no banner line (it comes with every play). True when it paid.
+ */
+function payMastery(settled: Settlement, machine: PayoutMachine, medals: PayoutBooks['medals']): boolean {
+  const share = machine.luck ? 0 : (medals?.mastery?.(machine.game.id) ?? 0);
+  const extra = Math.round(settled.tickets.counted * share);
+  if (extra <= 0) return false;
+  settled.tickets.paid += extra;
+  settled.bonuses.push({ label: 'MASTERED', tickets: extra });
+  return true;
 }
 
 /** A past Saturday's tournament run left before it ended: paid now, as if the player had gone out then. */

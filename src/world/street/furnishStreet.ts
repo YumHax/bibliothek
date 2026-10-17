@@ -59,7 +59,10 @@ import { StreetHolidays } from './StreetHolidays';
 import { ChimneySmoke } from './ChimneySmoke';
 import { awningShelters } from './relief/FacadeRelief';
 import { ShopInteriors } from './relief/ShopInteriors';
-import { buildStreetBase, buildStreetFixtures, buildStreetFronts, paintStreetBase, sceneryAnisotropy, type AddScenery } from './streetScenery';
+import { buildStreetFixtures, paintStreetBase, sceneryAnisotropy, streetBaseSteps, streetFrontsSteps, type AddScenery } from './streetScenery';
+import type { Buildings } from './Buildings';
+import type { StreetPark } from './StreetPark';
+import type { Shopfronts } from './shopfronts/Shopfronts';
 import { ShopSpill } from './shopfronts/ShopSpill';
 import { WetGround } from './relief/WetGround';
 import { Leaves } from './relief/Leaves';
@@ -174,8 +177,8 @@ interface StreetSite {
   scenery: AddScenery;
   // Ground and buildings.
   lighting?: StreetLighting;
-  buildings?: ReturnType<typeof buildStreetBase>['buildings'];
-  park?: ReturnType<typeof buildStreetBase>['park'];
+  buildings?: Buildings;
+  park?: StreetPark;
   shopGoods?: string[] | null;
   // Traffic and fixtures.
   traffic?: StreetTraffic;
@@ -205,7 +208,7 @@ interface StreetSite {
   pigeons?: Pigeons;
   strayCat?: StrayCat;
   // Fronts.
-  shopfronts?: ReturnType<typeof buildStreetFronts>['shopfronts'];
+  shopfronts?: Shopfronts;
 }
 
 /** Passers-by say what is going on; every walker placed goes on `walkers` too: the pigeons take off for them, passers-by keep right of them. */
@@ -223,7 +226,7 @@ function onDoorIn(site: StreetSite): (spot: Vec2) => void {
 }
 
 /** Light, sky, ground and buildings. */
-function raiseGroundAndBuildings(site: StreetSite): void {
+function* raiseGroundAndBuildings(site: StreetSite): Generator<void, void, void> {
   const { zone, plan, dayNight, origin, scenery, build: { sky, listener, today, market: { stock: market } } } = site;
   site.lighting = zone.place(
     new StreetLighting(dayNight, listener, (out) => sky.outdoors.lightDirection(dayNight.state, out), { shadowMapSize: Math.min(2048, QUALITY.shadowMapSize * 2), nearReach: QUALITY.level === 'low' ? 0 : 9 }),
@@ -243,7 +246,7 @@ function raiseGroundAndBuildings(site: StreetSite): void {
   const windowLife = buildingWindowLife({ day: () => today.gameDay, hours: () => dayNight.state.hours });
   // The ground, the park's near stretch over the hedge (its walked gardens), the facades (`streetScenery`, shared with the window views).
   const facades = streetFacades();
-  const base = buildStreetBase(scenery, { dayNight, facades, detailScale, shopGoods: site.shopGoods, windowLife, walkable: true });
+  const base = yield* streetBaseSteps(scenery, { dayNight, facades, detailScale, shopGoods: site.shopGoods, windowLife, walkable: true });
   site.buildings = base.buildings;
   site.park = base.park;
   // The rows stand in what the street reflects (the glass, the paint, the wet setts), taken again as the player walks on.
@@ -591,16 +594,17 @@ function placeLife(site: StreetSite): void {
  * new market day as seen from the flat; the Fair's day; the wet ground; autumn's leaves; the small print; a roadworker
  * in the road's gap at each works in his shift.
  */
-function dressFronts(site: StreetSite): void {
+function* dressFronts(site: StreetSite): Generator<void, void, void> {
   const { zone, plan, dayNight, origin, season, fewer, seen, anisotropy, scenery, build: { listener, today, home: { upgrades }, market: { day: marketDay } } } = site;
   const buildings = ready(site.buildings, 'the buildings');
   const cues = ready(site.cues, 'the cues');
   const talk = ready(site.talk, 'the talk');
   const placeWalker = placeWalkerIn(site);
   const fronts = buildings.fronts;
-  const { shopfronts } = buildStreetFronts(scenery, fronts, dayNight, { upgrades, onRoll: (spot) => cues.rattle(spot) });
+  const { shopfronts } = yield* streetFrontsSteps(scenery, fronts, dayNight, { upgrades, onRoll: (spot) => cues.rattle(spot) });
   site.shopfronts = shopfronts;
   const interiors = zone.place(new ShopInteriors(fronts, dayNight, site.shopGoods ?? null, { cheap: QUALITY.level === 'low' }), origin);
+  yield;
   const onStock = (colors: readonly string[]): void => {
     buildings.repaintGoods(colors);
     interiors?.repaintGoods(colors);
@@ -609,6 +613,7 @@ function dressFronts(site: StreetSite): void {
   zone.place(new RetroLure({ ...plan.retroLure, queue: fewer ? plan.retroLure.queue.slice(0, 3) : plan.retroLure.queue, door: plan.doors.market.at, viewer: listener, place: placeWalker, talk, ...seen, onStock, day: marketBusy, sky: () => dayNight.state }), origin);
   if (isBrocante(today.gameDay)) zone.place(new FairDay({ viewer: listener, place: placeWalker, talk, ...seen, sky: () => dayNight.state }), origin);
   zone.place(new ShopSpill(dayNight, { spots: plan.shopSpill, board: plan.chalkBoard, collisions: zone.collisions }), origin);
+  yield;
   // The wet road's mirror leaves the people out (a passer-by's draw calls twice over are not worth a puddle).
   const lamps = ready(site.lamps, 'the lamps');
   const cars = ready(site.cars, 'the cars');
@@ -769,7 +774,7 @@ function* furnishStreetSteps(zone: Zone, build: StreetBuild): Generator<void, Zo
   };
   // The facades' atlas first, a facade a step: the heaviest painting, never in one idle moment.
   for (const _ of paintStreetBase({ facades: streetFacades(), detailScale: streetDetailScale() })) yield;
-  raiseGroundAndBuildings(site);
+  yield* raiseGroundAndBuildings(site);
   yield;
   placeTrafficAndFixtures(site);
   yield;
@@ -783,7 +788,7 @@ function* furnishStreetSteps(zone: Zone, build: StreetBuild): Generator<void, Zo
   yield;
   placeLife(site);
   yield;
-  dressFronts(site);
+  yield* dressFronts(site);
   yield;
   playSounds(site);
   yield;

@@ -8,6 +8,7 @@ import { patchShader } from '../materials/shaderPatch';
 import { WALL, onSurface } from '../surface/layers';
 import { registerZfightRoot } from '../surface/zfight';
 import { markGlass, unmarkGlass } from '@/graphics/glassMask';
+import { uploadTexturesSpread } from '../materials/textureUpload';
 
 /** What is out there: its own scene (lit by its own sun and sky, never the room's lamps), what moves in it, how to free it. */
 export interface OutlookContents {
@@ -284,11 +285,21 @@ export class OutlookView extends THREE.Group implements Updatable {
     renderer.autoClear = autoClear;
   }
 
-  /** The programs linked out of sight (as the picture's target binds them: no tone mapping, a clip plane), then shown. */
+  /**
+   * Out of sight, then shown: the textures uploaded a few at a time, the programs linked (as the picture's target
+   * binds them: no tone mapping, a clip plane), then one render a pixel wide for what only a draw does (the sun's
+   * shadow map and its depth programs, anything missed). Left to the first real draw, these froze the frame the
+   * window came into view.
+   */
   private compile(renderer: THREE.WebGLRenderer, contents: OutlookContents): void {
     this.state = 'compiling';
     contents.prepare?.(renderer, 0);
-    const compiled = contents.parts ? this.compileInSlices(renderer, contents) : this.compileSome(renderer, contents.scene, null);
+    const compiled = uploadTexturesSpread(renderer, contents.scene, idleMoment)
+      .then(() => (contents.parts ? this.compileInSlices(renderer, contents) : this.compileSome(renderer, contents.scene, null)))
+      .then(idleMoment)
+      .then(() => {
+        if (!this.disposed && this.contents === contents) this.warm(renderer, contents.scene);
+      });
     compiled
       .then(() => {
         if (!this.disposed && this.contents === contents) {
@@ -300,6 +311,33 @@ export class OutlookView extends THREE.Group implements Updatable {
         this.state = 'failed';
         console.error('[outlook] the view failed to compile', error);
       });
+  }
+
+  /** One render of `scene` into a single pixel of the picture, outside the room's render: its shadow passes run, every draw is linked. */
+  private warm(renderer: THREE.WebGLRenderer, scene: THREE.Scene): void {
+    const previous = renderer.getRenderTarget();
+    const clipping = renderer.clippingPlanes;
+    const autoUpdate = renderer.shadowMap.autoUpdate;
+    // The camera where a pane would put it is unknown yet: the main camera's lens, at the outlook's origin.
+    this.placeCamera(this.options.viewer as THREE.PerspectiveCamera, IDENTITY);
+    this.clipPlanes[0]!.set(NORMAL.set(0, 1, 0), 1e6);
+    this.target.scissor.set(0, 0, 1, 1);
+    this.target.scissorTest = true;
+    renderer.setRenderTarget(this.target);
+    renderer.clippingPlanes = this.clipPlanes;
+    renderer.shadowMap.autoUpdate = true;
+    // The view's updatables (its `ShadowRefresh` among them) do not tick while it compiles: the sun's map is asked for here.
+    scene.traverse((obj) => {
+      const light = obj as THREE.Light;
+      if (light.isLight && light.castShadow && light.shadow) light.shadow.needsUpdate = true;
+    });
+    try {
+      renderer.render(scene, this.camera);
+    } finally {
+      renderer.shadowMap.autoUpdate = autoUpdate;
+      renderer.clippingPlanes = clipping;
+      renderer.setRenderTarget(previous);
+    }
   }
 
   /**
@@ -487,7 +525,7 @@ export class OutlookView extends THREE.Group implements Updatable {
   }
 
   /**
-   * Only the pane's rectangle of the picture is rendered (the whole of it when a corner is behind the eye), stretched
+   * Only the pane's rectangle of the picture is rendered (the whole of it when none of it is ahead of the eye), stretched
    * over the other panes of this view in its plane that are on screen this frame, when that costs few extra pixels:
    * those are then `covered`, and their own draw skips the render (the stairwell's panes, a storey apart up the well).
    */
@@ -525,23 +563,37 @@ export class OutlookView extends THREE.Group implements Updatable {
     target.scissor.copy(UNION);
   }
 
-  /** The pane's rectangle of the picture in pixels (x, y, width, height), clamped to it; false when a corner is behind the eye. */
+  /**
+   * The pane's rectangle of the picture in pixels (x, y, width, height), clamped to it. A pane with corners behind the
+   * eye (brushed past on the stairs) is cut where it crosses just in front of the eye first, so only the part ahead
+   * counts. Without that cut the whole picture was rendered every frame. False when none of it is ahead of the eye.
+   */
   private rectOf(pane: THREE.Mesh, camera: THREE.Camera, out: THREE.Vector4): boolean {
     const geometry = pane.geometry as THREE.PlaneGeometry;
     const { width, height } = geometry.parameters;
+    for (let i = 0; i < CORNERS.length; i++) {
+      const [sx, sy] = CORNERS[i]!;
+      CORNER.set((sx * width) / 2, (sy * height) / 2, 0).applyMatrix4(pane.matrixWorld);
+      CLIPPED[i]!.set(CORNER.x, CORNER.y, CORNER.z, 1).applyMatrix4(camera.matrixWorldInverse).applyMatrix4(camera.projectionMatrix);
+    }
     let x0 = Infinity;
     let y0 = Infinity;
     let x1 = -Infinity;
     let y1 = -Infinity;
-    for (const [sx, sy] of CORNERS) {
-      CORNER.set((sx * width) / 2, (sy * height) / 2, 0).applyMatrix4(pane.matrixWorld);
-      CLIP.set(CORNER.x, CORNER.y, CORNER.z, 1).applyMatrix4(camera.matrixWorldInverse).applyMatrix4(camera.projectionMatrix);
-      if (CLIP.w <= 0.01) return false;
-      x0 = Math.min(x0, CLIP.x / CLIP.w);
-      x1 = Math.max(x1, CLIP.x / CLIP.w);
-      y0 = Math.min(y0, CLIP.y / CLIP.w);
-      y1 = Math.max(y1, CLIP.y / CLIP.w);
+    const include = (p: THREE.Vector4): void => {
+      x0 = Math.min(x0, p.x / p.w);
+      x1 = Math.max(x1, p.x / p.w);
+      y0 = Math.min(y0, p.y / p.w);
+      y1 = Math.max(y1, p.y / p.w);
+    };
+    // The quad's outline cut at w = NEAR_W: the corners ahead, and where an edge crosses it.
+    for (let i = 0; i < CORNERS.length; i++) {
+      const a = CLIPPED[i]!;
+      const b = CLIPPED[(i + 1) % CORNERS.length]!;
+      if (a.w >= NEAR_W) include(a);
+      if (a.w >= NEAR_W !== b.w >= NEAR_W) include(CLIP.lerpVectors(a, b, (NEAR_W - a.w) / (b.w - a.w)));
     }
+    if (x0 > x1) return false;
     const { width: tw, height: th } = this.target;
     const px0 = THREE.MathUtils.clamp(Math.floor(((x0 + 1) / 2) * tw) - SCISSOR_PAD, 0, tw);
     const px1 = THREE.MathUtils.clamp(Math.ceil(((x1 + 1) / 2) * tw) + SCISSOR_PAD, 0, tw);
@@ -622,6 +674,8 @@ function resetClipping(renderer: THREE.WebGLRenderer, camera: THREE.Camera): voi
 
 const DRAWING_BUFFER = new THREE.Vector2();
 const CLEAR = new THREE.Color();
+/** The outlook's frame as the world's (`warm`: no pane yet to carry the camera through). */
+const IDENTITY = new THREE.Matrix4();
 const CORNERS: readonly [number, number][] = [
   [-1, -1],
   [1, -1],
@@ -631,6 +685,10 @@ const CORNERS: readonly [number, number][] = [
 const CORNER = new THREE.Vector3();
 const OTHER_CORNER = new THREE.Vector3();
 const CLIP = new THREE.Vector4();
+/** A pane's corners in clip space (`rectOf`). */
+const CLIPPED = CORNERS.map(() => new THREE.Vector4());
+/** Clip-space w (metres ahead of the eye) a pane is cut at before projecting (`rectOf`): nothing behind it counts. */
+const NEAR_W = 0.01;
 const NORMAL = new THREE.Vector3();
 const OTHER_NORMAL = new THREE.Vector3();
 const RECT = new THREE.Vector4();

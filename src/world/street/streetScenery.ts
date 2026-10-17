@@ -79,10 +79,17 @@ export function* paintStreetBase(options: Pick<StreetBaseOptions, 'facades' | 'd
 
 /** The ground, the park's paths and beds, the facades. */
 export function buildStreetBase(add: AddScenery, options: StreetBaseOptions): { buildings: Buildings; park: StreetPark } {
+  return drain(streetBaseSteps(add, options));
+}
+
+/** `buildStreetBase` a piece at a time (the ground, the park, the rows), a pause (`yield`) after each: the street built ahead never holds a frame for all three. */
+export function* streetBaseSteps(add: AddScenery, options: StreetBaseOptions): Generator<void, { buildings: Buildings; park: StreetPark }, void> {
   const { dayNight, facades, detailScale, shopGoods, windowLife, walkable, windowFrames } = options;
   const anisotropy = sceneryAnisotropy();
   add(new StreetGround(dayNight, anisotropy));
+  yield;
   const park = add(new StreetPark({ anisotropy, lawnY: LAWN_Y, reach: LAWN_REACH.x, dayNight, ...(walkable ? { walkable } : {}) }));
+  yield;
   const buildings = add(new Buildings(facades, dayNight, { detailScale, anisotropy, shopGoods, nightScale: nightScale(), ...(windowLife ? { windowLife } : {}), ...(windowFrames === false ? { windowFrames } : {}) }));
   // The sun's map draws only the stretches of their length it covers (`shadowStretches`).
   castByStretch(park);
@@ -97,10 +104,17 @@ interface StreetFrontsOptions extends FacadeReliefOptions {
 
 /** What stands out of the painted facades: awnings, balconies, the landmark fronts, bracket signs, the walk-in shops' fronts, shutters, the shops' glow, what is fixed to the walls (lanterns, alarms, cables, posters). */
 export function buildStreetFronts(add: AddScenery, fronts: readonly PaintedFront[], dayNight: DayNight, options: StreetFrontsOptions = {}): { shopfronts: Shopfronts } {
+  return drain(streetFrontsSteps(add, fronts, dayNight, options));
+}
+
+/** `buildStreetFronts` with a pause (`yield`) after the relief and after the shopfronts, the heavy two. */
+export function* streetFrontsSteps(add: AddScenery, fronts: readonly PaintedFront[], dayNight: DayNight, options: StreetFrontsOptions = {}): Generator<void, { shopfronts: Shopfronts }, void> {
   const { onRoll, ...relief } = options;
   const facadeRelief = add(new FacadeRelief(fronts, { dayNight, ...relief }));
+  yield;
   add(new BladeSigns(fronts, dayNight));
   const shopfronts = add(new Shopfronts(fronts, dayNight));
+  yield;
   add(new Shutters(fronts, dayNight, onRoll));
   add(new ShopGlow(fronts, dayNight));
   const mounts = add(new WallMounts(fronts, dayNight));
@@ -150,4 +164,12 @@ export function buildStreetFixtures(add: AddScenery, options: StreetFixturesOpti
     }),
   );
   return { lamps, cars };
+}
+
+/** A builder's steps run straight through: its result. */
+function drain<T>(steps: Generator<void, T, void>): T {
+  for (;;) {
+    const step = steps.next();
+    if (step.done) return step.value;
+  }
 }

@@ -93,6 +93,8 @@ const B_UP = 0.113;
 const B_DOWN = 0.118;
 const C_FRONT = 0.092;
 const C_BACK = 0.103;
+/** A bell's squared reach (in its sigmas) past which it is taken as 0: e^-16, a ten-millionth (`headRadius`). */
+const BELL_REACH = 32;
 /** Superellipse exponent of the skull: a little squarer than an egg. */
 const N = 2.3;
 /** The nose's rise off the face along its length, by elevation angle (bridge high, tip at -0.3). */
@@ -155,7 +157,15 @@ export function headRadius(d: THREE.Vector3, shape: FaceShape): number {
   const fv = Math.asin(THREE.MathUtils.clamp(d.y, -1, 1));
   // The mouth and jaw sit back under the nose rather than jutting like a muzzle.
   r *= 1 - 0.1 * gaussian(fv, -0.55, 0.16) * d.z;
-  const g = (u0: number, v0: number, su: number, sv: number): number => gaussian(au, u0, su) * gaussian(fv, v0, sv);
+  // A feature's bell across and up: one exponential, none where it is under a ten-millionth of its height (most
+  // of the face for most features: the head is thousands of directions, every person and their hair).
+  const g = (u0: number, v0: number, su: number, sv: number): number => {
+    const dv = (fv - v0) / sv;
+    if (dv * dv > BELL_REACH) return 0;
+    const du = (au - u0) / su;
+    const e = du * du + dv * dv;
+    return e > BELL_REACH ? 0 : Math.exp(-0.5 * e);
+  };
   const lift = eyeLift(s, shape);
   r += 0.0045 * traits.brow * (1 - 0.6 * child) * g(0.3, 0.36 + lift, 0.3, 0.07); // brow ridge
   r -= 0.01 * g(0.34, 0.15 + lift, 0.17, 0.12); // eye sockets

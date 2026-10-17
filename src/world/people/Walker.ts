@@ -199,7 +199,8 @@ export class Walker extends THREE.Group implements Furniture, Updatable, Interac
     this.viewer = options.viewer;
     this.speed = options.speed ?? 0.8;
     const seed = options.seed ?? 1;
-    this.model = new PersonModel(options.look ?? randomLook(seed + 200, 'shopper'), this.viewer, seed + 200);
+    // The body is built over idle moments (`bodyQueue`): a crowd made with its zone never freezes the frame.
+    this.model = new PersonModel(options.look ?? randomLook(seed + 200, 'shopper'), this.viewer, seed + 200, { deferred: true });
     this.add(this.model);
     // Under the hips and each foot, sized to them.
     this.blob = this.model.groundShadow();

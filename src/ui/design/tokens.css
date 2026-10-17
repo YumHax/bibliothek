@@ -235,6 +235,8 @@
   --dur-breathe: 1200ms;
   --dur-shimmer: 1400ms;
   --dur-spin: 9s;
+  /* The loading bar's creep while the code downloads (`ui/loading`): long, it only slows toward its mark. */
+  --dur-creep: 15s;
 
   /*
    * Stacking, back to front. The CSS3D screens sit behind the canvas (its cut-outs show them); the HUD and the

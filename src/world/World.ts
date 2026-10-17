@@ -6,15 +6,11 @@ import { Listeners } from '@/core/Listeners';
 import { QUALITY } from '@/graphics/quality';
 import { LightMonitor } from './lighting/lightBudget';
 import { LightCuller } from './lighting/LightCuller';
+import { texturesOf, uploadTexturesSpread } from './materials/textureUpload';
 import { FIRST_ZONE_SHADOW_LAYER, Zone, type LazyZoneBuilder, type ZoneBuilder, type ZoneHost, type ZoneSpec } from './zone/Zone';
 
 /** How long `primeAsync` waits at most for the driver to finish compiling (ms). */
 const PRIME_WAIT_MS = 3000;
-
-function materialsOf(obj: THREE.Object3D): THREE.Material[] {
-  const material = (obj as Partial<THREE.Mesh>).material;
-  return Array.isArray(material) ? material : material ? [material] : [];
-}
 
 /** The zone ids of a handle map. */
 type IdOf<Handles> = Extract<keyof Handles, string>;
@@ -109,13 +105,15 @@ export class World<Handles extends object = Record<string, unknown>> implements 
    * first time the player looks through a doorway. Call it once the `ZoneManager` has activated
    * the start zone and its neighbours: programs depend on the scene's light count, so what is
    * compiled must be the lights the loop will render with (zones out of the flat, reached by
-   * teleport, compile behind the fade).
+   * teleport, compile behind the fade). The driver links the programs in the background
+   * (`KHR_parallel_shader_compile`), awaited at most `PRIME_WAIT_MS`, so the page stays live meanwhile
+   * (the loading bar moves) and the one real frame at the end does not stall on them.
    */
-  prime(): void {
+  async prime(): Promise<void> {
     this.uploadTextures();
     this.lightCuller.apply();
-    void this.engine.compileScene();
-    this.primeLaterLooks();
+    const compiled = Promise.all([this.engine.compileScene(), this.primeLaterLooks()]);
+    await atMost(compiled.then(() => undefined), PRIME_WAIT_MS);
     // One real frame: the shadow passes and the post-processing passes compile too.
     this.engine.renderFrame();
     this.lights.check('prime');
@@ -126,7 +124,7 @@ export class World<Handles extends object = Record<string, unknown>> implements 
    * (one per class): the first box taken in hand then links no program (a hitch of a frame or two
    * otherwise, the clearcoat variants on high). The copies stay out of the scene and are dropped.
    */
-  private primeLaterLooks(): void {
+  private primeLaterLooks(): Promise<void> {
     const kinds = new Set<unknown>();
     const standIn = new THREE.Scene();
     const { scene } = this.engine;
@@ -137,10 +135,10 @@ export class World<Handles extends object = Record<string, unknown>> implements 
       kinds.add(obj.constructor);
       standIn.add(obj.primeShaders());
     });
-    if (!standIn.children.length) return;
+    if (!standIn.children.length) return Promise.resolve();
     standIn.updateMatrixWorld(true);
     this.uploadTextures(standIn);
-    void this.engine.compileScene(standIn, scene);
+    return this.engine.compileScene(standIn, scene);
   }
 
   /**
@@ -191,7 +189,7 @@ export class World<Handles extends object = Record<string, unknown>> implements 
     standIn.updateMatrixWorld(true);
     try {
       // A big texture (a facade atlas) per idle moment when the build is spread, else all at once.
-      if (between) await this.uploadTexturesSpread(standIn, between);
+      if (between) await uploadTexturesSpread(this.engine.renderer, standIn, between);
       else this.uploadTextures(standIn);
       // The counts the loop will draw them with once they are in (the culler's), not all their lights.
       this.lightCuller.apply(standIn);
@@ -206,19 +204,6 @@ export class World<Handles extends object = Record<string, unknown>> implements 
   private uploadTextures(root: THREE.Object3D = this.engine.scene): void {
     const { renderer } = this.engine;
     for (const texture of texturesOf(root)) renderer.initTexture(texture);
-  }
-
-  /**
-   * `uploadTextures` spread over idle moments: an idle moment awaited after each big one (`BIG_TEXTURE` texels, a
-   * facade atlas is 16 M), so a street's atlases, masks and night maps never go up in one frame.
-   */
-  private async uploadTexturesSpread(root: THREE.Object3D, between: () => Promise<void>): Promise<void> {
-    const { renderer } = this.engine;
-    for (const texture of texturesOf(root)) {
-      renderer.initTexture(texture);
-      const image = texture.image as { width?: number; height?: number } | null;
-      if ((image?.width ?? 0) * (image?.height ?? 0) >= BIG_TEXTURE) await between();
-    }
   }
 
   /**
@@ -299,21 +284,4 @@ export class World<Handles extends object = Record<string, unknown>> implements 
     this.occluders.splice(this.occluders.indexOf(object), 1);
     this.occluderRemovedListeners.emit(object);
   }
-}
-
-/** Texels (width x height) past which a texture is uploaded in an idle moment of its own (`uploadTexturesSpread`). */
-const BIG_TEXTURE = 1 << 20;
-
-/** Every texture `root`'s materials hold, once each (render targets aside: their owner draws them). */
-function texturesOf(root: THREE.Object3D): Set<THREE.Texture> {
-  const textures = new Set<THREE.Texture>();
-  root.traverse((obj) => {
-    for (const m of materialsOf(obj)) {
-      for (const value of Object.values(m)) {
-        const texture = value as THREE.Texture | null;
-        if (texture?.isTexture && !texture.isRenderTargetTexture) textures.add(texture);
-      }
-    }
-  });
-  return textures;
 }

@@ -229,6 +229,8 @@ export const KEYS = {
   artMisses: `${CACHE_PREFIX}artMisses.v1`,
   /** The press's scores and a quoted line per game, from its Wikipedia article (`reviews/Reviews`). */
   reviewsCache: `${CACHE_PREFIX}reviews.v1`,
+  /** How long each step of the page's start took on this browser, for the loading bar's pace (`ui/loading`). */
+  loadTimesCache: `${CACHE_PREFIX}loadTimes.v1`,
 } as const;
 
 /** Preferences, not progress: a new game keeps them. */

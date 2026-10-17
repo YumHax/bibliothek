@@ -63,8 +63,8 @@ export const FIRST_DAY_STEPS: readonly FirstDayStep[] = [
   },
   {
     id: 'redeem',
-    todo: `Tickets → ${formatCoins(BARGAIN_PRICE)} at the prize counter`,
-    tips: { arcade: 'The prize counter swaps your tickets for coins, and a handful of coins buys a bargain-bin game.' },
+    todo: 'Swap your tickets for coins at the prize counter',
+    tips: { arcade: 'The prize counter swaps your tickets for coins: a handful buys a bargain-bin game, a few more a copy off a stall.' },
   },
   {
     id: 'market',

@@ -19,12 +19,14 @@ import { lightLevelOf } from '@/world/zoneHandle';
 import { ShelvingGroup } from '@/world/shelving/ShelvingGroup';
 import { trackWorldLoad } from '@/ui/worldLoad';
 import { MemoryProjector } from '@/memories/MemoryFilm';
+import { setBodyCompiler } from '@/world/people/bodyQueue';
 import { zonePlan } from '@/world/worldPlan';
 import { DreamFlat } from '@/intro/DreamFlat';
 import { stagedPieces } from '@/world/build/owned';
 import { SEED_GAMES } from '@/catalog';
 import { seededRng, shuffled } from '@/random';
 import { late, type Late } from './late';
+import type { Loading } from './loading';
 import type { Services } from './services';
 import type { PlayerMoves } from './player';
 import { installBuildingDebug, installStats, installZFight } from './debug';
@@ -86,11 +88,13 @@ interface WorldParts {
  * (`worldSound`), the graphics, the building's life and the context every builder reads (`worldContext`), the zones
  * from `WORLD_PLAN` (the flat at once, the rest on demand) and their streaming (`worldZones`), the cat roaming the
  * flat, the friends and the gatherings (`worldLife`), the shaders compiled up front, and the shelves of every zone as
- * one. The order is the order things need each other; nothing here decides a rule.
+ * one. The order is the order things need each other; nothing here decides a rule. Each room of the flat, the life
+ * and the shaders are a step of the loading bar (`loading`), the page painting between them.
  */
-export function buildWorld(services: Services, parts: WorldParts): BuiltWorld {
+export async function buildWorld(services: Services, parts: WorldParts, loading: Loading): Promise<BuiltWorld> {
   const { engine, params, sky, market, cssLayer, covers, arrangement, strays } = services;
   const { world, player, marketHall, flat, session, moves, zones } = parts;
+  await loading.step('world');
   const cat = late<Cat>('the cat');
   // The household's beats (cleaning, baking, a soak): a fade that holds the player still, like a night (docs/household.md).
   const pastimes = new Pastimes(flat.fader, sky.dayNight, (busy) => session.isSet && session.get().setFrozen(busy));
@@ -118,6 +122,8 @@ export function buildWorld(services: Services, parts: WorldParts): BuiltWorld {
     daylight: () => sky.dayNight.state.daylight,
     videoLayer: cssLayer,
   });
+  // People's bodies, built over idle moments, link their programs before they show (`world/people/bodyQueue`).
+  setBodyCompiler((root) => engine.renderer.compileAsync(root, engine.camera, engine.scene).then(() => undefined));
 
   // The memories filmed in a zone (Mémé's album, docs/story.md "Mémé"): the opening's screen, the camera and the grade;
   // the zones a film cuts to built ahead and held, the weather of the past, Félix's flat as the opening shows it.
@@ -155,6 +161,7 @@ export function buildWorld(services: Services, parts: WorldParts): BuiltWorld {
   const context = makeBuildContext(services, { flat, marketHall, listener: engine.camera, acoustics, building, pastimes, session, cat, memories });
   declareZones(world, context, services.furnishings);
   // The collection room: the cat's home, its shelves and screens.
+  await loading.step('living', 'Furnishing the flat');
   const home = world.build('living');
   engine.addUpdatable(player);
 
@@ -162,12 +169,19 @@ export function buildWorld(services: Services, parts: WorldParts): BuiltWorld {
   const manager = streamZones(services, engine, world, { graphics, notices: flat.notices, session, activity, zones });
   if (params.has('stats')) installStats({ engine, world, zones: manager, player, graphics });
   if (params.has('stats') || params.has('debug')) {
-    installZFight({ world, zones: manager });
+    installZFight({ world, zones: manager, auto: params.has('zfight') });
     installBuildingDebug();
     world.lights.verbose = true;
   }
 
   // Every room of the flat is built first (nothing is lost, `prime` activates them all next): the cat roams them all.
+  // One room per step of the loading bar; `build` hands back the room already built below.
+  for (const id of FLAT) {
+    if (id === 'living') continue;
+    await loading.step(id);
+    world.build(id);
+  }
+  await loading.step('life', 'Waking the building');
   const flatZones = FLAT.map((id) => world.zone(id));
   const flatHandles = FLAT.map((id) => world.build(id));
   wirePlayerGround(player, world, manager);
@@ -180,8 +194,9 @@ export function buildWorld(services: Services, parts: WorldParts): BuiltWorld {
   wireGatherings(services, world, { visitors, home, flat, programs });
 
   // The whole flat is active (every room neighbours the others) and furnished: compiled and drawn once
-  // now, so crossing a doorway costs nothing.
-  world.prime();
+  // now, so crossing a doorway costs nothing. The driver links the programs while the bar moves on.
+  await loading.step('prime', 'Letting the light in');
+  await world.prime();
   // Covers nearest to the player download first.
   setInterval(() => covers.setPriorityOrigin(engine.camera.position), 1000);
 

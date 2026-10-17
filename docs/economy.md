@@ -148,26 +148,36 @@ from 7-11 tickets (NEON SNAKE, PADDLE WARS, COMET DASH: under the coin, close to
 hundred (STAR RAID's four shots in the air, the hoops' roof net sliding every hard throw in); LexiPunk's rate is a guess until the site's scores are
 seen. The extras have their numbers there too: `MEDAL_REWARD`, `STREAK`, `LEAGUE`,
 `WHEEL_SLICES` and `JACKPOT` (every slice pays over the coin, 12 at the least; about 15 tickets a spin on average at
-the jackpot's start: a thrill that never loses, not an earner), `MYSTERY_GAME_TICKETS` and `MYSTERY_GAME_MAX_PRICE`. Base prices
-are set against that rate (net, a good player; an ordinary one takes about 40% longer):
+the jackpot's start: a thrill that never loses, not an earner), `MYSTERY_GAME_TICKETS` and `MYSTERY_GAME_MAX_PRICE`, and
+`MASTERY` (a mastered machine's extra, see "Medals"). Base prices are set against that rate. `npm run balance` ends on
+the table below (every machine played; stall copies priced from the fame cache `.cache/fame` at the day's middle
+discount, complete), in minutes at the cabinets per profile, net of the plays, the walk between machines and the end
+cards counted (`PRACTICE`, 0.75 of the balance table's net: novice 2.7, ordinary 4.5, good 6.3 coins a minute):
 
-| Buy | Coins | Plays | Time |
-| --- | --- | --- | --- |
-| The first bin game, from the 20 starting coins | 25 | 2 | a minute |
-| The cat | 60 | ~22 | ~7 min |
-| An armchair | 70 | ~26 | ~8 min |
-| An ordinary NES copy at a stall (160 x ~0.7) | ~110 | ~41 | ~13 min |
-| A bookcase | 250 | ~93 | ~30 min |
-| The projector | 550 | ~204 | ~65 min |
-| A grail | 800-2 400 | | 1.5-4.5 h |
-| The whole flat | ~4 250 | ~1 570 | ~8 h (a novice about 18) |
-| Mrs Roux's flat next door | 1 500 | ~560 | ~3 h |
+| Buy | Coins | Novice | Ordinary | Good |
+| --- | --- | --- | --- | --- |
+| The first bin game (from the 60 starting coins) | 15 | 0 | 0 | 0 |
+| The cat | 35 | 13 min | 8 min | 6 min |
+| An armchair | 40 | 15 min | 9 min | 6 min |
+| The median stall copy | ~50 | 19 min | 11 min | 8 min |
+| A bookcase | 120 | 44 min | 27 min | 19 min |
+| A famous stall copy (20 000 views a month and more) | ~150 | 54 min | 33 min | 24 min |
+| The projector | 330 | 2 h | 74 min | 52 min |
+| Mrs Roux's flat next door | 900 | 5.5 h | 3.4 h | 2.4 h |
+| A grail | 400-1 200 | 2.4-7.3 h | 1.5-4.5 h | 1-3.2 h |
+| The whole flat, Mrs Roux aside | ~3 000 | 18 h | 11 h | 8 h |
 
-A worn cheap copy is 2-4 minutes, a legend on a stall (Ocarina of Time about 600) over an hour. `STARTING_COINS` is 20: the first
-round of plays, with the first bin game (`BARGAIN_PRICE` 25) a couple of minutes of good plays away on the first day
-(`onboarding/`: its "Tickets → 25 coins" step ticks once tickets were swapped and the pocket holds `BARGAIN_PRICE`;
-its tips name keys through `actionKeyLabel`, so they follow the bindings and the layout). Retune `BASE_PRICE` if
-the cabinets' payouts move, `FAME_CURVE` if legends feel too cheap or filler too dear.
+The arcade is not the only purse: the collection pays its way as it grows (`MILESTONE_REWARD`: a few games' worth at
+each step of the collector's book, 40 coins at 10 games to 900 at 250; the open house from 15 games, 30 to 120 coins an
+afternoon every four game days, docs/visitors.md), a mastered machine pays a fifth more, and the street brings games
+in at the bin's price or free one game day in two (the garage sale, FREE TO TAKE). The 17 October 2026 pass (games had
+felt out of reach: a famous copy was an hour and a half at the cabinets, the flat some sixteen hours) halved
+`BASE_PRICE`, flattened `FAME_CURVE`'s top (a legend 2.6x, was 4x), cut the flat's goods by about 40 % and the grails
+by half, and raised `STARTING_COINS`, the milestones, `CHALLENGE_REWARD` and the open house's take. `STARTING_COINS` is
+60: the first bin game at once and a stall copy minutes away on the first day (`onboarding/`: its "swap your tickets"
+step ticks once tickets were swapped and the pocket holds `BARGAIN_PRICE`; its tips name keys through `actionKeyLabel`,
+so they follow the bindings and the layout). Retune `BASE_PRICE` if the cabinets' payouts move, `FAME_CURVE` if legends
+feel too cheap or filler too dear, and rerun `npm run balance` for the table.
 
 ## Fame (`src/economy/Fame.ts`, `server/fame.ts`)
 
@@ -175,7 +185,7 @@ How well known a game is = the average monthly page views of its English Wikiped
 full months (Wikimedia pageviews API, key-less). `null` when Wikipedia has no article (most catalogue filler),
 `undefined` while unknown (offline, or the lookup failed): then the game is priced as ordinary (factor 1) and
 asked again next time. `FAME_CURVE` maps `log10(views)` to the factor: no article 0.6x, ~2 000 views 1x,
-~40 000 near 3x, 200 000+ 4x. Orders of magnitude seen: Kwirk 700, Xevious 3 300, Sonic 2 9 000, Chrono
+~40 000 near 2.2x, 200 000+ 2.6x. Orders of magnitude seen: Kwirk 700, Xevious 3 300, Sonic 2 9 000, Chrono
 Trigger 28 000, Ocarina of Time / Final Fantasy VII 50 000.
 
 `GET /api/fame?title=...&platform=...` (Vite plugin in dev, `api/fame.ts` on Vercel) first asks for the article
@@ -573,8 +583,11 @@ its level following what the screen does; only the six original cabinets keep a 
 - **Medals** (`economy/ArcadeMedals`): bronze, silver and gold per machine for matching the fifth, third and first
   score of its starting table; each pays `MEDAL_REWARD` once. Lamps on the machine, the next one on the attract screen.
   Then **platinum**: the score that won the gold beaten by a fifth (`PLATINUM.over`, frozen when the gold is won:
-  `platinumTarget`; an older save's gold takes it from the player's best), 300 tickets. Gold on every machine that keeps
-  a table is **the hall's tour** (`tourDone`, `takeTour` once): its trophy (`hallTour`) goes home with a banner line.
+  `platinumTarget`; an older save's gold takes it from the player's best), 300 tickets. A machine whose gold is held is
+  **mastered** (`ArcadeMedals.mastery`, `MASTERY`): every play there pays a share more of its score's tickets (0.2, 0.35
+  with the platinum; the gold-winning play already), a "+N MASTERED" line on the end card and no banner (it comes with
+  every play; the gold's banner says once that the machine "pays you more from now on"). Practice is how the arcade's pay
+  grows. Gold on every machine that keeps a table is **the hall's tour** (`tourDone`, `takeTour` once): its trophy (`hallTour`) goes home with a banner line.
   The `HallTourPlaque` on the back wall (under the PLAYER ONE panel, where the MEDALS flyer was) lists every such
   machine with its four medal dots lit as they are won, and turns gold with the player's initials once the tour is done.
 - **Daily challenge** (`ArcadeDaily.challenge()`, drawn once a game day and kept with its progress): a game, a kind
@@ -627,7 +640,7 @@ its level following what the screen does; only the six original cabinets keep a 
   (baked glows, no light). **Sets** (`PRIZE_SETS`, `PrizeSets`): every claw bunny, the whole glass case, every limited
   edition, each pays `PRIZE_SET_TICKETS` once, the moment it is complete (`bootstrap/uiPanels` `wireHud`). The
   **mystery game** (`Prize.game`) is a random seed game the collection lacks, never a grail and never one whose shop
-  price is over `MYSTERY_GAME_MAX_PRICE` (320: no fallback, an empty box says so), added to it with a receipt
+  price is over `MYSTERY_GAME_MAX_PRICE` (160: no fallback, an empty box says so), added to it with a receipt
   (`PRIZE_WHERE`, 0 coins) so it waits in the parcel at home; the WE BUY desk, a swap and a wanted card never count it
   for more than its tickets' worth (`MYSTERY_GAME_VALUE`, 90: `receiptCap`). The counter says where a prize goes, and
   what it still needs at home: the mood lamp the dresser, the feather wand a cat (`PrizeHomeSource`, `HomeUpgrades`;
@@ -642,7 +655,7 @@ its level following what the screen does; only the six original cabinets keep a 
   **This week's limited edition** (`limitedOnOffer(gameDay)`: the golden token, the snow globe, the gold joystick, the
   marquee light box, the jukebox tape, the pixel pal, one a week in turn, each sold once, for the trophy row). **The
   rare cartridge** (`rareGame`): a game the collection lacks priced over the mystery game's ceiling and at most
-  `RARE_GAME.maxPrice` (900), never a grail; its receipt (`RARE_PRIZE_WHERE`) caps what a desk pays at its tickets'
+  `RARE_GAME.maxPrice` (450), never a grail; its receipt (`RARE_PRIZE_WHERE`) caps what a desk pays at its tickets'
   worth (`RARE_GAME.value`). **The sponsor's plate** (`sponsor`): the player picks a hall cabinet (`hallCabinets`) and
   a brass plate with their initials goes on its base (`SponsorPlate`, `OwnedPrize.game`), one per cabinet. **The
   retired cabinet** (`hallCabinet`): the hall retires one of `RETIRED_CABINETS` a week (`retiredOnOffer`); bought, that
@@ -819,7 +832,7 @@ one shut since lands there too (`PositionMemory`'s `instead`, `outsideIfShut`).
 - **The stray cat** (`life/StrayCat`, `bibliothek.strayCat.v1`): fed a scrap or a treat once a game day, he trusts the
   player a step more (0 to 6): he lets them nearer before slinking off (`WARY` by trust), from 3 is stroked (a purr,
   `CatVoice`), from 5 brings a coin from the gutter once a day. A stranger right on top of him gets a hiss.
-- **FREE TO TAKE** (`GiveawayBox`): one game day in four a box of cast-offs by a front door; once the market's stock is
+- **FREE TO TAKE** (`GiveawayBox`): one game day in two (`STREET_PLAN.giveaway.oneDayIn`) a box of cast-offs by a front door; once the market's stock is
   drawn, one worn bin game lies in it, free (a `free` `ForSaleBox`: B takes it, no price, the market never hears of it).
 - **The collector** (`Trader`): one game day in three (`rivalOnFrontStreet(day)`), 10:00 to 18:00, outside RETRO GAMES with three copies he took off
   the flea market's stalls once the stock is drawn (`market.soldToRival`: gone from there; one from the wishlist if the
@@ -830,7 +843,7 @@ one shut since lands there too (`PositionMemory`'s `instead`, `outsideIfShut`).
 - **The busker**: a click is a word (free); clicked again while they wait, a coin buys a request (the next tune of
   their book), a few a game day; a croissant or a bunch buys one too. Hands off the keys between songs. With the social
   layer a click is a conversation with Django, the requests its entries (free for a friend; docs/social.md).
-- **The garage sale**: a loft's own games (never the flea market's stalls: `MarketStock.randomGames`, by the day), a
+- **The garage sale**: one game day in two (`garageSale.oneDayIn`), a loft's own games (never the flea market's stalls: `MarketStock.randomGames`, by the day), a
   few complete, most without their manual, some worn, all at the bin's flat price; the neighbour selling answers a
   click (unpacking, a word, or picked clean). Bought off it: a moment for the collector's book (`streetMarks`).
 - **The Mansions' favours**: a resident's favour done pays 3 to 7 coins; a cupboard's games on the step are free
@@ -978,7 +991,7 @@ Numbers: `AUCTION`, `SEALED_LOT`, `RIVAL` in pricing.ts. Stores: `services.lots`
   `BookcaseKit` leans there; clicking it is `SessionActions.buyUpgrade` (a second click confirms, the coins clink, as in the shops). The
   market panel's "At home" row (`ui/market/shelfRoom`) says where a new game will go; with every bookcase bought it
   says the game stays in the collection, boxed away, and never suggests another.
-- **Mrs Roux's flat** (the `annex` home good, `HOME_GOOD_PRICES.annex` 1 500, sold by no shop: shop `agent`, bought
+- **Mrs Roux's flat** (the `annex` home good, `HOME_GOOD_PRICES.annex` 900, sold by no shop: shop `agent`, bought
   through the agency's sign on her door from game day 19, `building/rouxMove`, docs/zones.md "Mrs Roux's rooms"): the
   endgame's goal, about three projectors. Two days after, its two rooms are the flat's and the bookcases go up to ten
   bought (`HomeGood.until`: five without it, `HomeUpgrades.limit`), the collection room's front-right slot moving on

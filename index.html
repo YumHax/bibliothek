@@ -9,6 +9,13 @@
     <link rel="stylesheet" href="/src/ui/styles.css" />
   </head>
   <body>
+    <!-- The loading screen, painted before any script runs (src/ui/loading: loading.css, LoadingScreen). -->
+    <div class="boot" id="boot" role="status" aria-label="Loading">
+      <h1 class="boot__title">Bibliothek</h1>
+      <p class="boot__tagline">A video game collection, one box at a time</p>
+      <div class="boot__track"><div class="boot__fill"></div></div>
+      <p class="boot__line" aria-live="polite"></p>
+    </div>
     <div id="app"></div>
     <script type="module" src="/src/main.ts"></script>
   </body>

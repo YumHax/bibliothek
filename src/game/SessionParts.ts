@@ -186,6 +186,8 @@ export interface MedalsLike {
   award(gameId: string, score: number): readonly { tier: string; reward: number }[];
   /** Gold on every machine: true once (the hall's tour's trophy goes home). */
   takeTour?(): boolean;
+  /** The share more a mastered machine (gold, platinum) pays for its score (`MASTERY`). */
+  mastery?(gameId: string): number;
 }
 
 /**

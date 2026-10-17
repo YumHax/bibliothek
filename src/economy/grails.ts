@@ -21,21 +21,21 @@ export interface Grail {
   seller: string;
 }
 
-/** The dozen games every collector dreams of, on the platforms the game knows. Prices are an hour or two at the arcade. */
+/** The dozen games every collector dreams of, on the platforms the game knows. Prices are one to four hours at the arcade (`BASE_PRICE`'s scale: a legend on a stall about 150-250). */
 export const GRAILS: readonly Grail[] = [
-  { platform: 'nes', title: 'Stadium Events', libretroName: 'Stadium Events (USA)', price: 2400, lore: 'Pulled from the shelves weeks after release and reissued as World Class Track Meet: hardly any boxed copies survive.', seller: 'an old sports shop clearing its stockroom' },
-  { platform: 'nes', title: 'Little Samson', libretroName: 'Little Samson (USA)', price: 1500, lore: 'A late NES release with a tiny print run, and one of the best platformers on the console.', seller: 'a retired shopkeeper emptying the back of his van' },
-  { platform: 'nes', title: 'The Flintstones: The Surprise at Dinosaur Peak!', libretroName: 'Flintstones, The - The Surprise at Dinosaur Peak! (USA)', price: 1300, lore: 'Sold almost only through rental shops in 1994: a boxed copy is a rare sight.', seller: 'a video rental shop closing down' },
-  { platform: 'snes', title: 'EarthBound', libretroName: 'EarthBound (USA)', price: 1200, lore: 'Shipped in an oversized box with a strategy guide; most boxes were thrown away.', seller: 'someone clearing out an attic of Super Nintendo carts' },
-  { platform: 'snes', title: 'Hagane: The Final Conflict', libretroName: 'Hagane - The Final Conflict (USA)', price: 1100, lore: 'A ninja action game released almost only to Blockbuster in the States.', seller: 'a man who used to work at a rental chain' },
-  { platform: 'snes', title: 'Wild Guns', libretroName: 'Wild Guns (USA)', price: 900, lore: 'A cult western shooter from Natsume, printed in small numbers.', seller: 'a collector thinning out his Super Nintendo shelf' },
-  { platform: 'gb', title: 'Kid Dracula', libretroName: 'Kid Dracula (USA, Europe)', price: 800, lore: "Konami's cheeky Castlevania spin-off, rarely seen complete with its box.", seller: 'a family selling a shoebox of Game Boy games' },
-  { platform: 'megadrive', title: 'MUSHA', libretroName: 'MUSHA - Metallic Uniframe Super Hybrid Armor (USA)', price: 1000, lore: 'A legendary shooter with a heavy-metal soundtrack and a small American print run.', seller: 'a shooter fan parting with his Mega Drive collection' },
-  { platform: 'megadrive', title: 'Crusader of Centy', libretroName: 'Crusader of Centy (USA)', price: 900, lore: 'An action RPG released late in the console’s life, to very few shops.', seller: 'a house clearance out in the suburbs' },
-  { platform: 'n64', title: "Conker's Bad Fur Day", libretroName: "Conker's Bad Fur Day (USA)", price: 1000, lore: "Rare's foul-mouthed squirrel came out at the end of the N64, in a short run.", seller: 'a student selling his Nintendo 64 things' },
-  { platform: 'n64', title: 'Ogre Battle 64', libretroName: 'Ogre Battle 64 - Person of Lordly Caliber (USA)', price: 900, lore: 'A tactical RPG from Atlus, printed in very small numbers.', seller: 'someone emptying a storage unit of RPGs' },
-  { platform: 'ps1', title: 'Suikoden II', libretroName: 'Suikoden II (USA)', price: 1100, lore: 'Overlooked on release, adored since: the original black-label copies are prized.', seller: 'a collector moving abroad, selling his PlayStation RPGs' },
-  { platform: 'ps1', title: 'Valkyrie Profile', libretroName: 'Valkyrie Profile (USA)', price: 1000, lore: 'An Enix RPG with a short print run; complete copies with both discs are hard to find.', seller: 'a cousin of somebody’s, clearing out a flat' },
+  { platform: 'nes', title: 'Stadium Events', libretroName: 'Stadium Events (USA)', price: 1200, lore: 'Pulled from the shelves weeks after release and reissued as World Class Track Meet: hardly any boxed copies survive.', seller: 'an old sports shop clearing its stockroom' },
+  { platform: 'nes', title: 'Little Samson', libretroName: 'Little Samson (USA)', price: 750, lore: 'A late NES release with a tiny print run, and one of the best platformers on the console.', seller: 'a retired shopkeeper emptying the back of his van' },
+  { platform: 'nes', title: 'The Flintstones: The Surprise at Dinosaur Peak!', libretroName: 'Flintstones, The - The Surprise at Dinosaur Peak! (USA)', price: 650, lore: 'Sold almost only through rental shops in 1994: a boxed copy is a rare sight.', seller: 'a video rental shop closing down' },
+  { platform: 'snes', title: 'EarthBound', libretroName: 'EarthBound (USA)', price: 600, lore: 'Shipped in an oversized box with a strategy guide; most boxes were thrown away.', seller: 'someone clearing out an attic of Super Nintendo carts' },
+  { platform: 'snes', title: 'Hagane: The Final Conflict', libretroName: 'Hagane - The Final Conflict (USA)', price: 550, lore: 'A ninja action game released almost only to Blockbuster in the States.', seller: 'a man who used to work at a rental chain' },
+  { platform: 'snes', title: 'Wild Guns', libretroName: 'Wild Guns (USA)', price: 450, lore: 'A cult western shooter from Natsume, printed in small numbers.', seller: 'a collector thinning out his Super Nintendo shelf' },
+  { platform: 'gb', title: 'Kid Dracula', libretroName: 'Kid Dracula (USA, Europe)', price: 400, lore: "Konami's cheeky Castlevania spin-off, rarely seen complete with its box.", seller: 'a family selling a shoebox of Game Boy games' },
+  { platform: 'megadrive', title: 'MUSHA', libretroName: 'MUSHA - Metallic Uniframe Super Hybrid Armor (USA)', price: 500, lore: 'A legendary shooter with a heavy-metal soundtrack and a small American print run.', seller: 'a shooter fan parting with his Mega Drive collection' },
+  { platform: 'megadrive', title: 'Crusader of Centy', libretroName: 'Crusader of Centy (USA)', price: 450, lore: 'An action RPG released late in the console’s life, to very few shops.', seller: 'a house clearance out in the suburbs' },
+  { platform: 'n64', title: "Conker's Bad Fur Day", libretroName: "Conker's Bad Fur Day (USA)", price: 500, lore: "Rare's foul-mouthed squirrel came out at the end of the N64, in a short run.", seller: 'a student selling his Nintendo 64 things' },
+  { platform: 'n64', title: 'Ogre Battle 64', libretroName: 'Ogre Battle 64 - Person of Lordly Caliber (USA)', price: 450, lore: 'A tactical RPG from Atlus, printed in very small numbers.', seller: 'someone emptying a storage unit of RPGs' },
+  { platform: 'ps1', title: 'Suikoden II', libretroName: 'Suikoden II (USA)', price: 550, lore: 'Overlooked on release, adored since: the original black-label copies are prized.', seller: 'a collector moving abroad, selling his PlayStation RPGs' },
+  { platform: 'ps1', title: 'Valkyrie Profile', libretroName: 'Valkyrie Profile (USA)', price: 500, lore: 'An Enix RPG with a short print run; complete copies with both discs are hard to find.', seller: 'a cousin of somebody’s, clearing out a flat' },
 ];
 
 /** The copy the market sells: the index's id and name, complete. */

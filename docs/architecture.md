@@ -19,8 +19,10 @@ Walls as seen from the spawn: back = -z (shelves, door), front = +z, left = -x (
 ## Folder map
 
 ```
-src/main.ts             wiring only: a short sequence of `src/bootstrap/` calls; `late` holders for what is made after it is asked for
-src/bootstrap/          the start-up, in order, each step returning a typed bundle: services (engine, input, settings, every store made
+src/main.ts             wiring only: a short sequence of `src/bootstrap/` calls, awaited one after the other (the loading bar
+                        moves and the page paints between them); `late` holders for what is made after it is asked for
+src/bootstrap/          the start-up, in order, each step returning a typed bundle: loading (`startLoading`: the steps' names, the
+                        loading screen handed to the others, gone when the first zone is ready), services (engine, input, settings, every store made
                         once, art, sky, market), world (`createWorld`: World + player; `buildWorld`: the orchestrator over worldSound
                         (hearing, the street heard), worldContext (`FlatPanels`, `makeBuilding`, `makeBuildContext`), worldZones
                         (`declareZones`, `streamZones`, `wirePlayerGround`), worldLife (the cat, the building's life, the visitors, the
@@ -409,7 +411,10 @@ src/ui/                 Overlay (title: Continue / New game; pause: status, Go h
                         out there (`time/gameDateLabel`), else a few seconds when money moves; rolls the count, floats the
                         difference), money (`formatCount` / `formatCoins`: the one way amounts read), fade (`fadeIn` / `fadeOut`: a closing class,
                         then `hidden`), hoverCaption (`Name · verb`, legacy "click to …" read too), coverPlaceholder (a made-up box for art that
-                        does not load), worldLoad (the start button waits for the first zone; a failure alerts with Retry), fonts.css (self-hosted
+                        does not load), worldLoad (the start button waits for the first zone; a failure alerts with Retry), loading/
+                        (LoadingScreen: the screen index.html paints before any script, its bar creeping on CSS alone while
+                        the code downloads, then driven step by step as compositor transitions timed on the last load's
+                        steps, `KEYS.loadTimesCache`; `boot:<step>` performance measures and a `[boot]` timings line), fonts.css (self-hosted
                         faces from public/fonts), Fader,
                         NewsPanel (the newsstand's paper), ScratchCardPanel (the newsagent's scratch card), journal/ (JournalPanel, the
                         notebook open on a day: glancePage, the left page's counters, week bars, snapshots of the games come home, what

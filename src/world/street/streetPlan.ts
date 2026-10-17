@@ -226,7 +226,7 @@ export const STREET_PLAN = {
   /** The busker by the bus shelter: where they stand and face; the chiptune's reach. */
   busker: { at: [22.6, 10.8] as Vec2, yaw: Math.PI, hours: [9, 21.5] as [number, number], tipsPerDay: 3, reach: 22 },
   /** The garage sale's folding table (some days): centre, facing the pavement. */
-  garageSale: { at: [29.5, -11.2] as Vec2, yaw: 0, oneDayIn: 3 },
+  garageSale: { at: [29.5, -11.2] as Vec2, yaw: 0, oneDayIn: 2 },
   /**
    * The bells of Park Corner Mansions (`MansionBell`), the flats over PARK FRUIT & VEG (facade fA, its painted entrance
    * at 8 along, its surround to 8.95): on the wall right of the door as the street sees it, at hand height.
@@ -564,7 +564,7 @@ export const STREET_PLAN = {
   /** Coins dropped on the pavement: where one may lie (a few a real day, seeded by the date, and one each market day), how many a real day. */
   coins: { spots: [[-14.2, -9.1], [-3.3, -11.2], [6.1, -8.9], [24.8, -9.4], [34.4, -11.5], [-22.4, 9.3], [-6.6, 9.1], [9.2, 11.2], [26.2, 9.2], [33.1, 11.3], [-21.9, -40.5], [-37.9, -22.6], [-30.5, -10.6], [1.2, -10.1], [15.8, -11.3], [-12.5, 10.6], [17.4, 9.4], [36.9, 9.8], [-21.0, -30.2], [-38.2, -41.0]] as Vec2[], perDay: 3 },
   /** A cardboard box of cast-offs left out by a door (some days): "FREE TO TAKE". */
-  giveaway: { spots: [{ at: [-4.8, -11.55], yaw: 0 }, { at: [-36.4, 11.5], yaw: Math.PI }, { at: [-19.75, -26.8], yaw: -Math.PI / 2 }] as Spot[], oneDayIn: 4 },
+  giveaway: { spots: [{ at: [-4.8, -11.55], yaw: 0 }, { at: [-36.4, 11.5], yaw: Math.PI }, { at: [-19.75, -26.8], yaw: -Math.PI / 2 }] as Spot[], oneDayIn: 2 },
   /** The collector who sets up outside RETRO GAMES some days, selling and swapping. */
   trader: { at: [8.4, 10.85] as Vec2, yaw: Math.PI, oneDayIn: 3, hours: [10, 18] as [number, number] },
   /**

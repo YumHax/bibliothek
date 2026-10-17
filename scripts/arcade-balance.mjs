@@ -5,6 +5,10 @@
 // on). The people are models, not measurements: reaction times, timing spread and slips from casual keyboard play, so
 // read the table to compare machines and profiles, then check real plays with `?payout`.
 //
+// Then, with every machine played, the progress table: what the coins buy (stall copies priced from the fame cache
+// `.cache/fame`, the flat's goods, a grail) in minutes at the cabinets per profile, the walk and the end cards counted
+// (`PRACTICE`). docs/economy.md's table is read off it.
+//
 //   npm run balance                     every machine, 60 plays per profile
 //   npm run balance -- --game snake,frog --runs 200 --net 60
 //
@@ -52,7 +56,10 @@ await build({
   outfile: out,
   logLevel: 'error',
 });
-const { ARCADE_GAMES, pointsPerTicket, ticketsAt, TICKET_FLOOR, rivalTable, HoopSim, AlleySim, PinballSim, REPLAY_STEP, THREE } = await import(pathToFileURL(out).href);
+const {
+  ARCADE_GAMES, pointsPerTicket, ticketsAt, TICKET_FLOOR, rivalTable, HoopSim, AlleySim, PinballSim, REPLAY_STEP, THREE,
+  BARGAIN_PRICE, BOOKCASE_PRICE, MARKET_DISCOUNT, STARTING_COINS, TICKETS_PER_COIN, shopPrice, HOME_GOODS, GRAILS,
+} = await import(pathToFileURL(out).href);
 /** The machines' own fixed step (`world/arcade/replay/Replay`): the live play and this script step alike. */
 const STEP = REPLAY_STEP;
 fs.rmSync(out, { force: true });
@@ -514,6 +521,8 @@ function rateFor(id, s) {
 }
 
 const rows = [];
+/** Net tickets a minute per profile, summed over the machines (the progress table takes their average). */
+const nets = { novice: 0, ordinary: 0, good: 0 };
 for (const machine of machines) {
   const rate = pointsPerTicket(machine.id);
   const runs = machine.runs ?? RUNS;
@@ -527,6 +536,7 @@ for (const machine of machines) {
     stats[name] = { avg, seconds, scores, tickets: paidAt(machine.id, scores, rate), under, median: scores[runs >> 1], p90: scores[Math.floor(runs * 0.9)], p95: scores[Math.floor(runs * 0.95)] };
   }
   const o = stats.ordinary;
+  for (const name of Object.keys(nets)) nets[name] += ((stats[name].tickets - 10) / (stats[name].seconds + OVERHEAD)) * 60 / machines.length;
   const cell = (s) => {
     const tickets = Math.round(s.tickets);
     return `${Math.round(s.avg)} pts ${s.seconds.toFixed(0)}s ${tickets}t ${Math.round(((s.tickets - 10) / (s.seconds + OVERHEAD)) * 60)}/min ${Math.round(s.under * 100)}%<floor`;
@@ -545,4 +555,52 @@ for (const machine of machines) {
 }
 console.log(`Average per play: points, seconds, tickets at today's rate (the floor counted), net tickets a minute (the coin paid, ${OVERHEAD} s between plays), plays whose score paid under the floor. ${RUNS} plays a profile; 'rate for net' nets ${NET} a minute for the ordinary player.`);
 console.table(rows);
+if (!ONLY) progressTable(nets);
 process.exit(0);
+
+// --- The progress table ----------------------------------------------------------------------------
+
+/**
+ * What an hour in the hall buys: the net coins a minute per profile (the machines' average, times `PRACTICE` for the
+ * walk between machines and the end cards the table leaves out), against the prices the game asks.
+ */
+function progressTable(netPerMinute) {
+  const PRACTICE = 0.75;
+  const STALL = (MARKET_DISCOUNT.min + MARKET_DISCOUNT.max) / 2;
+  const PREFIX = { 'game-boy-': 'gb', 'nintendo-entertainment-system-': 'nes', 'super-nintendo-': 'snes', 'nintendo-64-': 'n64', 'sega-mega-drive-': 'megadrive', 'sony-playstation-': 'ps1' };
+  const stalls = [];
+  const famous = [];
+  const dir = path.join(ROOT, '.cache/fame');
+  for (const file of fs.existsSync(dir) ? fs.readdirSync(dir) : []) {
+    const platform = Object.entries(PREFIX).find(([p]) => file.startsWith(p))?.[1];
+    if (!platform) continue;
+    const { views } = JSON.parse(fs.readFileSync(path.join(dir, file), 'utf8'));
+    const price = Math.round(shopPrice({ id: file, platform }, views ?? 0) * STALL);
+    stalls.push(price);
+    if ((views ?? 0) >= 20000) famous.push(price);
+  }
+  const median = (xs) => [...xs].sort((a, b) => a - b)[xs.length >> 1] ?? 0;
+  const flat = HOME_GOODS.filter((g) => g.id !== 'annex').reduce((sum, g) => sum + g.price * (g.until?.max ?? g.max), 0);
+  const grails = GRAILS.map((g) => g.price);
+  const buys = [
+    ['the bargain bin', BARGAIN_PRICE],
+    ...(stalls.length ? [[`median stall copy (${stalls.length} games cached)`, median(stalls)], [`famous stall copy (${famous.length}, 20 000 views+)`, median(famous)]] : []),
+    ['a bookcase', BOOKCASE_PRICE],
+    ...['cat', 'armchair', 'projector', 'annex'].map((id) => [id, HOME_GOODS.find((g) => g.id === id)?.price ?? 0]),
+    ['cheapest .. dearest grail', Math.min(...grails), Math.max(...grails)],
+    ['the whole flat (Mrs Roux aside)', flat],
+  ];
+  const minutes = (coins, name) => {
+    const rate = (netPerMinute[name] / TICKETS_PER_COIN) * PRACTICE;
+    const m = Math.max(0, coins - (coins === BARGAIN_PRICE ? STARTING_COINS : 0)) / rate;
+    return m >= 90 ? `${(m / 60).toFixed(1)} h` : `${Math.round(m)} min`;
+  };
+  const table = buys.map(([what, coins, upTo]) => Object.fromEntries([
+    ['buy', what],
+    ['coins', upTo ? `${coins}..${upTo}` : coins],
+    ...Object.keys(netPerMinute).map((name) => [name, upTo ? `${minutes(coins, name)}..${minutes(upTo, name)}` : minutes(coins, name)]),
+  ]));
+  const rates = Object.entries(netPerMinute).map(([name, n]) => `${name} ${((n / TICKETS_PER_COIN) * PRACTICE).toFixed(1)}`).join(', ');
+  console.log(`\nWhat the coins buy, in minutes at the cabinets (net coins a minute, the walk and end cards counted: ${rates}; the bin's first copy from the ${STARTING_COINS} starting coins). Stall copies at the day's middle discount, complete.`);
+  console.table(table);
+}

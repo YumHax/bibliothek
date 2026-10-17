@@ -158,14 +158,14 @@ const FARTHEST = 140;
 
 /**
  * `?debug` / `?stats`: `bibliothek.zfight(zoneId?, options?)` lists the overlapping coplanar faces
- * of a zone (the player's by default) that z-fight, and each zone logs its count the first time the
- * player enters it once built (see `world/surface/zfight`). A zone is judged as far as it can be seen
+ * of a zone (the player's by default) that z-fight; with `?zfight` (`auto`) each zone also logs its count the first
+ * time the player enters it once built (see `world/surface/zfight`). A zone is judged as far as it can be seen
  * across (most of its diagonal, at most `FARTHEST`: Front Street's far end). The subtrees outside any zone
  * (`registerZfightRoot`: a window's street) are checked with the first zone, or by name:
  * `bibliothek.zfight('outlook:stairwell')`.
  */
-export function installZFight(parts: { world: { readonly zones: readonly Zone[] }; zones: { readonly current: Zone; onZoneChange(listener: (zone: Zone) => void): () => void } }): void {
-  const { world, zones } = parts;
+export function installZFight(parts: { world: { readonly zones: readonly Zone[] }; zones: { readonly current: Zone; onZoneChange(listener: (zone: Zone) => void): () => void }; auto: boolean }): void {
+  const { world, zones, auto } = parts;
   const run = (zone: Zone, options?: ZFightOptions): ReturnType<typeof findZFighting> => {
     const diagonal = zone.bounds.getSize(new THREE.Vector3()).length();
     return report(zone.id, findZFighting(zone.group, { viewDistance: Math.min(FARTHEST, Math.max(6, diagonal * 0.8)), ...options }));
@@ -198,8 +198,12 @@ export function installZFight(parts: { world: { readonly zones: readonly Zone[] 
       }
     }, 1500);
   };
-  check(zones.current);
-  zones.onZoneChange((zone) => check(zone));
+  // Each zone judged on its first visit with `?zfight` only: a whole zone's faces are a second or more on the main
+  // thread (the stairwell's froze the first flight down under `?debug`).
+  if (auto) {
+    check(zones.current);
+    zones.onZoneChange((zone) => check(zone));
+  }
   exposeDebug({
     zfight: (id?: string, options?: ZFightOptions) => {
       const zone = id ? world.zones.find((z) => z.id === id) : zones.current;

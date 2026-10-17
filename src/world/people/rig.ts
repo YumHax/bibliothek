@@ -154,7 +154,27 @@ export interface Rig {
   palm: number;
 }
 
-export function buildRig(look: PersonLook): Rig {
+/**
+ * Where the rig puts the person, from the look alone (no mesh built): the scale from reference metres to their height,
+ * their eye height (world metres) and the hitbox, so an owner can stand them and click them before the body is built.
+ */
+export function rigFrame(look: PersonLook): { scale: number; eyeHeight: number; hitbox: THREE.Object3D } {
+  const prop = proportionsOf(look);
+  // The legs and the neck add their rises; the person is scaled to their height all the same.
+  const rise = prop.legRise + prop.neckRise;
+  const scale = look.height / (REFERENCE_HEIGHT + rise);
+  const top = HEAD_Y + rise + 0.14;
+  const hitbox = invisibleHitbox(0.6, top, 0.45, { y: top / 2 });
+  hitbox.scale.setScalar(scale);
+  return { scale, eyeHeight: (HEAD_Y + rise + 0.014) * scale, hitbox };
+}
+
+/**
+ * The rig built a part at a time: each `yield` is a pause between pieces of a few milliseconds each (the legs, the
+ * trunk, the arms, the head's surface, its expressions, the painted face, the hair, the eyes), so a crowd's bodies
+ * are built over idle moments (`bodyQueue`) instead of a person's sixty-odd milliseconds in one go.
+ */
+export function* rigSteps(look: PersonLook): Generator<void, Rig, void> {
   const build = look.build;
   // Limb girth follows the build a little, never as much as the trunk.
   const girth = 0.7 + 0.3 * build;
@@ -172,6 +192,7 @@ export function buildRig(look: PersonLook): Rig {
   const limbCasters: THREE.Mesh[] = [];
   const legs: [LegBones, LegBones] = [leg(-1, look, girth, hipHalf, prop, materials, limbCasters), leg(1, look, girth, hipHalf, prop, materials, limbCasters)];
   pelvis.add(legs[0].hip, legs[1].hip, ...legs[0].meshes, ...legs[1].meshes);
+  yield;
   const skirtSkin = look.skirt || look.coat ? new SkirtSkin() : null;
   const garments = skirtSkin ? lowerGarments(look, skirtSkin) : [];
   if (garments.length) pelvis.add(...garments);
@@ -200,6 +221,7 @@ export function buildRig(look: PersonLook): Rig {
     pelvis.add(band);
   }
 
+  yield;
   const lumbar = new THREE.Group();
   lumbar.position.y = LUMBAR_Y - PELVIS_Y;
   pelvis.add(lumbar);
@@ -227,11 +249,12 @@ export function buildRig(look: PersonLook): Rig {
   torso.add(arms[0].clavicle, arms[1].clavicle);
   // The tops of the shoulders go with the collarbones.
   spine.attach(torso, [arms[0].clavicle, arms[1].clavicle], [arms[0].shoulder, arms[1].shoulder]);
+  yield;
 
   const head = new THREE.Group();
   head.position.set(NECK_PIVOT.x, NECK_PIVOT.y + prop.neckRise - TORSO_PIVOT_Y, NECK_PIVOT.z);
   head.rotation.order = 'YXZ';
-  const built = buildHead(head, look);
+  const built = yield* headSteps(head, look);
   const casters: THREE.Mesh[] = [trunk, ...garments, ...limbCasters];
   built.skull.traverse((o) => {
     const mesh = o as THREE.Mesh;
@@ -241,13 +264,8 @@ export function buildRig(look: PersonLook): Rig {
   if (look.headScale) head.scale.setScalar(look.headScale);
   torso.add(head);
 
-  // The legs and the neck add their rises; the person is scaled to their height all the same.
-  const rise = prop.legRise + prop.neckRise;
-  const scale = look.height / (REFERENCE_HEIGHT + rise);
+  const { scale, eyeHeight, hitbox } = rigFrame(look);
   root.scale.setScalar(scale);
-  const top = HEAD_Y + rise + 0.14;
-  const hitbox = invisibleHitbox(0.6, top, 0.45, { y: top / 2 });
-  hitbox.scale.setScalar(scale);
   return {
     root,
     pelvis,
@@ -268,7 +286,7 @@ export function buildRig(look: PersonLook): Rig {
     hood,
     hem,
     hitbox,
-    eyeHeight: (HEAD_Y + rise + 0.014) * scale,
+    eyeHeight,
     scale,
     hipHalf,
     palm: 0.05 * (0.95 + 0.1 * build),
@@ -522,14 +540,18 @@ function arm(side: -1 | 1, look: PersonLook, build: number, girth: number, prop:
 }
 
 /** The head in the neck pivot's frame, raised to the skull's centre. */
-function buildHead(head: THREE.Group, look: PersonLook): Pick<Rig, 'skull' | 'face' | 'morphs' | 'mouthOpen' | 'wrinkles' | 'hairFollow' | 'eyes' | 'tail' | 'details' | 'detailMaterials'> {
+/** The head's pieces (`rigSteps`), a pause after each heavy one: the surface, its expressions, the painted face, the hair, its fuzz. */
+function* headSteps(head: THREE.Group, look: PersonLook): Generator<void, Pick<Rig, 'skull' | 'face' | 'morphs' | 'mouthOpen' | 'wrinkles' | 'hairFollow' | 'eyes' | 'tail' | 'details' | 'detailMaterials'>, void> {
   const shape = faceShapeOf(look);
   const skull = new THREE.Group();
   skull.position.set(-NECK_PIVOT.x, HEAD_Y - NECK_PIVOT.y, -NECK_PIVOT.z);
   const geometry = headGeometry(shape);
+  yield;
   const morphs = addFaceMorphs(geometry, look);
+  yield;
   const age = skinAgeOf(look.age);
   const { material: faceMaterial, wrinkles } = faceSkin({ map: paintFace(look), roughness: 0.64 }, age);
+  yield;
   // The mouth opens through the skin (not under a full beard: no jaw there).
   const mouthCut = morphs.jaw >= 0 ? mouthPatch(faceMaterial) : null;
   // The expressions move the face only: the rest of the head (crown, back, sides) is a mesh without them, so the morph
@@ -560,6 +582,7 @@ function buildHead(head: THREE.Group, look: PersonLook): Pick<Rig, 'skull' | 'fa
   const hair = hairMaterial(look);
   const tailParts = new Parts();
   addHair(parts, look, shape, hair, tailParts);
+  yield;
   // Loose strands and fuzz over the hair's mass (none without MSAA): they cast no shadow and fade with the details.
   const cards = hairCardMaterial(look);
   if (cards) {
@@ -568,6 +591,7 @@ function buildHead(head: THREE.Group, look: PersonLook): Pick<Rig, 'skull' | 'fa
     if (strands.tail) tailParts.add(strands.tail, cards);
   }
   const fuzz = hairFuzz(look, shape);
+  yield;
   addHat(parts, look);
   if (look.glasses !== undefined) addGlasses(parts, look.glasses, shape);
   const headParts = parts.meshes();

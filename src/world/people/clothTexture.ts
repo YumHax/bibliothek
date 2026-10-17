@@ -5,6 +5,7 @@ import { cachedTexture } from './textureCache';
 import { fnv1a, lcg } from '@/random';
 import { smooth } from '@/math/scalar';
 
+
 /*
  * The one canvas a person wears: the torso's texture, painted once from the look. The trunk's
  * seam is at the back, so u = 0.5 is the middle of the chest; v runs from the bottom
@@ -16,6 +17,9 @@ import { smooth } from '@/math/scalar';
  * trouser legs wear. Both are shared by every look with the same values for them (`cachedTexture`),
  * the weave's flecks drawn from a random seeded by those values.
  */
+
+/** The painter reads its pixels back (`getImageData`): its canvas kept in memory, not on the GPU (`createCanvas`). */
+const READ_BACK: CanvasRenderingContext2DSettings = { willReadFrequently: true };
 
 const W = 512;
 const H = 512;
@@ -31,7 +35,7 @@ export function untuckedHemV(waistV: number): number {
 }
 
 function torso(look: PersonLook, waistV: number, random: () => number): THREE.CanvasTexture {
-  const [canvas, ctx] = createCanvas(W, H);
+  const [canvas, ctx] = createCanvas(W, H, READ_BACK);
   const waistY = (1 - waistV) * H;
   // Trousers and belt first: an untucked top is painted over them below.
   paintTrousers(ctx, look, waistY);
@@ -435,7 +439,7 @@ export function paintCloth(color: number, accent: number, pattern: ClothPattern)
 function cloth(color: number, accent: number, pattern: ClothPattern, random: () => number): THREE.CanvasTexture {
   if (pattern === 'denim') return denim(color, random);
   const S = 64;
-  const [canvas, ctx] = createCanvas(S, S);
+  const [canvas, ctx] = createCanvas(S, S, READ_BACK);
   ctx.fillStyle = css(color);
   ctx.fillRect(0, 0, S, S);
   if (pattern === 'stripes') {
@@ -468,7 +472,7 @@ function cloth(color: number, accent: number, pattern: ClothPattern, random: () 
 
 function denim(color: number, random: () => number): THREE.CanvasTexture {
   const S = 128;
-  const [canvas, ctx] = createCanvas(S, S);
+  const [canvas, ctx] = createCanvas(S, S, READ_BACK);
   ctx.fillStyle = css(color);
   ctx.fillRect(0, 0, S, S);
   const image = ctx.getImageData(0, 0, S, S);

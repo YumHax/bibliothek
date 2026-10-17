@@ -10,13 +10,20 @@ import { additive } from '../materials/blend';
 import { spillGlow } from '../materials/glowTextures';
 import { DustMotes } from '../attic/collectorProps';
 import { PaneReflection } from '../materials/paneReflection';
-import { leaseHomeOutlook, type OutlookLease } from '../outlook/sharedOutlook';
+import { leaseHomeOutlook, streetWindows, type OutlookLease } from '../outlook/sharedOutlook';
 import type { WindowLife } from '../street/windowLife';
 import { STAIRWELL_PLAN as plan } from './stairwellPlan';
 import { STOREY, STOREYS, landingY } from '@/world/measures/building';
 
-/** How many of the landings' panes show the courtyard at once (the nearest to the eye). */
-const LIVE = 2;
+/**
+ * How many of the landings' panes show the courtyard at once (the nearest on screen, each one in view a render of the
+ * street). None on low (`streetWindows`): all frosted, the street never built for the stairs.
+ */
+const LIVE = streetWindows() ? 2 : 0;
+/** What a pane out of the camera's view adds to its distance when ranking (m): one on screen is preferred. */
+const UNSEEN_PENALTY = 2 * STOREY;
+/** What the pane already live takes off its distance when ranking (m): no flicker between two at about the same height. */
+const HOLD = 0.5;
 /** Seconds a pane takes to frost over or clear as it leaves or joins the nearest `LIVE` (no snap while climbing). */
 const FROST_S = 0.3;
 const FRAME = 0.05;
@@ -54,12 +61,12 @@ interface StairWindowsOptions {
 export class StairWindows extends THREE.Group implements Furniture, Updatable, OccupancyAware {
   readonly contactShadow = false;
   readonly footprint = new THREE.Box3();
-  /** The view from our building (`sharedOutlook`), shared with the flat's windows and the neighbours'. */
-  private readonly lease: OutlookLease;
+  /** The view from our building (`sharedOutlook`), shared with the flat's windows and the neighbours'; none on low (`LIVE` 0). */
+  private readonly lease: OutlookLease | null;
   /** Every landing's pane: the nearest `LIVE` show the courtyard (each a render of it), the rest frosted glass. */
   private readonly panes: THREE.Mesh[] = [];
   /** Over each pane, its frost fading in or out (`frost`: 0 the courtyard clear, 1 frosted). */
-  private readonly frosts: { mesh: THREE.Mesh; material: THREE.MeshBasicMaterial; frost: number }[] = [];
+  private readonly frosts: { mesh: THREE.Mesh; material: THREE.MeshBasicMaterial; frost: number; live: boolean }[] = [];
   private readonly frosted: THREE.MeshBasicMaterial;
   /** The patch of daylight each window lays on its landing (one material, its strength by the sky). */
   private readonly daylight = onSurface(
@@ -67,9 +74,14 @@ export class StairWindows extends THREE.Group implements Furniture, Updatable, O
     FLOOR.glowPool,
   );
   private readonly motes: DustMotes[] = [];
-  private readonly live: THREE.Material;
+  private readonly live: THREE.Material | null;
   private readonly sky: () => THREE.Color;
   private readonly eye = new THREE.Vector3();
+  private readonly frustum = new THREE.Frustum();
+  private readonly viewProjection = new THREE.Matrix4();
+  private readonly paneBox = new THREE.Box3();
+  /** Each pane's distance for the ranking (`update`), reused every frame. */
+  private readonly distances: number[] = [];
   private readonly viewer: THREE.Camera;
   /** The stairwell given back by the glass, over every pane (as the flat's windows have it). */
   private readonly reflection = new PaneReflection();
@@ -81,14 +93,14 @@ export class StairWindows extends THREE.Group implements Furniture, Updatable, O
     const { x, width, height, sill } = plan.courtyardWindow;
     const z = plan.shaft.z0;
     // The stairwell is where the street has it (`flatToStreet`, the view's default frame).
-    this.lease = leaseHomeOutlook({ dayNight, outdoors, viewer, ...(windowLife ? { windowLife } : {}) });
+    this.lease = LIVE > 0 ? leaseHomeOutlook({ dayNight, outdoors, viewer, ...(windowLife ? { windowLife } : {}) }) : null;
     const waiting = new THREE.Color();
     this.sky = () => waiting.copy(dayNight.state.horizon).multiplyScalar(0.5 + 0.9 * dayNight.state.daylight);
     this.frosted = onSurface(new THREE.MeshBasicMaterial({ color: 0x8a9096, fog: false }), WALL.paper);
     for (let k = 0; k < STOREYS; k++) {
       const floor = landingY(k) - STOREY / 2;
       const y = floor + sill + height / 2;
-      const pane = this.lease.view.pane(width, height, this.lease.toOutlook);
+      const pane = this.lease ? this.lease.view.pane(width, height, this.lease.toOutlook) : new THREE.Mesh(new THREE.PlaneGeometry(width, height), this.frosted);
       pane.position.set(x, y, z + WALL.pane.lift);
       this.add(pane);
       this.panes.push(pane);
@@ -99,7 +111,7 @@ export class StairWindows extends THREE.Group implements Furniture, Updatable, O
       // Seen (clear) until the first tick, so `World.prime` compiles it with the rest.
       frostMaterial.opacity = 0;
       this.add(frost);
-      this.frosts.push({ mesh: frost, material: frostMaterial, frost: k < LIVE ? 0 : 1 });
+      this.frosts.push({ mesh: frost, material: frostMaterial, frost: k < LIVE ? 0 : 1, live: k < LIVE });
       const reflection = this.reflection.over(pane.geometry, z + WALL.pane.lift);
       reflection.position.x = x;
       reflection.position.y = y;
@@ -133,44 +145,28 @@ export class StairWindows extends THREE.Group implements Furniture, Updatable, O
     this.traverse((obj) => {
       if ((obj as THREE.Mesh).isMesh) obj.castShadow = false;
     });
-    this.live = this.panes[0]!.material as THREE.Material;
+    this.live = this.lease ? (this.panes[0]!.material as THREE.Material) : null;
     // Both materials are in the scene from the start, so `World.prime` compiles both.
-    this.panes.forEach((pane, i) => (pane.material = i < LIVE ? this.live : this.frosted));
+    this.panes.forEach((pane, i) => (pane.material = this.live && i < LIVE ? this.live : this.frosted));
     this.viewer = viewer;
     this.dayNight = dayNight;
   }
 
   /** The player walked in: what is out there is built now, at the next idle moment (`OutlookView.prefetch`). */
   setOccupied(occupied: boolean): void {
-    if (occupied) this.lease.view.prefetch();
+    if (occupied) this.lease?.view.prefetch();
   }
 
   update(dt: number): void {
-    this.lease.view.update(dt);
-    // Only the panes nearest the eye render the courtyard (each visible one is a whole render of it, and through the
-    // well up to five can be in view at once); the others, glimpsed storeys away, are frosted glass in the sky's colour.
+    this.lease?.view.update(dt);
+    // Only the panes nearest the eye on screen render the courtyard (each visible one is a whole render of it, and
+    // through the well up to five can be in view at once); the others, glimpsed storeys away, are frosted glass in the
+    // sky's colour. On low none does.
     this.viewer.getWorldPosition(this.eye);
     this.worldToLocal(this.eye);
-    // A pane's rank is how many panes are nearer the eye (ties to the lower index); no allocation, every frame.
     const eyeY = this.eye.y;
-    for (let i = 0; i < this.panes.length; i++) {
-      const d = Math.abs(this.panes[i]!.position.y - eyeY);
-      let rank = 0;
-      for (let j = 0; j < this.panes.length; j++) {
-        const e = Math.abs(this.panes[j]!.position.y - eyeY);
-        if (e < d || (e === d && j < i)) rank++;
-      }
-      // Joining the nearest: the courtyard at once under the frost, which clears; leaving: the frost comes over it,
-      // and once it is whole the pane goes back to the plain frosted glass (no render of the courtyard behind it).
-      const f = this.frosts[i]!;
-      const wanted = rank < LIVE ? 0 : 1;
-      const step = dt / FROST_S;
-      f.frost = wanted > f.frost ? Math.min(wanted, f.frost + step) : Math.max(wanted, f.frost - step);
-      const live = wanted === 0 || f.frost < 1;
-      this.panes[i]!.material = live ? this.live : this.frosted;
-      f.mesh.visible = live && f.frost > 0;
-      f.material.opacity = f.frost;
-    }
+    if (this.live) this.rankPanes(dt, this.live, eyeY);
+    else for (const f of this.frosts) f.mesh.visible = false;
     this.frosted.color.copy(this.sky());
     for (const f of this.frosts) f.material.color.copy(this.frosted.color);
     // Daylight through the courtyard windows: a soft patch on each landing, a little sun in it on a clear day.
@@ -184,10 +180,50 @@ export class StairWindows extends THREE.Group implements Furniture, Updatable, O
     this.reflection.set(this.dayNight.state.daylight);
   }
 
+  /**
+   * The `LIVE` panes nearest the eye (by height; one out of view counts `UNSEEN_PENALTY` farther, the one already
+   * live `HOLD` nearer, so standing between two it does not flicker) show the courtyard, the frost clearing over
+   * them; the others frost over and go back to plain glass. No allocation, every frame.
+   */
+  private rankPanes(dt: number, live: THREE.Material, eyeY: number): void {
+    this.viewProjection.multiplyMatrices(this.viewer.projectionMatrix, this.viewer.matrixWorldInverse);
+    this.frustum.setFromProjectionMatrix(this.viewProjection);
+    for (let i = 0; i < this.panes.length; i++) {
+      const pane = this.panes[i]!;
+      pane.geometry.boundingBox ?? pane.geometry.computeBoundingBox();
+      const seen = this.frustum.intersectsBox(this.paneBox.copy(pane.geometry.boundingBox!).applyMatrix4(pane.matrixWorld));
+      const f = this.frosts[i]!;
+      this.distances[i] = Math.abs(pane.position.y - eyeY) + (seen ? 0 : UNSEEN_PENALTY) - (f.live ? HOLD : 0);
+    }
+    for (let i = 0; i < this.panes.length; i++) {
+      // A pane's rank is how many panes are nearer (ties to the lower index).
+      const d = this.distances[i]!;
+      let rank = 0;
+      for (let j = 0; j < this.panes.length; j++) {
+        const e = this.distances[j]!;
+        if (e < d || (e === d && j < i)) rank++;
+      }
+      // Joining the nearest: the courtyard at once under the frost, which clears; leaving: the frost comes over it,
+      // and once it is whole the pane goes back to the plain frosted glass (no render of the courtyard behind it).
+      const f = this.frosts[i]!;
+      f.live = rank < LIVE;
+      const wanted = f.live ? 0 : 1;
+      const step = dt / FROST_S;
+      f.frost = wanted > f.frost ? Math.min(wanted, f.frost + step) : Math.max(wanted, f.frost - step);
+      const showing = wanted === 0 || f.frost < 1;
+      this.panes[i]!.material = showing ? live : this.frosted;
+      f.mesh.visible = showing && f.frost > 0;
+      f.material.opacity = f.frost;
+    }
+  }
+
   dispose(): void {
     for (const f of this.frosts) f.material.dispose();
     this.daylight.dispose();
-    for (const pane of this.panes) this.lease.view.release(pane);
-    this.lease.release();
+    if (this.lease) {
+      for (const pane of this.panes) this.lease.view.release(pane);
+      this.lease.release();
+    } else for (const pane of this.panes) pane.geometry.dispose();
+    this.frosted.dispose();
   }
 }

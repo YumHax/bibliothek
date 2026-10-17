@@ -10,10 +10,10 @@ import { unit01 } from '@/random';
  */
 
 /**
- * Coins in a brand-new wallet: a first round of arcade plays with enough left over that the first
- * bargain-bin game (`BARGAIN_PRICE`) is a few good plays away, not an evening's.
+ * Coins in a brand-new wallet: the first bargain-bin game (`BARGAIN_PRICE`) and a first round of arcade plays, with
+ * an ordinary stall copy (about 50) a few minutes at the cabinets away: the collection starts on the first day.
  */
-export const STARTING_COINS = 20;
+export const STARTING_COINS = 60;
 /** One arcade play. */
 export const PLAY_COST = 1;
 /** The prize counter's rate. */
@@ -107,8 +107,8 @@ export function playIsFree(wallet: { readonly coins: number; readonly tickets: n
 /** What the change machine coughs up on a (game) day it works: coins, and how often a day it works. */
 export const CHANGE_MACHINE = { minCoins: 1, maxCoins: 3, workingOdds: 0.25 };
 
-/** The daily challenge's reward range in tickets (the day picks one in it). */
-export const CHALLENGE_REWARD = { min: 50, max: 90 };
+/** The daily challenge's reward range in tickets (the day picks one in it): worth the trip on its own, 10 to 16 coins. */
+export const CHALLENGE_REWARD = { min: 100, max: 160 };
 /**
  * Where the daily challenge's target falls on a game's starting table (`rivals.ts`, 0-based ranks,
  * best first): between the `low` rank's score and the `high` one's, the fourth and the second
@@ -138,18 +138,19 @@ export const OUT_OF_ORDER_ODDS = 0.35;
 /**
  * Shop price of an ordinary game per platform, before the fame factor. Calibrated against the
  * arcade (`PAYOUT`): an ordinary player nets about 6 coins a minute there once the coin each play
- * costs is paid, a good one 8-10 (more on a challenge or a medal); for a good player an ordinary
- * market copy (about 0.7 of the shop price: a NES one about 110) is 12-15 minutes of play, a famous
- * shop title an hour or more, a bargain-bin game three (four for an ordinary player).
+ * costs is paid (some 4-5 once the walking and the end cards are counted), a good one 8-10 (more on a
+ * challenge or a medal); the ordinary player's median stall copy (about 50) is ten minutes of play, a
+ * famous one half an hour, a bargain-bin game three. `npm run balance` ends on the table (docs/economy.md "Numbers").
  */
-const BASE_PRICE: Record<PlatformId, number> = { nes: 160, snes: 240, gb: 120, megadrive: 200, n64: 280, ps1: 200 };
+const BASE_PRICE: Record<PlatformId, number> = { nes: 80, snes: 120, gb: 60, megadrive: 100, n64: 140, ps1: 100 };
 
 /**
  * Fame factor by monthly Wikipedia page views: no article 0.6x, an ordinary title with a stub
- * (~2 000 views) about 1x, a well-known one (~40 000) near 3x, the handful of legends 4x. Set as
+ * (~2 000 views) about 1x, a well-known one (~40 000) near 2.2x, the handful of legends 2.6x: the
+ * games the player knows are the ones they want, so fame lifts a price without walling it off. Set as
  * `[log10(views), factor]` points, straight lines in between, flat beyond the ends.
  */
-const FAME_CURVE: readonly (readonly [number, number])[] = [[2.5, 0.6], [3.3, 1], [4, 1.8], [4.6, 3], [5.3, 4]];
+const FAME_CURVE: readonly (readonly [number, number])[] = [[2.5, 0.6], [3.3, 1], [4, 1.6], [4.6, 2.2], [5.3, 2.6]];
 /** A game whose fame is unknown (offline, or Wikipedia unreachable) is priced as ordinary. */
 const UNKNOWN_FAME_FACTOR = 1;
 /** Per-title jitter around the fame factor, from the id. */
@@ -162,7 +163,7 @@ const CONDITION_FACTOR: Record<BoxCondition, number> = { complete: 1, noManual: 
 export const MARKET_DISCOUNT = { min: 0.55, max: 0.85 };
 
 /** Everything in the bargain bin goes at this flat price, whatever it is (worn copies; the odd gem is the point). */
-export const BARGAIN_PRICE = 25;
+export const BARGAIN_PRICE = 15;
 /** How a bargain-bin copy's receipt names where it came from (`Acquisition.where`). */
 export const BIN_WHERE = 'the bargain bin';
 /** The street's flat-price copies' receipts (a garage sale, the box of cast-offs): capped at the desk like the bin's. */
@@ -293,7 +294,7 @@ export const IMPORT = { odds: 0.07, price: 0.7 };
  * A homebrew NES cart (`emulator/homebrew`: plays for real on the TV) on the NES stall: the share of market days one
  * is there (one the player does not own yet), and its price (coins: new, from a small run, whatever its fame).
  */
-export const HOMEBREW = { odds: 0.45, price: 90 };
+export const HOMEBREW = { odds: 0.45, price: 50 };
 /** Chance a market day that one stall has a first print of a game the player owns in an ordinary printing. */
 export const UPGRADE_ODDS = 0.5;
 
@@ -389,7 +390,7 @@ export const AUCTION = {
  * the saleroom puts `AUCTION.lots.sealed` under the hammer. A game the player has already counts `duplicateShare` of
  * its share of the price in coins (the buyer takes it off them).
  */
-export const SEALED_LOT = { items: [3, 7] as readonly [number, number], gameOdds: 0.5, bootlegOdds: 0.12, gemOdds: 0.16, perItem: 34, marketShare: 1, perDay: 1, duplicateShare: 0.6, coinsOdds: 0.25, coins: [1, 4] as readonly [number, number] } as const;
+export const SEALED_LOT = { items: [3, 7] as readonly [number, number], gameOdds: 0.5, bootlegOdds: 0.12, gemOdds: 0.16, perItem: 17, marketShare: 1, perDay: 1, duplicateShare: 0.6, coinsOdds: 0.25, coins: [1, 4] as readonly [number, number] } as const;
 
 /**
  * The rival collector (`economy/rivalCollector.ts`): at the flea market on `marketOdds` of market days between
@@ -607,9 +608,10 @@ export function describeCondition(condition: BoxCondition | undefined): string {
 
 /**
  * A bookcase (about 40 NES boxes): the collection room starts with one, those bought stand along its
- * walls, then in the bedroom. About half an hour at the cabinets for a good player (net of the plays), dearer than any ordinary copy.
+ * walls, then in the bedroom. About twenty minutes at the cabinets for an ordinary player: room for the collection
+ * is never what holds it back.
  */
-export const BOOKCASE_PRICE = 250;
+export const BOOKCASE_PRICE = 120;
 
 // --- The arcade's extras: medals, streaks, the weekly league, the wheel, the mystery game -------
 
@@ -619,6 +621,12 @@ export const BOOKCASE_PRICE = 250;
  */
 export const MEDAL_REWARD = { bronze: 25, silver: 60, gold: 150, platinum: 300 } as const;
 export const PLATINUM = { over: 1.2 } as const;
+/**
+ * A machine mastered pays more for its score, every play after (`ArcadeMedals.mastery`, a MASTERED line on the end
+ * card): this share of the score's tickets on top once its gold is won, more once its platinum is. Practice is how
+ * the arcade's pay grows, the good player's edge kept for good.
+ */
+export const MASTERY = { gold: 0.2, platinum: 0.35 } as const;
 /** Gold on every machine that keeps a table: the hall's tour, its trophy home once (`Prizes`). */
 export const HALL_TOUR = { prize: 'hallTour' } as const;
 
@@ -699,13 +707,13 @@ export const WHEEL_SLICES: readonly { tickets: number | 'jackpot'; weight: numbe
 export const JACKPOT = { start: 250, perSpin: 3, news: 1000 } as const;
 
 /** A random game for the collection from the prize counter: the dearest thing on the list. */
-export const MYSTERY_GAME_TICKETS = 900;
+export const MYSTERY_GAME_TICKETS = 600;
 /**
- * The mystery game is never a grail, nor anything whose shop price is over this (coins): 900 tickets
- * are 90 coins, so it may be a pleasant surprise (a good shop title), never a jackpot to sell on.
+ * The mystery game is never a grail, nor anything whose shop price is over this (coins): 600 tickets
+ * are 60 coins, so it may be a pleasant surprise (a good shop title), never a jackpot to sell on.
  */
-export const MYSTERY_GAME_MAX_PRICE = 320;
-/** What the mystery game counts for at the WE BUY desk and in a swap, at most: its tickets' worth in coins (90). */
+export const MYSTERY_GAME_MAX_PRICE = 160;
+/** What the mystery game counts for at the WE BUY desk and in a swap, at most: its tickets' worth in coins (60). */
 export const MYSTERY_GAME_VALUE = Math.round(MYSTERY_GAME_TICKETS / TICKETS_PER_COIN);
 
 /** The prize counter's list, in tickets, by prize id (`Prizes.ts` has what each one is). */
@@ -725,7 +733,7 @@ export const PRIZE_TICKETS = {
   miniCabinet: 600,
   mysteryGame: MYSTERY_GAME_TICKETS,
   // The back room, for when the flat is done: at an ordinary player's 60 tickets a minute, a limited edition is half
-  // an hour of play, the rare cartridge an hour, the sponsor's plate fifty minutes, a retired cabinet an hour and a half.
+  // an hour of play, the rare cartridge forty minutes, the sponsor's plate fifty minutes, a retired cabinet an hour and a half.
   goldToken: 1500,
   jukeboxTape: 1500,
   pixelPal: 1600,
@@ -733,7 +741,7 @@ export const PRIZE_TICKETS = {
   goldStick: 2000,
   lightBox: 2200,
   sponsor: 3000,
-  rareGame: 4000,
+  rareGame: 2500,
   hallCabinet: 5000,
 } as const;
 
@@ -745,35 +753,37 @@ export const PRIZE_SET_TICKETS = { bunnies: 200, counter: 300, limited: 500 } as
  * `maxPrice` coins (never a grail); `value` is what the WE BUY desk and a swap count it for at most (its tickets'
  * worth in coins), so it is no way to print coins either.
  */
-export const RARE_GAME = { maxPrice: 900, value: Math.round(PRIZE_TICKETS.rareGame / TICKETS_PER_COIN) } as const;
+export const RARE_GAME = { maxPrice: 450, value: Math.round(PRIZE_TICKETS.rareGame / TICKETS_PER_COIN) } as const;
 /** Where the rare cartridge's receipt says it came from: its cap is `RARE_GAME.value` (`receiptCap`). */
 export const RARE_PRIZE_WHERE = 'the prize counter’s back room';
 
 /**
  * What the flat's furniture costs, in coins (the bookcase is `BOOKCASE_PRICE`; `homeGoods.ts` has the list, who sells
- * what and how many). The flat starts bare (a bookcase, the TV, a mattress): at a good player's 8-10 coins a minute at the
- * cabinets (net of the plays; an ordinary player's 6) a print or a plant is a couple of minutes, an armchair or a lamp seven to ten, a bed or a dresser
- * about a quarter of an hour, the projector the long goal (about an hour). The whole flat is some eight hours.
+ * what and how many). The flat starts bare (a bookcase, the TV, a mattress): at an ordinary player's 4-5 coins a minute at
+ * the cabinets (net of the plays and the walking; a good player's 8-10) a print or a plant is a couple of minutes, an armchair
+ * or a lamp under ten, a bed or a dresser about a quarter of an hour, the projector the long goal (over an hour). The whole
+ * flat, Mrs Roux's rooms aside, is some eleven hours at the cabinets alone for an ordinary player (eight for a good one),
+ * less with the collection's own income (the book's milestones, the open house).
  */
 export const HOME_GOOD_PRICES = {
   // The market's household stall.
-  rug: 120, lamp: 90, poster: 60, record: 25,
+  rug: 70, lamp: 55, poster: 35, record: 15,
   // The furniture shop.
-  armchair: 70, floorLamp: 55, sideTable: 30, livingRug: 45, floorCushions: 20, sideboard: 110, framedPrint: 15,
-  bed: 120, nightstands: 50, dresser: 90, readingCorner: 80, bedroomRug: 35, mirror: 30,
-  kitchenTable: 70, kitchenRug: 20, bathMat: 10, hallStand: 30, bistroSet: 60,
+  armchair: 40, floorLamp: 35, sideTable: 20, livingRug: 25, floorCushions: 12, sideboard: 65, framedPrint: 10,
+  bed: 70, nightstands: 30, dresser: 55, readingCorner: 50, bedroomRug: 20, mirror: 18,
+  kitchenTable: 40, kitchenRug: 12, bathMat: 6, hallStand: 18, bistroSet: 35,
   // The displays for the collection's showpieces, and the label maker for the shelves (`world/showcase`, `world/labels`).
-  displayCase: 95, pedestal: 65, labelMaker: 8,
+  displayCase: 55, pedestal: 40, labelMaker: 5,
   // The TV repair shop.
-  crt: 300, projector: 550, speakers: 120, bedroomTv: 150, radio: 40, appliances: 45, homeArcade: 420,
+  crt: 180, projector: 330, speakers: 70, bedroomTv: 90, radio: 25, appliances: 28, homeArcade: 250,
   // The TV repair shop's region converters (`economy/regionLock`): a Japanese copy runs at home with its platform's.
-  famicomAdapter: 35, superFamicomAdapter: 45, megaDriveConverter: 35, n64Passthrough: 50, ps1ModChip: 60,
+  famicomAdapter: 20, superFamicomAdapter: 28, megaDriveConverter: 20, n64Passthrough: 30, ps1ModChip: 35,
   // The florist.
-  houseplant: 14, plant: 12,
+  houseplant: 9, plant: 8,
   // The pet shop.
-  cat: 60, scratcher: 25, catToy: 5,
+  cat: 35, scratcher: 15, catToy: 3,
   // Mrs Roux's two rooms next door (the agency's sign on her door): the endgame's goal, near three projectors.
-  annex: 1500,
+  annex: 900,
 } as const;
 
 // --- The market's calendar of events: grails, the monthly big market, sales (see `marketEvents.ts`) ---
@@ -811,34 +821,35 @@ export const SALES = {
 
 /**
  * What each milestone of the collector's book pays once claimed there (coins, or arcade tickets);
- * a milestone missing here pays nothing but its place in the book (or the thing it brings home).
+ * a milestone missing here pays nothing but its place in the book (or the thing it brings home). Each pays a few
+ * games' worth or more: the collection growing is what speeds the next buys, not only the arcade.
  */
 export const MILESTONE_REWARD: Readonly<Record<string, { coins?: number; tickets?: number }>> = {
-  'games-10': { coins: 15 },
-  'games-25': { coins: 30 },
-  'games-50': { coins: 60 },
-  'games-75': { coins: 80 },
-  'games-100': { coins: 150 },
-  'games-150': { coins: 220 },
-  'games-250': { coins: 400 },
-  'platform-10': { tickets: 150 },
-  'platform-25': { coins: 120 },
-  'platforms-5': { coins: 40 },
-  'complete-1': { coins: 15 },
-  'sealed-1': { coins: 25 },
-  'genre-5': { tickets: 60 },
-  'publisher-8': { coins: 30 },
-  'decades-3': { tickets: 80 },
-  'set-1': { tickets: 100 },
-  'sets-3': { coins: 100 },
+  'games-10': { coins: 40 },
+  'games-25': { coins: 80 },
+  'games-50': { coins: 150 },
+  'games-75': { coins: 200 },
+  'games-100': { coins: 350 },
+  'games-150': { coins: 500 },
+  'games-250': { coins: 900 },
+  'platform-10': { tickets: 300 },
+  'platform-25': { coins: 250 },
+  'platforms-5': { coins: 100 },
+  'complete-1': { coins: 30 },
+  'sealed-1': { coins: 50 },
+  'genre-5': { tickets: 150 },
+  'publisher-8': { coins: 70 },
+  'decades-3': { tickets: 200 },
+  'set-1': { tickets: 250 },
+  'sets-3': { coins: 220 },
   'medal-1': { tickets: 30 },
   'medals-10': { tickets: 150 },
-  'deal-1': { coins: 10 },
-  'sale-1': { coins: 10 },
+  'deal-1': { coins: 20 },
+  'sale-1': { coins: 20 },
   'league-1': { tickets: 200 },
-  'value-1000': { coins: 50 },
-  'value-5000': { coins: 200 },
-  'grail-1': { coins: 100 },
+  'value-1000': { coins: 120 },
+  'value-5000': { coins: 400 },
+  'grail-1': { coins: 200 },
 };
 
 // --- The one rule every number above must keep: buying to sell back never pays -------------------

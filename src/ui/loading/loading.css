@@ -1,0 +1,63 @@
+/*
+ * The loading screen (`index.html`'s `.boot`, driven by `LoadingScreen`): painted before any script runs, so this
+ * sheet comes with the page (`styles.css` imports it), not with a module. The fill is a `scaleX` so its moves run
+ * on the compositor while a step holds the main thread. Until the bootstrap takes it over, it creeps toward a third
+ * on its own (`boot-creep`), slower and slower, so the download reads as work.
+ */
+@layer panels {
+  .boot {
+    /* `LoadingScreen`'s FINISH_MS: the fade it waits for before taking the screen out. */
+    --boot-fade: 250ms;
+    position: fixed;
+    inset: 0;
+    z-index: var(--z-fader);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: var(--sp-3);
+    padding: var(--sp-5);
+    background: var(--ui-page);
+    color: var(--ui-text);
+    font-family: var(--ui-font-body);
+    transition: opacity var(--boot-fade) ease;
+  }
+  .boot--done { opacity: 0; pointer-events: none; }
+
+  .boot__title {
+    margin: 0;
+    font-family: var(--ui-font-display);
+    font-weight: 400;
+    font-size: clamp(2rem, 7vw, 2.75rem);
+    letter-spacing: 0.04em;
+    line-height: 1.1;
+    text-align: center;
+  }
+  .boot__tagline { margin: 0 0 var(--sp-3); color: var(--ui-text-dim); text-align: center; }
+
+  .boot__track {
+    width: min(18rem, 70vw);
+    height: 4px;
+    border-radius: 2px;
+    background: var(--ui-border);
+    overflow: hidden;
+  }
+  .boot__fill {
+    height: 100%;
+    background: var(--ui-accent);
+    transform-origin: left center;
+    transform: scaleX(0);
+    transition-property: transform;
+    transition-timing-function: ease-out;
+    animation: boot-creep var(--dur-creep) cubic-bezier(0.1, 0.6, 0.3, 1) forwards;
+  }
+  @keyframes boot-creep {
+    from { transform: scaleX(0); }
+    to   { transform: scaleX(0.35); }
+  }
+  .boot--failed .boot__fill { background: var(--ui-danger); }
+
+  /* Fixed height: a line coming or going never moves the bar. */
+  .boot__line { min-height: 1.4em; margin: 0; font-size: var(--fs-4); color: var(--ui-text-dim); text-align: center; }
+  .boot--failed .boot__line { color: var(--ui-danger-text); }
+}

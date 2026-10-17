@@ -3,11 +3,16 @@ import { QUALITY } from './quality';
 
 /** Generic helpers for textures drawn on a 2D canvas (covers, labels, signs, posters). */
 
-export function createCanvas(width: number, height: number): [HTMLCanvasElement, CanvasRenderingContext2D] {
+/**
+ * A canvas and its 2D context. `settings.willReadFrequently` for a painter that reads its pixels back (`getImageData`):
+ * the canvas then stays in memory instead of on the GPU, where each read waits on a copy back (a person's face and
+ * clothes were 20-50 ms of it each in a busy frame).
+ */
+export function createCanvas(width: number, height: number, settings?: CanvasRenderingContext2DSettings): [HTMLCanvasElement, CanvasRenderingContext2D] {
   const canvas = document.createElement('canvas');
   canvas.width = width;
   canvas.height = height;
-  return [canvas, canvas.getContext('2d')!];
+  return [canvas, canvas.getContext('2d', settings)!];
 }
 
 /**

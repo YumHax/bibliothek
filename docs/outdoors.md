@@ -427,9 +427,11 @@ calls as the street's own, `street/streetScenery`: only the options differ), the
 the street never reaches (`Courtyard`, `COURTYARD_YARD` in `courtyard/courtyardPlan.ts`: setts, lawn and chestnut, the workshop's
 back, bins, shed, rack, sandpit, bikes). No people, doors or sounds. It is built at the next idle moment once the
 player walks into the room (`prefetch`, from `setOccupied`) or a pane is first drawn, a step per idle moment (`between`:
-the ground and park, the facades, the fronts, the fixtures, the rest), compiled out of sight a few pieces per idle
+the ground and park, the facades, the fronts, the fixtures, the rest). Its textures then go up a big one per idle moment
+(`materials/textureUpload`, as `World` does for a zone), and it is compiled out of sight a few pieces per idle
 moment (`OutlookContents.parts`, `COMPILE_SLICE_MS`; without the driver's parallel compile each slice's programs are
-linked there and then, not on the first draw), and ticked only while a pane was drawn in the last 1.5 s; the glass
+linked there and then, not on the first draw). Last comes one render a pixel wide (`warm`: the sun's shadow map and its
+depth programs). Left to the first real draw, the atlases and that shadow froze the frame a window came into view. It is ticked only while a pane was drawn in the last 1.5 s; the glass
 shows a pale sky until then, and the view comes through it over `REVEAL_S` (0.4 s) once ready (a veil over the fresh
 picture, again after a free).
 

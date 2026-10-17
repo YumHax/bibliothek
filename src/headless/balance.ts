@@ -4,6 +4,10 @@
  */
 export { ARCADE_GAMES } from '@/world/arcade/games';
 export { pointsPerTicket, ticketsAt, TICKET_FLOOR } from '@/economy/pricing';
+// The progress table: what the coins buy, priced as the game prices it.
+export { BARGAIN_PRICE, BOOKCASE_PRICE, MARKET_DISCOUNT, STARTING_COINS, TICKETS_PER_COIN, shopPrice } from '@/economy/pricing';
+export { HOME_GOODS } from '@/economy/homeGoods';
+export { GRAILS } from '@/economy/grails';
 export { rivalTable } from '@/economy/rivals';
 export { HoopSim } from '@/world/arcade/hoop/HoopSim';
 export { AlleySim } from '@/world/arcade/alley/AlleySim';

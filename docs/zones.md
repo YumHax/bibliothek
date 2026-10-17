@@ -207,10 +207,13 @@ the sas's glass door) is only the street's home door when the sas is not connect
   mirror, doormat, fibre box and lift plate: docs/building.md "The co-owners' meeting".
 - **Drawn only when seen.** The `PortalCuller` already hides the whole stairwell while the front door is shut and the
   player is in the flat (the hallway's portal carries the door), so its merged storeys cost nothing from home. The
-  courtyard windows render the outlook only on their two panes nearest the eye (`StairWindows`, `LIVE`; the others,
-  storeys away through the well, are frosted glass in the sky's colour, a pane frosting over or clearing in 0.3 s as it
-  leaves or joins the two: `FROST_S`, a frost layer `WALL.paneFrost`), panes in one plane share one render, and the
-  outlook frees its scene after 90 s undrawn (`OutlookView`, docs/outdoors.md).
+  courtyard windows render the outlook only on their two panes nearest the eye on screen (`StairWindows`, `LIVE`; one
+  out of view ranks two storeys farther, a live one holds 0.5 m against flicker). The others, storeys away through
+  the well, are frosted glass in the sky's colour; a pane frosts over or clears in 0.3 s as it leaves or joins the two
+  (`FROST_S`, a frost layer `WALL.paneFrost`). On low (`streetWindows`) every pane is frosted and the street is never
+  built for the stairs. A pane brushed
+  past is cut at the eye before its scissor is taken (`OutlookView.rectOf`), not rendered whole. Panes in one plane share
+  one render, and the outlook frees its scene after 90 s undrawn (`OutlookView`, docs/outdoors.md).
 - **Visiting the neighbours** (`neighbourFlat/visits`): past their friendship's `inviteAt` a knock while they are home
   travels into their flat (see "The neighbours' flats"; docs/building.md "Friendship"), and their door there leads back
   onto their landing (`travel/nextArrival`).

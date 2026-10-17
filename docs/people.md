@@ -143,6 +143,19 @@ root (scaled to look.height) > pelvis > hips (2) > knees > ankles (shoes)
   vertex from the look) bound rigidly to the rig's own bones, so it moves exactly as the full body; the full body's
   meshes leave the camera's layer meanwhile (held things and costumes stay) and their skinning, face and hair stop.
   About 50 draws near, 1 there. Built when first needed.
+- **Built over idle moments** (`bodyQueue.ts`, `PersonModel`'s `deferred`, on for every `Walker`). A body costs about
+  60 ms: the head's surface and morphs, the painted face and clothes, the hair. Built where its owner was made, a crowd
+  froze its zone's build: Front Street got ready from the stairs (`airlock/StreetAhead`) with 4 s in one frame. Now
+  `rig.rigSteps` builds a body a part at a time. The queue runs its steps in `requestIdleCallback`, the nearest body
+  first (`priority`, kept by `update` while it waits), about 6 ms a moment. A finished body links its programs
+  (`setBodyCompiler`: `compileAsync`, one body after another) before it shows.
+  - Until then the person stands, is clicked (`rigFrame`: hitbox and eye height from the look) and is asked things.
+    `hold`, `carry`, `wearOnHead`, `setHood`, `standOn`, `enableFade` and the opacity are kept for the body; a face's
+    feeling or words are dropped.
+  - The body takes the person's layers (the zone's shadow layer: it was placed before the body existed).
+  - Where there is no `requestIdleCallback` (Node's checks, Safari) bodies are built at once, as made.
+  - The painters that read their pixels back (face, torso, cloth) draw on a `willReadFrequently` canvas (`createCanvas`):
+    on the GPU each `getImageData` waited on a copy back.
 
 ## How it moves (`PersonModel.animate`, in layers)
 

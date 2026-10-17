@@ -159,22 +159,33 @@ export function radialSurface(radius: (d: THREE.Vector3) => number, widthSegment
 export function weldNormals(geometry: THREE.BufferGeometry): void {
   const position = geometry.getAttribute('position');
   const normal = geometry.getAttribute('normal') as THREE.BufferAttribute;
-  const groups = new Map<string, number[]>();
-  for (let i = 0; i < position.count; i++) {
-    const key = `${Math.round(position.getX(i) * 1e5)},${Math.round(position.getY(i) * 1e5)},${Math.round(position.getZ(i) * 1e5)}`;
-    const group = groups.get(key);
-    if (group) group.push(i);
-    else groups.set(key, [i]);
+  const count = position.count;
+  // Positions to a hundredth of a millimetre, as integers; the vertices sorted by them, so those sharing one are
+  // neighbours (a string key a vertex was a person's five milliseconds).
+  const grid = new Int32Array(count * 3);
+  for (let i = 0; i < count; i++) {
+    grid[i * 3] = Math.round(position.getX(i) * 1e5);
+    grid[i * 3 + 1] = Math.round(position.getY(i) * 1e5);
+    grid[i * 3 + 2] = Math.round(position.getZ(i) * 1e5);
   }
+  const order = new Uint32Array(count);
+  for (let i = 0; i < count; i++) order[i] = i;
+  const compare = (a: number, b: number): number => grid[a * 3]! - grid[b * 3]! || grid[a * 3 + 1]! - grid[b * 3 + 1]! || grid[a * 3 + 2]! - grid[b * 3 + 2]!;
+  order.sort(compare);
   const sum = new THREE.Vector3();
   const n = new THREE.Vector3();
-  for (const group of groups.values()) {
-    if (group.length < 2) continue;
-    sum.set(0, 0, 0);
-    for (const i of group) sum.add(n.fromBufferAttribute(normal, i));
-    if (sum.lengthSq() === 0) continue;
-    sum.normalize();
-    for (const i of group) normal.setXYZ(i, sum.x, sum.y, sum.z);
+  for (let start = 0; start < count; ) {
+    let end = start + 1;
+    while (end < count && compare(order[start]!, order[end]!) === 0) end++;
+    if (end - start > 1) {
+      sum.set(0, 0, 0);
+      for (let k = start; k < end; k++) sum.add(n.fromBufferAttribute(normal, order[k]!));
+      if (sum.lengthSq() > 0) {
+        sum.normalize();
+        for (let k = start; k < end; k++) normal.setXYZ(order[k]!, sum.x, sum.y, sum.z);
+      }
+    }
+    start = end;
   }
   normal.needsUpdate = true;
 }

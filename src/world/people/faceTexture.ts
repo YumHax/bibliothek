@@ -8,6 +8,7 @@ import { cachedTexture } from './textureCache';
 import { absorb, absorbInto } from './skinTone';
 import { lcg } from '@/random';
 
+
 /*
  * The skin of the head, painted once from the look. The canvas is laid out like the head's
  * geometry (`radialSurface`): x is the azimuth with the face in the middle and +x to the right, y
@@ -16,6 +17,9 @@ import { lcg } from '@/random';
  * and nose, shade in the eye sockets, under the jaw and under the hairline, stubble, freckles, then the eyes as seen
  * from afar, the brows, the lips and the nostrils.
  */
+
+/** The painter reads its pixels back (`getImageData`): its canvas kept in memory, not on the GPU (`createCanvas`). */
+const READ_BACK: CanvasRenderingContext2DSettings = { willReadFrequently: true };
 
 const W = 1024;
 const H = 512;
@@ -34,7 +38,7 @@ export function paintFace(look: PersonLook): THREE.CanvasTexture {
 }
 
 function paint(look: PersonLook): THREE.CanvasTexture {
-  const [canvas, ctx] = createCanvas(W, H);
+  const [canvas, ctx] = createCanvas(W, H, READ_BACK);
   const random = lcg(look.skin * 13 + look.hair * 7 + Math.round(look.nose * 100));
   const skin = rgb(look.skin);
   const hair = rgb(look.hair);

@@ -6,7 +6,8 @@ import { buildProxy } from './proxy';
 import { QUALITY } from '@/graphics/quality';
 import type { PersonLook } from './looks';
 import type { Performer, Reaction } from './performer';
-import { buildRig, TOE_FLEX, type ArmBones, type LegBones, type Rig } from './rig';
+import { rigFrame, rigSteps, TOE_FLEX, type ArmBones, type LegBones, type Rig } from './rig';
+import { compileBody, deferBodies, queueBody, type BodyJob } from './bodyQueue';
 import { blobShadow } from '../zone/ContactShadows';
 import { Face } from './motion/face';
 import { faceSpecularOcclusion, PersonOcclusion } from './occlusion';
@@ -183,9 +184,23 @@ export class PersonModel extends THREE.Group implements Performer {
   /** Eye height in world metres once scaled, for whoever wants to be looked at. */
   readonly eyeHeight: number;
 
-  private readonly rig: Rig;
-  private readonly occlusion: PersonOcclusion | null;
-  private readonly face: Face;
+  /** The body (`rigSteps`): built in the constructor, or over idle moments when deferred (`bodyQueue`) and then attached (`built`). */
+  private rig!: Rig;
+  private occlusion: PersonOcclusion | null = null;
+  private face!: Face;
+  /** Whether the body is built and attached; until then the owner's asks are kept and applied to it then. */
+  private built = false;
+  /** The body and its contact shadow: hidden until the body is built and its programs linked. */
+  private readonly holder = new THREE.Group();
+  /** The deferred body's place in the queue (its priority kept up to date while waiting), null once built. */
+  private job: BodyJob | null = null;
+  private readonly seed: number;
+  /** What was asked of a body not built yet: the height stood on, the hood, a box carried, things worn on the head, fading. */
+  private standHeight = 0;
+  private hoodUp = false;
+  private pendingCarry: { box: THREE.Object3D; size: { w: number; d: number } } | null = null;
+  private readonly pendingHead: THREE.Object3D[] = [];
+  private fadeWanted = false;
   /** What the face is asked for this frame: the gesture's, plus the look of concentration (reused). */
   private readonly faceGoal = blankFace();
   private readonly gait = new Gait();
@@ -225,7 +240,7 @@ export class PersonModel extends THREE.Group implements Performer {
   private readonly riseSpring = new Spring(0, 12, 0.8);
   private readonly hipsSpring = new Spring(0, 12, 0.8);
   private readonly shrugSprings = [new Spring(0, 10, 0.8), new Spring(0, 10, 0.8)];
-  private readonly armSprings: Record<'ux' | 'uz' | 'lx' | 'ly' | 'lz' | 'wf' | 'tw' | 'curl', Spring>[];
+  private armSprings!: Record<'ux' | 'uz' | 'lx' | 'ly' | 'lz' | 'wf' | 'tw' | 'curl', Spring>[];
   /** The last drop of the hips the standing legs needed (eased up, never down, so a foot never floats). */
   private drop = 0;
 
@@ -336,29 +351,28 @@ export class PersonModel extends THREE.Group implements Performer {
   private readonly toLocal = (p: THREE.Vector3): THREE.Vector3 => this.worldToLocal(p).divideScalar(this.rig.scale);
   private readonly toWorld = (p: THREE.Vector3): THREE.Vector3 => this.localToWorld(p.multiplyScalar(this.rig.scale));
 
-  /** `viewer` (the camera), when given, sets the level of detail by distance; `seed` the way they move (default: from the look). */
-  constructor(look: PersonLook, viewer?: THREE.Object3D, seed?: number) {
+  /**
+   * `viewer` (the camera), when given, sets the level of detail by distance; `seed` the way they move (default: from
+   * the look). `deferred`: the body is built over idle moments (`bodyQueue`, the nearest first) instead of now; until
+   * it is, the person is not drawn but stands, is clicked and is asked things as usual (kept for the body).
+   */
+  constructor(look: PersonLook, viewer?: THREE.Object3D, seed?: number, options: { deferred?: boolean } = {}) {
     super();
     this.name = 'PersonModel';
     this.viewer = viewer ?? null;
     this.look = look;
     const s = seed ?? seedOfLook(look);
+    this.seed = s;
     this.temper = temperamentOf(s, look);
     this.breath = new Breath(this.temper.breath);
     this.random = lcg(s * 2654435761 + 7);
     this.fidgetIn = this.temper.fidgetEvery * (0.4 + liveRandom());
-    this.rig = buildRig(look);
-    this.add(this.rig.root);
-    this.hitbox = this.rig.hitbox;
+    const frame = rigFrame(look);
+    this.hitbox = frame.hitbox;
     this.add(this.hitbox);
-    // The body's light kept from itself (capsules along the bones), the face's creases, the conversation's portrait light.
-    this.occlusion = PersonOcclusion.build(this.rig, look);
-    this.occlusion?.patch(this, this.hitbox);
-    faceSpecularOcclusion(this.rig.face.material as THREE.Material);
-    this.eyeHeight = this.rig.eyeHeight;
-    this.face = new Face(this.rig.face, this.rig.morphs, this.rig.eyes, 0.03 + liveRandom() * 0.05 + (look.age === 'elder' ? 0.05 : 0), this.rig.mouthOpen, this.rig.wrinkles);
-    // Their own smile: a trace of one at rest for a smiley person, one side leading (from the seed, so always the same).
-    this.face.setCharacter(look.smile ? 0.15 + (Math.abs(s * 0.618) % 1) * 0.15 : 0, (Math.abs(s * 0.377) % 1) * 2 - 1);
+    this.eyeHeight = frame.eyeHeight;
+    this.holder.name = 'PersonBody';
+    this.add(this.holder);
     this.lastGesture = this.gestures.update(0);
     // The arms' room in front of the chest: what this trunk has over a straight, average one there.
     const average = trunkSection(1.15, { ...look, build: 1, figure: 'straight' }).front;
@@ -369,7 +383,48 @@ export class PersonModel extends THREE.Group implements Performer {
     const roll = sitting();
     this.sitStyle = roll < 0.5 ? 'apart' : roll < 0.75 ? 'ankles' : 'knee';
     this.topLeg = sitting() < 0.5 ? 0 : 1;
-    this.armSprings = this.rig.arms.map((arm) => {
+    const steps = rigSteps(look);
+    if (options.deferred && deferBodies()) {
+      this.holder.visible = false;
+      const job: BodyJob = {
+        priority: Infinity,
+        step: () => {
+          const next = steps.next();
+          if (!next.done) return false;
+          this.wearBody(next.value);
+          // Shown once its programs are linked (a first draw linking them was the hitch this avoids).
+          void compileBody(this.rig.root).then(() => (this.holder.visible = true));
+          return true;
+        },
+      };
+      this.job = job;
+      queueBody(job);
+    } else {
+      let next = steps.next();
+      while (!next.done) next = steps.next();
+      this.wearBody(next.value);
+    }
+  }
+
+  /** Whether the body is built (a deferred one shows once it is). */
+  get hasBody(): boolean {
+    return this.built;
+  }
+
+  /** The body built: hung on the person, its face and arms set up, and what was asked meanwhile applied to it. */
+  private wearBody(rig: Rig): void {
+    const look = this.look;
+    const s = this.seed;
+    this.rig = rig;
+    this.holder.add(rig.root);
+    // The body's light kept from itself (capsules along the bones), the face's creases, the conversation's portrait light.
+    this.occlusion = PersonOcclusion.build(rig, look);
+    this.occlusion?.patch(rig.root, this.hitbox);
+    faceSpecularOcclusion(rig.face.material as THREE.Material);
+    this.face = new Face(rig.face, rig.morphs, rig.eyes, 0.03 + liveRandom() * 0.05 + (look.age === 'elder' ? 0.05 : 0), rig.mouthOpen, rig.wrinkles);
+    // Their own smile: a trace of one at rest for a smiley person, one side leading (from the seed, so always the same).
+    this.face.setCharacter(look.smile ? 0.15 + (Math.abs(s * 0.618) % 1) * 0.15 : 0, (Math.abs(s * 0.377) % 1) * 2 - 1);
+    this.armSprings = rig.arms.map((arm) => {
       const c = arm.current;
       const make = (value: number, omega: number, zeta = 0.9): Spring => new Spring(value, omega, zeta);
       return {
@@ -383,6 +438,26 @@ export class PersonModel extends THREE.Group implements Performer {
         curl: make(0, HAND_OMEGA, 0.8),
       };
     });
+    this.built = true;
+    this.job = null;
+    // A body built after the person was placed is on the layers the person is on (the zone's shadow layer).
+    const mask = this.layers.mask;
+    rig.root.traverse((o) => (o.layers.mask |= mask));
+    // What was asked meanwhile.
+    rig.root.position.y = this.standHeight;
+    if (this.held) this.showHeld(this.held);
+    if (this.pendingCarry) {
+      const { box, size } = this.pendingCarry;
+      this.pendingCarry = null;
+      this.carry(box, size);
+    }
+    for (const object of this.pendingHead.splice(0)) this.wearOnHead(object);
+    if (this.hoodUp) this.setHood(true);
+    if (this.fadeWanted) {
+      this.collectFade();
+      this.setOpacity(this.opacity);
+    }
+    this.placeShadow();
   }
 
   // --- What the owner asks for ----------------------------------------------------------------
@@ -395,7 +470,7 @@ export class PersonModel extends THREE.Group implements Performer {
   /** Talking for `seconds` (or as long as `text`, when given, takes to say): the mouth on the words (or on syllables), small nods, the hands with them. */
   talk(seconds: number, text?: string): void {
     // With the words, the mouth shapes their sounds (and keeps going as long as they take to say).
-    const saying = text ? this.face.say(text) : 0;
+    const saying = text && this.built ? this.face.say(text) : 0;
     this.talking = Math.max(this.talking, seconds, saying);
   }
 
@@ -433,14 +508,14 @@ export class PersonModel extends THREE.Group implements Performer {
 
   /** Shows a feeling on the face for `seconds`. */
   feel(expression: FaceKey, seconds: number): void {
-    this.face.feel(expression, seconds);
+    if (this.built) this.face.feel(expression, seconds);
   }
 
   /** Something happened to them: they show it in their own way (a gesture, a face, a nod). */
   react(reaction: Reaction): void {
     const response = respond(reaction, this.context(), this.random);
     if (response.gesture) this.gesture(response.gesture);
-    this.face.feel(response.face, response.seconds);
+    this.feel(response.face, response.seconds);
     if (response.nod) this.nod();
     this.fidgetIn = Math.max(this.fidgetIn, 4);
   }
@@ -489,7 +564,8 @@ export class PersonModel extends THREE.Group implements Performer {
   }
 
   standOn(height: number): void {
-    this.rig.root.position.y = height;
+    this.standHeight = height;
+    if (this.built) this.rig.root.position.y = height;
   }
 
   release(): void {
@@ -499,7 +575,8 @@ export class PersonModel extends THREE.Group implements Performer {
     this.handCurl = null;
     this.handFlex = [0.15, 0.15];
     this.directedGaze = null;
-    this.rig.root.position.y = 0;
+    this.standHeight = 0;
+    if (this.built) this.rig.root.position.y = 0;
   }
 
   footAt(foot: 0 | 1, point: THREE.Vector3 | null): void {
@@ -508,6 +585,8 @@ export class PersonModel extends THREE.Group implements Performer {
   }
 
   palm(hand: 0 | 1, out: THREE.Vector3): THREE.Vector3 {
+    // No body yet: about where a hand hangs.
+    if (!this.built) return this.localToWorld(out.set(hand === 1 ? 0.2 : -0.2, this.eyeHeight * 0.5, 0));
     const wrist = this.rig.arms[hand].wrist;
     wrist.updateWorldMatrix(true, false);
     return wrist.localToWorld(out.set(0, -this.rig.palm, 0));
@@ -520,9 +599,14 @@ export class PersonModel extends THREE.Group implements Performer {
    */
   hold(item: Held | null): void {
     if (item === this.held) return;
-    if (this.held) this.heldMeshes.get(this.held)!.visible = false;
+    const was = this.held ? this.heldMeshes.get(this.held) : undefined;
+    if (was) was.visible = false;
     this.held = item;
-    if (!item) return;
+    if (item && this.built) this.showHeld(item);
+  }
+
+  /** The held thing's mesh, made on first use, on the body. */
+  private showHeld(item: Held): void {
     let mesh = this.heldMeshes.get(item);
     if (!mesh) {
       const seed = Math.round(this.look.height * 1000);
@@ -550,6 +634,11 @@ export class PersonModel extends THREE.Group implements Performer {
       this.heldMeshes.delete('carried');
     }
     if (!box) return;
+    if (!this.built) {
+      this.pendingCarry = { box, size };
+      this.carriedHalf = size.w / 2;
+      return;
+    }
     const scale = this.rig.scale;
     box.scale.setScalar(1 / scale);
     // Its back a little off the belly.
@@ -579,6 +668,10 @@ export class PersonModel extends THREE.Group implements Performer {
 
   /** Something worn on the head (a witch's hat, a ghost's sheet): in the skull's frame (its centre), fading with the person. */
   wearOnHead(object: THREE.Object3D): void {
+    if (!this.built) {
+      this.pendingHead.push(object);
+      return;
+    }
     this.rig.skull.add(object);
     this.adoptFade(object);
   }
@@ -590,6 +683,8 @@ export class PersonModel extends THREE.Group implements Performer {
 
   /** The hood up over the head (in the snow) or down. */
   setHood(up: boolean): void {
+    this.hoodUp = up;
+    if (!this.built) return;
     let hood = this.heldMeshes.get('hood');
     if (!up && !hood) return;
     if (!hood) {
@@ -633,6 +728,12 @@ export class PersonModel extends THREE.Group implements Performer {
    * (alpha hash, so no sorting). Call it once, early (it changes the shader programs).
    */
   enableFade(): void {
+    this.fadeWanted = true;
+    if (this.built) this.collectFade();
+  }
+
+  /** `enableFade` on the built body: every material it wears made to dither. */
+  private collectFade(): void {
     if (this.fading) return;
     const list: { material: THREE.Material; opacity: number }[] = [];
     const seen = new Set<THREE.Material>();
@@ -653,14 +754,19 @@ export class PersonModel extends THREE.Group implements Performer {
 
   /** 0 gone .. 1 solid, after `enableFade` (a no-op before). */
   setOpacity(opacity: number): void {
-    if (!this.fading) return;
     this.opacity = opacity;
+    if (!this.fading) return;
     for (const f of this.fading) f.material.opacity = f.opacity * opacity * (this.rig.detailMaterials.has(f.material) ? this.detailLevel : 1);
     // The bent parts' own shadow materials (trunk, skirts, long hair) do not dither: they stop casting a shadow as it fades.
     for (const mesh of this.rig.casters) mesh.castShadow = opacity > 0.5;
   }
 
   update(dt: number): void {
+    if (!this.built) {
+      // Waiting in the queue: the nearest are built first.
+      if (this.job && this.viewer) this.job.priority = this.getWorldPosition(this.here).distanceTo(this.viewer.getWorldPosition(this.viewerPos));
+      return;
+    }
     if (this.viewer) this.pickDetail(this.viewer);
     this.occlusion?.updatePortrait(dt, this);
     this.pending += dt;
@@ -678,6 +784,7 @@ export class PersonModel extends THREE.Group implements Performer {
 
   /** How far above `point` the eyes are now (world metres; negative: below it): a conversation frames the face, not the words over the head. */
   eyesAbove(point: THREE.Object3D): number {
+    if (!this.built) return this.getWorldPosition(this.here).y + this.eyeHeight - point.getWorldPosition(this.viewerPos).y;
     const skull = this.rig.skull;
     skull.updateWorldMatrix(true, false);
     const eyes = skull.localToWorld(this.scratch.set(0, 0.014, 0.085)).y;
@@ -696,9 +803,10 @@ export class PersonModel extends THREE.Group implements Performer {
     const group = new THREE.Group();
     group.name = 'PersonShadow';
     group.add(body, ...feet);
-    this.add(group);
+    // With the body: hidden until it is built.
+    this.holder.add(group);
     this.shadow = { body, feet };
-    this.placeShadow();
+    if (this.built) this.placeShadow();
     return group;
   }
 

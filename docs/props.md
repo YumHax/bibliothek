@@ -125,8 +125,8 @@ Read this to add or change something visible in the room. The recipe is in the `
   one subject, `--write-baseline` accepts what is there (only for a pair that can never be seen). A new kind of
   piece the plans do not name goes in the catalogue's `PIECES`. What needs the running game (shelves of boxes, seats in
   place, people, traffic, the market's stock) is still the browser's check below.
-- **Check**: `?debug` (or `?stats`) logs `[zfight] <zone>: N pairs` the first time each zone is shown, and
-  `bibliothek.zfight()` in the console lists the overlapping coplanar faces of the player's zone (paths, gap, area,
+- **Check**: `?zfight` logs `[zfight] <zone>: N pairs` the first time each zone is shown (a second or more per zone:
+  not under every `?debug`), and under `?debug` (or `?stats`) `bibliothek.zfight()` in the console lists the overlapping coplanar faces of the player's zone (paths, gap, area,
   out to how far it holds, where); `bibliothek.zfight('<zone or registered root>')` another. Under `?debug` the street's
   builders also warn about their own coplanar faces as they build. Run it after adding a prop. What it leaves out on
   purpose (`world/surface/zfight.ts`): two plain materials that look the same, two that both skip the depth write, a
