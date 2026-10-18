@@ -22,7 +22,7 @@
     max-height: 100%;
     overflow-y: auto;
     box-sizing: border-box;
-    padding: 1rem;
+    padding: var(--sp-4);
     color: var(--album-ink);
     color-scheme: light;
     font-family: var(--ui-font-hand);
@@ -38,12 +38,13 @@
     gap: 2px;
   }
   .album__page {
+    position: relative;
     display: grid;
     grid-template-columns: repeat(2, var(--slot-w));
     grid-template-rows: repeat(2, calc(var(--slot-w) * 0.95));
     justify-content: center;
-    gap: 0.6rem;
-    padding: 0.8rem 0.6rem;
+    gap: var(--sp-2);
+    padding: var(--sp-3) var(--sp-2);
     background: var(--album-page);
   }
   /* The spine's shadow down the middle. */
@@ -76,8 +77,8 @@
     display: flex;
     flex-direction: column;
     align-items: center;
-    gap: 0.2rem;
-    padding: 0.3rem 0.3rem 0;
+    gap: var(--sp-1);
+    padding: var(--sp-1) var(--sp-1) 0;
     border: 0;
     color: inherit;
     font: inherit;
@@ -121,7 +122,7 @@
     width: 100%;
     aspect-ratio: 4 / 3;
     box-sizing: border-box;
-    padding: 0.4rem;
+    padding: var(--sp-2);
     font-size: var(--fs-t3);
     text-align: center;
     background: var(--album-back);
@@ -145,10 +146,10 @@
     display: flex;
     justify-content: space-between;
     min-height: 2rem;
-    padding-top: 0.5rem;
+    padding-top: var(--sp-2);
   }
   .album__turn {
-    padding: 0.2rem 0.8rem;
+    padding: var(--sp-1) var(--sp-3);
     border: 1px solid var(--album-page);
     border-radius: var(--ui-radius-xs);
     color: var(--album-page);
@@ -203,8 +204,8 @@
     display: flex;
     flex-direction: column;
     justify-content: center;
-    gap: 0.4rem;
-    padding: 1rem;
+    gap: var(--sp-2);
+    padding: var(--sp-4);
     text-align: center;
     background: var(--album-back);
     border: 1px solid var(--album-page-shade);
@@ -215,6 +216,13 @@
   .album__back-date { font-size: var(--fs-t3); }
   .album__back-place { font-size: var(--fs-t1); opacity: 0.75; }
   .album__back-line { font-size: var(--fs-t2); line-height: 1.25; }
+  /* A print with nothing written on its back: the lab's stamp, her initials in pencil. */
+  .album__back-stamp { padding: var(--sp-1) var(--sp-2); border: 2px solid currentColor; border-radius: var(--ui-radius-xs); font-family: var(--ui-font-print); font-size: var(--fs-1); letter-spacing: 0.12em; text-transform: uppercase; opacity: 0.45; rotate: -6deg; }
+  .album__back-initials { font-family: var(--ui-font-hand); font-size: var(--fs-t2); opacity: 0.7; }
+  /* The page's number in its outer corner. */
+  .album__folio { position: absolute; bottom: var(--sp-1); font-family: var(--ui-font-serif); font-size: var(--fs-1); opacity: 0.55; pointer-events: none; }
+  .album__page--left .album__folio { left: var(--sp-2); }
+  .album__page--right .album__folio { right: var(--sp-2); }
 
   /* Her words over it, a line at a time: every line holds its place from the start (nothing moves when one comes). */
   .album__close-side {
@@ -222,17 +230,17 @@
     display: flex;
     flex-direction: column;
     justify-content: space-between;
-    gap: 0.6rem;
+    gap: var(--sp-2);
   }
   .album__words {
     overflow: hidden;
   }
   .album__words-title {
-    margin: 0 0 0.5rem;
+    margin: 0 0 var(--sp-2);
     font-size: var(--fs-t3);
   }
   .album__line {
-    margin: 0 0 0.45rem;
+    margin: 0 0 var(--sp-2);
     font-size: var(--fs-t1);
     line-height: 1.3;
     opacity: 0;
@@ -242,22 +250,20 @@
   .album__close-actions {
     display: flex;
     flex-wrap: wrap;
-    gap: 0.4rem;
+    gap: var(--sp-2);
   }
 
-  @media (prefers-reduced-motion: reduce) {
-    .album__big-print,
-    .album__big-back,
-    .album__line { transition: none; }
-  }
+  .reduce-motion .album__big-print,
+  .reduce-motion .album__big-back,
+  .reduce-motion .album__line { transition: none; }
 
   .album .ui-panel__footer {
     display: flex;
     justify-content: flex-end;
-    padding-top: 0.6rem;
+    padding-top: var(--sp-2);
   }
   .album__button {
-    padding: 0.3rem 0.9rem;
+    padding: var(--sp-1) var(--sp-3);
     border: 1px solid var(--album-page);
     border-radius: var(--ui-radius-xs);
     color: var(--album-page);

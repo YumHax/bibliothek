@@ -4,14 +4,27 @@ import type { TipOptions } from './types';
 import { hudSlot } from '@/ui/hudSlot';
 import { closeOnPress } from './dismissHint';
 import { writeWithCaps } from './keyCaps';
+import { KEYS, PersistedStore, safeStorage } from '@/persistence';
 
 const MIN_MS = 12000;
-/** Handwritten slips top left (the first day's to-do steps), and pills in the hint tray, at most. */
-const MAX_NOTES = 3;
+/** Handwritten slips top left (the to-do steps and promises), and pills in the hint tray, at most: past them the oldest slip folds into the tray, the oldest pill goes. */
+const MAX_NOTES = 4;
 const MAX_TRAY = 3;
 const FADE_MS = 300;
 /** The crosshair's pulse (`crosshair--pulse`, styles.css) is over by then. */
 const PULSE_MS = 600;
+/** A tip's heading when its caller names none. */
+const DEFAULT_HEAD = 'How to';
+
+/** How many times each limited tip (`TipOptions.times`) was shown, by id. */
+const seenStore = new PersistedStore<Record<string, number>>({
+  key: KEYS.tipsSeen,
+  version: 1,
+  storage: safeStorage(),
+  defaults: () => ({}),
+  read: (data) => (data && typeof data === 'object' ? Object.fromEntries(Object.entries(data).filter((e): e is [string, number] => typeof e[1] === 'number')) : null),
+});
+let seen: Record<string, number> | null = null;
 
 /** Where a tip is: a handwritten `note` top left, a `card` under the crosshair being read, a pill in the hint `tray`. */
 type Stage = 'note' | 'card' | 'tray';
@@ -78,6 +91,14 @@ export class TipBoard {
     if (!this.shown) return () => {};
     const id = options.id ?? `tip:${serial++}`;
     const same = this.tips.find((t) => t.id === id);
+    // Told its number of times already (and not up now): learned, so it stays quiet.
+    if (options.times !== undefined && options.id && !same) {
+      seen ??= seenStore.load();
+      const count = seen[options.id] ?? 0;
+      if (count >= options.times) return () => {};
+      seen = { ...seen, [options.id]: count + 1 };
+      seenStore.save(seen);
+    }
     const stay = options.ms ?? Math.max(MIN_MS, readMs(text) * 2);
     if (same && same.text === text) {
       same.left = stay;
@@ -90,8 +111,9 @@ export class TipBoard {
     const tip: Tip = { id, text, el: look === 'note' ? this.noteEl(text, options.head) : this.cardEl(text, options.head), stage: look, until: options.until, left: stay, cardLeft: readMs(text), cardAge: 0 };
     closeOnPress(tip.el, () => this.remove(tip));
     if (look === 'note') {
+      // Past the slips' room, the oldest folds into a pill (never silently lost: the promise is still on the page).
+      for (const old of this.tips.filter((t) => t.stage === 'note').slice(0, Math.max(0, this.tips.filter((t) => t.stage === 'note').length - (MAX_NOTES - 1)))) this.fold(old);
       this.notes.appendChild(tip.el);
-      this.evict('note', MAX_NOTES - 1);
     } else {
       for (const other of this.tips) if (other.stage === 'card') this.fold(other);
       this.column.appendChild(tip.el);
@@ -142,7 +164,7 @@ export class TipBoard {
     el.className = 'tip tip--note';
     const h = document.createElement('div');
     h.className = 'tip__head';
-    h.textContent = head ?? 'Tip';
+    h.textContent = head ?? DEFAULT_HEAD;
     const body = document.createElement('div');
     body.className = 'tip__text';
     body.textContent = text;
@@ -156,7 +178,7 @@ export class TipBoard {
     el.className = 'tip-card';
     const h = document.createElement('div');
     h.className = 'tip-card__head';
-    h.textContent = head ?? 'Tip';
+    h.textContent = head ?? DEFAULT_HEAD;
     const body = document.createElement('div');
     body.className = 'tip-card__text';
     writeWithCaps(body, text);
@@ -164,10 +186,10 @@ export class TipBoard {
     return el;
   }
 
-  /** Read: the card leaves the crosshair's column for a pill in the tray (no sound). */
+  /** Read: the card (or a slip pushed out of the top left) leaves for a pill in the tray (no sound). */
   private fold(tip: Tip): void {
-    if (tip.stage !== 'card') return;
-    this.fade(tip.el, 'tip-card--out');
+    if (tip.stage === 'tray') return;
+    this.fade(tip.el, tip.stage === 'note' ? 'tip--out' : 'tip-card--out');
     const pill = document.createElement('div');
     pill.className = 'hint';
     writeWithCaps(pill, tip.text);

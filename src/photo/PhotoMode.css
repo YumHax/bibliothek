@@ -11,14 +11,180 @@
   body.photo-mode .tip-board,
   body.photo-mode .reading-stage,
   body.photo-mode .reward-stage,
-  body.photo-mode .touch-stick,
   body.photo-mode .touch-bar,
+  body.photo-mode .touch-pad,
   body.photo-mode .touch-badge {
     visibility: hidden;
   }
 
   .photo-guides,
   .photo-card,
+  .photo-flash {
+    z-index: var(--z-hud);
+  }
+
+  .photo-guides {
+    --guide: var(--tint-50);
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+  }
+  /* Thirds: two lines each way. */
+  .photo-guides[data-frame='thirds'] {
+    background:
+      linear-gradient(90deg, transparent calc(33.333% - 0.5px), var(--guide) calc(33.333% - 0.5px), var(--guide) calc(33.333% + 0.5px), transparent calc(33.333% + 0.5px)),
+      linear-gradient(90deg, transparent calc(66.666% - 0.5px), var(--guide) calc(66.666% - 0.5px), var(--guide) calc(66.666% + 0.5px), transparent calc(66.666% + 0.5px)),
+      linear-gradient(180deg, transparent calc(33.333% - 0.5px), var(--guide) calc(33.333% - 0.5px), var(--guide) calc(33.333% + 0.5px), transparent calc(33.333% + 0.5px)),
+      linear-gradient(180deg, transparent calc(66.666% - 0.5px), var(--guide) calc(66.666% - 0.5px), var(--guide) calc(66.666% + 0.5px), transparent calc(66.666% + 0.5px));
+  }
+  /* Letterbox and square: what falls outside the kept rectangle is shaded (a centred box with a huge shadow). */
+  .photo-guides[data-frame='letterbox']::before,
+  .photo-guides[data-frame='square']::before {
+    content: '';
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    translate: -50% -50%;
+    width: min(100vw, calc(100vh * var(--photo-aspect, 1)));
+    height: min(100vh, calc(100vw / var(--photo-aspect, 1)));
+    box-shadow: 0 0 0 100vmax var(--shade-70);
+    outline: 1px solid var(--ui-border-strong);
+  }
+
+  /* Binoculars: two round eyepieces side by side, the rest dark (dark where both masks are: outside both circles). */
+  .photo-guides[data-frame='binoculars']::before {
+    --eyepiece: min(27vw, 42vh);
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: var(--shade-90);
+    -webkit-mask-image:
+      radial-gradient(circle at 36% 50%, transparent var(--eyepiece), var(--ui-black) calc(var(--eyepiece) + 2px)),
+      radial-gradient(circle at 64% 50%, transparent var(--eyepiece), var(--ui-black) calc(var(--eyepiece) + 2px));
+    mask-image:
+      radial-gradient(circle at 36% 50%, transparent var(--eyepiece), var(--ui-black) calc(var(--eyepiece) + 2px)),
+      radial-gradient(circle at 64% 50%, transparent var(--eyepiece), var(--ui-black) calc(var(--eyepiece) + 2px));
+    -webkit-mask-composite: source-in;
+    mask-composite: intersect;
+  }
+
+  /*
+   * The card is the camera's top plate: a dark body, the settings on its little LCD (the readout in the LED face), the
+   * keys grouped under it as the keys card groups them.
+   */
+  .photo-card {
+    --photo-lcd: color-mix(in srgb, var(--ui-success-pale) 18%, var(--ui-black));
+    --photo-lcd-ink: var(--ui-success-pale);
+    position: absolute;
+    top: var(--sp-4);
+    left: var(--sp-4);
+    max-width: min(23rem, calc(100vw - 2rem));
+    padding: 0.6rem 0.8rem 0.7rem;
+    box-sizing: border-box;
+    color: var(--ui-text);
+    font-size: var(--fs-3);
+    line-height: 1.45;
+    background:
+      repeating-linear-gradient(90deg, var(--tint-08) 0 1px, transparent 1px 3px),
+      color-mix(in srgb, var(--ui-black) 82%, var(--ui-panel-solid));
+    border: 1px solid var(--ui-border-strong);
+    border-radius: var(--ui-radius-md);
+    box-shadow: var(--ui-shadow), inset 0 1px 0 var(--tint-20);
+    pointer-events: none;
+  }
+  .photo-card h2 {
+    display: flex;
+    align-items: center;
+    gap: 0.45rem;
+    margin: 0 0 0.45rem;
+    font-size: var(--fs-3);
+    font-weight: 700;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+  }
+  /* The shutter's red dot before the name. */
+  .photo-card h2::before {
+    content: '';
+    width: 0.6rem;
+    height: 0.6rem;
+    border-radius: 50%;
+    background: var(--ui-danger);
+    box-shadow: 0 0 6px var(--ui-danger-glow);
+  }
+  .photo-card dl {
+    display: grid;
+    grid-template-columns: auto 1fr;
+    gap: 0 0.8rem;
+    margin: 0 0 0.5rem;
+  }
+  .photo-card dt {
+    opacity: var(--ui-muted);
+  }
+  .photo-card dd {
+    margin: 0;
+  }
+  /* The readout on the LCD. */
+  .photo-card dl:not(.photo-card__keys) {
+    padding: 0.35rem 0.55rem;
+    border-radius: var(--ui-radius-xs);
+    background: var(--photo-lcd);
+    box-shadow: inset 0 1px 3px var(--shade-70);
+    color: var(--photo-lcd-ink);
+    font-family: var(--ui-font-led);
+    font-size: var(--fs-5);
+    line-height: 1.2;
+  }
+  .photo-card dl:not(.photo-card__keys) dt { text-transform: uppercase; opacity: 0.7; }
+  /* The keys, by what they do. */
+  .photo-card__keys {
+    margin: 0;
+    font-size: var(--fs-2);
+  }
+  .photo-card__keys dt {
+    font-size: var(--fs-1);
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    padding-top: 0.12rem;
+  }
+  .photo-card__keys dd { opacity: 0.9; }
+  .photo-card kbd {
+    min-width: 1em;
+    padding: 0 0.25em;
+    margin-right: 0;
+    font: inherit;
+    border-color: var(--ui-border-strong);
+    background: none;
+    border-radius: 3px;
+  }
+
+  /* A touchscreen's camera buttons, along the bottom: only on a touch device, in photo mode. */
+  .photo-touch {
+    position: absolute;
+    left: 50%;
+    bottom: calc(var(--safe-bottom) + 1rem);
+    translate: -50% 0;
+    z-index: var(--z-controls);
+    display: none;
+    gap: 0.5rem;
+  }
+  body.touch-device.photo-mode .photo-touch:not([hidden]) { display: flex; }
+  .photo-touch__btn {
+    min-width: 4.2rem;
+    min-height: 44px;
+    padding: 0 0.9rem;
+    border: 1px solid var(--ui-border-strong);
+    border-radius: var(--ui-radius-pill);
+    background: color-mix(in srgb, var(--ui-black) 70%, transparent);
+    color: var(--ui-text);
+    font: inherit;
+    font-size: var(--fs-3);
+    font-weight: 600;
+    touch-action: manipulation;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .photo-touch__btn:active { background: var(--ui-fill-hover); }
+
   .photo-flash {
     z-index: var(--z-hud);
   }

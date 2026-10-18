@@ -58,7 +58,7 @@ export function furnishReplay(zone: Zone, ctx: Pick<BuildContext, 'sky' | 'liste
       front: PLAN.counter.front,
       label: 'REPLAY’s counter · sell her some games',
       open: (session) => {
-        owner.speak('“Let’s see what you’ve brought.”');
+        owner.speak('Let’s see what you’ve brought.');
         session.openSellDesk();
       },
     }),

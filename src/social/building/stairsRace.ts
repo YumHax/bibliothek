@@ -69,7 +69,7 @@ export class StairsRace implements Updatable {
       } else {
         nudge('girard', { warmth: RACE.warmth, day, why: 'loved the race', reason: 'race' });
         this.deps.notices.say(RACE.lost, 'Pascal');
-        this.deps.notices.react(`Pascal won: ${race.his.toFixed(1)} s, you ${race.elapsed.toFixed(1)} s`);
+        this.deps.notices.react(`Pascal won: ${race.his.toFixed(1)} s, you ${race.elapsed.toFixed(1)} s.`);
       }
       return;
     }

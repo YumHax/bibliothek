@@ -3,8 +3,11 @@ import type { Game } from '@/catalog/types';
 import type { NoticeActions } from '@/notices';
 import { KEYS, PersistedStore, safeStorage } from '@/persistence';
 import { BARGAIN_PRICE } from '@/economy/pricing';
-import { readMs } from '@/notices/readingTime';
-import { FIRST_DAY_DONE, FIRST_DAY_STEPS, tipText, type FirstDayStepId } from './firstDaySteps';
+import { STARTER_GAMES } from '@/catalog';
+import { FIRST_DAY_DONE, FIRST_DAY_SKIPPED, FIRST_DAY_STEPS, placeOf, tipText, type FirstDayStepId } from './firstDaySteps';
+
+/** The steps done along the way or not needed: the list read, Félix's lid (going out further ticks both). */
+const OPTIONAL: ReadonlySet<FirstDayStepId> = new Set(['note', 'lid']);
 
 /** What the first day watches: the stores by their counts, the player's zone, and where its tips are pinned. */
 interface FirstDaySources {
@@ -14,8 +17,11 @@ interface FirstDaySources {
   prizes?: { readonly owned: readonly unknown[]; subscribe(cb: () => void): () => void };
   /** The zone the player stands in (`ZoneManager.current.id`). */
   zone: () => string;
-  /** The tips pinned top left, and the banner at the end; `tipsShown` false (Settings > Game) holds the chain back. */
-  notices: Pick<NoticeActions, 'tip' | 'reward'> & { readonly tipsShown?: boolean };
+  /**
+   * The tips, the banner at the end, the card when the list is put away; `tipsShown` false (Settings > Game) holds the
+   * chain back, `readyToTell` false (a film, a menu, a conversation) stops its clocks.
+   */
+  notices: Pick<NoticeActions, 'tip' | 'reward' | 'read'> & { readonly tipsShown?: boolean; readonly readyToTell?: boolean };
 }
 
 interface FirstDayOptions {
@@ -41,7 +47,7 @@ export interface FirstDayLike {
 
 interface FirstDayState {
   done: FirstDayStepId[];
-  /** `step:zone` tips already shown. */
+  /** `step:place` tips already shown (`placeOf`: rooms sharing a tip are one place). */
   shown: string[];
   finished: boolean;
   /** Arcade machines whose controls the HUD has spelled out once (game ids); kept after the first day ends. */
@@ -51,17 +57,20 @@ interface FirstDayState {
 const STEP_IDS = new Set<string>(FIRST_DAY_STEPS.map((s) => s.id));
 /** A tip waits this long after the player enters a zone (s), so it is not lost in the travel fade. */
 const SETTLE_S = 1.2;
-/** A to-do tip stays pinned while the player is in its zone and the step is not done, this long at most. */
+/** A to-do tip stays pinned while the player is in its place and the step is not done, this long at most. */
 const TIP_MS = 120_000;
-/** A to-do tip comes back on each visit to its zone while its step is not done, this many times at most. */
+/** A to-do tip comes back on each visit to its place while its step is not done, this many times at most. */
 const TIP_SHOWS = 3;
 
 /**
  * THE GUIDED FIRST DAY: the to-do list on the hall console and the sticky note on the front door,
- * and a chain of tips, each shown once, for the first step not done yet in the zone the player is
- * in. Steps are ticked off by what the stores say (tickets won, tickets spent, a game bought, the
- * parcel unpacked) and by where the player goes; the list ends by itself or from the note's "no
- * more tips". A player whose save predates it never sees it. An `Updatable` (it follows the zone).
+ * and a chain of tips for the first step not done yet in the place the player is in (once a visit,
+ * `TIP_SHOWS` visits at most; the flat's rooms sharing the first tip are one place, so walking room
+ * to room does not ring it again). Steps are ticked off by what the stores say (tickets won, tickets
+ * spent, a game bought, the parcel unpacked) and by where the player goes, never by a timer: the
+ * last one by a longplay coming on (`screenPlayed`) or, its pointer read, by going out again. The
+ * clocks run only while the player is free to read (`readyToTell`). The list ends by itself or
+ * from the note's "no more tips". A player whose save predates it never sees it. An `Updatable`.
  */
 export class FirstDay implements Updatable {
   private state: FirstDayState;
@@ -71,9 +80,9 @@ export class FirstDay implements Updatable {
   private sources: FirstDaySources | null = null;
   private zone = '';
   private inZoneFor = 0;
-  /** The last step's tip is up: it is done once read (seconds left), then the day finishes. */
-  private pointerLeft: number | null = null;
-  /** The zone's tip was shown on this visit already. */
+  /** The `step:place` of this visit: the same place across rooms is one visit. */
+  private visit = '';
+  /** This visit's tip was shown already. */
   private shownThisVisit = false;
 
   constructor(options: FirstDayOptions) {
@@ -87,6 +96,8 @@ export class FirstDay implements Updatable {
     });
     const saved = this.store.tryLoad();
     this.state = saved ?? { done: [], shown: [], finished: options.returningPlayer, hinted: [] };
+    // A list from before the lid step: past going out, it is not needed.
+    if (this.state.done.some((s) => !OPTIONAL.has(s)) && !this.state.done.includes('lid')) this.state = { ...this.state, done: [...this.state.done, 'lid'] };
     if (!saved && this.enabled) this.store.save(this.state);
   }
 
@@ -105,14 +116,20 @@ export class FirstDay implements Updatable {
   /** A longplay came on: with only the last step left (the game bought, found, brought to the TV), the day is done. */
   screenPlayed(): void {
     if (!this.active || FIRST_DAY_STEPS.find((s) => !this.state.done.includes(s.id))?.id !== 'shelf') return;
-    this.pointerLeft = null;
     this.complete('shelf');
   }
 
+  /** The list put away from the note: the tips stop, and a card says what the round was, once. */
   skip(): void {
     if (!this.active) return;
     this.state = { ...this.state, finished: true };
     this.commit();
+    this.sources?.notices.read({ title: 'The list goes in the drawer', text: FIRST_DAY_SKIPPED, look: 'note' });
+  }
+
+  /** The last step's pointer was read on an earlier visit (or before a reload). */
+  private get pointerShown(): boolean {
+    return this.state.shown.some((s) => s.startsWith('shelf:'));
   }
 
   /** Whether the controls of the arcade machine running `gameId` were spelled out once already. */
@@ -153,7 +170,11 @@ export class FirstDay implements Updatable {
       coins = wallet.coins;
     });
     prizes?.subscribe(() => this.complete('play'));
+    // Félix's note in the lid of the starter game read (`CopyOpening` marks its past found).
+    const lidRead = (): boolean => STARTER_GAMES.some((s) => collection.games.find((g) => g.id === s.id)?.past?.found);
+    if (lidRead()) this.complete('lid');
     collection.subscribe(() => {
+      if (lidRead()) this.complete('lid');
       const now = ownedCount();
       // A first game in hand (bought with lucky coins, taken from the cast-offs) makes the swap step moot: the list can still finish.
       if (now > owned) this.complete('buy', 'redeem');
@@ -173,17 +194,12 @@ export class FirstDay implements Updatable {
     if (zone !== this.zone) {
       this.zone = zone;
       this.inZoneFor = 0;
-      this.shownThisVisit = false;
       this.onZone(zone);
+      if (!this.active) return;
     }
+    // A film, a menu or a conversation has the player: no clock runs, no tip comes (it would ring unseen).
+    if (sources.notices.readyToTell === false) return;
     this.inZoneFor += dt;
-    if (this.pointerLeft !== null) {
-      this.pointerLeft -= dt;
-      if (this.pointerLeft <= 0) {
-        this.pointerLeft = null;
-        this.complete('shelf');
-      }
-    }
     if (this.inZoneFor < SETTLE_S) return;
     const step = FIRST_DAY_STEPS.find((s) => !this.state.done.includes(s.id));
     if (!step) {
@@ -191,30 +207,39 @@ export class FirstDay implements Updatable {
       return;
     }
     const tip = tipText(step, zone);
-    const id = `${step.id}:${zone}`;
-    if (!tip) return;
-    // The last step is a pointer, not a chore: read is done (its reading time, twice over, the tip's own stay), then the day ends.
+    if (!tip) {
+      // A place with nothing to say for this step (a shop off the street) ends the visit: back out, it is a new one.
+      this.visit = '';
+      return;
+    }
+    const place = placeOf(step, zone);
+    const id = `${step.id}:${place}`;
+    // A new visit when the step or the place changes: the flat's rooms sharing one tip are one place.
+    if (id !== this.visit) {
+      this.visit = id;
+      this.shownThisVisit = false;
+    }
+    // Once a visit; back on the next visits while the step is not done (`TIP_SHOWS` in all). The last step's pointer shows once.
     const pointer = step.id === 'shelf';
-    // Once a visit; back on the next visits while the step is not done (`TIP_SHOWS` in all). The pointer shows once.
     const shows = this.state.shown.filter((s) => s === id).length;
-    if (this.shownThisVisit || shows >= (pointer ? 1 : TIP_SHOWS)) {
-      if (pointer && shows > 0 && this.pointerLeft === null) this.pointerLeft = (2 * readMs(tip)) / 1000; // shown before a reload
-      return;
-    }
-    // Tips off (Settings > Game): nothing is marked shown, so each shows once they are back on; the pointer still ends the day.
-    if (sources.notices.tipsShown === false) {
-      if (pointer && this.pointerLeft === null) this.pointerLeft = (2 * readMs(tip)) / 1000;
-      return;
-    }
+    if (this.shownThisVisit || shows >= (pointer ? 1 : TIP_SHOWS)) return;
+    // Tips off (Settings > Game): nothing is marked shown, so each shows once they are back on.
+    if (sources.notices.tipsShown === false) return;
     this.shownThisVisit = true;
     this.state = { ...this.state, shown: [...this.state.shown, id] };
     this.commit();
-    sources.notices.tip(tip, { id: 'first-day', head: 'To do', ms: pointer ? undefined : TIP_MS, until: pointer ? undefined : () => this.isDone(step.id) || this.zone !== zone || !this.active });
-    if (pointer) this.pointerLeft = (2 * readMs(tip)) / 1000;
+    sources.notices.tip(tip, { id: 'first-day', head: 'To do', ms: pointer ? undefined : TIP_MS, until: pointer ? undefined : () => this.isDone(step.id) || placeOf(step, this.zone) !== place || !this.active });
   }
 
   /** Where the player went ticks what going there meant. */
   private onZone(zone: string): void {
+    // Out again with the last pointer read (or tips off): the round is done, whether or not the TV came on.
+    const lastLeft = FIRST_DAY_STEPS.find((s) => !this.state.done.includes(s.id))?.id === 'shelf';
+    if ((zone === 'stairwell' || zone === 'street') && lastLeft && (this.pointerShown || this.sources?.notices.tipsShown === false)) {
+      this.complete('shelf');
+      this.finish();
+      return;
+    }
     if (zone === 'stairwell' || zone === 'street') this.complete('out');
     if (zone === 'arcade') this.complete('out', 'arcade');
     if (zone === 'market') this.complete('out', 'arcade', 'market');
@@ -227,6 +252,8 @@ export class FirstDay implements Updatable {
     // Going out means the list was read (or not needed).
     const done = [...this.state.done, ...fresh];
     if (fresh.some((s) => s !== 'note') && !done.includes('note')) done.push('note');
+    // Going out (or further) means Félix's game can wait: its lid is no step in the way.
+    if (fresh.some((s) => !OPTIONAL.has(s)) && !done.includes('lid')) done.push('lid');
     this.state = { ...this.state, done };
     this.commit();
   }

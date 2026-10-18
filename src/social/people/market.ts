@@ -26,7 +26,7 @@ export const MARKET_STALL_PEOPLE: readonly PersonCard[] = [
     group: 'market',
     trade: 'stall',
     topics: [
-      { id: 'shop', say: 'You had a shop once?', again: 'Miss the old shop?', name: 'His old shop', icon: 'history', fit: 'loves', obvious: true, teaches: 'shop', answers: ['Twenty years on Front Street. Where the phone place is now. Don’t look, it hurts.', 'Kids queued round the corner for a new cartridge. Imagine.'] },
+      { id: 'shop', say: 'You had a shop once?', again: 'Miss the old shop?', name: 'His old shop', icon: 'history', fit: 'loves', obvious: true, teaches: 'shop', answers: ['Twenty years on Front Street. Where the phone place is now. Don’t look, it hurts.', 'Kids queued round the corner for a new cartridge. Imagine.'], phone: { answers: ['Twenty years on Front Street. Where the phone place is now. I cross the road not to see it.', 'Kids queued round the corner for a new cartridge. Imagine.'] } },
     ],
     whereabouts: 'Behind the NES stall at the flea market, every market day',
     intro: 'Gérard. Everyone says Gégé. Grey cartridges since 1987, and I’ve blown into every one of them.',
@@ -161,7 +161,7 @@ export const MARKET_STALL_PEOPLE: readonly PersonCard[] = [
     group: 'market',
     trade: 'stall',
     topics: [
-      { id: 'lamp', say: 'Why the jeweller’s lamp?', again: 'That lamp again, eh?', name: 'Her lamp', icon: 'tools', fit: 'likes', obvious: true, teaches: 'lamp', answers: ['My father’s. Every disc goes under it. Scratches tell stories.', 'If a disc is scratched, I say so. Nobody else does.'] },
+      { id: 'lamp', say: 'Why the jeweller’s lamp?', again: 'That lamp again, eh?', phone: { say: 'Why do you use a jeweller’s lamp?', again: 'Still checking discs under that lamp?' }, name: 'Her lamp', icon: 'tools', fit: 'likes', obvious: true, teaches: 'lamp', answers: ['My father’s. Every disc goes under it. Scratches tell stories.', 'If a disc is scratched, I say so. Nobody else does.'] },
     ],
     whereabouts: 'Behind the PlayStation glass case at the flea market, every market day',
     intro: 'Clémence. PlayStation. The discs are checked, every one, under the lamp.',

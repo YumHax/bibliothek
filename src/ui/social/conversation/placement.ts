@@ -31,9 +31,9 @@ export function faceLift(anchor: SocialAnchor): number {
  * Places their balloon (`say`: the tag and the balloon, its foot the tail's tip) with the tail on `point` (the top of
  * their head on screen): centred on them, kept inside the screen, the tail sliding along the balloon to stay on them.
  * When there is no room above their head (they are tall in the shot) the balloon goes beside it, on the side with
- * more room. Returns the tail's point on screen (where the hearts burst).
+ * more room. `burst` (in `say`) goes to the tail's tip. Returns the tail's point on screen (where the hearts burst).
  */
-export function placeSay(say: HTMLElement, tail: HTMLElement, point: { x: number; y: number }, vw: number, vh: number): { x: number; y: number } {
+export function placeSay(say: HTMLElement, tail: HTMLElement, burst: HTMLElement, point: { x: number; y: number }, vw: number, vh: number): { x: number; y: number } {
   const w = say.offsetWidth;
   const h = say.offsetHeight;
   let left = Math.round(Math.max(EDGE, Math.min(vw - w - EDGE, point.x - w / 2)));
@@ -48,7 +48,12 @@ export function placeSay(say: HTMLElement, tail: HTMLElement, point: { x: number
   }
   say.style.translate = `${left}px ${top}px`;
   say.classList.toggle('social-say--side', side);
-  const tailX = side ? (left > point.x ? 18 : w - 18) : Math.max(22, Math.min(w - 22, point.x - left));
+  // The tail hangs from the balloon, which can be narrower than the name tag over it (a short line): it stays on the balloon.
+  const balloon = tail.offsetParent as HTMLElement | null;
+  const bx = balloon?.offsetLeft ?? 0;
+  const bw = balloon?.offsetWidth ?? w;
+  const tailX = side ? (left + bx > point.x ? 18 : bw - 18) : Math.max(22, Math.min(bw - 22, point.x - left - bx));
   tail.style.left = `${Math.round(tailX)}px`;
-  return { x: left + tailX, y: top + h };
+  burst.style.left = `${Math.round(bx + tailX)}px`;
+  return { x: left + bx + tailX, y: top + h };
 }

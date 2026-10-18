@@ -192,11 +192,11 @@
     cursor: pointer;
     transition: background var(--dur-hover) ease, transform var(--dur-tap) ease;
   }
-  .shop__btn:hover:not(:disabled) { background: var(--shop-accent); }
-  .shop__btn:active:not(:disabled) { transform: translateY(1px); }
+  .shop__btn:hover:not([aria-disabled='true']) { background: var(--shop-accent); }
+  .shop__btn:active:not([aria-disabled='true']) { transform: translateY(1px); }
   /* Armed: a dear piece's first click; the second buys. */
-  .shop__btn.sell__armed { background: var(--ui-armed-strong); border-color: transparent; }
-  .shop__btn:disabled { color: var(--shop-ink-soft); background: transparent; box-shadow: inset 0 0 0 1px var(--shop-rule); cursor: default; font-weight: 600; letter-spacing: 0.03em; text-transform: none; font-size: var(--fs-3); }
+  .shop__btn.ui-btn--armed { background: var(--ui-armed-strong); border-color: transparent; }
+  .shop__btn[aria-disabled='true'] { color: var(--shop-ink-soft); background: transparent; box-shadow: inset 0 0 0 1px var(--shop-rule); cursor: default; font-weight: 600; letter-spacing: 0.03em; text-transform: none; font-size: var(--fs-3); }
 
   @media (max-width: 560px) {
     .home-shop .ui-panel__body { grid-template-columns: repeat(auto-fill, minmax(10.5rem, 1fr)); gap: 0.9rem 0.7rem; }
@@ -206,4 +206,19 @@
     .shop__btn { min-height: 44px; }
   }
   .reduce-motion .shop__photo::after { animation: none; }
+
+  /* Just adopted: one card across the leaflet, her name to give. */
+  .shop__adopt { grid-column: 1 / -1; }
+  .shop__name {
+    width: 100%;
+    margin-top: var(--sp-2);
+    padding: var(--sp-2);
+    font: inherit;
+    font-size: var(--fs-4);
+    color: var(--shop-ink);
+    background: transparent;
+    border: 0;
+    border-bottom: 2px solid var(--shop-rule);
+  }
+  .shop__name:focus-visible { outline: none; border-bottom-color: var(--shop-accent); }
 }

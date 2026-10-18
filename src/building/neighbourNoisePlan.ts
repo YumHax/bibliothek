@@ -37,8 +37,8 @@ export const NEIGHBOUR_NOISE = {
     { voice: 'tv', who: '1:1', hours: { from: 22.5, to: 24.5 }, oneIn: 1, level: 0.18, needs: { person: 'leclerc', effect: 'feud' } },
     // The Moreaus' evening TV, under the living room.
     { voice: 'tv', who: '1:0', hours: { from: 20.5, to: 23 }, oneIn: 1, level: 0.12 },
-    // The student up in the attic, some nights.
-    { voice: 'music', who: 'attic', hours: { from: 23, to: 25.5 }, oneIn: 3, level: 0.1 },
+    // The student up in the attic, some nights; barely a murmur once the row over it is settled (`social/conflicts`).
+    { voice: 'music', who: 'attic', hours: { from: 23, to: 25.5 }, oneIn: 3, level: 0.1, softer: { person: 'student', effect: 'quietAttic', factor: 0.2 } },
     // Cross with the player, Théo turns it up: earlier, louder, every night.
     { voice: 'music', who: 'attic', hours: { from: 22, to: 26 }, oneIn: 1, level: 0.2, needs: { person: 'student', effect: 'loudMusic' } },
   ] as ThroughWall[],
@@ -63,6 +63,8 @@ export const NEIGHBOUR_NOISE = {
   /** The broom, as the subtitle names it. */
   broomSpeaker: 'Downstairs',
   broomLines: ['Some of us are trying to sleep!', 'It is past ten!', 'Turn it down up there!'],
+  /** The player out of the flat at the broom: word of it reaches them wherever they are, before it costs anything. */
+  awayWarning: { title: 'Thumps from downstairs, at home', detail: 'Your {what} is still on, and it is past ten.' },
   /** Said at the door, by the hour (before or after midnight), in turn. */
   doorLines: [
     'It is gone ten! Some of us work tomorrow. Could you turn it down, please?',

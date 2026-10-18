@@ -1,3 +1,4 @@
+import type { CatBoxLike } from './CatBrain';
 import * as THREE from 'three';
 import type { Seat } from '../Seat';
 import type { WaterBowlLike } from './types';
@@ -32,6 +33,8 @@ export class CatMind {
   perch: RestingSpot | null = null;
   /** A fly is being chased: `lookPoint` is where it buzzes (set on entering a state). */
   flying = false;
+  /** The shelved box it went to paw out of its row (`pawBox`). */
+  pawing: CatBoxLike | null = null;
   /** The water bowl it went to drink from. */
   drinkingFrom: WaterBowlLike | null = null;
   /** A play bout (the ball, an imaginary fly): pounces so far, out of how many. */

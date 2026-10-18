@@ -15,10 +15,18 @@ import { playCoins } from '@/audio/coins';
 import { Arming, armedLine } from './confirmTwice';
 import { SheetPanel } from './panel/SheetPanel';
 import { attr, html, paint, type Html } from './panel/html';
-import { coverImg, emptyState, gameRow, priceHtml } from './panel/widgets';
+import { coverImg, emptyState, gameRow, nextTab, priceHtml, tabs } from './panel/widgets';
 import { rememberFocus } from './rememberFocus';
-import { plural } from '@/text/count';
+import { formatCount, plural } from '@/text/count';
+import { compareTitles } from '@/text/strings';
 import { formatCoins } from '@/text/money';
+
+/** A used copy quoted at the counter: its price, the deposit paid now, the game day it waits on its stall from. */
+interface UsedQuote {
+  price: number;
+  deposit: number;
+  day: number;
+}
 
 interface CataloguePanelOptions {
   /**
@@ -29,9 +37,9 @@ interface CataloguePanelOptions {
     peekToday(): readonly StockItem[] | null;
     /** The counter's orders (`MarketOrders`). */
     readonly orders?: {
-      quote(game: Game): Promise<{ price: number; deposit: number; day: number }>;
-      place(game: Game, quote: { price: number; deposit: number; day: number }): void;
-      readonly list: readonly { game: Game }[];
+      quote(game: Game): Promise<UsedQuote>;
+      place(game: Game, quote: UsedQuote): void;
+      readonly list: readonly { game: Game; day: number }[];
     };
     readonly day?: number;
   };
@@ -39,25 +47,45 @@ interface CataloguePanelOptions {
   coverUrl?: (game: Game) => string | undefined;
 }
 
+/** The two pages of the counter: the catalogue searched by title, and the games the player wishes for. */
+type Tab = 'catalogue' | 'wishlist';
+const TABS: readonly Tab[] = ['catalogue', 'wishlist'];
+
 /**
  * The market's order counter: search any game in the libretro-thumbnails index and buy a complete
- * copy at the shop price. A sheet like the collection editor; the Session opens it from the
- * counter, releases the mouse while it is up and re-enters the room when it closes. Prices depend
- * on fame (`Fame`), which arrives after the rows: a row shows the ordinary price greyed and cannot
- * be bought until its lookup lands, then settles; a copy is bought at the price its row shows. A
- * row says so when one of today's stalls has a copy, and at what price.
+ * copy at the shop price, or keep a list of the games wanted. A sheet like the collection editor;
+ * the Session opens it from the counter, releases the mouse while it is up and re-enters the room
+ * when it closes. Two tabs: the catalogue (the search's results) and the wishlist (each wished-for
+ * game with its cover, its price, a stall that has it today or the copy on order, and the same
+ * buttons). Prices depend on fame (`Fame`), which arrives after the rows: a row shows the ordinary
+ * price greyed and cannot be bought until its lookup lands, then settles; a copy is bought at the
+ * price its row shows. A wish taken off the list stays in its place, faded, until the counter is
+ * left ("Want it" puts it back), so nothing jumps under the pointer.
  */
 export class CataloguePanel extends SheetPanel {
+  private tab: Tab = 'catalogue';
+  private readonly tabsEl: HTMLElement;
   private searchSeq = 0;
-  private lastResults: IndexMatch[] = [];
-  /** Price shown per result row (index into `lastResults`); what `buy` charges. */
+  /** The search's results, as games; empty before a search. */
+  private results: Game[] = [];
+  /** What the catalogue's page says while a search has no rows: still looking, nothing found, the index not answering. */
+  private searchNote = 'Leafing through the catalogue…';
+  /** The wishlist as it read when its tab was shown: a wish dropped stays listed (faded) until the tab is read again. */
+  private wishes: Game[] = [];
+  /** Bumped at every repaint of the rows: a fame lookup landing for an older set of rows is dropped. */
+  private rowsSeq = 0;
+  /** Price shown per row (index into `rows`); what `buy` charges. */
   private prices = new Map<number, number>();
   /** Rows whose price is final (fame known, or its lookup done): only those can be bought. */
   private settled = new Set<number>();
-  /** A used copy quoted by a first click on "Used", confirmed by a second. */
-  private quoted: { row: number; quote: { price: number; deposit: number; day: number } } | null = null;
-  /** A new copy's row clicked once ("N coins?"): a second click orders it (no handing a posted copy back). */
-  private readonly buying = new Arming(() => this.repaintArmed());
+  /** The used copy last quoted ("N down?" on its row while `arming` holds `order:<row>`). */
+  private quoted: { row: number; quote: UsedQuote } | null = null;
+  /** The row whose used copy is being asked about. */
+  private asking: number | null = null;
+  /** A wish just made: its row lights up once. */
+  private justWished: string | null = null;
+  /** "Buy" ("N coins?") and "Used…" ("N down?"): a first press arms, a second within the time orders; one armed at a time. */
+  private readonly arming = new Arming(() => this.repaintButtons());
 
   constructor(
     container: HTMLElement,
@@ -75,40 +103,109 @@ export class CataloguePanel extends SheetPanel {
       wallet,
       search: { placeholder: 'Search a title…', platforms: true },
     });
+    this.tabsEl = document.createElement('div');
+    this.tabsEl.className = 'mail-order__tabs';
+    (this.statusEl ?? this.body).before(this.tabsEl);
     store.subscribe(() => {
-      if (this.isOpen && this.lastResults.length) this.render();
+      if (this.isOpen) this.render();
     });
   }
 
+  /** The rows on show: the search's results or the wishlist. */
+  private get rows(): readonly Game[] {
+    return this.tab === 'wishlist' ? this.wishes : this.results;
+  }
+
   protected override onOpened(): void {
+    this.tab = this.query.length < 2 && this.wishedFor().length ? 'wishlist' : 'catalogue';
+    this.readWishes();
     super.onOpened();
     const sale = catalogueSaleOn(this.day);
     if (sale) this.setStatus(`Sale today: ${Math.round((1 - sale) * 100)}% off every new copy.`);
   }
 
-  /** Today's stalls may have changed since the last look: the results read again; nothing searched yet, a way in. */
-  protected render(): void {
-    if (this.lastResults.length) this.renderResults(this.lastResults);
-    else if (this.query.length < 2) this.renderIdle();
+  protected override onClosed(): void {
+    this.arming.reset();
+    this.justWished = null;
   }
 
-  /** Before a search: what to do, and the wishlist's titles to look up in one press. */
-  private renderIdle(): void {
-    const wished = this.store.games.filter((g) => g.status === 'wishlist').slice(0, 8);
+  /** The tabs and the page shown; today's stalls may have changed since the last look, so the rows read again. */
+  protected render(): void {
+    this.renderTabs();
+    if (this.tab === 'wishlist') this.renderWishlist();
+    else if (this.results.length) this.renderRows();
+    else if (this.query.length < 2) paint(this.body, emptyState('Type a title to leaf through the catalogue: every game, new and complete, sent by post.'));
+    else paint(this.body, emptyState(this.searchNote));
+  }
+
+  private renderTabs(): void {
+    const hadFocus = this.tabsEl.contains(document.activeElement);
+    const count = this.wishedFor().length;
     paint(
-      this.body,
-      html`${emptyState('Type a title to leaf through the catalogue: every game, new and complete, sent by post.')}
-        ${wished.length
-          ? html`<div class="catalogue__suggest"><p class="catalogue__meta">On your wishlist</p>${wished.map(
-              (g) => html`<button type="button" class="ui-btn ui-btn--sm" data-action="suggest" data-title="${g.title}">${g.title}</button>`,
-            )}</div>`
-          : ''}`,
+      this.tabsEl,
+      tabs<Tab>({
+        tabs: [
+          { id: 'catalogue', label: 'Catalogue' },
+          { id: 'wishlist', label: html`Your wishlist${count ? html` <span class="ui-badge--solid">${count}</span>` : ''}` },
+        ],
+        active: this.tab,
+        label: 'Mail order',
+        idPrefix: 'mail-order-tab',
+      }),
     );
+    // The tabs' own `data-autofocus` must not steal the opening focus from the search field.
+    for (const el of this.tabsEl.querySelectorAll('[data-autofocus]')) el.removeAttribute('data-autofocus');
+    if (hadFocus) this.tabsEl.querySelector<HTMLElement>('[aria-selected="true"]')?.focus();
+  }
+
+  private showTab(tab: Tab, fromTabs = false): void {
+    if (tab === this.tab) return;
+    this.tab = tab;
+    this.arming.reset();
+    this.quoted = null;
+    this.asking = null;
+    if (tab === 'wishlist') this.readWishes();
+    this.setStatus('');
+    this.render();
+    if (fromTabs) this.tabsEl.querySelector<HTMLElement>('[aria-selected="true"]')?.focus();
+  }
+
+  /** Left / right on the tabs (or with nothing in a row focused) turn the page; inside a row they walk its buttons. */
+  protected override onSide(direction: 1 | -1): boolean {
+    if (document.activeElement?.closest('.catalogue__row')) return false;
+    this.showTab(nextTab(TABS, this.tab, direction), this.tabsEl.contains(document.activeElement));
+    return true;
+  }
+
+  /** The games on the wishlist now. */
+  private wishedFor(): Game[] {
+    return this.store.games.filter((g) => g.status === 'wishlist');
+  }
+
+  /** The wishlist read afresh: what is on a stall today first, then what is on order, then the rest by console and title. */
+  private readWishes(): void {
+    const onStalls = this.stallsToday();
+    const ordered = new Set(this.orders().map((o) => o.game.id));
+    const rank = (g: Game): number => (onStalls.has(g.id) ? 0 : ordered.has(g.id) ? 1 : 2);
+    const platform = this.platform;
+    this.arming.reset();
+    this.quoted = null;
+    this.wishes = this.wishedFor()
+      .filter((g) => !platform || g.platform === platform)
+      .sort((a, b) => rank(a) - rank(b) || getPlatform(a.platform).shortName.localeCompare(getPlatform(b.platform).shortName) || compareTitles(a.title, b.title));
   }
 
   /** Today's market day (the sale's calendar). */
   private get day(): number {
     return this.options.market?.day ?? 0;
+  }
+
+  private stallsToday(): Map<string, StockItem> {
+    return new Map((this.options.market?.peekToday() ?? []).map((item) => [item.game.id, item]));
+  }
+
+  private orders(): readonly { game: Game; day: number }[] {
+    return this.options.market?.orders?.list ?? [];
   }
 
   /** A new copy's price today (the sale off it), or null for a grail: out of print, only ever found at the market. */
@@ -118,109 +215,163 @@ export class CataloguePanel extends SheetPanel {
 
   /** The row's price: today's, with the usual one struck out on a sale day. */
   private rowPrice(game: Game, price: number | null, views: Views, pending: boolean): Html {
-    if (price === null) return html`<span class="catalogue__price">out of print</span>`;
+    if (price === null) return html`<span class="catalogue__price catalogue__price--none">out of print</span>`;
     return priceHtml(price, { was: shopPrice(game, views), pending });
   }
 
   protected override onAction(action: string, el: HTMLElement): void {
     const row = Number(el.dataset.result);
-    if (action === 'buy') this.buy(row);
-    else if (action === 'order') void this.orderUsed(row, el as HTMLButtonElement);
+    if (action === 'tab' && (el.dataset.tab === 'catalogue' || el.dataset.tab === 'wishlist')) this.showTab(el.dataset.tab, true);
+    else if (action === 'buy') this.buy(row);
+    else if (action === 'order') void this.orderUsed(row);
     else if (action === 'want') this.toggleWant(row);
-    else if (action === 'suggest' && el.dataset.title && this.searchInput) {
-      this.searchInput.value = el.dataset.title;
-      this.searchInput.focus();
-      void this.runSearch(el.dataset.title, undefined);
+    else if (action === 'to-catalogue') {
+      this.showTab('catalogue');
+      this.searchInput?.focus();
     }
   }
 
   /** "Want it": on the wishlist (its card waits on the shelf, the stalls look out for it), or off it again. */
   private toggleWant(i: number): void {
-    const r = this.lastResults[i];
-    if (!r) return;
-    const game = this.gameOf(r);
-    if (this.store.owns(game.id)) return;
+    const game = this.rows[i];
+    if (!game || this.store.owns(game.id)) return;
     if (this.store.isWanted(game.id)) {
+      this.justWished = null;
       this.store.dropWish(game.id);
       this.setStatus(`"${game.title}" is off your wishlist.`);
     } else {
+      this.justWished = game.id;
       this.store.want(game);
-      this.setStatus(`"${game.title}" is on your wishlist: its card waits on your shelf, and the stallholders will look out for it.`, 'ok');
+      this.setStatus(`"${game.title}" is on your wishlist. Its card waits in its gap on your shelf, and the stallholders will keep an eye out.`, 'ok');
     }
   }
 
   protected override onSearch(query: string, platform: PlatformId | undefined): void {
+    // The console picked with nothing typed narrows the wishlist; words always search the catalogue.
+    if (query.length < 2 && this.tab === 'wishlist') {
+      this.results = [];
+      this.readWishes();
+      this.render();
+      return;
+    }
+    if (query.length >= 2) this.showTab('catalogue');
     void this.runSearch(query, platform);
   }
 
   private async runSearch(query: string, platform: PlatformId | undefined): Promise<void> {
     const seq = ++this.searchSeq;
     if (query.length < 2) {
-      this.lastResults = [];
-      this.renderIdle();
+      this.results = [];
+      this.render();
       return;
     }
-    paint(this.body, emptyState('Leafing through the catalogue…'));
+    if (!this.results.length) {
+      this.searchNote = 'Leafing through the catalogue…';
+      if (this.tab === 'catalogue') paint(this.body, emptyState(this.searchNote));
+    }
     try {
-      const results = await this.index.search(query, platform);
+      const found = await this.index.search(query, platform);
       if (seq !== this.searchSeq) return;
-      this.lastResults = results;
-      this.renderResults(results);
+      this.results = found.map(gameOf);
+      this.arming.reset();
+      this.quoted = null;
+      this.searchNote = `Nothing by that name${platform ? ` on the ${getPlatform(platform).shortName}` : ''}. Try fewer words.`;
     } catch (err) {
       if (seq !== this.searchSeq) return;
-      this.lastResults = [];
+      this.results = [];
+      this.searchNote = 'The catalogue isn’t answering. Try again in a moment.';
       console.warn('[catalogue] the index could not be read', err);
-      paint(this.body, emptyState('The catalogue isn’t answering. Try again in a moment.'));
     }
+    if (this.tab === 'catalogue') this.render();
   }
 
-  private renderResults(results: IndexMatch[]): void {
-    this.quoted = null;
-    this.buying.reset();
-    this.prices.clear();
-    this.settled.clear();
-    if (results.length === 0) {
-      paint(this.body, emptyState('Nothing by that name.'));
+  /** The wishlist's page: a line on how it stands today, then a row per wish (or why there is none). */
+  private renderWishlist(): void {
+    if (!this.wishes.length) {
+      const any = this.wishedFor().length > 0;
+      paint(
+        this.body,
+        html`<div class="mail-order__wish-empty">
+          <p class="mail-order__wish-empty-title">${any ? 'None of your wishes is for that console.' : 'Nothing on your wishlist yet.'}</p>
+          <p class="mail-order__wish-empty-text">${any ? 'Pick “All platforms” to see them all.' : 'Find a game in the catalogue and press “Want it”: its card waits in its gap on your shelf, and the stallholders keep an eye out for it.'}</p>
+          ${any ? '' : html`<button type="button" class="ui-btn ui-btn--primary" data-action="to-catalogue">Search the catalogue</button>`}
+        </div>`,
+      );
       return;
     }
-    const seq = this.searchSeq;
-    const onStalls = new Map((this.options.market?.peekToday() ?? []).map((item) => [item.game.id, item]));
+    const onStalls = this.stallsToday();
+    const ordered = new Set(this.orders().map((o) => o.game.id));
+    const wanted = this.wishes.filter((g) => this.store.isWanted(g.id));
+    const today = wanted.filter((g) => onStalls.has(g.id)).length;
+    const onOrder = wanted.filter((g) => ordered.has(g.id)).length;
+    this.renderRows(html`<div class="mail-order__wish-head">
+      <span class="mail-order__wish-count">${formatCount(wanted.length, 'game')} wished for</span>
+      ${today ? html`<span class="ui-chip ui-chip--accent">${today} on the stalls today</span>` : ''}
+      ${onOrder ? html`<span class="ui-chip">${onOrder} on order</span>` : ''}
+      <span class="mail-order__wish-note">Each one has its card on your shelf, and the stallholders know you’re looking.</span>
+    </div>`);
+  }
+
+  /** The rows on show, each with its price (settled as the fame lookups land) and its buttons. */
+  private renderRows(head: Html | '' = ''): void {
+    this.prices.clear();
+    this.settled.clear();
+    const seq = ++this.rowsSeq;
+    const rows = this.rows;
+    const wishlist = this.tab === 'wishlist';
+    const onStalls = this.stallsToday();
+    const orders = new Map(this.orders().map((o) => [o.game.id, o]));
     const restoreFocus = rememberFocus(this.body);
     paint(
       this.body,
-      html`${results.map((r, i) => {
-        const game = this.gameOf(r);
+      html`${head}${rows.map((game, i) => {
         const views = this.fame.peek(game);
         const known = views !== undefined;
         const price = this.priceOf(game, views);
         this.prices.set(i, price ?? Infinity);
         if (known) this.settled.add(i);
         const stall = onStalls.get(game.id);
+        const order = orders.get(game.id);
+        const dropped = wishlist && !this.store.isWanted(game.id) && !this.store.owns(game.id);
+        const classes = ['mail-order__row', wishlist && 'mail-order__row--wish', dropped && 'mail-order__row--dropped', this.justWished === game.id && 'mail-order__row--wished'].filter(Boolean).join(' ');
         return gameRow({
           id: String(i),
+          className: classes,
           cover: coverImg(this.options.coverUrl?.(game), game),
-          title: r.title,
-          metas: [stall && html`<span class="catalogue__stall">${stallNote(stall)}</span>`, r.region, getPlatform(r.platform).shortName],
-          tail: html`${this.rowPrice(game, price, views, !known)}${this.wantButtonHtml(i, game.id)}${this.buttonHtml(i, game.id)}${this.orderButtonHtml(i, game.id)}`,
+          title: game.title,
+          metas: [
+            stall && html`<span class="catalogue__stall">${stallNote(stall)}</span>`,
+            wishlist && !stall && order && html`<span class="ui-chip">${orderNote(order.day, this.day, game)}</span>`,
+            wishlist && !stall && !order && isGrail(game.id) && html`<span class="ui-chip">Only ever found at the market</span>`,
+            game.region,
+            getPlatform(game.platform).shortName,
+          ],
+          tail: html`<span class="mail-order__tail">${this.rowPrice(game, price, views, !known)}${this.wantButtonHtml(i, game)}${this.buttonHtml(i, game.id)}${this.orderButtonHtml(i, game.id)}</span>`,
         });
       })}`,
     );
     restoreFocus();
-    results.forEach((r, i) => {
-      const game = this.gameOf(r);
+    this.justWished = null;
+    rows.forEach((game, i) => {
       if (this.fame.peek(game) !== undefined || isGrail(game.id)) return;
       void this.fame.lookup(game).then((views) => {
-        if (seq !== this.searchSeq || this.lastResults !== results) return;
-        this.settlePrice(i, game, views);
+        if (seq === this.rowsSeq) this.settlePrice(i, game, views);
       });
     });
   }
 
-  /** "Want it" beside a game the player has not got: on the wishlist or not (a press says what it did). */
-  private wantButtonHtml(i: number, id: string): Html | '' {
-    if (this.store.owns(id)) return '';
-    const wanted = this.store.isWanted(id);
-    return html`<button type="button" class="ui-btn" data-action="want" data-result="${i}" aria-pressed="${wanted}">${wanted ? 'Wanted' : 'Want it'}</button>`;
+  /**
+   * "Want it" beside a game the player has not got, a toggle: pressed it reads "Wanted", and "Not wanted" under the
+   * pointer or the focus (both words always laid out, so the button never changes width).
+   */
+  private wantButtonHtml(i: number, game: Game): Html | '' {
+    if (this.store.owns(game.id)) return '';
+    const wanted = this.store.isWanted(game.id);
+    return html`<button type="button" class="ui-btn mail-order__want" data-action="want" data-result="${i}" aria-pressed="${wanted}" aria-label="Want ${game.title}">
+      <span class="mail-order__want-label" aria-hidden="true">Want it</span>
+      <span class="mail-order__want-label" aria-hidden="true">Wanted</span>
+      <span class="mail-order__want-label" aria-hidden="true">Not wanted</span>
+    </button>`;
   }
 
   /**
@@ -229,7 +380,7 @@ export class CataloguePanel extends SheetPanel {
    */
   private buttonHtml(i: number, id: string): Html {
     const [label, state] = this.buttonState(i, id);
-    const armed = this.buying.isArmed(String(i));
+    const armed = this.arming.isArmed(`buy:${i}`);
     return html`<button type="button" class="ui-btn ui-btn--primary${armed ? ' sell__armed' : ''}" data-action="buy" data-result="${i}"${attr('disabled', state === 'off')} aria-disabled="${state === 'why'}">${armed ? `${formatCoins(this.prices.get(i) ?? 0)}?` : label}</button>`;
   }
 
@@ -239,7 +390,7 @@ export class CataloguePanel extends SheetPanel {
     if (!this.settled.has(i)) return ['Pricing…', 'off'];
     const price = this.prices.get(i) ?? Infinity;
     if (!this.wallet.canAfford(price)) return [`${formatCoins(price - this.wallet.coins)} short`, 'why'];
-    return ['Buy', 'on'];
+    return ['Buy new', 'on'];
   }
 
   /** A fame lookup landed: the row shows its real price and whether the wallet still stretches to it. */
@@ -257,66 +408,67 @@ export class CataloguePanel extends SheetPanel {
     restoreFocus();
   }
 
-  /** The buy buttons read armed or not: repainted in place (the one armed and the one just disarmed). */
-  private repaintArmed(): void {
-    for (const button of this.body.querySelectorAll<HTMLElement>('button[data-action="buy"]')) {
+  /** The buy and used buttons read armed or not: repainted in place, the focus kept. */
+  private repaintButtons(): void {
+    const restoreFocus = rememberFocus(this.body);
+    for (const button of this.body.querySelectorAll<HTMLElement>('button[data-action="buy"], button[data-action="order"]')) {
       const i = Number(button.dataset.result);
-      const r = this.lastResults[i];
-      if (r) button.outerHTML = this.buttonHtml(i, this.gameOf(r).id).markup; // convention-ok: one button of the kit's own markup, repainted in place
+      const game = this.rows[i];
+      if (!game) continue;
+      const markup = button.dataset.action === 'buy' ? this.buttonHtml(i, game.id) : this.orderButtonHtml(i, game.id);
+      if (markup) button.outerHTML = markup.markup; // convention-ok: one button of the kit's own markup, repainted in place
     }
+    restoreFocus();
   }
 
-  /** "Used": a second-hand copy put by on its stall, for a deposit now and the rest when collected. */
+  /** "Used…": a second-hand copy put by on its stall, for a deposit now and the rest when collected. */
   private orderButtonHtml(i: number, id: string): Html | '' {
-    const market = this.options.market;
-    if (!market?.orders || isGrail(id)) return '';
-    const onOrder = market.orders.list.some((o) => o.game.id === id);
-    const disabled = onOrder || this.store.owns(id);
-    return html`<button type="button" class="ui-btn" data-action="order" data-result="${i}"${attr('disabled', disabled)}>${onOrder ? 'On order' : 'Used…'}</button>`;
+    if (!this.options.market?.orders || isGrail(id)) return '';
+    const onOrder = this.orders().some((o) => o.game.id === id);
+    const armed = this.quoted?.row === i && this.arming.isArmed(`order:${i}`);
+    const label = onOrder ? 'On order' : this.asking === i ? 'Asking…' : armed ? `${formatCoins(this.quoted!.quote.deposit)} down?` : 'Used…';
+    return html`<button type="button" class="ui-btn${armed ? ' sell__armed' : ''}" data-action="order" data-result="${i}"${attr('disabled', onOrder || this.asking === i || this.store.owns(id))}>${label}</button>`;
   }
 
-  /** First click quotes a used copy (price, deposit, the day it arrives); a second one orders it. */
-  private async orderUsed(i: number, button: HTMLButtonElement): Promise<void> {
+  /** First press asks the stall for a used copy (price, deposit, the day it arrives) and arms; a second one orders it. */
+  private async orderUsed(i: number): Promise<void> {
     const market = this.options.market;
-    const r = this.lastResults[i];
-    if (!r || !market?.orders) return;
-    const game = this.gameOf(r);
-    if (this.quoted?.row !== i) {
-      const hadFocus = document.activeElement === button;
-      button.disabled = true;
-      button.textContent = 'Asking…';
-      const quote = await market.orders.quote(game);
-      if (this.lastResults[i] !== r) return;
-      this.quoted = { row: i, quote };
-      const days = quote.day - (market.day ?? quote.day);
-      button.disabled = false;
-      if (hadFocus) button.focus(); // disabling it dropped the focus
-      button.textContent = `${quote.deposit} down?`;
-      button.classList.add('sell__armed');
-      this.setStatus(`A used, complete copy of "${game.title}": ${formatCoins(quote.price)}, ${quote.deposit} down now. It will wait for you on the ${getPlatform(game.platform).shortName} stall in ${days} market ${plural(days, 'day')}. ${armedLine('order')}`);
+    const game = this.rows[i];
+    if (!game || !market?.orders || this.asking !== null) return;
+    const key = `order:${i}`;
+    if (this.quoted?.row === i && this.arming.isArmed(key)) {
+      const { quote } = this.quoted;
+      this.quoted = null;
+      this.arming.reset();
+      const ordered = this.tx.orderUsed(game, quote);
+      if (!ordered.ok) {
+        if (ordered.reason === 'short') this.setStatus(`The deposit is ${formatCoins(quote.deposit)} and you have ${formatCoins(this.wallet.coins)}.`, 'error');
+        this.repaintButtons();
+        return;
+      }
+      playCoins(2);
+      this.setStatus(`Ordered: "${game.title}" will be put by for you on the ${getPlatform(game.platform).shortName} stall. ${formatCoins(quote.price - quote.deposit)} to pay when you collect it.`, 'ok');
+      this.render();
       return;
     }
-    const { quote } = this.quoted;
-    this.quoted = null;
-    const ordered = this.tx.orderUsed(game, quote);
-    if (!ordered.ok) {
-      if (ordered.reason === 'short') this.setStatus(`The deposit is ${formatCoins(quote.deposit)} and you have ${this.wallet.coins}.`, 'error');
-      this.renderResults(this.lastResults);
-      return;
-    }
-    playCoins(2);
-    this.setStatus(`Ordered: "${game.title}" will be on the ${getPlatform(game.platform).shortName} stall, put by for you. ${formatCoins(quote.price - quote.deposit)} to pay when you collect it.`);
-    this.renderResults(this.lastResults);
+    const rows = this.rows;
+    this.asking = i;
+    this.repaintButtons();
+    const quote = await market.orders.quote(game);
+    this.asking = null;
+    if (this.rows !== rows || !this.isOpen) return;
+    this.quoted = { row: i, quote };
+    this.arming.press(key);
+    const days = Math.max(0, quote.day - this.day);
+    this.setStatus(`A used, complete copy of "${game.title}": ${formatCoins(quote.price)}, ${formatCoins(quote.deposit)} down now. It will wait for you on the ${getPlatform(game.platform).shortName} stall in ${days} market ${plural(days, 'day')}. ${armedLine('order it')}`);
   }
 
-  /** First click on "Buy" arms the row ("N coins?"), the second orders the new copy: a posted copy cannot be handed back. */
+  /** First press on "Buy new" arms the row ("N coins?"), the second orders the new copy: a posted copy cannot be handed back. */
   private buy(i: number): void {
-    const r = this.lastResults[i];
-    if (!r) return;
-    const game = this.gameOf(r);
-    if (this.store.owns(game.id)) return;
+    const game = this.rows[i];
+    if (!game || this.store.owns(game.id)) return;
     if (isGrail(game.id)) {
-      this.setStatus(`"${game.title}" is out of print: only ever found at the market. “Want it” and the stallholders will look out for it.`);
+      this.setStatus(`"${game.title}" is out of print: only ever found at the market.${this.store.isWanted(game.id) ? ' The stallholders know you want it.' : ' “Want it” and the stallholders will keep an eye out.'}`);
       return;
     }
     const price = this.prices.get(i);
@@ -328,8 +480,8 @@ export class CataloguePanel extends SheetPanel {
       this.setStatus(`You’re ${formatCoins(price - this.wallet.coins)} short for "${game.title}". The arcade pays in tickets, the prize counter swaps them for coins.`);
       return;
     }
-    if (!this.buying.press(String(i))) {
-      this.setStatus(`A new copy of "${game.title}" by post: ${formatCoins(price)}. ${armedLine('order')}`);
+    if (!this.arming.press(`buy:${i}`)) {
+      this.setStatus(`A new copy of "${game.title}" by post: ${formatCoins(price)}. ${armedLine('order it')}`);
       return;
     }
     const bought = this.tx.buyMailOrder(game, price);
@@ -338,18 +490,18 @@ export class CataloguePanel extends SheetPanel {
       return;
     }
     playCoins(purchaseClinks(price));
-    this.setStatus(`Bought "${game.title}" for ${formatCoins(price)}. The postman brings it on his next round: it will be in the hallway.`);
+    this.setStatus(`Bought "${game.title}" for ${formatCoins(price)}. The postman brings it on his next round: it will be in the hallway.`, 'ok');
   }
+}
 
-  private gameOf(r: IndexMatch): Game {
-    return {
-      id: gameIdFor(r.platform, r.name),
-      title: r.title,
-      platform: r.platform,
-      region: r.region,
-      externalIds: { libretroName: r.name },
-    };
-  }
+function gameOf(r: IndexMatch): Game {
+  return {
+    id: gameIdFor(r.platform, r.name),
+    title: r.title,
+    platform: r.platform,
+    region: r.region,
+    externalIds: { libretroName: r.name },
+  };
 }
 
 /** "On the NES stall today: 70 (no manual)", or the bargain bin. */
@@ -357,5 +509,12 @@ function stallNote(item: StockItem): string {
   const where = item.source === 'bin' ? 'In the bargain bin today' : `On the ${getPlatform(item.game.platform).shortName} stall today`;
   if (!item.priced) return `${where} (being priced)`;
   const state = describeCondition(item.condition);
-  return `${where}: ${item.price}${state ? `, ${state}` : ''}`;
+  return `${where}: ${formatCoins(item.price)}${state ? `, ${state}` : ''}`;
+}
+
+/** A used copy on order: "On order: on the NES stall in 3 days", or waiting there now. */
+function orderNote(day: number, today: number, game: Game): string {
+  const stall = `the ${getPlatform(game.platform).shortName} stall`;
+  const days = day - today;
+  return days > 0 ? `On order: on ${stall} in ${days} market ${plural(days, 'day')}` : `On order: waiting on ${stall}`;
 }

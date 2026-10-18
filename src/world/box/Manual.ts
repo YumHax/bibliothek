@@ -42,5 +42,12 @@ export class Manual extends THREE.Mesh<THREE.BufferGeometry, THREE.MeshStandardM
       mat.map?.dispose();
       mat.dispose();
     }
+    // The papers stacked behind it (`papers/paperStack`): their own geometries and materials.
+    this.traverse((obj) => {
+      if (obj === this || !(obj as THREE.Mesh).isMesh) return;
+      const mesh = obj as THREE.Mesh;
+      mesh.geometry.dispose();
+      (mesh.material as THREE.Material).dispose();
+    });
   }
 }

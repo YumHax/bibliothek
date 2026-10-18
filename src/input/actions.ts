@@ -16,13 +16,22 @@ import { PAD_LABELS, type PadButton } from './padButtons';
  * - `KeyR`: `turnPiece` (furniture carried) first; `KeyQ`: `turnPieceBack` (furniture carried) > `readStalls` (market) >
  *   `tipBox` (held at home, hands free: read as a held key by `shelving/BoxTipping`, like `readStalls`);
  * - `KeyK`: `padA` (at a program on the TV) > `labelShelf` (at home, the label maker bought);
- * - `KeyG`: `gridSnap` (furniture carried); `KeyU`: `handBack` (market copy in hand) > `undoMove` (hands free);
+ * - `KeyG`: `gridSnap` (furniture carried) > `spineOut` (a shelf box in hand) > `turnShelfBox` (hands free, at home);
+ *   `KeyU`: `handBack` (market copy in hand) > `undoMove` (hands free);
  * - `KeyO`: `lookInside` (a market copy: finds out a fake, lets the key go on) then `openBox`;
  * - `KeyX`: `storePiece` (furniture carried) > `swap` (a market copy in hand) > `dismissNotice` (anywhere else in a room, at an arcade machine or a program on the TV too);
  * - `KeyR`: `holdCopy` (a market copy in hand) > `turnBox` (a box in hand) > `randomPick` (Browse skips it while holding);
  * - `KeyH`: `haggle` (a market copy in hand) > `keysCard` (held in the room, read as a held key by `ui/KeysCard`);
  * - `Space` / `Enter`: `fire` (the arcade replays on its end card) > `pickUpFound` (Browse);
- * - movement keys: walking, the arcade stick while at a machine, `standUp` when seated.
+ * - the arrows, `Backspace`: `pageBack` / `pageOn`, `paperBefore` / `paperAfter` (a paper out of the box read, `Hands`) >
+ *   `turnBoxLeft` / `Right` / `Up` / `Down`, `squareBox` (a box looked at, `Hands`) > the longplay remote;
+ * - movement keys: walking, the arcade stick while at a machine, `standUp` when seated; facing a bookcase (`ShelfViewing`,
+ *   before them all but photo mode) W / S / A / D, the up and down arrows, F, E and B are the bookcase view's;
+ * - `KeyB`: `buy` (a market copy in hand) > `faceShelves` (hands free, a bookcase in front);
+ * - `KeyC`: `compareBox` (one of the flat's boxes in hand, another aimed at or held beside it) > `callCat`;
+ * - the D-pad (`GamepadUp` / `Down` / `Left` / `Right`, which walks): the faces of a box looked at and the bookcase view's
+ *   rows and bookcases take it instead (the walk lets go of it then: `GamepadInput`'s `dpadWalks`); `GamepadB` (the
+ *   right mouse button) steps back from a row, then from the bookcase;
  * A shared key has one Settings row (the entry with `rebind`); rebinding moves every action on it.
  *
  * Controller buttons that spend (`buy`, `haggle`) sit on the triggers, which do nothing else: B and RB
@@ -47,7 +56,9 @@ export type ActionContext =
   /** In photo mode: every key is its own (the walking keys fly the camera). */
   | 'photo'
   /** Carrying a piece of furniture about the room. */
-  | 'furnishing';
+  | 'furnishing'
+  /** Facing a bookcase (the bookcase view, `shelfView/ShelfView`): the mouse moves a cursor over it. */
+  | 'shelves';
 
 interface TouchSpec {
   label: string;
@@ -94,6 +105,21 @@ export const ACTIONS = {
     touch: { label: 'Open', title: 'Open the box', slot: 2 }, rebind: 'Open the box',
   },
   lookInside: { codes: ['KeyO'], context: 'market', hint: 'open a market copy: a fake shows inside (shares openBox’s key)' },
+  readBooklet: { codes: ['KeyV'], context: 'held', hint: 'the box open in hand: lift its booklet out and leaf through it, again: back in the box', rebind: 'Read the booklet' },
+  pageBack: { codes: ['ArrowLeft'], context: 'held', hint: 'a paper out of the box: the page before; a card or a poster turned over (shares turnBoxLeft’s key)' },
+  pageOn: { codes: ['ArrowRight'], context: 'held', hint: 'a paper out of the box: the next page; a card or a poster turned over (shares turnBoxRight’s key)' },
+  paperBefore: { codes: ['ArrowUp'], context: 'held', hint: 'a paper out of the box: the one before it in the box (shares turnBoxUp’s key)' },
+  paperAfter: { codes: ['ArrowDown'], context: 'held', hint: 'a paper out of the box: the next one in the box, a card, a leaflet, a poster (shares turnBoxDown’s key)' },
+  liftMedia: { codes: ['KeyT'], context: 'held', hint: 'the box open in hand: lift its cartridge or disc out to read the label, again: back in (shares sortShelves’s key)' },
+  spineOut: { codes: ['KeyG'], context: 'held', hint: 'a shelf box in hand: it goes in spine out where you aim, again: cover out (shares gridSnap’s key)' },
+  // The box looked at (brought to the middle of the view: the wheel, RT, a pinch): a face at a time (share the longplay remote's keys).
+  turnBoxLeft: { codes: ['ArrowLeft', 'GamepadLeft'], context: 'held', hint: 'the box looked at: a quarter turn to the left, its right side to the eye (shares remoteBack’s key)' },
+  turnBoxRight: { codes: ['ArrowRight', 'GamepadRight'], context: 'held', hint: 'the box looked at: a quarter turn to the right, its left side to the eye (shares remoteOn’s key)' },
+  turnBoxUp: { codes: ['ArrowUp', 'GamepadUp'], context: 'held', hint: 'the box looked at: its top to the eye' },
+  turnBoxDown: { codes: ['ArrowDown', 'GamepadDown'], context: 'held', hint: 'the box looked at: its bottom to the eye' },
+  squareBox: { codes: ['Backspace'], context: 'held', hint: 'the box looked at: back to its front, upright (shares remoteAnother’s key)' },
+  compareBox: { codes: ['KeyC'], context: 'held', hint: 'a box in hand: hold the shelf box aimed at beside it, to compare; again: that one goes back (shares callCat’s key)' },
+  takeArmful: { codes: ['KeyY'], context: 'room', hint: 'the shelf box aimed at into your arms, on top of the one in hand (five at most; E puts them all back)', rebind: 'Take an armful' },
 
   // --- Moving things about the flat (docs/furnishing.md): right-click takes, M does the same ----------------------
   moveFurniture: {
@@ -117,7 +143,7 @@ export const ACTIONS = {
     touch: { label: 'Turn back', title: 'Turn the piece the other way', slot: 5 },
   },
   gridSnap: {
-    codes: ['KeyG'], context: 'furnishing', hint: 'snap the carried piece to the grid, or let it go free', rebind: 'Grid on / off',
+    codes: ['KeyG'], context: 'furnishing', hint: 'snap the carried piece to the grid, or let it go free', rebind: 'Grid on / off · spine out',
     touch: { label: 'Grid', title: 'Snap to the grid, or place freely', slot: 4 },
   },
   putBackPiece: {
@@ -142,31 +168,50 @@ export const ACTIONS = {
   },
   randomPick: { codes: ['KeyR'], context: 'room', hint: 'random pick, again: walk to it', rebind: 'Random pick / hold for the day' },
   sortShelves: { codes: ['KeyT'], context: 'room', hint: 'sort the shelves by platform / year / title', rebind: 'Sort the shelves' },
-  nightMode: { codes: ['KeyN'], context: 'room', hint: 'night mode', rebind: 'Night mode' },
+  nightMode: { codes: ['KeyN'], context: 'room', hint: 'jump the clock to night or day (`?debug` only)' },
+  // The longplay on the flat's screen (`game/ScreenRemote`): keys nothing else takes at home.
+  remotePause: { codes: ['Space'], context: 'room', hint: 'hold the longplay playing on the TV or the projector, again: run it on (shares fire’s, padA’s and photoUp’s key)', rebind: 'Pause the longplay / fire / fly up' },
+  remoteBack: { codes: ['ArrowLeft'], context: 'room', hint: 'the longplay a minute back' },
+  remoteOn: { codes: ['ArrowRight'], context: 'room', hint: 'the longplay a minute on' },
+  remoteAnother: { codes: ['Backspace'], context: 'room', hint: 'not this video: another longplay of the game' },
   callCat: { codes: ['KeyC'], context: 'room', hint: 'call the cat', pad: 'GamepadRS', rebind: 'Call the cat' },
   journal: { codes: ['KeyJ'], context: 'room', hint: 'open the journal: today, the days before', padHold: 'GamepadSelect', rebind: 'Journal' },
   keysCard: { codes: ['KeyH'], context: 'room', hint: 'hold to show the keys for what you are doing (shares haggle’s key: a market copy in hand haggles)' },
   people: { codes: ['KeyI'], context: 'room', hint: 'open the People book: everyone you know, how you stand', rebind: 'People' },
   photoMode: { codes: ['KeyP'], context: 'room', hint: 'photo mode (again: leave it)', rebind: 'Photo mode' },
   tipBox: { codes: ['KeyQ'], context: 'room', hint: 'hold to tip the box looked at half out of its row and read it, at home (shares readStalls’s key)' },
+  turnShelfBox: { codes: ['KeyG'], context: 'room', hint: 'turn the box looked at on a shelf spine out, again: cover out, at home (shares gridSnap’s key)' },
   labelShelf: { codes: ['KeyK'], context: 'room', hint: 'print a label for the shelf edge looked at, or peel one off (the label maker, at home)' },
+  faceShelves: { codes: ['KeyB'], context: 'room', hint: 'face the bookcase in front: all of it in view, a cursor over its boxes (again: step back; shares buy’s key)' },
+
+  // --- facing a bookcase (the bookcase view, docs/furnishing.md) -----------------------------------------
+  shelfIn: { codes: ['KeyW'], context: 'shelves', hint: 'closer: the row under the cursor (the wheel turned up does too)' },
+  shelfOut: { codes: ['KeyS', 'GamepadB'], context: 'shelves', hint: 'back: from a row to the whole bookcase, from there step back' },
+  shelfLeft: { codes: ['KeyA', 'GamepadLeft'], context: 'shelves', hint: 'the next bookcase to the left' },
+  shelfRight: { codes: ['KeyD', 'GamepadRight'], context: 'shelves', hint: 'the next bookcase to the right' },
+  shelfRowUp: { codes: ['ArrowUp', 'GamepadUp'], context: 'shelves', hint: 'the row above (from the whole bookcase: the top one)' },
+  shelfRowDown: { codes: ['ArrowDown', 'GamepadDown'], context: 'shelves', hint: 'the row below (from the whole bookcase: the bottom one)' },
+  filterShelves: { codes: ['KeyF'], context: 'shelves', hint: 'write what you look for: every box that matches leans out (shares search’s key)' },
+  leaveShelves: { codes: ['KeyE'], context: 'shelves', hint: 'step back from the bookcase (shares putBack’s key)' },
   dismissNotice: {
-    codes: ['KeyX'], context: 'room', hint: 'put down the card being read (twice quickly: every waiting card), else the tips, the reward banner, the subtitles (shares swap’s key)',
+    codes: ['KeyX'], context: 'room', hint: 'put down the card being read (or turn its page), else the tips, the reward banner, the subtitles (twice quickly: every tip and banner; shares swap’s key)',
     padHold: 'GamepadY',
   },
 
   // --- a market copy in hand ---------------------------------------------------------------------------
   buy: {
     codes: ['KeyB'], context: 'market', hint: 'buy it', pad: 'GamepadRT',
-    touch: { label: 'Buy', title: 'Buy the market copy in hand', slot: 3 }, rebind: 'Buy',
+    touch: { label: 'Buy', title: 'Buy the market copy in hand', slot: 3 }, rebind: 'Buy / face a bookcase',
   },
   haggle: {
     codes: ['KeyH'], context: 'market', hint: 'haggle (once a day per copy)', pad: 'GamepadLT',
     touch: { label: 'Haggle', title: 'Make the stallholder an offer', slot: 4 }, rebind: 'Haggle / keys card (hold)',
   },
-  holdCopy: { codes: ['KeyR'], context: 'market', hint: 'hold it for the day (shares randomPick’s key)' },
-  swap: { codes: ['KeyX'], context: 'market', hint: 'swap one of yours for it', rebind: 'Swap / put a card down' },
-  handBack: { codes: ['KeyU'], context: 'market', hint: 'hand back what was just bought' },
+  // A copy in hand freezes the walk, so the D-pad is free for these two; the market's own route reads its button's code.
+  holdCopy: { codes: ['KeyR', 'GamepadLeft'], context: 'market', hint: 'hold it for the day (shares randomPick’s key; D-pad ← on a controller)' },
+  swap: { codes: ['KeyX', 'GamepadRight'], context: 'market', hint: 'swap one of yours for it (D-pad → on a controller)', rebind: 'Swap / put a card down' },
+  // Hands empty again after a buy: LT (haggle's button, idle then) hands it back within the few seconds.
+  handBack: { codes: ['KeyU', 'GamepadLT'], context: 'market', hint: 'hand back what was just bought (LT on a controller)' },
   readStalls: { codes: ['KeyQ'], context: 'market', hint: 'hold to read titles and prices from the aisle', rebind: 'Read the stalls / tip a box / turn a piece back' },
 
   // --- found box, panels -------------------------------------------------------------------------------
@@ -234,6 +279,10 @@ export function everyKeyMarkup(id: ActionId, separator = ' or '): string {
   return SPECS[id].codes.map((code) => `{${code}}`).join(separator);
 }
 
+function isPadButton(code: string): code is PadButton {
+  return code in PAD_LABELS;
+}
+
 /** The first entry on `id`'s key that has `field` (a shared key has its buttons on one entry). */
 function onSameKey<K extends 'pad' | 'touch'>(id: ActionId, field: K): ActionSpec[K] {
   const code = primaryCode(id);
@@ -242,7 +291,8 @@ function onSameKey<K extends 'pad' | 'touch'>(id: ActionId, field: K): ActionSpe
 
 /** `[X]`: the controller button that presses the action's key, or undefined when none does. */
 export function padMarkup(id: ActionId): string | undefined {
-  const pad = onSameKey(id, 'pad');
+  // A button among the action's own codes (read by its route in context, no alias) comes first.
+  const pad = SPECS[id].codes.find(isPadButton) ?? onSameKey(id, 'pad');
   return pad && `[${PAD_LABELS[pad]}]`;
 }
 
@@ -269,12 +319,12 @@ export const PAD_HOLD_ALIASES: Readonly<Record<string, string>> = Object.fromEnt
 );
 
 /** The touch action bar, left to right: each button presses its action's key, shown where its `context` applies (`TouchControls`). */
-export const TOUCH_ACTIONS: ReadonlyArray<{ label: string; code: string; title: string; context: ActionContext }> = IDS.flatMap((id) => {
+export const TOUCH_ACTIONS: ReadonlyArray<{ id: ActionId; label: string; code: string; title: string; context: ActionContext }> = IDS.flatMap((id) => {
   const touch = SPECS[id].touch;
-  return touch ? [{ ...touch, code: primaryCode(id), context: SPECS[id].context }] : [];
+  return touch ? [{ ...touch, id, code: primaryCode(id), context: SPECS[id].context }] : [];
 })
   .sort((a, b) => a.slot - b.slot)
-  .map(({ label, code, title, context }) => ({ label, code, title, context }));
+  .map(({ id, label, code, title, context }) => ({ id, label, code, title, context }));
 
 /** The keys the Settings screen lets the player move, in table order, with the action each one names. */
 export const REBINDABLE_ACTIONS: ReadonlyArray<{ code: string; label: string }> = IDS.flatMap((id) => {

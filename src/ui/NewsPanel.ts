@@ -1,6 +1,15 @@
 import { CardPanel } from './panel/CardPanel';
 import { html, type Html } from './panel/html';
+import { playIntercomLine } from '@/audio/furnitureSounds';
 import './NewsPanel.css';
+
+/** A made-up local number for an ad, the same every time it is printed. */
+function phoneNumber(id: string): string {
+  let h = 7;
+  for (const c of id) h = (h * 31 + c.charCodeAt(0)) >>> 0;
+  const digits = String(h % 1_000_000).padStart(6, '0');
+  return `${digits.slice(0, 2)} ${digits.slice(2, 4)} ${digits.slice(4)}`;
+}
 
 /** What the panel prints: the paper's masthead, dateline, lead and tips (see `street/gamingWeekly`). */
 interface NewsIssue {
@@ -27,18 +36,25 @@ interface NewsPanelOptions {
  */
 export class NewsPanel extends CardPanel {
   private issue: NewsIssue | null = null;
+  /** The ad rung last and what its seller said, pencilled under it. */
+  private rung: { id: string; said: string } | null = null;
 
   constructor(container: HTMLElement, private readonly options: NewsPanelOptions = {}) {
     super(container, { className: 'news-panel', cardClass: 'news-panel__paper', title: 'The newspaper', dismiss: 'Put it back', header: false, buttonClass: '' });
   }
 
   protected override onAction(action: string, el: HTMLElement): void {
-    if (action === 'ring' && el.dataset.id && this.options.ring) this.setStatus(this.options.ring(el.dataset.id));
+    if (action === 'ring' && el.dataset.id && this.options.ring) {
+      this.rung = { id: el.dataset.id, said: this.options.ring(el.dataset.id) };
+      playIntercomLine(0.9, 0.06);
+      this.refresh();
+    }
   }
 
   /** Prints `issue` (call before the Session opens the panel). */
   print(issue: NewsIssue): void {
     this.issue = issue;
+    this.rung = null;
     if (this.isOpen) this.refresh();
   }
 
@@ -54,7 +70,16 @@ export class NewsPanel extends CardPanel {
       <ul>${issue.hints.map((hint) => html`<li>${hint}</li>`)}</ul>
       ${issue.prices ? html`<p class="news-panel__prices">${issue.prices}</p>` : ''}
       ${issue.classifieds?.length
-        ? html`<section class="news-panel__ads"><h4>Small ads</h4>${issue.classifieds.map((ad) => html`<p><b>${ad.head}</b> ${ad.text}${this.options.ring && ad.id ? html` <button type="button" class="ui-btn news-panel__ring" data-action="ring" data-id="${ad.id}">Ring them</button>` : ''}</p>`)}<p class="news-panel__ads-note">${this.options.ring ? 'The newsagent lets you use the kiosk’s phone, or ring from home.' : 'Ring from your phone at home.'}</p></section>`
+        ? html`<section class="news-panel__ads"><h4>Small ads</h4>${issue.classifieds.map((ad) => this.ad(ad))}${this.options.ring ? '' : html`<p class="news-panel__ads-note">Their numbers go in your phone at home.</p>`}</section>`
         : ''}`;
+  }
+
+  /** A small ad: who and where, the words, its number to ring (from the kiosk's phone), and the seller's answer pencilled under it once rung. */
+  private ad(ad: { id?: string; head: string; text: string }): Html {
+    const ring = this.options.ring && ad.id;
+    const said = ad.id && this.rung?.id === ad.id ? this.rung.said.split('\n') : null;
+    return html`<div class="news-panel__ad"><p><b>${ad.head}</b> ${ad.text}${ring ? html` <button type="button" class="news-panel__ring" data-action="ring" data-id="${ad.id!}" aria-label="Ring ${ad.head} from the kiosk’s phone">Tel. ${phoneNumber(ad.id!)}</button>` : ''}</p>
+      ${said ? html`<p class="news-panel__answer"><span class="news-panel__answer-head">On the phone:</span> ${said.map((line, i) => (i === 0 ? html`<span class="news-panel__answer-said">${line}</span>` : html`<span class="news-panel__answer-note">${line}</span>`))}</p>` : ''}
+    </div>`;
   }
 }

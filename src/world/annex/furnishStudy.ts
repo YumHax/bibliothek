@@ -6,7 +6,8 @@ import { furnishShell } from '../shell';
 import { furnishDecor, placeRoomLight } from '../build/roomParts';
 import { floorPointsToWorld } from '../zone/attach';
 import { STUDY_PLAN } from './annexPlan';
-import { STUDY_OVERFLOW, annexSplit, placeAnnexShelving } from './annexShelves';
+import { STUDY_LEFTOVER, STUDY_OVERFLOW, annexSplit, placeAnnexShelving } from './annexShelves';
+import { BoxPile } from '../shelving/BoxPile';
 import { OldFrontDoor } from './OldFrontDoor';
 
 /** What the study built: its room, its two bookcases. */
@@ -33,7 +34,10 @@ export function furnishStudy(zone: Zone, ctx: Pick<BuildContext, 'sky' | 'covers
     slots: plan.shelving.here,
     width: plan.shelving.width,
     source: STUDY_OVERFLOW,
+    overflow: STUDY_LEFTOVER,
     count: (bought) => annexSplit(bought).study,
   });
+  // The last shelves' leftovers: a pile on the floor in front of them, never games gone missing.
+  zone.placeAt(new BoxPile(STUDY_LEFTOVER), plan.boxPile);
   return { room, shelving, catVisits: floorPointsToWorld(zone, plan.catVisits) };
 }

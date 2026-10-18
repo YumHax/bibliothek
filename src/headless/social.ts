@@ -6,16 +6,19 @@
  * module-level: the script bundles this module afresh for each run.
  */
 import { fnv1a, hashInts, mulberry32, shuffled } from '@/random';
-import { beginConversation, choicesFor, endConversation, say, type Choice, type Conversation, type TalkContext } from '@/social/conversation';
+import { beginConversation, choicesFor, endConversation, factSays, newsPool, playerPool, say, socialPool, topicHere, type Choice, type Conversation, type TalkContext } from '@/social/conversation';
+import { MOOD_SAYS } from '@/social/moodLines';
+import { BIRTHDAY_LINES, CALLBACK_LINES, COLD_LINES, GRUDGE_LINES, HELD_LINES, HOSTILE_LINES, KEEPSAKE_LINES, MOOD_OPENINGS, PHONE_FAREWELL_LINES, PHONE_HELLO_LINES, PHONE_LEAVING_LINES, PHONE_TWICE_LINES, REPEAT_LINES } from '@/social/socialLines';
+import { voiced } from '@/social/voices';
 import { extrasFor } from '@/social/extras';
 import { FAVOURS } from '@/social/life/favoursPlan';
 import { addNews } from '@/social/news';
 import { everyone } from '@/social/people';
 import { effectsOf } from '@/social/perks';
-import { PROMISE, TALK, TIERS, type NewsTag } from '@/social/socialPlan';
+import { INTERACTIONS, PROMISE, TALK, TIERS, type NewsTag } from '@/social/socialPlan';
 import { hasNumber, meet, nudge, setStanding, settleDay, standing } from '@/social/standing';
 import { atLeast, tierOf } from '@/social/tiers';
-import type { Fit, GiftKind, PersonCard, SocialGroup, SocialPlace } from '@/social/types';
+import type { Fit, GiftKind, InteractionId, LineKey, PersonCard, SocialGroup, SocialPlace } from '@/social/types';
 
 /** How a simulated player lives: whom they meet, how well they read faces, how much they give and promise. */
 interface Profile {
@@ -274,4 +277,66 @@ export function coverage(): { problems: string[]; deep: number; extras: number }
     }
   }
   return { problems: [...new Set(problems)], deep: cast.filter(isDeep).length, extras };
+}
+
+/*
+ * Down the phone (docs/social.md "The phone", docs/checks.md "Social sim"): every line a call can show, for everyone
+ * with a number, read for words that need the player in front of them. Nobody passes the salt down a line.
+ */
+
+/** Words that need the two of them in one place: a thing handed over, a seat, a look, a smell. Kept tight on purpose. */
+const IN_PERSON: readonly RegExp[] = [
+  // A request said to someone there: at the start of a sentence ("Sit, sit.", "Taste."), not a story ("I had to sit down").
+  /(^|[.!?…]\s+)(sit|taste|come here|come in)\b/, /\bsit, sit\b/, /\bcome here\b/,
+  /\bpass me\b/, /\bhand me\b/, /\bgrab a stool\b/, /\blet me look\b/,
+  /\blook at you\b/, /\byou look\b(?! for)/, /\blook at (this|that)\b/, /\bsmells? good\b/, /\bthis smell\b/, /\btaste (it|this|properly)\b/,
+  /(^|[.!?…]\s+)take some\b/, /\bhere,? (take|have)\b/, /\bhere you (go|are)\b/, /\bmind the (step|bags?|boxes)\b/, /\bthe kettle'?s on\b/,
+  /\b(good|nice|lovely) to see you\b/, /\bdon'?t look at me\b/, /\byou'?re blocking\b/, /\bover here\b/, /\blet me show you\b/,
+];
+
+/** The keys of a person's own lines a call can say (`thanks`: gifts are not given on a call; `call`: written for it). */
+const PHONE_KEYS: readonly LineKey[] = ['hello', 'cold', 'hostile', 'chat', 'joke', 'tease', 'leaving', 'bye', 'repeat', 'news', 'birthday', 'hurt', 'twice'];
+const FITS: readonly Fit[] = ['loves', 'likes', 'meh', 'dislikes'];
+
+/** Every line a call can show, with where it comes from: their card (with its phone words), then the shared pools. */
+function phoneReachable(): { where: string; line: string }[] {
+  const out: { where: string; line: string }[] = [];
+  const add = (where: string, lines: readonly string[] | undefined): void => {
+    for (const line of lines ?? []) out.push({ where, line });
+  };
+  for (const card of everyone().filter((c) => c.phone)) {
+    // Their first conversation can be a call only when their number comes from the start (a friend from before, Mémé).
+    if (card.listed === 'always') add(`${card.id} intro`, [card.phoneIntro ?? card.intro]);
+    for (const t of card.topics ?? []) {
+      const seen = topicHere(t, 'phone');
+      if (!seen) continue;
+      add(`${card.id} topic ${t.id}`, [seen.say, ...(seen.again ? [seen.again] : []), ...seen.answers, ...(seen.deeper ? [seen.deeper] : [])]);
+    }
+    for (const f of card.facts ?? []) add(`${card.id} fact ${f.id}`, [factSays(f, 'phone')]);
+    for (const key of PHONE_KEYS) add(`${card.id} ${key}`, voiced(card.id, key, 'phone'));
+  }
+  const onCall = (Object.keys(INTERACTIONS) as InteractionId[]).filter((i) => !INTERACTIONS[i].notAt?.includes('phone'));
+  for (const i of onCall) {
+    add(`player ${i}`, i === 'topic' || i === 'news' ? [] : playerPool(i, 'phone'));
+    if (i === 'chat' || i === 'joke' || i === 'tease' || i === 'apologise' || i === 'insult') for (const fit of FITS) add(`shared ${i} ${fit}`, socialPool(i, fit, 'phone'));
+  }
+  for (const fit of FITS) add(`shared news ${fit}`, [...newsPool('any', fit, 'phone'), ...newsPool('game', fit, 'phone')]);
+  add('shared hello', PHONE_HELLO_LINES);
+  add('shared leaving', PHONE_LEAVING_LINES);
+  add('shared bye', Object.values(PHONE_FAREWELL_LINES).flat());
+  add('shared twice', PHONE_TWICE_LINES);
+  add('shared repeat', [...REPEAT_LINES.today, ...REPEAT_LINES.lately]);
+  add('shared opening', [...HELD_LINES, ...CALLBACK_LINES, ...KEEPSAKE_LINES, ...GRUDGE_LINES, ...BIRTHDAY_LINES, ...COLD_LINES, ...HOSTILE_LINES, ...Object.values(MOOD_OPENINGS).flat()]);
+  add('mood', Object.values(MOOD_SAYS));
+  return out;
+}
+
+/** The lines a call can show that need the player there, as problems in words (none: every call sounds like one). */
+export function phoneProblems(): string[] {
+  return phoneReachable()
+    .filter(({ line }) => {
+      const plain = line.toLowerCase().replaceAll('’', "'");
+      return IN_PERSON.some((re) => re.test(plain));
+    })
+    .map(({ where, line }) => `${where}: “${line}” needs the player there (a \`phone\` / \`phoneLines\` word for it, or \`phone: false\`)`);
 }

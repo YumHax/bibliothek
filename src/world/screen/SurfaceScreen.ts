@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import type { LabelPlacement } from '@/interaction/Interactable';
 import type { VideoInfo } from '@/video/VideoProvider';
 import type { VideoSurface } from './VideoSurface';
-import type { ScreenFeed, ScreenState, ScreenStateListener, VideoScreen } from './VideoScreen';
+import type { LongplayRemote, ScreenFeed, ScreenState, ScreenStateListener, VideoScreen } from './VideoScreen';
 
 /**
  * A screen whose picture is a `VideoSurface` (the television, the projector): the `VideoScreen` shape forwarded to
@@ -45,6 +45,11 @@ export abstract class SurfaceScreen extends THREE.Group implements VideoScreen {
 
   stop(): void {
     this.surface.stop();
+  }
+
+  /** The longplay's remote: pause, a minute back or on, another video. */
+  get remote(): LongplayRemote {
+    return this.surface.remote;
   }
 
   /** A program's canvas lit on the screen (docs/media.md "Programs on the screen"). */

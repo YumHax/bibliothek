@@ -52,6 +52,8 @@ import type { SocialServices, TalkExtra, TalkSession } from '@/social/talk';
 import type { PersonId } from '@/social/types';
 import { voiceBody } from '../people/socialHook';
 import { AtticStudent } from './AtticStudent';
+import { NewTenant } from './NewTenant';
+import { NEW_TENANT, newTenantIn, pinNewTenantNote } from '@/building/newTenant';
 
 /** A chat with a resident on the stairs counts this much for the friendship (once a game day). */
 const STAIR_CHAT_FRIENDSHIP = 10;
@@ -184,12 +186,17 @@ export function furnishStairwell(zone: Zone, { sky, listener, acoustics, buildin
     zone.place(postman.walker, postman.walker.position.clone());
     walkers.push(postman.walker);
   }
+  // The late Mr Lambert's flat's new tenant, some evenings at the mailboxes once he has moved in (`building/newTenant`).
+  const tenant = zone.place(new NewTenant({ viewer: listener, ground: walkOn, hours, day: () => today.gameDay, people: social }), origin);
+  zone.place(tenant.walker, tenant.walker.position.clone());
+  walkers.push(tenant.walker);
+  zone.onUnload(pinNewTenantNote());
   // Théo from the attic, some nights on our landing waiting for the lift (docs/social.md: someone to meet).
   const student = zone.place(new AtticStudent({ viewer: listener, ground: walkOn, hours, day: () => today.gameDay, people: social }), origin);
   zone.place(student.walker, student.walker.position.clone());
   walkers.push(student.walker);
   // The hall's life: the notice board, the co-owners' meeting, the concierge, the timer buttons (`hallLife`).
-  walkers.push(...placeHallLife(zone, { listener, today, sky, building, money, social }, { stairs, lights, ground: walkOn }));
+  walkers.push(...placeHallLife(zone, { listener, today, sky, building, money, social, home }, { stairs, lights, ground: walkOn }));
   // The landings' sensors see the residents and the postman go by too, not only the player.
   lights.watch(walkers);
   // The power cut of a storm's evening, the meters cupboard, the endless stairs of some nights.
@@ -203,6 +210,7 @@ export function furnishStairwell(zone: Zone, { sky, listener, acoustics, buildin
   // The entrance hall: the mailboxes, and the sas at the street door: its twin stands behind our door on Front Street,
   // and going through it is walked, not travelled (`world/airlock`).
   const { streetDoor, mailboxes } = plan;
+  mailboxDay = () => today.gameDay;
   zone.place(new Mailboxes(), new THREE.Vector3(mailboxes.x, mailboxes.y, mailboxes.z), Math.PI / 2);
   // Our flap, first of the top row: the day's post, taken on the way past (or found on the mat at home: whichever first).
   const box = mailboxGrid();
@@ -463,6 +471,9 @@ class FloorName extends Prop {
   }
 }
 
+/** The game day the mailboxes' names are painted for (set by the builder before it builds them). */
+let mailboxDay = (): number => 0;
+
 /** The residents' mailboxes in the hall: a wooden cabinet of brass-framed flaps with names. */
 class Mailboxes extends Prop {
   readonly contactShadow = false;
@@ -527,7 +538,8 @@ function mailboxNames(count: number): string[] {
     // "The Nguyens": the family's name on the box.
     return (who.startsWith('The ') && last.endsWith('s') ? last.slice(0, -1) : last).toUpperCase();
   };
-  // The late Mr Lambert's box keeps his name (`world/estateSale`).
-  const names = [mailboxes.ours, surname(ourNeighbour), ...neighbours.flat().map(surname), plan.estateSale.mailbox, mailboxes.concierge];
+  // The late Mr Lambert's box keeps his name (`world/estateSale`) until the new tenant moves in (`building/newTenant`).
+  const lambert = newTenantIn(mailboxDay()) ? NEW_TENANT.surname : plan.estateSale.mailbox;
+  const names = [mailboxes.ours, surname(ourNeighbour), ...neighbours.flat().map(surname), lambert, mailboxes.concierge];
   return Array.from({ length: count }, (_, i) => names[i] ?? '');
 }

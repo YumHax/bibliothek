@@ -140,6 +140,18 @@ export class VisitBook {
     return this.state.lastDay === day;
   }
 
+  /**
+   * A friend asked round for a day gone by who never got in (the player was out when they came): who and when,
+   * once (the invitation is spent).
+   */
+  stoodUp(day: number): { friendId: string; day: number; hour: number } | null {
+    const invited = this.state.invited;
+    if (!invited || invited.day >= day) return null;
+    this.state.invited = null;
+    this.save();
+    return this.state.lastDay === invited.day ? null : invited;
+  }
+
   /** Who was asked round for `day`, if anyone. */
   invitedOn(day: number): string | null {
     const invited = this.state.invited;

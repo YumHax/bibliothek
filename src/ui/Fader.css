@@ -38,6 +38,93 @@
     display: block;
     animation: fader-photo-drift var(--dur-creep) linear both;
   }
+  .fader__greet { display: none; }
+
+  /*
+   * A place never photographed: the postcard's drawn picture side. A sky, that part of town's outline against it
+   * (roofs and chimneys for the building, shopfronts and their awnings for Front Street, a lit window for home, a tree-lined
+   * avenue for Linden Avenue), a stamp with its postmark, and "Greetings from…" across it in the card shop's script.
+   */
+  .fader__card--drawn .fader__photo {
+    --fd-sky-top: #f2b880;
+    --fd-sky-low: #fbe3c0;
+    --fd-far: #9a7e8e;
+    --fd-near: #5a4656;
+    --fd-lit: #ffd98a;
+    --fd-stamp: #c8483a;
+    --fd-awning-a: #c8483a;
+    --fd-awning-b: #f4ead6;
+    --fd-leaf: #5f7d4e;
+    position: relative;
+    display: block;
+    background:
+      radial-gradient(circle at 72% 62%, var(--fd-lit) 0 5%, transparent 5.4%),
+      linear-gradient(to bottom, var(--fd-sky-top), var(--fd-sky-low) 70%);
+  }
+  /* The outline: two rows of silhouettes, the far one paler. */
+  .fader__card--drawn .fader__photo::before {
+    content: '';
+    position: absolute;
+    inset: auto 0 0;
+    height: 58%;
+    background:
+      repeating-linear-gradient(90deg, var(--fd-near) 0 11%, transparent 11% 13%, var(--fd-near) 13% 21%, transparent 21% 22%) bottom / 100% 62% no-repeat,
+      repeating-linear-gradient(90deg, var(--fd-far) 0 7%, transparent 7% 9%, var(--fd-far) 9% 16%, transparent 16% 17%) bottom / 100% 88% no-repeat;
+    clip-path: polygon(0 30%, 6% 30%, 6% 12%, 9% 12%, 9% 30%, 22% 30%, 26% 18%, 30% 30%, 44% 30%, 44% 8%, 48% 8%, 48% 30%, 63% 30%, 67% 16%, 71% 30%, 84% 30%, 84% 14%, 87% 14%, 87% 30%, 100% 30%, 100% 100%, 0 100%);
+  }
+  .fader__card--drawn .fader__photo[data-scene='street']::before {
+    background:
+      repeating-linear-gradient(90deg, var(--fd-awning-a) 0 2%, var(--fd-awning-b) 2% 4%) 0 46% / 100% 9% no-repeat,
+      repeating-linear-gradient(90deg, var(--fd-near) 0 19%, transparent 19% 20%) bottom / 100% 72% no-repeat,
+      linear-gradient(var(--fd-far), var(--fd-far)) bottom / 100% 90% no-repeat;
+    clip-path: polygon(0 10%, 20% 10%, 20% 4%, 40% 4%, 40% 14%, 60% 14%, 60% 0, 80% 0, 80% 8%, 100% 8%, 100% 100%, 0 100%);
+  }
+  .fader__card--drawn .fader__photo[data-scene='home']::before {
+    inset: 14% 30% 10%;
+    height: auto;
+    border: 0.35rem solid var(--fd-near);
+    background:
+      linear-gradient(var(--fd-near), var(--fd-near)) center / 0.3rem 100% no-repeat,
+      linear-gradient(var(--fd-near), var(--fd-near)) center / 100% 0.3rem no-repeat,
+      radial-gradient(circle at 50% 35%, var(--fd-lit), var(--fd-sky-low) 70%);
+    clip-path: none;
+  }
+  .fader__card--drawn .fader__photo[data-scene='linden']::before {
+    background:
+      radial-gradient(circle at 10% 30%, var(--fd-leaf) 0 9%, transparent 9.5%),
+      radial-gradient(circle at 34% 26%, var(--fd-leaf) 0 10%, transparent 10.5%),
+      radial-gradient(circle at 60% 32%, var(--fd-leaf) 0 8%, transparent 8.5%),
+      radial-gradient(circle at 86% 24%, var(--fd-leaf) 0 11%, transparent 11.5%),
+      linear-gradient(var(--fd-far), var(--fd-far)) bottom / 100% 40% no-repeat;
+    clip-path: none;
+  }
+  /* The stamp, perforated, with its wavy postmark running off it. */
+  .fader__card--drawn .fader__photo::after {
+    content: '';
+    position: absolute;
+    top: 9%;
+    right: 5%;
+    width: 13%;
+    aspect-ratio: 4 / 5;
+    background:
+      radial-gradient(circle, transparent 0 0.12rem, var(--fd-stamp) 0.13rem) -0.15rem -0.15rem / 0.42rem 0.42rem,
+      var(--fd-stamp);
+    outline: 0.2rem dotted var(--paper-speech);
+    outline-offset: -0.1rem;
+    box-shadow: 0 0 0 0.12rem var(--paper-speech);
+    rotate: 6deg;
+  }
+  .fader__card--drawn .fader__greet {
+    display: block;
+    position: absolute;
+    left: 6%;
+    top: 10%;
+    max-width: 70%;
+    font: 400 var(--fs-t3) / 1.05 var(--ui-font-hand);
+    color: var(--ink-speech);
+    text-shadow: 0 0.06em 0 var(--paper-speech);
+    rotate: -4deg;
+  }
 
   .fader__caption {
     display: grid;

@@ -69,6 +69,13 @@ const NOTICE = {
 
 /** The one blackout of the page (made by the stairwell's builder), for the fuse boxes and the debug hook. */
 let current: Blackout | null = null;
+/** What holds a storm's cut back (the player in a fade, a conversation, a panel, a gathering, the opening): any true, no cut. */
+const holds: (() => boolean)[] = [];
+
+/** A storm does not cut the power while `gate` answers true (wired once at boot: never mid-scene, mid-talk or mid-panel). */
+export function holdPowerCutsWhile(gate: () => boolean): void {
+  holds.push(gate);
+}
 
 export class Blackout {
   private strikes = -1;
@@ -99,7 +106,7 @@ export class Blackout {
       if (this.since >= AUTO_RESTORE_S) this.restore();
       return;
     }
-    if (!struck || !inputs.canCut() || inputs.weatherKind() !== 'storm') return;
+    if (!struck || !inputs.canCut() || holds.some((held) => held()) || inputs.weatherKind() !== 'storm') return;
     const hours = inputs.hours();
     if (!inHours(hours, EVENING)) return;
     const day = inputs.gameDay();

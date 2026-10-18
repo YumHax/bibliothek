@@ -70,10 +70,12 @@ export const BUILDING_PERKS = {
   ],
   /** A lesson pays on the player's next COMET DASH game: these tickets on top, "a better first strip" (`arcade/guestDays`). */
   rossiCoaching: 20,
-  /** The postman's word at Friend: when the next round comes. */
-  postmanRounds: 'I come round twice a day. Give the lift a shout, I’ll bring it to your door myself.',
-  /** Pascal and the furniture (no weight to carry in the flat: a line). */
-  girardCarry: 'Need something moved? Pianos are my job. Anything in your flat, I could carry with one hand. Just say.',
-  /** The Nguyens' spare pad (games nights have no pad limit: a line). */
-  nguyenPad: 'Take the spare controller for your games nights. The twins broke the other one anyway.',
+  /** The postman's word at Friend (`carriesUp`: the parcels come a round sooner, `building/socialBuilding.parcelDelayHours`). */
+  postmanRounds: 'I bring yours up myself now, first thing on the round. Never mind what the lodge says.',
+  /** Pascal and the furniture (`helpsCarry`: the furniture shop's prices without delivery, `street/streetPerks`). */
+  girardCarry: 'Need something moved? Pianos are my job. Whatever you buy at the furniture shop, I’ll carry it up. No delivery to pay.',
+  /** The Nguyens' spare pad (`lendsPad`: at games night, winner stays on and everyone gets a go). */
+  nguyenPad: 'The spare pad’s yours for games nights. Winner stays on, the others take turns. The twins broke the other one anyway.',
+  /** Mrs Dubois' slice of cake on the mat (`leavesCake`), the player out this long (game hours), every so many game days. */
+  duboisCake: { awayHours: 4, everyDays: 3, note: { title: 'FROM THE 2ND FLOOR', lines: ['A slice of my lemon cake.', 'You looked thin on the stairs.', 'S. Dubois'], accent: 0x8a6a4a } },
 };

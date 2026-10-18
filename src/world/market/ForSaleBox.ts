@@ -5,6 +5,7 @@ import type { BoxArtLoader } from '@/covers/BoxArtLoader';
 import { getPlatform } from '@/catalog/platforms';
 import { createCanvas, toTexture } from '@/covers/generated/canvasUtils';
 import type { StockItem } from '@/economy/StockItem';
+import type { PersonId } from '@/social/types';
 import { BUDGET_LABEL, describeCondition, describeEdition } from '@/economy/pricing';
 import { variantTag } from '@/economy/copyTraits';
 import { playCoins } from '@/audio/coins';
@@ -35,6 +36,8 @@ export interface ForSaleBoxOptions {
   thanks?: () => string;
   /** Where it is sold, for the receipt: "the NES stall". */
   where: string;
+  /** Who sells it (`ForSaleLike.seller`): their card, for the haggle. */
+  seller?: PersonId;
   /** In a locked glass case (only a trusted player may take it in hand). */
   behindGlass?: boolean;
   /** A find, not a sale (`ForSaleLike.free`): no price shown, B takes it, no coins clink. */
@@ -84,6 +87,7 @@ export class ForSaleBox extends THREE.Group implements Furniture, Interactable {
   private disposed = false;
   /** Where it is sold, for the receipt. */
   readonly where: string;
+  readonly seller?: PersonId;
   readonly behindGlass: boolean;
   readonly free: boolean;
   private readonly reactTo?: (reaction: SaleReaction) => void;
@@ -103,6 +107,7 @@ export class ForSaleBox extends THREE.Group implements Furniture, Interactable {
     this.compare = options.compare ?? (() => ({ owned: false, cheaperElsewhere: false }));
     this.thanksLine = options.thanks ?? (() => THANKS[Math.floor(random() * THANKS.length)]!);
     this.where = options.where;
+    if (options.seller) this.seller = options.seller;
     this.behindGlass = options.behindGlass ?? false;
     this.free = options.free ?? false;
     this.reactTo = options.react;
@@ -275,11 +280,11 @@ export class ForSaleBox extends THREE.Group implements Furniture, Interactable {
     const variant = variantTag(game).toLowerCase();
     const edition = [printing, variant].filter(Boolean).join(', ');
     const was = this.item.beforeSale;
-    const cost = `${formatCoins(price)}${this.item.haggled ? ' (haggled)' : was !== undefined ? ` (clearance, was ${was})` : ''}${this.item.source === 'grail' ? ' · a grail' : ''}`;
+    const cost = `${formatCoins(price)}${this.item.haggled ? ' (haggled)' : was !== undefined ? ` (clearance, was ${formatCoins(was)})` : ''}${this.item.source === 'grail' ? ' · a grail' : ''}`;
     const due = this.item.due;
-    const short = coins < due ? ` · you have ${coins}` : '';
+    const short = coins < due ? ` · you have ${formatCoins(coins)}` : '';
     const wish = this.wanted ? ' · ★ on your wishlist' : '';
-    const held = this.item.source === 'ordered' ? ' · your order' : this.item.deposit ? ` · held for you, ${due} to pay` : '';
+    const held = this.item.source === 'ordered' ? ' · your order' : this.item.deposit ? ` · held for you, ${formatCoins(due)} to pay` : '';
     const glass = this.behindGlass ? ' · behind glass' : '';
     return `${what}${edition ? `, ${edition}` : ''} — ${cost}${held}${short}${wish}${glass} · look closer`;
   }

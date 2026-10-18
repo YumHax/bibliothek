@@ -17,8 +17,9 @@ interface Borrowed {
 
 interface FriendsLife {
   borrowed: Borrowed[];
-  /** The game day of the last postcard. */
+  /** The game day of the last postcard, and the places written from since the round of places began. */
   postcard: number;
+  places: string[];
   /** Friend id -> the game day they last put in a word for the player. */
   sides: Record<string, number>;
   /** The game day of the last unannounced call. */
@@ -27,7 +28,7 @@ interface FriendsLife {
   arcadeDate: number;
 }
 
-const fresh = (): FriendsLife => ({ borrowed: [], postcard: -99, sides: {}, dropBy: -99, arcadeDate: -99 });
+const fresh = (): FriendsLife => ({ borrowed: [], postcard: -99, places: [], sides: {}, dropBy: -99, arcadeDate: -99 });
 
 let store: PersistedStore<FriendsLife> | null = null;
 let state: FriendsLife | null = null;
@@ -51,7 +52,8 @@ function readLife(data: unknown): FriendsLife | null {
   );
   const sides: Record<string, number> = {};
   if (d.sides && typeof d.sides === 'object') for (const [k, v] of Object.entries(d.sides)) if (typeof v === 'number') sides[k] = v;
-  return { borrowed, postcard: typeof d.postcard === 'number' ? d.postcard : -99, sides, dropBy: typeof d.dropBy === 'number' ? d.dropBy : -99, arcadeDate: typeof d.arcadeDate === 'number' ? d.arcadeDate : -99 };
+  const places = Array.isArray(d.places) ? d.places.filter((p): p is string => typeof p === 'string') : [];
+  return { borrowed, postcard: typeof d.postcard === 'number' ? d.postcard : -99, places, sides, dropBy: typeof d.dropBy === 'number' ? d.dropBy : -99, arcadeDate: typeof d.arcadeDate === 'number' ? d.arcadeDate : -99 };
 }
 
 /** Whether the collection's `gameId` is borrowed from a friend (not the player's to sell, swap or give). */
@@ -82,9 +84,17 @@ export function giveBack(gameId: string): void {
 export function lastPostcard(): number {
   return loaded().postcard;
 }
-export function postcardSent(day: number): void {
-  loaded().postcard = day;
+/** A postcard sent on `day` from `place`; `restart` begins a new round of places (all were written from). */
+export function postcardSent(day: number, place: string, restart?: string[]): void {
+  const s = loaded();
+  s.postcard = day;
+  s.places = [...(restart ?? s.places), place];
   save();
+}
+
+/** The places written from in this round. */
+export function postcardPlacesSent(): readonly string[] {
+  return loaded().places;
 }
 
 /** The game day `friend` last put in a word for the player, and the record of a new one. */

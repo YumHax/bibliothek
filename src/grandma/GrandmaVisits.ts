@@ -1,7 +1,7 @@
 import { KEYS, PersistedStore, safeStorage } from '@/persistence';
 import { SUNDAY_WEEKDAY, weekdayOf } from '@/time/wakefulness';
 import { GRANDMA } from './grandma';
-import { MEMORIES, type Memory, type MemoryFacts } from './memories';
+import { DREAM_NEAR, MEMORIES, type Memory, type MemoryFacts } from './memories';
 
 /*
  * THE VISITS TO MÉMÉ'S (docs/story.md "Mémé"): how many, the last Sunday she gave the envelope, the memories of her
@@ -19,7 +19,7 @@ type GrandmaNews = 'prototype' | 'trail' | 'crane' | 'roomFull' | 'manyGames' | 
 
 /** The stores' side of things, read live (`bootstrap/services`). */
 interface GrandmaWorld {
-  facts(): Omit<MemoryFacts, 'visits' | 'felixHome' | 'seen'> & {
+  facts(): Omit<MemoryFacts, 'visits' | 'felixHome' | 'seen' | 'seenIds'> & {
     /** Times the rival collector was beaten to a copy. */
     craneBeaten: number;
     /** The prototype's trail under way. */
@@ -139,6 +139,17 @@ export class GrandmaVisits {
     return this.hasSeen(memory.id) ? memory.againAfter : memory.after;
   }
 
+  /**
+   * Memories known to be seen from what they left behind (her keepsakes given, the reckoning with Gaspard had): put
+   * back in the album when its own save was lost, in `MEMORIES` order. The family's story never runs ahead of the album.
+   */
+  restoreSeen(ids: readonly string[]): void {
+    const missing = MEMORIES.filter((m) => ids.includes(m.id) && !this.state.seen.includes(m.id)).map((m) => m.id);
+    if (!missing.length) return;
+    const order = (id: string): number => MEMORIES.findIndex((m) => m.id === id);
+    this.commit({ ...this.state, seen: [...this.state.seen, ...missing].sort((a, b) => order(a) - order(b)), visits: Math.max(1, this.state.visits) });
+  }
+
   /** A memory played to its end. */
   markSeen(id: string): void {
     if (this.state.seen.includes(id)) return;
@@ -158,6 +169,8 @@ export class GrandmaVisits {
       visits: this.state.visits,
       felixHome: this.state.felixHome,
       seen: this.state.seen.length,
+      seenIds: this.state.seen,
+      dreamRoom: world?.dreamRoom ?? 0,
       gamesOwned: world?.gamesOwned ?? 0,
       arcadeMedals: world?.arcadeMedals ?? 0,
       notebookFound: world?.notebookFound ?? false,
@@ -174,7 +187,7 @@ export class GrandmaVisits {
       prototype: world.prototypeFound,
       trail: world.trailStarted && !world.prototypeFound,
       crane: world.craneBeaten > 0,
-      roomFull: world.gamesOwned >= 120,
+      roomFull: world.dreamRoom >= DREAM_NEAR,
       manyGames: world.gamesOwned >= 50,
       notebook: world.notebookFound,
       medal: world.arcadeMedals > 0,

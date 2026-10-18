@@ -16,6 +16,10 @@ export interface MediaModel extends THREE.Object3D {
   readonly printFold: number;
   /** The drawn label (or disc print); null leaves it blank. Frees the one it replaces. */
   setPrint(texture: THREE.Texture | null): void;
+  /** Width over height of the sticker on its back (`setBackPrint`); absent: it has none (a disc). */
+  readonly backPrintAspect?: number;
+  /** The sticker on its back, seen when it is turned over in the hand; null leaves it off. Frees the one it replaces. */
+  setBackPrint?(texture: THREE.Texture | null): void;
   /** A photograph (or scan) of the real thing's face, over the whole of it; false when it does not fit (it is then freed). */
   setPhoto(texture: THREE.Texture | null): boolean;
   /** Geometries and textures off the GPU while nobody sees it (uploaded again when drawn). */

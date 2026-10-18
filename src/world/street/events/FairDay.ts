@@ -14,6 +14,7 @@ import { FRONT } from '@/world/measures/street';
 import { lcg } from '@/random';
 import { rainGear } from '../life/streetLook';
 import { currentSeason } from '@/time/season';
+import { inHours } from '@/time/clock';
 import type { SkyState } from '../../props/DayNight';
 
 interface FairDayOptions {
@@ -25,9 +26,12 @@ interface FairDayOptions {
   talk: () => string;
   drawDistance: number;
   fade: number;
-  /** The sky (an umbrella up for whoever waits in the rain). */
+  /** The sky (an umbrella up for whoever waits in the rain, and the hour: they wait of a morning only). */
   sky?: () => SkyState;
 }
+
+/** The game hours people wait about the door: the morning's rush, from before the hall opens to lunch. */
+const WAITING_HOURS: readonly [number, number] = [7, 13];
 
 /** The bunting's flags: how far apart, their size, their colours. */
 const FLAGS = { every: 0.42, width: 0.3, drop: 0.36, colours: ['#d8323a', '#f2c83a', '#2a7ac8', '#f4f0e8', '#3aa85a', '#e8702a'] };
@@ -47,6 +51,7 @@ export class FairDay extends THREE.Group implements Furniture, Updatable {
   private readonly people: Walker[] = [];
   private readonly eye = new THREE.Vector3();
   private readonly spot = new THREE.Vector3();
+  private waiting = true;
 
   constructor(private readonly options: FairDayOptions) {
     super();
@@ -125,6 +130,14 @@ export class FairDay extends THREE.Group implements Furniture, Updatable {
   }
 
   update(): void {
+    // Of a morning only: by lunch they are in (or have given up), and nobody queues for the Fair at night.
+    const sky = this.options.sky?.();
+    const waiting = !sky || inHours(sky.hours, WAITING_HOURS);
+    if (waiting !== this.waiting) {
+      this.waiting = waiting;
+      for (const person of this.people) person.setPresent(waiting);
+    }
+    if (!waiting) return;
     this.options.viewer.getWorldPosition(this.eye);
     for (const person of this.people) {
       person.getWorldPosition(this.spot);

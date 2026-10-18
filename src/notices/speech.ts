@@ -52,6 +52,19 @@ export function speechSink(): SpeechSink | null {
   return sink;
 }
 
+/** From the eyes up to where a bubble's tail points (m): the crown and the hair, and a hand's breadth of air. */
+const OVER_EYES = 0.2;
+
+/**
+ * From `anchor` to just over the head it stands for (m, never above the anchor): its body's eyes (`userData.faceLift`:
+ * a child, someone seated or short) plus `OVER_EYES`, so a bubble sits on the head however tall they are; 0 for an
+ * anchor with no body measure (a driver's window).
+ */
+export function overHead(anchor: THREE.Object3D): number {
+  const lift = anchor.userData.faceLift as (() => number) | undefined;
+  return typeof lift === 'function' ? Math.min(0, lift() + OVER_EYES) : 0;
+}
+
 /**
  * A conversation is going on (the conversation panel, from opening to closing): each answer shows at once over the
  * speaker's head, replacing the one before, instead of queueing behind it (a quick player would read stale lines).

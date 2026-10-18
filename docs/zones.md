@@ -61,10 +61,12 @@ The curtain (`ui/Fader`) falls in the light of where the trip goes (`travel/trav
 the market or the saleroom, the sky's grey-blue for the street by day, near black at night) and, if it is still down
 0.35 s after falling, shows the destination's travel card (`travel/travelCards`): a postcard with where it is
 ("Front Street"), its name, a photo of it as the player last left it (the frame grabbed on the way out, a small JPEG
-under `KEYS.travelCardsCache`, never in the save) and a bar that fills as the module is fetched, the zone built and its
+under `KEYS.travelCardsCache`, never in the save; a place never photographed gets a drawn picture side instead,
+"Greetings from …" over a little scene of that part of town and a stamp) and a bar that fills as the module is fetched, the zone built and its
 shaders compiled, creeping between those marks at the pace the last trip there took. Each trip logs where its time
 went (`[travel] market in 3120 ms: curtain …, load …, build …, prime …`). A
-trip whose destination will not load comes back with a refusal ("The door sticks", `Travel.onFailed`). A trip may play
+trip whose destination will not load comes back with a refusal ("The door sticks", `Travel.onFailed`); a second within
+two minutes is an alert with a Retry that makes the same trip again (`bootstrap/session.ts`). A trip may play
 an interlude over the fallen curtain while the destination builds (`TravelOptions.interlude`: the bus ride to Mémé's
 and back, `ui/busRide`); the curtain lifts once it has ended. In the flat every zone neighbours every other
 (`FLAT` in `worldPlan.ts`), so they are always active together: a zone coming or going changes the scene's light
@@ -115,13 +117,18 @@ the joining) is `building/rouxMove`, docs/building.md "Mrs Roux's move". `?debug
 right wall (map in `stairwellPlan.ts`). A zone of `FLAT` (persistent, always active: its lights are compiled with the
 flat's) with no `Room`: `Staircase` (plaster shaft, stone landings, ten flights of nine steps round the well, the iron
 balustrade, our landing's strip from the front door, the hall's cabochon tiles; walls and the well's sides are its
-`colliders`), `Lift` (an iron cage the full height, a wooden car that stops on every landing, the player in it at
-`liftSpeed` 3.5 m/s, ~6 s from top to bottom, folding gates (0.45 s) whose colliders come and go; at the two ends it
-runs itself (`Lift.autoPilot`): idle elsewhere, it sets off for the player as soon as they stand on our landing or in
-the hall (the front door opened, the sas crossed), folds its gate open when they walk up (on any landing), and leaves
-for the other end 0.6 s after they step in (not again until the rider it brought has stepped out; sent off by itself
-and they step back out, it stays). The floors between never draw it by themselves (the stairs run past them): their
-landing's brass button calls it. The car's panel has a button a floor and sends it at once, even turning it on its way. Residents and the postman ride
+`colliders`), `Lift` (an iron cage the full height, barred on three sides, a rail round it at every landing; a
+panelled wooden car (`liftBody`: veneer panels, brass handrail, framed mirror, frosted dome, the brass panel by the
+gate) that stops on every landing, the player in it at `liftSpeed` 3.5 m/s, ~6 s from top to bottom; on every landing a
+folding scissor gate (`FoldingGate`, instanced bars and links, 0.45 s) whose collider comes and goes, under a scrolled
+frieze with a brass dial whose needle follows the car (`runShare`); at the two ends it runs itself (`Lift.autoPilot`):
+idle elsewhere, it sets off for the player as soon as they stand on our landing or in the hall (the front door opened,
+the sas crossed), folds its gate open when they walk up (on any landing), and leaves for the other end 1.4 s after they
+step in (time to reach the panel; not again until the rider it brought has stepped out; sent off by itself and they step
+back out, it stays). The floors between never draw it by themselves (the stairs run past them): the gate itself, clicked,
+or the brass button on its post calls it; busy, the call is queued (`queued`, the button's amber lamp lit) and served
+as soon as it is free. The car's panel has two columns of numbered ivory buttons (`panelSpot`), the one it is going to
+lit, and sends it at once, even turning it on its way. Residents and the postman ride
 it for real when it idles empty (`Lift.carry`: called to their landing, they step in, it rides, they step out; busy,
 they fade at the gate and come out the ride's time later). Its hum and clank are on the world bus), `StairLights`
 (a timer globe on every landing, each with its own sensor: lit `LIT_S` after the player, a resident or the postman left
@@ -141,7 +148,8 @@ flap, `OurMailbox`, hands over the day's post, read on the spot, and the mat at 
 at the street door the sas (see "The sas"). Underfoot: tiles in the hall and the sas, stone (`concrete`: `stone` is an
 outdoor surface, it would splash on a rainy day) on the flights and landings. The menu's "Go home" lands in the
 hallway (`HALLWAY_PLAN.arrival`), and from the flat, once the first day's trip to the market is done, its "Go out…" opens
-the "Where to?" list (`Travel.choices`, the flat's own stops left out) for whoever does not want the stairs; travel to the stairwell (the entrance hall, `STAIRWELL_PLAN.arrival`, in front of
+the "Where to?" list (`Travel.choices`, the flat's own stops left out; each place under where it is, `placeWords`, with the
+photo of it as last left, `travelCards`) for whoever does not want the stairs; travel to the stairwell (the entrance hall, `STAIRWELL_PLAN.arrival`, in front of
 the sas's glass door) is only the street's home door when the sas is not connected.
 - **The player's ground.** `FirstPersonController.setGround(fn)` gives the floor's height under (x, z) for the feet's
   current height (`GroundHeight`): flights stack, so the surface is the highest one no more than a step above the feet.
@@ -314,8 +322,9 @@ placed by `courtyard/courtyardDoor.placeCourtyardDoor`, kept out of the yard's c
 - **Bounds**: `StreetBounds` behind the facades, `YardBounds` for the workshop's back wall, the bins, shed, sandpit,
   bikes, rack and the chestnut's trunk; `YardDressing`'s own; on bulky-waste day the pile's (`PileBounds`). Underfoot the setts (`stone`), the lawn (`grass`).
 - **What is there**: the concierge's pots by our door, the bags by the bins on bin day (one game day in seven), the
-  lantern over the back door (`YardLantern`, `COURTYARD_PLAN.lantern`: lit on the building's timer from dusk to half
-  past midnight and from half past five, a shadowless light and a pool on the setts). The rear building and the east
+  lanterns over the back door, the rear building's door and the bins (`YardLantern`, `COURTYARD_PLAN.lanterns`: lit
+  from dusk until it is light, a shadowless light and a pool on the setts each), and a night ambient above the open
+  street's (`COURTYARD_PLAN.nightAmbient`, `StreetLighting`'s `nightAmbient`) so the yard can be crossed at night. The rear building and the east
   wing are painted at `YARD_DETAIL` here (their windows in 3D), finer than from Front Street; the yard's own pieces
   (`outlook/Courtyard`) carry long grass along the lawn's curb (`street/GrassTufts`) and ivy up the workshop's back
   (`street/Climber`, `COURTYARD_YARD.ivy`).
@@ -430,7 +439,9 @@ floor underfoot (tomettes in the corridor, boards in the collector's room).
   within 6 s of the last, from inside the car (`stairwell/liftCode`, the ride itself `stairwell/liftAttic`). The car then goes to our landing, climbs 0.5 m
   past it with its lamp stuttering, and `Lift` asks the Session to travel to `attic`. Its default arrival is in the
   attic's car.
-  - The code is scratched faintly under the car's mirror, and a resident (k 3) passes on the rumour.
+  - The code is scratched into the mirror's lower edge as tally strokes a floor (4, 2, a gated 5, 2, 1, a ring for G),
+    among years of key scratches, initials and a heart (`mirrorScratchesTexture`): nothing marks it as a code. Lambert's
+    mailbox card points at the mirror; the residents only say Vasseur rode the lift for hours "like a piano".
   - When the stairwell loses its occupancy, the car parks back on our landing, shut (`parkFromAttic`). Its gate opens
     when the player comes back down.
   - If the co-owners voted the lift's overhaul (`coproChoice('lift')`), the car runs 1.5 times as fast and its gates
@@ -619,8 +630,9 @@ the works move on to x 110, short of the side street: `details/roadworks.syncWor
 moves `WALKABLE`'s end, and that stretch's shop doors get their clicks), down Park Street to its own roadworks at
 z -47, into the bay at our corner, and in the park's hours (`parkGate.hours`) through its gate into the gardens behind
 it (`PARK_WALK`, closed by a low hoop fence; the gate's leaves swing in and its box leaves `zone.collisions`, never shutting
-on the player still inside). Walked past the zone's box (x ±40), the street stays the current zone: nothing else stands
-there (the walk-in shops' zones are at x 600+, `PARK_WALK` keeps clear of the arcade's and market's at world z ±5). No
+on the player still inside), and from the gardens' far corner up a fenced lane to the bandstand (`BANDSTAND_WALK`: the
+lane and the round of lawn about it, the same hoop fence; the plinth collides). Walked past the zone's box (x ±40), the street stays the current zone: nothing else stands
+there (the walk-in shops' zones are at x 600+, `PARK_WALK` and `BANDSTAND_WALK` keep clear of the arcade's and market's boxes). No
 invisible wall: `StreetBounds` is a thin box behind every facade, the railings collide (`StreetFurniture`, with the
 park's gate the walkers leave by), both roadworks (`details/roadworks.closures()`, one frame per closure) have hoardings
 over the pavements and barriers over the parking lanes that collide, the works beyond (trench, plates, spoil, generator,
@@ -667,8 +679,15 @@ RETRO GAMES keeps `SHOP_HOURS`).
   button with its WAIT window, clicked), `Spray` behind wet wheels (and a sheet of water over the kerb at the player by
   a car tearing through the gutter: `splashes`). `TaxiRank` (`STREET_PLAN.taxi.rank`): hailed, a taxi comes to the
   stand and waits; got into for `taxi.fare`, it goes wherever line 38 goes (`busRide.destinations`, read at the click;
-  a `ChoicePanel` when more than one is open) at any hour the place is, marked `travel/rideVia` 'taxi' so no bus ride
-  plays over the curtain (the bus marks its own 'bus'). `ParkingWarden` (`STREET_PLAN.warden`): her round along one
+  a `ChoicePanel` when more than one is open) at any hour the place is, marked `travel/rideVia` taxi with the driver's
+  word and the fare: the back seat plays over the curtain instead of the bus ride (`ui/taxiRide`, a canvas like the
+  bus's: the road through the windscreen, the town past the side windows through the bus ride's own painter, the
+  cabbie's head over the front seat and eyes in the mirror, the pine tree swinging; on the dash the meter ticking up in
+  red digits and the address card; the driver's word in a balloon; engine, indicator, meter clicks and the door in
+  `audio/taxiRideSounds`; the bus marks its own). "Where to?" is the `ChoicePanel`'s `taxi` look with the cabbie
+  (`CABBIE`, one face on the rank and in the back seat). From 20:00 to 2:00 it also offers what the bus never
+  does, a drive along the river (`taxi.drive`): told in a beat (`household/pastime`, the back seat over the dark, the
+  clock on 35 minutes), back at the rank. `ParkingWarden` (`STREET_PLAN.warden`): her round along one
   kerb and back down the other, Monday to Saturday, a ticket under a wiper now and then (`StreetCars.ticket`).
   - **The cars** (`StreetCars`): each driver keeps its own pace and temper, more of them in the rush hours
     (`city/traffic` `rushAt(h, weekday)`: none at the weekend, a quiet Sunday). They swing out round a van standing in
@@ -744,7 +763,8 @@ RETRO GAMES keeps `SHOP_HOURS`).
   man goes hurries across (`StreetCrowd.hurryAcross`), and in a downpour with nothing over the head most run. Terrace
   customers sip from their cup once it comes, smokers take a draw, the Sunday concert's chairs clap after each song
   (and the raffle's keeper at the draw). The playground's swings hang on their own pivots (`StreetParkFeatures`
-  `swings`): a child rides one, pumping it higher, the creak at each end (`cues.swing`), and climbs the slide's ladder
+  `swings`): a child rides one, pumping it higher, the creak at each end (`cues.swing`); the player can sit on a free
+  one (`details/SwingSeat`: it swings gently and the eye rides the seat; one a kid sits on is taken), and climbs the slide's ladder
   to ride down the chute (`cues.slide`). On Halloween's evenings children in costume (a witch, a ghost, a pumpkin, a
   skeleton, a cat) go round the doors that answer, a grown-up with them, one group per pavement
   (`events/TrickOrTreaters`). A car braking hard just short of the player makes the eye start back (`player/flinch`,
@@ -908,30 +928,46 @@ RETRO GAMES keeps `SHOP_HOURS`).
   `ForSaleBox`es, laid again after a reload that day).
 - **Known people** (`townsfolk/`): the residents and two regulars talkable in the crowd (`knownFaces`, the crowd's
   `social`), Victor's walk at nine and Lou's break (`TownRounds`), a passer-by's lead (`streetLeads`).
-- **Secrets** (`secrets/`, `SECRETS_PLAN`): the TO LET window under our building on Park Street (GAME OVER in the dust,
-  three clicks: a cartridge fished out through the letterbox), the children's chalk on Park Street's pavement (ten
-  squares, the old code clicked in order pays once), the initials in the park's railing (a card).
+- **Secrets** (`secrets/`, `SECRETS_PLAN`): the TO LET window under our building on Park Street (GAME OVER fingered in
+  painted dust on the glass, three clicks: a clean patch rubbed, CONTINUE? F.A. scratched in it, a cartridge fished out
+  through the letterbox), the children's chalk on Park Street's pavement (ten squares, each right one scuffed by the
+  shoe, a wrong one wipes them; the old code clicked in order pays once), the initials in the park's railing (a card).
+  Mémé has a story for the carving and the pane once found (`grandma/storyLines` `found`), and for the phone box's
+  caller who asked for Félix.
 - **Places and events** (`events/placeStreetEvents`, spots in `streetPlacesPlan.ts` `STREET_PLACES`, their days in
   `events/streetSchedules`): the pillar box (`wayfinding/PostBox`: a card to a friend or family met, once a game week
   each, warmth, `post/cards`) and the phone box (`wayfinding/PhoneBox`: a coin, then the bedroom phone's panel; now and then it rings by itself,
-  `STREET_PLACES.phoneRings`, and whoever picks up gets a wrong number). In the
+  `STREET_PLACES.phoneRings`, and whoever picks up mostly gets a wrong number: once, Roger of the old radio shop asking
+  for Félix (`streetMarks` 'phoneFelix'); while the prototype's trail is on the collector, someone arranging a swap of
+  the Hana box outside RETRO GAMES). The postie empties the pillar box at its last collection (`wayfinding/Postie`), and
+  a friend now and then writes back to a card a few days on (`post/replies`, through the hallway's mail). In the
   park's gardens the ducks on the pond's near side (`park/ParkDucks`) and the bank over the hoop fence (`park/PondBank`:
   a croissant crumbled for them, else a coin tossed for a wish, one a game day; the seventh brings up an arcade token,
   `park/parkVisits`); Sunday afternoons' concert on a low stage on the lawn (`park/ParkConcert`, `PARK_CONCERT`: Lou's
   band, listeners on folding chairs, `audio/LiveMusic`; the stage clicked is a while listening, Lou's warmth; the
-  bandstand itself stays across the lawn, out of the gardens); the building's kids at the playground on Sundays (the
+  bandstand's boards are roped off, so the band plays on the grass); the bandstand at the end of its lane
+  (`STREET_PLACES.park.bandstand`): its steps to sit on, the lawn's talk overheard (or the band's brass on the wind while
+  it plays), and its plaque (`park/BandstandPlaque`) read a little more each look; the building's kids at the playground on Sundays (the
   courtyard's `YardKids` on its frames, `building/kids` `playgroundDay`). On the Grand Flea Fair's day: the overflow stall
   by the butcher's (a clearance lot, `build/showOnStall` on a `MarketStall`) with the raffle's drum (`events/RaffleDrum`,
-  `fair/raffle`: tickets till six, the number read out, a boxed game waiting for its winner), Roadshow Retro, a dealer who
-  comes only that day (a collector's lot), the crêpe cart (`events/CrepeCart`); both lots are drawn as a small ad's are
+  `fair/raffle`: tickets till six, each with its number, the prize face up on the table all day, the number read out, a
+  boxed game waiting for its winner; a prize never collected waits on the kiosk's ledge, `shops/Newsagent`
+  `placeKioskPrize`, and a note about it comes through the door), Roadshow Retro, a dealer who
+  comes only that day (a collector's lot), the crêpe cart (`events/CrepeCart`), all out in the Fair's hours only
+  (`events/FairPitch`: set up at the morning's opening, packed away at closing); both lots are drawn as a small ad's are
   (`ClassifiedsContext.lot` with an ad of their own). December: the Christmas stall (`events/ChristmasStall`: gift
-  wrapping through `ui/street/WrapPanel`, `holidays/giftWrap`, hot chestnuts). Halloween's evenings: the residents' doors
-  with a pumpkin answer a knock once a year (`events/HalloweenDoors`, `holidays/trickOrTreat`: sweets, coins, at one
-  door an old game on the step). Benches (`details/BenchSeats`, `benchExtras`): seated, a click waits until the next shop
-  opens (or a while) in a fade, and something is overheard after a little while. The What's On bill (`events/whatsOnItems`)
+  wrapping through `ui/street/WrapPanel`: the keeper in a balloon, the games as boxes on the stall's table, paper,
+  ribbon and bow folding over a box as it is wrapped; `holidays/giftWrap`; hot chestnuts; the stall's menu is the
+  `ChoicePanel`'s chalk-board `stall` look). Halloween's evenings: the residents' doors
+  with a pumpkin answer a knock once a year (whoever lives there comes out on the step, `life/StepAnswerer`;
+  `events/HalloweenDoors`, `holidays/trickOrTreat`: sweets, coins, at one door an old game on the step, laid again after
+  a reload until taken; the far doors once the works have moved on). Benches (`details/BenchSeats`, `benchExtras`): seated, a click waits until the next shop
+  opens (or a while) in a fade, and something is overheard after a little while; one stands in the park's gardens by the
+  path from the gate (the gardens' own talk), and each terrace keeps a chair for the player while it is laid out
+  (`Terraces.playerChair`: the waiter comes over). The What's On bill (`events/whatsOnItems`)
   adds the coming week: the saleroom, a garage sale, the collector, the concert, the Anchor's gig, the Local's quiz, the
   greengrocer's market mornings (Wednesday, Saturday), the neighbours' party (five pasted, eight read out). Line 38 has two stops: when both are on, `ui/street/ChoicePanel` asks
-  which (`StreetBus` `ride.choose`).
+  which (`StreetBus` `ride.choose`), as the route board with the driver (`bus.driverSeed`) and a ticket that tears off.
 
 ## Light in the places (render pass, 2026-10-17)
 

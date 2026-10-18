@@ -2,19 +2,21 @@ import type * as THREE from 'three';
 import type { Game } from '@/catalog/types';
 import { getPlatform } from '@/catalog/platforms';
 import { boxDimensionsOf } from '@/catalog/media';
-import { createCanvas, drawBarcode, drawImageCover, drawSeal, fitFontSize, roundRect, toTexture, wrapLines, FONT } from './canvasUtils';
+import { drawBarcode, drawImageCover, drawSeal, fitFontSize, layoutCanvas, roundRect, toTexture, wrapLines, FONT } from './canvasUtils';
 import { contrastText, css } from './palette';
 
 /** Layout width: every size below is in these units. */
 const WIDTH_PX = 640;
-/** Canvas height the layout is scaled down to: plenty for a box held at arm's length, a third of the pixels. */
-const HEIGHT_PX = 512;
+/**
+ * The canvas's longest side (px): the box in hand is brought up until its back fills the view to be read (the
+ * loupe), so its small print stays sharp there. Only the box in hand draws one, freed when it is put down.
+ */
+const LONG_PX = 2048;
 const MARGIN = 36;
 const FOOTER_H = 156;
 const DESC_LINE_H = 25;
 
 /** Fields the catalog may grow later; read without depending on them. */
-type GameExtras = { players?: string | number };
 
 type Platform = ReturnType<typeof getPlatform>;
 
@@ -45,9 +47,7 @@ export function createBackTexture(
   const { width, height } = boxDimensionsOf(game);
   const w = WIDTH_PX;
   const h = Math.round((w * height) / width);
-  const scale = Math.min(1, HEIGHT_PX / h);
-  const [canvas, ctx] = createCanvas(Math.round(w * scale), Math.round(h * scale));
-  ctx.scale(scale, scale);
+  const [canvas, ctx] = layoutCanvas(w, h, LONG_PX);
   const page: Page = { ctx, w, h, m: MARGIN, inner: w - MARGIN * 2, footerTop: h - FOOTER_H };
 
   paintBackground(page, accent);
@@ -195,8 +195,7 @@ function paintFooter({ ctx, w, h, m, footerTop }: Page, game: Game, platform: Pl
 /** The facts in columns from `left` to `right`: players, genre, and the region when there is room for it. */
 function paintFacts(ctx: CanvasRenderingContext2D, game: Game, left: number, footerTop: number, right: number): void {
   const facts: { label: string; value: string }[] = [];
-  const players = (game as Game & GameExtras).players;
-  if (players !== undefined && players !== null && players !== '') facts.push({ label: 'Players', value: String(players) });
+  if (game.players) facts.push({ label: 'Players', value: game.players });
   if (game.genre) facts.push({ label: 'Genre', value: game.genre });
   if (game.region && facts.length < 2) facts.push({ label: 'Region', value: game.region });
   const colW = facts.length ? Math.min(170, Math.floor((right - left) / facts.length)) : 0;

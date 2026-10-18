@@ -23,11 +23,17 @@ head for it; taken on the way, they try another or skip the sit; they turn to fa
 `sittingHeight`. What they say is heard as a faint murmur at their mouth (`audio/murmur.ts`, via `Friend.voice`), a tip's
 coins clink from where they stand. The script's pauses are `VISIT_RULES.beats`. A click to chat turns them to the player
 first; a comment on the box they looked at is made once, then they talk of others. Nobody
-answering after two rings, they go back down and try another day.
+answering after two rings, they go back down and try another day. Each friend says the everyday buckets in their own
+voice (`FriendPlan.lines.own`: asked round, asking to borrow, thanks, a refusal, a game handed back, leaving, the post's
+note) and greets by how things stand (`cool` while it has cooled, `close` for a close friend); "Home from home" only from
+someone it still feels like that to. Gone out mid-visit, they let themselves out and leave a note (`letOut`). Asked round
+on the phone and the player out when they came: their note on the mat the next day and a small hurt (`VisitBook.stoodUp`).
 
 Talking: a click on a friend opens the conversation (docs/social.md "Friends"): what they asked is its first entry; visits, loans, cake and games nights move how they stand with the player, and their tier brings perks (a game of theirs lent, a postcard, an unannounced call with a find) or keeps them away when cold.
 
-Borrowing: a click on the friend's request entry opens the `BorrowPanel` (`src/ui/BorrowPanel.ts`, via `SessionActions.openPanel`).
+Borrowing: a click on the friend's request entry opens the `BorrowPanel` (`src/ui/BorrowPanel.ts`, via `SessionActions.openPanel`):
+the friend's face asks in a balloon (`panel/speaker`), the box with a calendar leaf for the days till it comes back,
+"Take it" or "Not this one" (their answer is said in the room once the card is down).
 Lending marks the game `lent` in the collection (the existing status: its box wears the LENT OUT tag, the WE BUY desk
 refuses it). It comes back when due (2-4 days): the friend rings again and hands it back inside the door, holding its box
 out for `handBackFor` s (a `GameBox` in both hands) before it goes back on its shelf (the loan closes then, or when the
@@ -95,16 +101,20 @@ held, the paper's account, the photos.
 - **Games night** (`GamesNight`): the phone's "Have everyone round tonight" (before `callUntil`, every `everyDays`,
   not on a day someone came). From `from` (or `inHours` after the call) the three friends come, one behind the other;
   one shelf each, then they stand at `ROOM_PLAN.visitor.party` round the TV armchair (the player's: the route's seats
-  are emptied). Player two (the one who rang) offers PADDLE WARS (`offerAfter`, again every `offerAgain`, three times
+  are emptied). A friend gone cold (`stopsVisiting`) says no on the phone and stays away (`GamesNight.nightGuests`).
+  Player two (the one who rang) plays at their own level (`gamesNight.skill`: Marco holds the Duel record) and talks
+  in their own voice (`NIGHT_VOICES`: Marco's trash talk). With the Nguyens' spare pad (`lendsPad`) the winner stays on
+  and the next friend takes player two, one match more. Player two offers PADDLE WARS (`offerAfter`, again every `offerAgain`, three times
   unanswered at most); a click on them runs `PaddleWarsProgram` (the arcade's `Duel` as a `ScreenProgram`) on the TV
   through the `ProgramRunner` (`built.programs`, set in `bootstrap/session`), the player picks the pad up where they
   are (`ProgramPlay`). Goals and the score get reactions and lines; after `matches` matches (and `minStay` s) or
   `stay` s they leave a few seconds apart. An evening with a match adds a polaroid to `NightPhotos` on the hallway's
   far wall (`HALLWAY_PLAN.nightPhotos`, up to `photos`) and one friend leaves a game they no longer play
   (`giftChance`) or a tip. Nothing happens to a player who never hosts.
-- **Open house** (`OpenHouse`): the phone's "Ring THE GAMING WEEKLY", from `minGames` games, every `everyDays`, for
+- **Open house** (`OpenHouse`): the phone's Invite app, "An open house" (THE GAMING WEEKLY answers), from `minGames` games, every `everyDays`, for
   `aheadDays` later; that morning at home a word says it is today. From `from` to `until`, `waves` waves of
-  `perWave` strangers (never more than `inFlat` in the flat, the next once the last is in and the player is home):
+  `perWave` guests (Jo, Ray, Amy, Ben, Lucie, Kim: people the player can talk to, `social/people/guests.ts`, who
+  remember them at the next one and say so; who comes first changes with the day) (never more than `inFlat` in the flat, the next once the last is in and the player is home):
   each drops `entry` coins at the door (one more for every `entryEvery` games past `minGames`, at most `entryMax`: a
   fuller flat draws a better crowd), makes `stops` stops (the shelves, the window, the displays with something in
   them: `Showcases.stops`), gasps at a rare copy (`isRare`: a grail, a first print, 40 000 monthly views), goes. The

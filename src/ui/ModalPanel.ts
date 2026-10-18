@@ -91,6 +91,7 @@ export abstract class ModalPanel<OpenArgs extends unknown[] = []> {
     registerPanel(this.root, {
       isOpen: () => this.navigable(),
       onSide: (direction) => this.onSide(direction),
+      onMove: (direction) => this.onMove(direction),
       onBack: () => {
         if (!this.stepBack()) this.close();
       },
@@ -252,6 +253,11 @@ export abstract class ModalPanel<OpenArgs extends unknown[] = []> {
 
   /** D-pad left / right (or the arrow keys): true when the panel used it (tabs), else the focus moves. */
   protected onSide(_direction: 1 | -1): boolean {
+    return false;
+  }
+
+  /** Any D-pad move or arrow key, asked before the focus walks (a grid of letter keys, `panel/letterPad`; the darts' aim): true when used. */
+  protected onMove(_direction: 'up' | 'down' | 'left' | 'right'): boolean {
     return false;
   }
 

@@ -112,7 +112,12 @@ interface Terrace {
   centre: THREE.Vector3;
   /** The waiter laying the tables out or stacking them while the player watches: the tables still to do, then the change. */
   tidy: { tables: THREE.Vector3[]; open: boolean; wait: number } | null;
+  /** The player is sitting in the terrace's first chair (`playerChair`): no customer takes it. */
+  playerSat: boolean;
 }
+
+/** What the waiter says, coming over to the player's table. */
+const TO_THE_PLAYER = ['Anything for you? Take your time, love.', 'Nice out, isn’t it? I’ll leave you to it.', 'The coffee’s inside today, but sit as long as you like.'];
 
 /**
  * The café's and the bars' terraces: little round bistro tables with a chair either side along the
@@ -174,6 +179,53 @@ export class Terraces extends THREE.Group implements Furniture, Updatable {
     }
   }
 
+  /**
+   * The chair the player may take at terrace `i` (its first seat: zone-local, the way one faces sitting on it), as a
+   * `BenchSeat` does (`furnishStreet`): out while the terrace is laid out, taken while a customer sits on it.
+   */
+  playerChair(i: number): { at: THREE.Vector3; yaw: number; seat: number } | null {
+    const seat = this.terraces[i]?.seats[0];
+    return seat ? { at: seat.at.clone(), yaw: seat.yaw, seat: CHAIR.seat } : null;
+  }
+
+  /** Whether terrace `i`'s player chair is out (laid out, not being tidied). */
+  chairOut(i: number): boolean {
+    const t = this.terraces[i];
+    return !!t && t.isOpen && !t.tidy;
+  }
+
+  /** Whether a customer has terrace `i`'s player chair (or is on the way to it). */
+  chairTaken(i: number): boolean {
+    const t = this.terraces[i];
+    const seat = t?.seats[0];
+    return !!t && !!seat && t.customers.some((c) => c.seat === seat && c.state !== 'leaving');
+  }
+
+  /** The player sat down in terrace `i`'s chair: kept for them, and the waiter comes over for a word. */
+  sitDown(i: number, say: (line: string) => void): void {
+    const t = this.terraces[i];
+    const seat = t?.seats[0];
+    if (!t || !seat) return;
+    t.playerSat = true;
+    const w = t.waiter;
+    if (!w || w.busy || !w.figure.shown) return;
+    w.busy = true;
+    const walker = w.figure.walker;
+    const spot = seat.table.clone().add(new THREE.Vector3(0, 0, -Math.sign(t.spec.from[1]) * 0.55));
+    walker.walk([spot], () => {
+      walker.stand(Math.atan2(seat.at.x - spot.x, seat.at.z - spot.z), 'stand');
+      walker.gesture('nudge');
+      say(TO_THE_PLAYER[Math.floor(random() * TO_THE_PLAYER.length)]!);
+      w.wait = AT_TABLE;
+    });
+  }
+
+  /** The player got up from terrace `i`'s chair. */
+  standUp(i: number): void {
+    const t = this.terraces[i];
+    if (t) t.playerSat = false;
+  }
+
   /** How many customers sit at terrace `i` now (`SeatedCount`, for its chatter: 0 while it is stacked). */
   seated(i: number): number {
     const t = this.terraces[i];
@@ -226,7 +278,8 @@ export class Terraces extends THREE.Group implements Furniture, Updatable {
       this.worldToLocal(this.local);
       for (const t of this.terraces) {
         const wanted = terraceOut(t.spec.hours, s);
-        if (wanted !== t.isOpen && !t.tidy) {
+        // Never packed away under the player sitting at it: the waiter waits for them to get up.
+        if (wanted !== t.isOpen && !t.tidy && !(t.playerSat && !wanted)) {
           if (this.fresh || this.local.distanceTo(t.centre) > UNSEEN) this.setOpen(t, wanted);
           // In sight: the waiter goes round the tables first (laying them out, or stacking the chairs), then it changes.
           else if (!wanted || this.seated(this.terraces.indexOf(t)) === 0) this.startTidy(t, wanted);
@@ -274,6 +327,7 @@ export class Terraces extends THREE.Group implements Furniture, Updatable {
       else if (c.state === 'seated' || c.state === 'arriving') seated++;
     }
     const taken = new Set(t.customers.map((c) => c.seat).filter((s): s is Seat => s !== null));
+    if (t.playerSat && t.seats[0]) taken.add(t.seats[0]);
     for (const c of t.customers) {
       if (seated >= wanted) break;
       if (c.state !== 'away') continue;
@@ -480,7 +534,7 @@ export class Terraces extends THREE.Group implements Furniture, Updatable {
     const closed = this.merge(closedParts);
     open.visible = false;
     this.add(open, closed);
-    return { spec, open, closed, isOpen: false, openBoxes, closedBoxes, seats, customers: [], waiter: null, centre: new THREE.Vector3((lo + hi) / 2, 0, z), tidy: null };
+    return { spec, open, closed, isOpen: false, openBoxes, closedBoxes, seats, customers: [], waiter: null, centre: new THREE.Vector3((lo + hi) / 2, 0, z), tidy: null, playerSat: false };
   }
 
   private merge(parts: Record<Finish, THREE.BufferGeometry[]>): THREE.Group {

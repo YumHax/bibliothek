@@ -45,7 +45,7 @@ export function errandOf(id: ErrandId, season: SeasonName): Errand {
     case 'croissant':
       return { id, title: 'a croissant', price: STREET_TREATS.croissant, portions: 1, perDay: STREET_TREATS_PER_DAY.croissant, max: 2, bought: 'A warm croissant in a paper bag, in your pocket. The pigeons watch it go.' };
     case 'scrap':
-      return { id, title: 'a scrap for the stray', price: STREET_TREATS.scrap, portions: 1, perDay: STREET_TREATS_PER_DAY.scrap, max: 3, bought: 'A scrap of ham wrapped in paper. “For Trouble, is it? He knows you now.”' };
+      return { id, title: 'a scrap for the stray', price: STREET_TREATS.scrap, portions: 1, perDay: STREET_TREATS_PER_DAY.scrap, max: 3, bought: 'A scrap of ham wrapped in paper: the butcher knows who it is for.' };
     case 'treats':
       return { id, title: 'a pouch of cat treats', price: STREET_TREATS.treats, portions: 3, perDay: STREET_TREATS_PER_DAY.treats, max: 6, bought: 'A pouch of fish treats, three portions. Any cat in the street will listen to you now.' };
     case 'coffee':

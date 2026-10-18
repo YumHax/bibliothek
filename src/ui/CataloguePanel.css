@@ -82,3 +82,75 @@
   }
   .catalogue__stall { font-size: var(--fs-2); padding: 0.1rem 0.45rem; }
 }
+
+/*
+ * The mail-order counter's own: its two tabs (the catalogue, the wishlist), the price and buttons kept in one column so
+ * the rows line up, the "Want it" toggle, a wish that lights up when made and fades when dropped, the wishlist's head.
+ */
+@layer panels {
+  .mail-order__tabs { display: flex; }
+  .mail-order__tabs .ui-badge--solid { margin-left: 0.3rem; }
+  .mail-order .catalogue__status { min-height: 1.6em; }
+
+  /* The price and the three buttons: a fixed block at the row's end, so every row's buttons stand under each other. */
+  .mail-order__tail { display: inline-flex; align-items: center; justify-content: flex-end; gap: var(--sp-2); flex: none; }
+  .mail-order__tail .catalogue__price { min-width: 4.5rem; }
+  .mail-order__tail .ui-btn--primary { min-width: 5.5rem; }
+  .catalogue__price--none { color: var(--ui-text-dim); font-size: var(--fs-3); font-weight: 400; font-style: italic; }
+
+  /* "Want it" / "Wanted" / "Not wanted" laid in one cell: the button is as wide as the longest and never changes. */
+  .mail-order__tail .mail-order__want { display: inline-grid; place-items: center; min-width: 6.2rem; }
+  .mail-order__want-label { grid-area: 1 / 1; visibility: hidden; }
+  .mail-order__want[aria-pressed='false'] .mail-order__want-label:nth-child(1),
+  .mail-order__want[aria-pressed='true'] .mail-order__want-label:nth-child(2) { visibility: visible; }
+  .mail-order__want[aria-pressed='true'] {
+    border-color: var(--ui-danger-line);
+    background: var(--ui-danger-soft);
+    color: var(--ui-danger-text);
+  }
+  .mail-order__want[aria-pressed='true']:hover .mail-order__want-label:nth-child(2),
+  .mail-order__want[aria-pressed='true']:focus-visible .mail-order__want-label:nth-child(2) { visibility: hidden; }
+  .mail-order__want[aria-pressed='true']:hover .mail-order__want-label:nth-child(3),
+  .mail-order__want[aria-pressed='true']:focus-visible .mail-order__want-label:nth-child(3) { visibility: visible; }
+  .mail-order__want[aria-pressed='true']:hover,
+  .mail-order__want[aria-pressed='true']:focus-visible { background: var(--ui-fill); color: var(--ui-text); border-color: var(--ui-border-strong); }
+
+  /* A wish just made: the row warms once and the toggle pops. */
+  .mail-order__row--wished { animation: mail-order-wished var(--dur-shimmer) var(--ui-ease); }
+  .mail-order__row--wished .mail-order__want { animation: mail-order-pop var(--dur-long) var(--ui-ease-pop); }
+  @keyframes mail-order-wished {
+    from { background: var(--ui-danger-soft); }
+    to { background: transparent; }
+  }
+  @keyframes mail-order-pop {
+    from { transform: scale(0.85); }
+    to { transform: scale(1); }
+  }
+  /* A wish taken off the list stays in its place until the counter is left, faded, "Want it" to put it back. */
+  .mail-order__row--dropped .catalogue__cover,
+  .mail-order__row--dropped .catalogue__title,
+  .mail-order__row--dropped .catalogue__meta,
+  .mail-order__row--dropped .ui-chip,
+  .mail-order__row--dropped .catalogue__stall,
+  .mail-order__row--dropped .catalogue__price { opacity: 0.4; transition: opacity var(--dur-slow) var(--ui-ease); }
+  .mail-order__row--dropped .catalogue__title { text-decoration: line-through; text-decoration-color: var(--ui-text-dim); }
+  .mail-order__row--wish .ui-chip { font-size: var(--fs-2); white-space: nowrap; }
+  /* Reduced motion: the game's setting (`.reduce-motion` on <html>, settings/motion), never the media query alone. */
+  .reduce-motion .mail-order__row--wished,
+  .reduce-motion .mail-order__row--wished .mail-order__want { animation: none; }
+
+  /* The wishlist's head: how many, how many on today's stalls and on order, and what a wish does. */
+  .mail-order__wish-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--sp-2) var(--sp-3); padding: var(--sp-1) 0.6rem var(--sp-3); }
+  .mail-order__wish-count { font-family: var(--ui-font-display); font-size: var(--fs-7); letter-spacing: 0.04em; }
+  .mail-order__wish-note { flex-basis: 100%; color: var(--ui-text-dim); font-size: var(--fs-3); }
+
+  /* Nothing wished for: what a wish does, and the way to the catalogue. */
+  .mail-order__wish-empty { display: flex; flex-direction: column; align-items: center; gap: var(--sp-3); max-width: 30rem; margin: var(--sp-6) auto; text-align: center; }
+  .mail-order__wish-empty-title { margin: 0; font-family: var(--ui-font-display); font-size: var(--fs-8); letter-spacing: 0.04em; }
+  .mail-order__wish-empty-text { margin: 0; color: var(--ui-text-dim); line-height: 1.45; }
+
+  @media (max-width: 720px) {
+    .mail-order__row { flex-wrap: wrap; }
+    .mail-order__tail { flex-basis: 100%; }
+  }
+}

@@ -17,6 +17,8 @@ export { StepBeat } from './StepBeat';
 /** What a game may need from outside the cabinet: the big frame a web-page game is played in. */
 export interface GameContext {
   remoteScreen?: RemoteScreen | null;
+  /** The cabinet's plays cost nothing and pay nothing (`ArcadePlan`'s `freePlay`): what the game's screens promise follows it. */
+  freePlay?: boolean;
 }
 
 /** Every game a cabinet can run, by the id the arcade plan names. */
@@ -30,7 +32,7 @@ export const ARCADE_GAMES = {
   duel: () => new Duel(),
   stepbeat: () => new StepBeat(),
   sheriff: () => new NeonSheriff(),
-  lexipunk: (context: GameContext) => new LexiPunk(context.remoteScreen ?? null),
+  lexipunk: (context: GameContext) => new LexiPunk(context.remoteScreen ?? null, context.freePlay ?? false),
 } satisfies Record<string, (context: GameContext) => ArcadeGame>;
 
 export type ArcadeGameId = keyof typeof ARCADE_GAMES;

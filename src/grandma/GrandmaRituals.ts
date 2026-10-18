@@ -18,8 +18,11 @@ export const RITUALS = {
   /** The portion for her keeps this many game days in the bag (the jam far longer: a jar). */
   portionDays: 4,
   jarDays: 30,
-  /** She asks a favour from her `fromVisit`-th visit, `gapDays` game days after the last one was done. */
-  favour: { fromVisit: 2, gapDays: 3, coins: 4 },
+  /**
+   * She asks a favour from her `fromVisit`-th visit, `gapDays` game days after the last one was done; once each has been
+   * asked, one comes back only `againGapDays` after the last, and none more than `most` times in all (never a chore).
+   */
+  favour: { fromVisit: 2, gapDays: 3, againGapDays: 10, most: 3, coins: 4 },
 } as const;
 
 /** A dish cooked at home: out on the worktop for friends, and a portion in the bag for her. */
@@ -182,8 +185,10 @@ export class GrandmaRituals {
     if (thankedDay !== null && this.day() - thankedDay < RITUALS.favour.gapDays) return null;
     const fresh = FAVOURS.find((f) => !helped.includes(f.id) && can(f.id));
     if (fresh) return fresh.id;
-    // All asked once: the ones that may come back, the one done longest ago first.
-    const again = FAVOURS.filter((f) => !f.once && can(f.id)).sort((a, b) => helped.lastIndexOf(a.id) - helped.lastIndexOf(b.id));
+    // All asked once: the ones that may come back, now and then, the one done longest ago first, each a few times at most.
+    if (thankedDay !== null && this.day() - thankedDay < RITUALS.favour.againGapDays) return null;
+    const times = (id: FavourId): number => helped.filter((h) => h === id).length;
+    const again = FAVOURS.filter((f) => !f.once && can(f.id) && times(f.id) < RITUALS.favour.most).sort((a, b) => helped.lastIndexOf(a.id) - helped.lastIndexOf(b.id));
     return again[0]?.id ?? null;
   }
 

@@ -234,3 +234,21 @@ export function playIntercomLine(seconds = 1.4, level = 0.08): boolean {
     for (let i = 0; i < pops; i++) burst(ctx, phone, t + seconds * Math.pow(random(), 1.4), vary(1800, 0.4), 1.2, vary(0.8, 0.5), 0.01);
   });
 }
+
+/** A record slid out of its card sleeve: a dry papery swish that rises as the disc comes free, and a soft tap as it lands. */
+export function playSleeveSlide(level = 0.08): boolean {
+  return shot(level, 0.45, FURNITURE, ({ ctx, out, t }) => {
+    noiseBurst(ctx, out, t, { band: vary(2600), q: 0.8, level: 0.35, length: 0.28, attack: 0.12, duration: 0.3 });
+    burst(ctx, out, t + 0.3, vary(900), 1.2, 0.3, 0.04);
+  });
+}
+
+/** A bicycle's bell under the thumb: two bright dings, the second a little softer. */
+export function playBikeBell(level = 0.07): boolean {
+  return shot(level, 0.9, FURNITURE, ({ ctx, out, t }) => {
+    for (const [i, at] of [0, 0.16].entries()) {
+      tone(ctx, out, t + at, { frequency: vary(2900, 0.02), level: i ? 0.6 : 0.9, length: 0.45, attack: 0.002 });
+      tone(ctx, out, t + at, { frequency: vary(4350, 0.02), level: i ? 0.25 : 0.35, length: 0.3, attack: 0.002 });
+    }
+  });
+}

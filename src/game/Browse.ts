@@ -32,6 +32,8 @@ export interface BrowseParts extends Pick<CoreParts, 'player' | 'inspector'> {
   gameSource?: GameSource;
   shelving?: ShelvingLike;
   dayNight?: DayNightLike;
+  /** Where a game is when no shelf shows it ("still in the parcel in the hall", "on the kitchen table"), or null. */
+  whereabouts?: (game: Game) => string | null;
 }
 
 /** The box the player was just pointed at (search result or random pick) and until when it counts. */
@@ -71,7 +73,7 @@ export class Browse implements KeyRoute {
     const boxes = this.ownedBoxes().filter((b) => b.game.platform === id);
     const name = getPlatform(id).name;
     if (!boxes.length) {
-      this.host.refuse(`No ${name} games on the shelves`);
+      this.host.refuse(`No ${name} games on the shelves yet.`);
       return;
     }
     if (this.locate(boxes[0]!.game, 'random')) {
@@ -111,7 +113,7 @@ export class Browse implements KeyRoute {
   private openSearch(search: SearchBar): void {
     const games = this.games();
     if (!games.length) {
-      this.host.refuse('No games to search: the collection is empty');
+      this.host.refuse('No games to search: the collection is empty.');
       return;
     }
     search.open(games);
@@ -123,7 +125,8 @@ export class Browse implements KeyRoute {
     const { player, highlighter } = this.parts;
     const box = this.parts.shelving?.findBox(game.id);
     if (!box) {
-      this.host.refuse(`${game.title} is not on a shelf`);
+      const where = this.parts.whereabouts?.(game);
+      this.host.react(where ? `${game.title} is ${where}.` : `${game.title} is not on a shelf.`);
       return null;
     }
     highlighter?.highlight(box, HIGHLIGHT_SECONDS);
@@ -133,7 +136,9 @@ export class Browse implements KeyRoute {
 
     if (kind === 'search') {
       const distance = distanceTo(player, box);
-      this.host.react(distance < REACH_M ? `Found ${game.title}` : `${game.title} is ${distance.toFixed(1)} m away`);
+      // Lent out, its gap glows: the note in it says who has it.
+      const where = game.status === 'lent' ? this.parts.whereabouts?.(game) : null;
+      this.host.react(where ? `${game.title} is ${where}.` : distance < REACH_M ? `Found ${game.title}` : `${game.title} is ${distance.toFixed(1)} m away`);
       this.tipWhileFocused(distance < REACH_M ? '[Enter] pick up the glowing box' : 'walk up to the glowing box · [Enter] pick it up');
     }
     return box;
@@ -144,7 +149,7 @@ export class Browse implements KeyRoute {
     const focus = this.currentFocus();
     if (!focus || this.parts.inspector.isActive) return false;
     if (distanceTo(this.parts.player, focus.box) > REACH_M) {
-      this.host.refuse('Too far away: walk closer');
+      this.host.refuse('Out of reach: step closer to the shelf.');
       return true;
     }
     this.host.pickUp(focus.box);
@@ -168,7 +173,7 @@ export class Browse implements KeyRoute {
     }
     const boxes = this.ownedBoxes();
     if (!boxes.length) {
-      this.host.refuse('No games on the shelves');
+      this.host.refuse('The shelves are empty: nothing to pick from yet.');
       return;
     }
     const box = boxes[Math.floor(liveRandom() * boxes.length)]!;

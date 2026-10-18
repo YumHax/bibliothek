@@ -30,7 +30,7 @@ import { CollectorScores } from './collectorScores';
 /** The student's music, behind room 6: afternoons and late into the night (the flat hears it through its ceiling on his loud nights). */
 const STUDENT_HOURS = { from: 14, to: 25.5 };
 /** What his prize or his chest pays instead when the player has that game already (coins). */
-const ALREADY_OWNED_COINS = { prize: 600, chest: 300 };
+const ALREADY_OWNED_COINS = { prize: 600, chest: 300, sofa: 40, wardrobe: 60 };
 
 /**
  * Builds the attic from `ATTIC_PLAN`: the shell (the corridor, the collector's room under the
@@ -43,8 +43,8 @@ const ALREADY_OWNED_COINS = { prize: 600, chest: 300 };
  * four-wheel padlock (`chest.code`, the treasure hunt's end: a game sealed since 1991), dust in the
  * light. A zone reached by travel only (the lift's code; the roof's hatch back down).
  */
-export function furnishAttic(zone: Zone, ctx: Pick<BuildContext, 'sky' | 'listener' | 'acoustics' | 'input' | 'covers' | 'money' | 'arcade' | 'collection' | 'home'>): ZoneHandle {
-  const { sky, listener, acoustics, input, covers, money, arcade, collection, home } = ctx;
+export function furnishAttic(zone: Zone, ctx: Pick<BuildContext, 'sky' | 'listener' | 'acoustics' | 'input' | 'covers' | 'money' | 'arcade' | 'collection' | 'home' | 'today'>): ZoneHandle {
+  const { sky, listener, acoustics, input, covers, money, arcade, collection, home, today } = ctx;
   const notices = home.household?.notices;
   const origin = new THREE.Vector3();
   const shell = zone.place(new AtticShell(), origin);
@@ -71,13 +71,14 @@ export function furnishAttic(zone: Zone, ctx: Pick<BuildContext, 'sky' | 'listen
   for (const door of plan.doors) {
     const back = door.side === 'back';
     const z = back ? corridor.z0 : corridor.z1;
-    zone.place(new AtticDoor(door), new THREE.Vector3(door.x, 0, z), back ? 0 : Math.PI);
+    const placed = zone.place(new AtticDoor(door), new THREE.Vector3(door.x, 0, z), back ? 0 : Math.PI);
+    placed.day = () => today.gameDay;
     if (door.music) {
       const music = whileHome(new MusicUpstairs(), studentIn);
       zone.place(pointSound({ listener, acoustics }, music, { referenceDistance: 0.7, rolloff: 1.3, maxDistance: 7 }), new THREE.Vector3(door.x, 1.2, z + (back ? -1.2 : 1.2)));
     }
   }
-  zone.place(new ServiceWardrobe(plan.serviceStair.label, plan.serviceStair.line), new THREE.Vector3(plan.serviceStair.x, 0, corridor.z0 + 0.27));
+  const wardrobe = zone.place(new ServiceWardrobe(plan.serviceStair.label, plan.serviceStair.line), new THREE.Vector3(plan.serviceStair.x, 0, corridor.z0 + 0.27));
   const { hatch } = plan;
   zone.place(
     new HatchLadder(plan.corridorHeight, hatch, (session) => {
@@ -92,7 +93,7 @@ export function furnishAttic(zone: Zone, ctx: Pick<BuildContext, 'sky' | 'listen
   // The collector's room.
   const room = plan.collectorRoom;
   zone.place(new Rug({ width: 2, depth: 1.4, field: 0x5a2a2a, border: 0x9a8a6a, motif: 0x6a3a32 }), new THREE.Vector3(-3.2, 0, 0.6));
-  for (const s of plan.sheeted) zone.place(new SheetedFurniture(s.kind), new THREE.Vector3(s.at[0], 0, s.at[1]), s.yaw);
+  const sheeted = plan.sheeted.map((s) => zone.place(new SheetedFurniture(s.kind), new THREE.Vector3(s.at[0], 0, s.at[1]), s.yaw));
   zone.place(new DustyShelf(plan.shelf.width, plan.shelf.rows), new THREE.Vector3(plan.shelf.at[0], 0, plan.shelf.at[1]), plan.shelf.yaw);
   plan.covers.forEach((z, i) => zone.place(new MagazineCover(i), new THREE.Vector3(room.x1 - 0.05 - 0.002, 1.55, z), -Math.PI / 2));
   zone.place(new CollectorDesk(plan.notebook), new THREE.Vector3(plan.desk.at[0], 0, plan.desk.at[1]), Math.PI);
@@ -167,6 +168,42 @@ export function furnishAttic(zone: Zone, ctx: Pick<BuildContext, 'sky' | 'listen
     chestAt,
     chestYaw,
   );
+  // The blank-label cart down the side of his sofa (a Game Boy game the player lacks), and the wardrobe his chest's key opens.
+  const unowned = (platforms: readonly string[]): Game | null => SEED_GAMES.find((g) => platforms.includes(g.platform) && !collection.owns(g.id)) ?? null;
+  const sofa = sheeted.find((s) => s.name === 'Sheeted:sofa');
+  let cartOut = false;
+  if (sofa) {
+    sofa.find = () => {
+      if (atticState().sofaCart) return null;
+      if (cartOut) return 'The cartridge lies where it slid out, by the arm.';
+      const cart = unowned(['gb']);
+      if (!cart) return null;
+      cartOut = true;
+      // On the floor by the sofa's arm, where it slid out.
+      const at = zone.toLocal(sofa.localToWorld(new THREE.Vector3(1.05, 0.002, 0.3)));
+      const found: Game = { ...cart, status: 'owned', past: { kind: 'note', text: plan.sofaCart.past } };
+      // Counted found once taken: left lying there, it slides down the side again for the next visit.
+      giveGame(found, plan.sofaCart.where, at, sofa.rotation.y + 0.6, ALREADY_OWNED_COINS.sofa, () => markAttic('sofaCart'), plan.sofaCart.said);
+      return plan.sofaCart.line;
+    };
+  }
+  const stair = plan.serviceStair;
+  let spareOut = false;
+  wardrobe.key = {
+    held: () => atticState().chest,
+    // Opened for good once his spare is taken; till then the key opens it on each visit, the box set out in front.
+    opened: () => atticState().wardrobe || spareOut,
+    label: stair.openLabel,
+    after: stair.after,
+    open: (session) => {
+      session.react(stair.open);
+      const spare = unowned(['nes', 'snes', 'megadrive']);
+      if (!spare) return markAttic('wardrobe');
+      spareOut = true;
+      const at = zone.toLocal(wardrobe.localToWorld(new THREE.Vector3(0.1, 0.002, 0.55)));
+      giveGame({ ...spare, status: 'owned' }, stair.where, at, wardrobe.rotation.y + 0.2, ALREADY_OWNED_COINS.wardrobe, () => markAttic('wardrobe'), stair.said);
+    },
+  };
   for (const wheel of chest.wheels) zone.place(wheel, chestAt.clone().add(wheel.position.clone().applyAxisAngle(THREE.Object3D.DEFAULT_UP, chestYaw)), chestYaw);
 
   return { lightLevel: () => lights.lightLevel, surfaceAt: (local) => (local.x < room.x1 ? 'wood' : 'tiles') };

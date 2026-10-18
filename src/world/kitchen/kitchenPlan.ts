@@ -176,7 +176,7 @@ export const KITCHEN_PLAN = {
    * A game from the collection left on the breakfast table, at its left end on the wall side, clear of the plate
    * (table-local x -0.26..-0.04) and the paper: table-local [x, z] on its top, and its turn; a little askew, never onto the plate.
    */
-  strayBox: { at: [-0.3, 0.24] as [number, number], yaw: Math.PI / 2 + 0.25, jitter: { yaw: 0.15, offset: 0.012 } },
+  strayBox: { at: [-0.3, 0.24] as [number, number], yaw: Math.PI / 2 + 0.25, jitter: { yaw: 0.15, offset: 0.012 }, where: 'the kitchen table' },
 
   /**
    * Where the market's home goods for the kitchen (`economy/homeGoods.ts`) go once bought. The portable CRT stands on
@@ -195,6 +195,8 @@ export const KITCHEN_PLAN = {
   household: {
     kit: { at: [0.27, -0.22] as [number, number], yaw: 0.1 },
     cake: { at: [-0.2, -0.21] as [number, number] },
+    /** The vase for the florist's flowers (`errands/vase`): the wall side's right corner, clear of the folded paper (x up to 0.27). */
+    vase: { at: [0.34, 0.25] as [number, number] },
     mixingBowl: { wall: 'back', along: 0.05, y: WORKTOP, offset: 0.36 } as Placement,
     treatJar: { wall: 'back', along: 0.93, y: WORKTOP, offset: 0.1 } as Placement,
     catFind: { floor: [-0.55, -0.4], rotationY: 0.4 } as Placement,

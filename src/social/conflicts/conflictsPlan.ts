@@ -44,6 +44,13 @@ export interface ConflictPlan {
   lapsed: string;
   /** `b`'s side can also be taken at `a`'s, to their face (standing up for someone): the player's words, `a`'s answer. */
   defend?: { label: string; answer: string };
+  /**
+   * Making them make up, said to either side by a friend of both once each has told theirs: the player's words, and
+   * each side's answer (`a`'s, `b`'s).
+   */
+  peace: { label: string; a: string; b: string };
+  /** What the rest of the building says of it while it is on, asked (`life/buildingTalk`'s way): by temperament. */
+  talk: { say: string; name: string; eager: string; grumble: string; plain: string };
 }
 
 /**
@@ -57,6 +64,8 @@ export const CONFLICT = {
   lost: { warmth: -10 },
   lapse: { warmth: -3 },
   wayBack: { warmth: 8 },
+  /** Both, when the player made them make up (a stamp of trust each: they trusted the player with it). */
+  peace: { warmth: 6, trust: STAMP },
   startDays: 3,
   lapseDays: 6,
   wayBackDays: 5,
@@ -69,11 +78,23 @@ export const CONFLICTS: readonly ConflictPlan[] = [
     earliest: 4,
     started: '{a} and {b} are at odds over the music from the attic.',
     lapsed: 'The row over the attic’s music blew over without you.',
+    peace: {
+      label: 'What if the music stopped at ten, and Saturdays were his?',
+      a: 'At ten. Not a minute later. …Fine. Tell him fine.',
+      b: 'Ten o’clock, and Saturdays mine? …Deal. Tell him deal. Don’t tell him I said thanks.',
+    },
+    talk: {
+      say: 'Heard about Mr Leclerc and Théo?',
+      name: 'The row over the music',
+      eager: 'Who hasn’t! Notes on doors, banging on the pipes. Like a soap opera, but upstairs.',
+      grumble: 'The boy plays his music at all hours. Mr Leclerc has a point, for once.',
+      plain: 'I keep out of it. They’ll sort it out. Or they won’t.',
+    },
     a: {
       person: 'leclerc',
       need: 'That racket from the attic again last night. Someone has to do something.',
-      ask: 'You look tired. Bad night?',
-      tells: 'Bad night? Bad month. {b} plays that music of his until two. I’m writing to the syndic. Will you sign? Two names count more than one.',
+      ask: 'Rough night?',
+      tells: 'Rough night? Rough month. {b} plays that music of his until two. I’m writing to the syndic. Will you sign? Two names count more than one.',
       take: 'I’ll sign your letter to the syndic.',
       took: 'Thank you. Somebody in this building has some sense.',
       howLabel: 'Any word from the syndic?',
@@ -105,11 +126,23 @@ export const CONFLICTS: readonly ConflictPlan[] = [
     earliest: 9,
     started: '{a} has a story going round about {b}.',
     lapsed: 'The talk about {b} died down on its own.',
+    peace: {
+      label: 'Pascal carries half the parcels up himself. You both know that.',
+      a: 'Well. Yes. I suppose he does. Perhaps I’ll take him a slice of cake.',
+      b: 'If she says sorry, I’ll say no more about it. Tell her the coffee’s on me.',
+    },
+    talk: {
+      say: 'Is it true, what they say about Pascal?',
+      name: 'The talk about Pascal',
+      eager: 'Oh, you’ve heard too! I don’t believe it myself. Mostly. Who told you?',
+      grumble: 'People should mind their own business. Parcels go missing. That’s the post.',
+      plain: 'I don’t believe a word of it. He carried my shopping up last week.',
+    },
     defend: { label: 'That’s not true. Leave {b} alone.', answer: 'Well! I only said what I heard. No need to bite my head off.' },
     a: {
       person: 'dubois',
-      need: 'Have you heard what they’re saying about {b}? Come here, I’ll tell you.',
-      ask: 'You look like you’ve got a secret.',
+      need: 'Have you heard what they’re saying about {b}? Oh, wait till I tell you.',
+      ask: 'You’ve got a secret, haven’t you?',
       tells: 'Me? Well… {b}. They say the parcels that go missing from the lodge end up on his landing. I’m only saying what I heard. People should know.',
       take: 'I’ll pass it on.',
       took: 'I knew you’d see it. People should know who they live with.',
@@ -142,6 +175,18 @@ export const CONFLICTS: readonly ConflictPlan[] = [
     earliest: 14,
     started: '{a} and {b} are racing each other for {game}.',
     lapsed: 'The race between {a} and {b} for {game} went on without you.',
+    peace: {
+      label: 'Why not share the hunt? Whoever finds {game}, the other gets a look.',
+      a: 'Share? With him? …A look. Fine. But I’m still finding it first.',
+      b: 'Share. How bourgeois. …Very well. A look. Only a look.',
+    },
+    talk: {
+      say: 'Mrs Haddad’s after {game}, isn’t she?',
+      name: 'The race for {game}',
+      eager: 'And that Victor Crane too! Neck and neck, the pair of them. I’ve a little bet on with Mrs Pereira.',
+      grumble: 'All that fuss for a game. In my day we played outside.',
+      plain: 'She’s been after it for years. I hope she gets it before him.',
+    },
     a: {
       person: 'haddad',
       need: '{game}. I’ve been after it for years, and so has that {b}.',

@@ -25,9 +25,20 @@ interface GamepadOptions {
   onConnectionChange?(connected: boolean, gamepad: Gamepad | null): void;
   /** Out of the room (a panel up): the right stick scrolls what is open, in pixels this frame (`MenuNav.scrollPanel`). */
   onScroll?(pixels: number): void;
+  /** In the room, every frame: how far the right trigger is pressed (0..1); at home it brings the box in hand closer while held. */
+  onRightTrigger?(pressure: number): void;
+  /**
+   * Whether the d-pad walks now (it always does without it): false while its buttons are someone's keys instead (the
+   * faces of a box looked at, the bookcase view's rows), so a press turns the box without a step.
+   */
+  dpadWalks?(): boolean;
 }
 
-const BUTTON = { A: 0, B: 1, LB: 4, RB: 5, SELECT: 8, LS: 10, UP: 12, DOWN: 13, LEFT: 14, RIGHT: 15 } as const;
+const BUTTON = { A: 0, B: 1, LB: 4, RB: 5, LT: 6, SELECT: 8, LS: 10, UP: 12, DOWN: 13, LEFT: 14, RIGHT: 15 } as const;
+/** LT held, in the room: the key read as held for the aisle's prices at the market and tipping a box at home (they share it). */
+const READ_HELD = primaryCode('readStalls');
+/** The right trigger's index in the standard mapping (an analog button: `value` is how far it is pressed). */
+const RIGHT_TRIGGER = 7;
 /** A button with a long-press action (`PAD_HOLD_ALIASES`: Select held opens the journal) presses its own code on release, or its hold's past this (s). */
 const LONG_PRESS_S = 0.5;
 /** Pixels a second a full right-stick tilt scrolls an open panel. */
@@ -50,7 +61,8 @@ const LOOK_RAMP_FROM = 0.7;
  * - A → left mouse button, B and RB → right mouse button (held, like the real buttons);
  * - left stick click → sprint (`SPRINT_CODE` held), LB → crouch (`CROUCH_VIRTUAL` held);
  * - right stick click calls the cat, Select opens the collection (held: the journal) — the action table's `pad` / `padHold`;
- * - the triggers are the market's buy (RT) and haggle (LT): buttons that do nothing else;
+ * - the triggers are the market's buy (RT) and haggle (LT); LT held also reads the stalls' prices (at home: tips the box
+ *   looked at), and with empty hands just after a buy it hands the copy back;
  * - every button → an `Input` press code (`GamepadA`, `GamepadStart`, …) for the Session / PointerLockFlow.
  */
 export class GamepadInput implements Updatable {
@@ -58,7 +70,7 @@ export class GamepadInput implements Updatable {
   private readonly appliedHolds = new Map<string, number>();
   private connected = false;
   private stickEngaged = false;
-  private readonly opts: Required<Omit<GamepadOptions, 'onConnectionChange' | 'onScroll'>> & Pick<GamepadOptions, 'onConnectionChange' | 'onScroll'>;
+  private readonly opts: Required<Omit<GamepadOptions, 'onConnectionChange' | 'onScroll' | 'onRightTrigger' | 'dpadWalks'>> & Pick<GamepadOptions, 'onConnectionChange' | 'onScroll' | 'onRightTrigger' | 'dpadWalks'>;
   private lookScale = 1;
   /** Time the right stick has been at (nearly) full tilt, for the look's ramp (s). */
   private fullTilt = 0;
@@ -80,6 +92,8 @@ export class GamepadInput implements Updatable {
       keyAliases: options.keyAliases ?? {},
       onConnectionChange: options.onConnectionChange,
       onScroll: options.onScroll,
+      onRightTrigger: options.onRightTrigger,
+      dpadWalks: options.dpadWalks,
     };
   }
 
@@ -103,6 +117,7 @@ export class GamepadInput implements Updatable {
     this.updateLongPresses(dt);
     this.updateMovement(pad);
     this.updateLook(pad, dt);
+    if (this.player.isLocked) this.opts.onRightTrigger?.(pad.buttons[RIGHT_TRIGGER]?.value ?? 0);
   }
 
   /** A button with a long-press action held past `LONG_PRESS_S`: its hold's key, once. */
@@ -128,6 +143,7 @@ export class GamepadInput implements Updatable {
     }
     this.hold(SPRINT_CODE, this.isHeld(BUTTON.LS) ? 1 : 0);
     this.hold(CROUCH_CODE, this.isHeld(BUTTON.LB) ? 1 : 0);
+    this.hold(READ_HELD, this.player.isLocked && this.isHeld(BUTTON.LT) ? 1 : 0);
   }
 
   private onButtonDown(index: number): void {
@@ -171,11 +187,12 @@ export class GamepadInput implements Updatable {
 
   private updateMovement(pad: Gamepad): void {
     const [x, y] = radial(pad.axes[0] ?? 0, pad.axes[1] ?? 0, this.opts.deadZone, 1);
+    const dpad = this.opts.dpadWalks?.() ?? true;
     const strengths = {
-      up: this.isHeld(BUTTON.UP) ? 1 : Math.max(0, -y),
-      down: this.isHeld(BUTTON.DOWN) ? 1 : Math.max(0, y),
-      left: this.isHeld(BUTTON.LEFT) ? 1 : Math.max(0, -x),
-      right: this.isHeld(BUTTON.RIGHT) ? 1 : Math.max(0, x),
+      up: dpad && this.isHeld(BUTTON.UP) ? 1 : Math.max(0, -y),
+      down: dpad && this.isHeld(BUTTON.DOWN) ? 1 : Math.max(0, y),
+      left: dpad && this.isHeld(BUTTON.LEFT) ? 1 : Math.max(0, -x),
+      right: dpad && this.isHeld(BUTTON.RIGHT) ? 1 : Math.max(0, x),
     };
     let dominant: keyof typeof MOVE = 'up';
     let engaged = false;

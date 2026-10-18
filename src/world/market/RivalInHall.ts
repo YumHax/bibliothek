@@ -158,6 +158,7 @@ export class RivalInHall extends THREE.Object3D implements Furniture, Updatable 
     this.target = target;
     rival.startHunt(today, target.item.game);
     const decoy = this.spotNear(this.otherStall(target)) ?? this.spotNear(target);
+    this.person.hold(null);
     this.person.setPresent(true, new THREE.Vector3(...this.at(this.options.entrance[0]!)));
     this.step = { kind: 'walking' };
     // In by the door, past the boards, then to a stall.
@@ -218,6 +219,8 @@ export class RivalInHall extends THREE.Object3D implements Furniture, Updatable 
     if (!floor.takeForRival(target)) return this.lost();
     rival.endHunt(day(), 'took', { game, price });
     this.person.gesture('fistPump');
+    // Off he goes with it under his arm, in a game shop's bag.
+    this.person.hold('gamebag');
     const mood = rival.view().mood;
     this.person.speak(
       mood === 'bitter' ? `The ${game.title}. You needed that one, didn't you? What a shame.`

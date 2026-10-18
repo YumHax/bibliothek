@@ -14,7 +14,7 @@ import { hoursOn, isShopOpen, opensAgain, streetWeekday } from './shopHours';
 import { clockShort } from '@/text/clock';
 import { formatCoins } from '@/text/money';
 import { capitalise } from '@/text/strings';
-import { BARISTAS, BAR_GOSSIP, SHOP_TALK, WEEKDAY_LOOKS, shopName, type ShopOffer } from './shopPlan';
+import { BARISTAS, BAR_GOSSIP, SHOP_OWN_LOOKS, SHOP_TALK, WEEKDAY_LOOKS, shopName, type ShopOffer } from './shopPlan';
 import { BAR_LOOKS, barOf } from '@/streetShops/bars';
 import type { CounterTurn, StreetCounters } from './counters';
 import { SCRATCH_PER_DAY, cardInProgress, cardsToday, drawCard, keepCardInProgress, recordCard, type CardInProgress } from './scratchCard';
@@ -187,7 +187,7 @@ export class ShopEntrance extends THREE.Group implements Furniture, Interactable
   /** Who serves at this counter and can be known (the butcher, CORNER BOOKS' bookseller), when the social layer is there. */
   private keeper(): PersonId | null {
     if (!this.services.social) return null;
-    return shopkeeperOf(this.door.shop.kind, this.door.shop.name);
+    return shopkeeperOf(this.door.shop.kind, this.door.shop.name, this.door.facade.id);
   }
 
   /** Who serves at this café's counter (`BARISTAS`), when the social layer is there. */
@@ -209,7 +209,7 @@ export class ShopEntrance extends THREE.Group implements Furniture, Interactable
       return todays;
     }
     const bar = kind === 'bar' ? barOf(this.door.shop.name) : null;
-    const lines = bar ? BAR_LOOKS[bar] : SHOP_TALK[kind].looks;
+    const lines = bar ? BAR_LOOKS[bar] : SHOP_OWN_LOOKS[this.door.shop.name ?? ''] ?? SHOP_TALK[kind].looks;
     const n = looked.get(key) ?? 0;
     looked.set(key, n + 1);
     return lines[n % lines.length] ?? '';
@@ -223,18 +223,18 @@ export class ShopEntrance extends THREE.Group implements Furniture, Interactable
     const { market, purse } = this.services;
     switch (offer.id) {
       case 'coffee':
+        // One voice per click: the café says no, or pours and passes on what it heard (no tip card: gossip is said).
         if (market.hadCoffee) {
-          session.say('Another one? You’ll be haggling in your sleep.', 'Café');
-          session.refuse('One coffee a day is plenty.');
-          session.tip(this.tip(), { id: 'barista', head: 'Market tip' });
+          session.say('Another one? You’ll be haggling in your sleep. One a day is plenty.', 'Café');
           return;
         }
         session.pay({
           price: offer.price,
+          title: 'A coffee',
           paid: () => {
             market.drinkCoffee();
-            session.tip(this.tip(), { id: 'barista', head: 'Market tip' });
-            return 'A coffee at the counter.\nThe stallholders will go easier on you today.';
+            session.say(`There you go. And listen… ${this.tip().replace(/^[“"]|[”"]$/g, '')}`, 'Café');
+            return 'At the counter, standing up.\nThe stallholders will go easier on you today.';
           },
         });
         return;
@@ -245,7 +245,7 @@ export class ShopEntrance extends THREE.Group implements Furniture, Interactable
           return;
         }
         if (!purse.spend(offer.price)) {
-          session.refuse(`A scratch card is ${formatCoins(offer.price)} and you have ${purse.coins}.`);
+          session.refuse(`A scratch card is ${formatCoins(offer.price)} and you have ${formatCoins(purse.coins)}.`);
           return;
         }
         this.dealCard();
@@ -258,6 +258,7 @@ export class ShopEntrance extends THREE.Group implements Furniture, Interactable
       case 'drink':
         session.pay({
           price: offer.price,
+          title: 'A lemonade',
           paid: () => {
             pocket.recordBuy('lemonade');
             return `A lemonade at the bar. ${this.gossip()}`;
@@ -292,6 +293,7 @@ export class ShopEntrance extends THREE.Group implements Furniture, Interactable
     const { scratch, purse } = this.services;
     scratch.show({
       card: drawCard(lcg(card.seed)),
+      price: SHOP_TALK.tabac.offer!.price,
       revealed: card.revealed,
       onReveal: (index) => {
         card.revealed[index] = true;
@@ -308,7 +310,7 @@ export class ShopEntrance extends THREE.Group implements Furniture, Interactable
       },
       again: () => {
         if (cardsToday() >= SCRATCH_PER_DAY) return '“That’s enough cards for today, love.”';
-        if (!purse.spend(SHOP_TALK.tabac.offer!.price)) return `A card is ${formatCoins(SHOP_TALK.tabac.offer!.price)} and you have ${purse.coins}.`;
+        if (!purse.spend(SHOP_TALK.tabac.offer!.price)) return `A card is ${formatCoins(SHOP_TALK.tabac.offer!.price)} and you have ${formatCoins(purse.coins)}.`;
         this.dealCard();
         return null;
       },

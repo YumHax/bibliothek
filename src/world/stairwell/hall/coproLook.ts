@@ -11,6 +11,18 @@ import { StairRunner } from '../StairRunner';
 import { Bicycle } from './Bicycle';
 import { STAIRWELL_PLAN as plan } from '../stairwellPlan';
 import { STOREY, STOREYS, landingY } from '@/world/measures/building';
+import type { Interactable } from '@/interaction/Interactable';
+import type { SessionActions } from '@/game/SessionActions';
+import { invisibleHitbox } from '../../meshUtils';
+import { nudge } from '@/social/standing';
+import { inTurn, random } from '@/random';
+
+/** What the co-owners' things may ask of the hall: what the player wears (the mirror), the game day, whether the concierge is in her lodge. */
+interface CoproLookDeps {
+  outfit?: () => string;
+  day: () => number;
+  conciergeIn: () => boolean;
+}
 
 const PLANTS: readonly PlantKind[] = ['fig', 'monstera', 'yucca', 'small', 'fig'];
 const BIKE_COLOURS = [0x2f5a8a, 0x8a2f2a];
@@ -21,15 +33,18 @@ const BIKE_COLOURS = [0x2f5a8a, 0x8a2f2a];
  * junction box, the lift's overhaul plate. Everything is built once and shown or hidden (no light in any of it), and it
  * follows each meeting's outcome the moment it is tallied. Returns the unsubscribe.
  */
-export function placeCoproLook(zone: Zone, stairs: Staircase): () => void {
+export function placeCoproLook(zone: Zone, stairs: Staircase, deps: CoproLookDeps): () => void {
+  const { outfit } = deps;
   const runner = zone.place(new StairRunner(coproChoice('runner')), new THREE.Vector3());
   const { hall, coproLook: look, shaft } = plan;
   const plants = PLANTS.slice(0, STOREYS).map((kind, k) =>
     zone.place(new Plant({ kind, seed: 40 + k, collides: false, scale: kind === 'small' ? 1.6 : 0.85 }), new THREE.Vector3(look.plant.x, landingY(k) - STOREY / 2, look.plant.z), k * 1.3),
   );
+  const plantSpots = plants.map((p, k) => zone.place(new LandingPlant(k, deps.day), p.position.clone(), 0));
   const bikes = look.bikes.map(([x, z], i) => zone.place(new Bicycle(BIKE_COLOURS[i % BIKE_COLOURS.length]!, -0.12), new THREE.Vector3(x, 0, z), 0));
-  const mirror = zone.place(new HallMirror(look.mirror.width, look.mirror.height), new THREE.Vector3(hall.x0 + 0.004, look.mirror.y, look.mirror.z), Math.PI / 2);
+  const mirror = zone.place(new HallMirror(look.mirror.width, look.mirror.height, outfit), new THREE.Vector3(hall.x0 + 0.004, look.mirror.y, look.mirror.z), Math.PI / 2);
   const mat = zone.place(new Doormat({ width: 0.95, depth: 0.55, text: 'WELCOME', wear: 0.35, seed: 9 }), new THREE.Vector3(plan.streetDoor.at[0], 0, look.doormat.z), 0);
+  const wipe = zone.place(new MatSpot(deps), mat.position.clone(), 0);
   const fibre = zone.place(new FibreBox(), new THREE.Vector3(hall.x0 + 0.004, look.fibre.y, look.fibre.z), Math.PI / 2);
   const plaque = zone.place(new Plaque('LIFT OVERHAULED', 'by vote of the co-owners'), new THREE.Vector3(look.liftPlaque.x, landingY(STOREYS) + look.liftPlaque.y, shaft.z1 - 0.004), Math.PI);
   const apply = (): void => {
@@ -38,6 +53,8 @@ export function placeCoproLook(zone: Zone, stairs: Staircase): () => void {
     runner.setStyle(style);
     stairs.setRunner(style !== 'none');
     for (const p of plants) p.visible = coproChoice('plants') === 'yes';
+    for (const p of plantSpots) p.setShown(coproChoice('plants') === 'yes');
+    wipe.setShown(coproChoice('doormat') === 'yes');
     for (const b of bikes) b.visible = coproChoice('bikes') === 'yes';
     mirror.visible = coproChoice('mirror') === 'yes';
     mat.visible = coproChoice('doormat') === 'yes';
@@ -48,13 +65,81 @@ export function placeCoproLook(zone: Zone, stairs: Staircase): () => void {
   return onCoproChange(apply);
 }
 
-/** A tall mirror in a gilt frame (it shows the scene's environment, no reflection pass). Wall-hung, origin at its middle, +z out. */
-class HallMirror extends Prop {
+/** A spot to click that comes and goes with what it stands for (hidden: its hitbox shrunk out of reach). */
+class CoproSpot extends Prop {
   readonly contactShadow = false;
+  readonly hitboxes: THREE.Object3D[];
 
-  constructor(width: number, height: number) {
+  constructor(width: number, height: number, depth: number) {
+    super();
+    const hit = invisibleHitbox(width, height, depth, { y: height / 2 });
+    this.add(hit);
+    this.hitboxes = [hit];
+  }
+
+  setShown(shown: boolean): void {
+    this.hitboxes[0]?.scale.setScalar(shown ? 1 : 1e-4);
+  }
+
+  setHovered(): void {}
+}
+
+/** A half landing's plant (`coproLook.plantTalk`): Mrs Dubois's watering, or the player's. */
+class LandingPlant extends CoproSpot implements Interactable {
+  private readonly watered = inTurn(random, plan.coproLook.plantTalk.watered);
+  private readonly yours = inTurn(random, plan.coproLook.plantTalk.yours);
+
+  constructor(private readonly k: number, private readonly day: () => number) {
+    super(0.6, 1.2, 0.6);
+    this.name = 'LandingPlant';
+  }
+
+  label(): string {
+    return 'The landing’s plant · water it';
+  }
+
+  activate(session: SessionActions): void {
+    const day = this.day();
+    if ((day + this.k) % 3 === 0) {
+      session.react(this.watered());
+      return;
+    }
+    session.react(this.yours());
+    nudge('dubois', { warmth: 1, day, reason: 'landingPlants', why: plan.coproLook.plantTalk.why });
+  }
+}
+
+/** The co-owners' doormat (`coproLook.doormatTalk`): feet wiped, the concierge approving from her lodge. */
+class MatSpot extends CoproSpot implements Interactable {
+  private readonly lines = inTurn(random, plan.coproLook.doormatTalk.lines);
+
+  constructor(private readonly deps: CoproLookDeps) {
+    super(0.95, 0.12, 0.55);
+    this.name = 'MatSpot';
+  }
+
+  label(): string {
+    return 'The doormat · wipe your feet';
+  }
+
+  activate(session: SessionActions): void {
+    const { doormatTalk } = plan.coproLook;
+    const seen = this.deps.conciergeIn() && nudge('pereira', { warmth: 1, day: this.deps.day(), reason: 'wipesFeet', why: doormatTalk.why }) !== null;
+    session.react(seen ? `${this.lines()} ${doormatTalk.seen}` : this.lines());
+  }
+}
+
+/** A tall mirror in a gilt frame (it shows the scene's environment, no reflection pass). Wall-hung, origin at its middle, +z out. */
+class HallMirror extends Prop implements Interactable {
+  readonly contactShadow = false;
+  readonly hitboxes: THREE.Object3D[];
+
+  constructor(width: number, height: number, private readonly outfit?: () => string) {
     super();
     this.name = 'HallMirror';
+    const hit = invisibleHitbox(width, height, 0.06, { z: 0.03 });
+    this.add(hit);
+    this.hitboxes = [hit];
     const gilt = METAL.agedBrass();
     const f = 0.06;
     part(this, width + 2 * f, f, 0.04, gilt, { y: height / 2 + f / 2, z: 0.02 });
@@ -65,6 +150,22 @@ class HallMirror extends Prop {
     glass.position.z = 0.012;
     this.add(glass);
     this.traverse((o) => (o.castShadow = false));
+  }
+
+  setHovered(): void {}
+
+  /** Hidden until the co-owners vote it in: a hidden hitbox still takes the ray, so it lets it by. */
+  passesThrough(): boolean {
+    return !this.visible;
+  }
+
+  label(): string {
+    return 'The hall’s mirror · a look on the way out';
+  }
+
+  activate(session: SessionActions): void {
+    const wearing = this.outfit?.();
+    session.react(wearing ? `A look in the gilt mirror on the way out: ${wearing}. It will do. It more than does.` : 'A look in the gilt mirror on the way out. It will do.');
   }
 }
 

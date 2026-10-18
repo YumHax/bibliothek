@@ -30,6 +30,8 @@ const FAMILY = {
   /** After her first visit, now and then on a Saturday: the odds, and the fewest days between two. */
   againOdds: 0.35,
   againGap: 14,
+  /** After his apology: the fewest days before his one Sunday back, sorry to the player too, something of Félix's in hand. */
+  backAfter: 7,
 } as const;
 
 /** The day's marker for Gaspard gone from her table (`time/OncePerDay`). */
@@ -44,6 +46,8 @@ interface FamilyState {
   /** How it ended with him, and when; null while it has not. */
   gaspard: GaspardEnd | null;
   gaspardOn: number | null;
+  /** After his apology, he came back one Sunday with what he had kept back from the sale. */
+  gaspardBack: boolean;
   gameBoy: GameBoyStage;
   /** What Crane asked for it (coins), once he named a price. */
   price: number | null;
@@ -52,14 +56,16 @@ interface FamilyState {
   visits: number;
   previous: number | null;
   photo: boolean;
+  /** The closing reel (the end of the story, after her photo) has played. */
+  ended: boolean;
   /** `?debug`: Gaspard at her table on this day whatever the day; her visit today whatever the hour. */
   debugGaspard: number | null;
   debugVisit: number | null;
 }
 
 const fresh = (): FamilyState => ({
-  gaspardDays: [], gaspard: null, gaspardOn: null, gameBoy: 'none', price: null,
-  visitDay: null, visits: 0, previous: null, photo: false, debugGaspard: null, debugVisit: null,
+  gaspardDays: [], gaspard: null, gaspardOn: null, gaspardBack: false, gameBoy: 'none', price: null,
+  visitDay: null, visits: 0, previous: null, photo: false, ended: false, debugGaspard: null, debugVisit: null,
 });
 
 /** What it reads of Mémé's album (whether a memory has been seen, `GrandmaVisits.hasSeen`), and the journal it writes to. */
@@ -71,10 +77,18 @@ interface FamilyDeps {
 export class FamilyStory {
   private state: FamilyState;
   private readonly store: PersistedStore<FamilyState>;
+  private readonly backListeners = new Set<(day: number) => void>();
 
   constructor(private readonly deps: FamilyDeps, storage: Storage | null = safeStorage()) {
     this.store = new PersistedStore<FamilyState>({ key: KEYS.familyStory, version: 1, storage, defaults: fresh, read: readState });
     this.state = this.store.load();
+  }
+
+  /** The album's memories this story could only have reached past (a lost album save is mended from it: `GrandmaVisits.restoreSeen`). */
+  impliesSeen(): string[] {
+    const s = this.state;
+    if (s.gaspard !== null || s.gameBoy !== 'none') return ['row', 'sale'];
+    return s.gaspardDays.length ? ['row'] : [];
   }
 
   /** A line in the day's journal (the scenes at hers and at the flat write theirs here). */
@@ -99,22 +113,50 @@ export class FamilyStory {
     return this.deps.seen('sale');
   }
 
-  /** Gaspard at her table on `day` at `hour`: a Sunday's lunch hours, once the row is seen, never after the reckoning. */
+  /**
+   * Gaspard at her table on `day` at `hour`: a Sunday's lunch hours, once the row is seen; after the reckoning only
+   * once more, a Sunday a week or more after he said sorry (`returning`).
+   */
   gaspardAt(day: number, hour: number): boolean {
     const s = this.state;
-    if (s.gaspard !== null || !this.deps.seen('row')) return false;
+    if (!this.deps.seen('row')) return false;
+    if (s.gaspard !== null && !this.returning) return false;
     if (s.debugGaspard === day) return true;
     if (oncePerDay.done(GASPARD_LEFT, day)) return false;
     if (weekdayOf(day) !== SUNDAY_WEEKDAY || !inHours(hour, FAMILY.gaspardHours)) return false;
+    if (this.returning) return s.gaspardOn !== null && day - s.gaspardOn >= FAMILY.backAfter;
     // Once the sale is seen he is there every Sunday until it is had out; before, his first Sunday, then now and then.
     if (this.deps.seen('sale') || !s.gaspardDays.length || s.gaspardDays.includes(day)) return true;
     return s.gaspardDays.length <= FAMILY.gaspardCasual && gameDayRandom('gaspard:sunday', day)() < FAMILY.gaspardOdds;
+  }
+
+  /** He said sorry at her table and has not come back yet: his next Sunday there is his last scene (`gaspardBrought`). */
+  get returning(): boolean {
+    return this.state.gaspard === 'apologised' && !this.state.gaspardBack;
+  }
+
+  /** Back after his apology, he gave the player what he kept from the sale (`onGaspardBack` hands it over). */
+  gaspardBrought(day: number): void {
+    if (!this.returning) return;
+    this.commit({ ...this.state, gaspardBack: true });
+    for (const listener of [...this.backListeners]) listener(day);
+  }
+
+  /** Hears Gaspard's return (`gaspardBrought`), to put what he brought into the collection. Returns the unsubscribe. */
+  onGaspardBack(listener: (day: number) => void): () => void {
+    this.backListeners.add(listener);
+    return () => this.backListeners.delete(listener);
   }
 
   /** He was there on `day` (counted once). */
   gaspardCame(day: number): void {
     if (this.state.gaspardDays.includes(day)) return;
     this.commit({ ...this.state, gaspardDays: [...this.state.gaspardDays, day] });
+  }
+
+  /** He sat down at her table on `day` and has not got up and gone yet (his plate laid at lunch, his name not said). */
+  gaspardIn(day: number): boolean {
+    return this.state.gaspardDays.includes(day) && !oncePerDay.done(GASPARD_LEFT, day);
   }
 
   /** He got up and went on `day`: not at her table again that day (her flat built anew included). */
@@ -228,11 +270,25 @@ export class FamilyStory {
     if (!this.state.photo) this.commit({ ...this.state, photo: true });
   }
 
+  /** The story's closing reel is due: her photo is in the album and it has not played. */
+  get endingDue(): boolean {
+    return this.state.photo && !this.state.ended;
+  }
+
+  /** The closing reel played (to its end, or skipped): the story is told. */
+  get ended(): boolean {
+    return this.state.ended;
+  }
+
+  storyEnded(): void {
+    if (!this.state.ended) this.commit({ ...this.state, ended: true });
+  }
+
   // --- ?debug -------------------------------------------------------------------------------------
 
   /** Gaspard at her table today, whatever the day and the hour (the row taken as seen by the album's own switch). */
   debugGaspardToday(day: number): void {
-    this.commit({ ...this.state, gaspard: null, gaspardOn: null, debugGaspard: day });
+    this.commit({ ...this.state, gaspard: null, gaspardOn: null, gaspardBack: false, debugGaspard: day });
   }
 
   /** The Game Boy's trail at its start (Mémé tells it on the next visit). */
@@ -271,12 +327,14 @@ function readState(data: unknown): FamilyState | null {
     gaspardDays: Array.isArray(raw.gaspardDays) ? raw.gaspardDays.filter((d): d is number => typeof d === 'number' && Number.isFinite(d)) : [],
     gaspard: ends.includes(raw.gaspard as GaspardEnd) ? (raw.gaspard as GaspardEnd) : null,
     gaspardOn: day(raw.gaspardOn),
+    gaspardBack: raw.gaspardBack === true,
     gameBoy: stages.includes(raw.gameBoy as GameBoyStage) ? (raw.gameBoy as GameBoyStage) : 'none',
     price: day(raw.price),
     visitDay: day(raw.visitDay),
     visits: typeof raw.visits === 'number' && Number.isFinite(raw.visits) ? Math.max(0, Math.floor(raw.visits)) : 0,
     previous: day(raw.previous),
     photo: raw.photo === true,
+    ended: raw.ended === true,
     debugGaspard: day(raw.debugGaspard),
     debugVisit: day(raw.debugVisit),
   };

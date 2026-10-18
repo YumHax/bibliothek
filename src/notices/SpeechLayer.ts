@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { readMs } from './readingTime';
+import { overHead } from './speech';
 import { noteSaid } from './speechLog';
 
 /** How a line is said: to the player (named, queued, kept until read) or in passing (a word to nobody). */
@@ -239,7 +240,9 @@ export class SpeechLayer {
     let scale = 1;
     const anchor = bubble.anchor;
     if (anchor && shown(anchor)) {
-      anchor.getWorldPosition(world);
+      // Just over the head, wherever the anchor stands (a child, someone seated or short).
+      const lift = overHead(anchor);
+      anchor.getWorldPosition(world).y += lift;
       view.copy(world).applyMatrix4(this.camera.matrixWorldInverse);
       const distance = view.length();
       const range = line.addressed ? ADDRESSED_RANGE : AMBIENT_RANGE;
@@ -252,7 +255,7 @@ export class SpeechLayer {
         const inView = x > MARGIN_X - slack && x < w - MARGIN_X + slack && y > MARGIN_TOP - slack && y < h - MARGIN_BOTTOM + slack;
         if (inView && this.blocked && bubble.sightAge >= SIGHT_S) {
           bubble.sightAge = 0;
-          anchor.getWorldPosition(world);
+          anchor.getWorldPosition(world).y += lift;
           this.camera.getWorldPosition(this.eye);
           bubble.hiddenByWall = this.blocked(this.eye, world);
         }

@@ -83,7 +83,7 @@ export class RewardBanner {
     }
     if (reward.picture) {
       const frame = document.createElement('div');
-      frame.className = 'reward__picture';
+      frame.className = reward.pictureBox ? 'reward__picture reward__picture--box' : 'reward__picture';
       if (reward.pictureRing) frame.style.setProperty('--ring', reward.pictureRing);
       frame.appendChild(reward.picture);
       el.appendChild(frame);
@@ -116,21 +116,23 @@ export class RewardBanner {
   }
 }
 
-/** How many rewards a merged banner stands for (a merged one merged again still counts them all). */
-const MERGED = new WeakMap<RewardNotice, number>();
+/** The titles a merged banner stands for, in order (a merged one merged again keeps them all). */
+const MERGED = new WeakMap<RewardNotice, readonly string[]>();
 
-/** Several waiting rewards as one: the first's title, the others counted, their amounts summed. */
+/** Several waiting rewards as one: the first's title, the others named under it (none silently lost), their amounts summed. */
 function merged(rewards: RewardNotice[]): RewardNotice {
   const sum = (key: 'coins' | 'tickets') => rewards.reduce((total, r) => total + (r[key] ?? 0), 0);
-  const count = rewards.reduce((total, r) => total + (MERGED.get(r) ?? 1), 0);
-  const first = rewards[0]!;
+  const titles = rewards.flatMap((r) => MERGED.get(r) ?? [r.title]);
+  const [first = '', ...others] = titles;
+  const named = others.slice(0, 3);
+  const rest = others.length - named.length;
   const reward: RewardNotice = {
-    title: first.title,
-    detail: `…and ${count - 1} more`,
+    title: first,
+    detail: `And: ${named.join(' · ')}${rest > 0 ? `, and ${rest} more` : ''}.`,
     coins: sum('coins') || undefined,
     tickets: sum('tickets') || undefined,
     big: rewards.some((r) => r.big),
   };
-  MERGED.set(reward, count);
+  MERGED.set(reward, titles);
   return reward;
 }

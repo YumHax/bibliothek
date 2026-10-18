@@ -34,7 +34,7 @@ export const POINTS_PER_TICKET = 50;
  */
 export const PAYOUT: Readonly<Record<string, number>> = {
   breakout: 104,
-  invaders: 46,
+  invaders: 36,
   stacker: 132,
   frog: 53,
   snake: 11,
@@ -95,6 +95,8 @@ export const TICKET_FLOOR = Math.round(TICKETS_PER_COIN * PLAY_COST * 1.5);
 
 /** A claw play that drops nothing pays the coin back in tickets: only the plush is a gamble, never the coin. */
 export const CLAW_MISS_TICKETS = TICKETS_PER_COIN * PLAY_COST;
+/** A plush won that is on the bed at home already: the attendant swaps it for this many tickets (more than a miss's). */
+export const CLAW_DUPLICATE_TICKETS = 3 * CLAW_MISS_TICKETS;
 
 /**
  * Broke, and not even a coin's worth of tickets: the house stands the play (ticket machines only),
@@ -123,17 +125,21 @@ export const CHALLENGE_BAND: Readonly<Record<string, { low: number; high: number
  * The kinds of daily challenge and how often each comes up (weights): `score` one play reaching the target, `twice`
  * two plays of the day each reaching a lower one (`twiceBand`: the table's fifth to fourth score), `total` the day's
  * plays on the machine adding up to `totalOf` times a target of the usual band. Once the player holds the machine's
- * gold, a `score` challenge follows their own best instead of the table (`personal`: that share of it).
+ * gold, a `score` challenge follows their own best instead of the table (`personal`: that share of it). A `feat`
+ * challenge asks for one of the game's feats in a play (`feats`: the caption its bonus shows); a game with none gets a
+ * `score` one instead.
  */
 export const CHALLENGE_KINDS = {
-  weights: { score: 5, twice: 2, total: 2 },
+  weights: { score: 5, twice: 2, total: 2, feat: 2 },
+  feats: { invaders: 'PERFECT WAVE', frog: 'ALL HOME', breakout: 'WALL CLEAR', stacker: 'PRIZE TAKEN', duel: 'RALLY OF 8', snake: 'STAGE 3 CLEAN' } as Readonly<Record<string, string>>,
   twiceBand: { low: 4, high: 3 },
   totalOf: 2.5,
   personal: { low: 0.8, high: 0.95 },
 } as const;
 
-/** How often a day has an arcade machine out of order. */
+/** How often a day has an arcade machine out of order; asked about, Gus rings the repair man, who has it going this many hours later. */
 export const OUT_OF_ORDER_ODDS = 0.35;
+export const REPAIR_HOURS = 3;
 
 /**
  * Shop price of an ordinary game per platform, before the fame factor. Calibrated against the
@@ -231,6 +237,13 @@ export const NEGOTIATION = {
    * to this share of the tag at most, so each still counts and a cheeky offer is not always taken.
    */
   maxSway: 0.1,
+  /**
+   * The player's arguments (`Negotiation.argue`), once each per haggle: pointing out a flaw of the copy (no manual, a
+   * worn box) lowers the lowest share by `flaw` (never under `lowest`); "I'll think about it till Sunday" brings the
+   * asking price `later` of the way down to the lowest one, unless the seller is set on their price (a showpiece, or a
+   * lowest share drawn in the top half), who bristles instead (a point of patience).
+   */
+  argument: { flaw: 0.04, later: 0.5 },
 } as const;
 
 /** How a copy's printing moves its price, and how often a stall copy is a first print or a budget re-release. */
@@ -324,6 +337,17 @@ export const JOB_LOT = { min: 4, max: 6, share: 0.55 };
 /** A game swapped at a stall counts for this share of its shop price (times its condition): more than the WE BUY desk, less than a stall asks. */
 export const TRADE_SHARE = 0.42;
 
+/**
+ * A game worth more than the copy it is swapped for: the stallholder makes up the rest in coins at the WE BUY desk's
+ * rate (this share of the value over), so a swap never pays out more than selling the excess at the desk would.
+ */
+const SWAP_CHANGE = BUY_BACK_SHARE / TRADE_SHARE;
+
+/** The coins handed back when a game counting for `value` is swapped for a copy that costs `due` (0 when it is worth less). */
+export function swapChange(due: number, value: number): number {
+  return value > due ? Math.floor((value - due) * SWAP_CHANGE) : 0;
+}
+
 /** The notice board: collectors pay this share of a game's shop price (drawn in the range), for this many market days. */
 export const WANTED_AD = { perDay: 3, share: [0.62, 0.8] as [number, number], days: 3, premium: 1.15 };
 /**
@@ -368,7 +392,9 @@ export const TRADER_MARKUP = 1.25;
  * game hours `hours`. A lot opens at `reserve` of its shop price (times its condition and printing, like the stalls:
  * over the WE BUY desk's top share, so a lot nobody else wants is a bargain, never a press); the room expects it to
  * fetch about `estimate` of that. Silence after a bid: `call` seconds to "going once", as much to "twice", as much to
- * the hammer; a lot nobody opens in `openSilence` seconds is passed. `pause` between two lots.
+ * the hammer; a lot nobody opens in `openSilence` seconds is passed. `pause` between two lots. The player may enter one
+ * copy of theirs a sale (`consign`, docs/economy.md "Consigning a copy"): estimated at `consign.estimate` of its price,
+ * taken only from `consign.min` coins of estimate, the house keeping `consign.commission` of the hammer (`consignNet`).
  */
 export const AUCTION = {
   // The sale day is the game week's Sunday (`time/wakefulness` SUNDAY_DAY, every seventh day from day 3): `isAuctionDay`.
@@ -380,7 +406,18 @@ export const AUCTION = {
   call: 2.6,
   openSilence: 7,
   pause: 5,
+  consign: { estimate: 0.8, min: 30, commission: 0.15 },
 } as const;
+
+/**
+ * What the house hands over for a consigned copy that went for `hammer` coins: the hammer less the commission, and,
+ * like a WANTED card, no more than a finder's premium over what the copy cost (`wantedCap`) nor than a flat-price
+ * receipt allows (`receiptCap`): a copy bought cheap that morning and entered for Sunday is never a sure profit.
+ */
+export function consignNet(hammer: number, copy: Pick<Game, 'acquired'>): number {
+  const net = Math.max(1, Math.floor(hammer * (1 - AUCTION.consign.commission)));
+  return Math.min(net, receiptCap(copy), wantedCap(copy));
+}
 
 /**
  * Sealed box lots (`economy/boxLots.ts`): a taped carton bought blind, unpacked at home one thing at a time.
@@ -497,7 +534,8 @@ export type DealtCopy = Pick<Game, 'id' | 'platform' | 'condition' | 'edition' |
 export function buyBackPrice(game: DealtCopy, views: Views, bonus = 0): number {
   if (game.repro) return REPRO_BUY_BACK;
   const offer = Math.max(1, Math.round(shopPrice(game, views) * (BUY_BACK_SHARE + bonus) * dealerFactor(game) * EDITION_FACTOR[game.edition ?? 'standard']));
-  return Math.min(offer, receiptCap(game));
+  // Never more than the copy cost: a private seller's table (a clear-out's, a loft's, "the lot") goes under the desk's share.
+  return Math.min(offer, receiptCap(game), paidCap(game));
 }
 
 /** What `game` counts for in a swap at a stall (a reproduction nearly nothing), integer coins; a bargain-bin copy at most what it cost. */
@@ -517,12 +555,14 @@ function paidCap(game: Pick<Game, 'acquired'>): number {
 }
 
 /**
- * What a copy was bought for, when its receipt says so; 0 for a gift, a prize, a swap (its receipt holds only the
- * coins added, not what the copy was worth) or no receipt at all.
+ * What a copy was bought for, when its receipt says so; 0 for a gift, a prize or no receipt at all. A swap's receipt
+ * holds the coins added, so its `worth` (all it cost) counts; an older swap's has none (0). Without it a swapped-in copy
+ * would count for more than it cost, and a chain of swaps (or one swap and the saleroom) would be a press.
  */
 function boughtFor(game: Pick<Game, 'acquired'>): number {
   const receipt = game.acquired;
-  if (!receipt || receipt.where.startsWith(SWAP_WHERE_PREFIX)) return 0;
+  if (!receipt) return 0;
+  if (receipt.where.startsWith(SWAP_WHERE_PREFIX)) return receipt.worth ?? 0;
   return receipt.price;
 }
 

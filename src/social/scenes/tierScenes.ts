@@ -7,7 +7,7 @@ import { giveKeepsake, hasKeepsake, keepsakeFor, noteOnce, pendingScenes, queueS
 import { findPerson, shortName } from '../people';
 import { talkingWith } from '../talkState';
 import type { PersonId, SocialChange, TierId } from '../types';
-import { CLOSE_INVITES, COOLING_NOTES, DOOR_GOODBYES, DOOR_OPENERS, FRIENDLY_NOTES, MISSED_LINES, POSTED_LINES, WELCOME_THANKS, lineFor } from './sceneLines';
+import { CLOSE_INVITES, COOLING_NOTES, DOOR_GOODBYES, DOOR_OPENERS, FRIENDLY_NOTES, MISSED_LINES, POSTED_LINES, WELCOME_THANKS, lineFor, sceneVoice, type SceneVoice } from './sceneLines';
 import { tier as tierNow } from '../standing';
 import { atLeast } from '../tiers';
 import { capitalise } from '@/text/strings';
@@ -60,6 +60,8 @@ interface SceneStage {
   day(): number;
   /** The frame as the player sees it now (a close friend's photo at the door), or null. */
   snapshot?(): HTMLCanvasElement | null;
+  /** The keepsake drawn as it will hang on the fridge (`photo`: a close friend's print, drawn in once loaded), for the slip. */
+  keepsakePicture?(def: KeepsakeDef, giver: string, key: string, photo?: string): HTMLCanvasElement;
   notices: Pick<NoticeActions, 'slip'>;
 }
 
@@ -90,6 +92,12 @@ export function setSceneStage(given: SceneStage): () => void {
   return () => {
     if (stage === given) stage = null;
   };
+}
+
+/** Whose words `id`'s scene is in (a neighbour's, by default). */
+function voiceOf(id: PersonId): SceneVoice {
+  const card = findPerson(id);
+  return card ? sceneVoice(card) : 'neighbour';
 }
 
 /** Whether `id` comes up to the door for their scene: the building's people (who live here) and the old friends. */
@@ -134,7 +142,8 @@ export function slipCoolingNote(change: SocialChange, card: ReadingNotice): bool
   if (!stage || !writesNotes(change.id)) return false;
   const card0 = findPerson(change.id);
   if (!card0) return false;
-  const lines = COOLING_NOTES[change.after] ?? COOLING_NOTES.cold!;
+  const notes = COOLING_NOTES[voiceOf(change.id)];
+  const lines = notes[change.after] ?? notes.cold ?? COOLING_NOTES.neighbour.cold!;
   stage.slipNote({ look: 'letter', title: card.title ?? `A note from ${shortName(change.id)}`, lines: [lineFor(change.id, lines, stage.day())], from: card0.name, hand: 'pen', ...(card.effect ? { effect: card.effect } : {}) });
   return true;
 }
@@ -199,7 +208,7 @@ function post(s: SceneStage, scene: PendingScene): void {
   sceneDone(scene);
   if (!card) return;
   if (scene.tier === 'friendly') {
-    if (noteOnce(scene.person)) s.slipNote({ look: 'letter', title: `A note from ${shortName(scene.person)}`, lines: [lineFor(scene.person, FRIENDLY_NOTES)], from: card.name, hand: 'pen', effect: 'Kept, in the kitchen drawer.' });
+    if (noteOnce(scene.person)) s.slipNote({ look: 'letter', title: `A note from ${shortName(scene.person)}`, lines: [lineFor(scene.person, FRIENDLY_NOTES[voiceOf(scene.person)])], from: card.name, hand: 'pen', effect: 'Kept, in the kitchen drawer.' });
     return;
   }
   // Mme Pereira's thanks not said at the door (the player out for days): its banner only.
@@ -252,8 +261,9 @@ function startDoorScene(s: SceneStage, scene: PendingScene): void {
     knocks: 4,
     answer: (_session, walker) => {
       current.answered = true;
-      const lines = def ? [lineFor(scene.person, DOOR_OPENERS[tier]), def.giving] : [...WELCOME_THANKS];
-      if (def && tier === 'close') lines.push(lineFor(scene.person, CLOSE_INVITES));
+      const voice = voiceOf(scene.person);
+      const lines = def ? [lineFor(scene.person, DOOR_OPENERS[voice][tier]), def.giving] : [...WELCOME_THANKS];
+      if (def && tier === 'close') lines.push(lineFor(scene.person, CLOSE_INVITES[voice]));
       for (const line of lines) walker.speak(line);
       walker.gesture(tier === 'close' ? 'handsJoin' : 'claspHands');
       walker.feel({ smile: 0.9, browsUp: 0.4 }, 4);
@@ -273,7 +283,7 @@ function startDoorScene(s: SceneStage, scene: PendingScene): void {
         current.photoIn = null;
         handOver(s, scene, def);
       }
-      walker.speak(lineFor(scene.person, DOOR_GOODBYES));
+      walker.speak(lineFor(scene.person, DOOR_GOODBYES[voiceOf(scene.person)]));
       walker.gesture('wave');
     },
     gone: () => {
@@ -289,7 +299,9 @@ function startDoorScene(s: SceneStage, scene: PendingScene): void {
 function handOver(s: SceneStage, scene: PendingScene, def: KeepsakeDef, photo?: string): void {
   if (scene.tier !== 'friend' && scene.tier !== 'close') return;
   if (!giveKeepsake(scene.person, scene.tier, s.day(), photo)) return;
-  s.notices.slip({ title: `${capitalise(possessive(shortName(scene.person)))} ${def.name}`, detail: 'On your fridge now.' });
+  // Drawn as the fridge draws it (`fridgeKeepsakes`: the same giver's name and key), so the slip shows what hangs there.
+  const picture = s.keepsakePicture?.(def, shortName(scene.person), `${scene.person}:${scene.tier}`, photo);
+  s.notices.slip({ title: `${capitalise(possessive(shortName(scene.person)))} ${def.name}`, detail: 'On your fridge now.', ...(picture ? { picture } : {}) });
 }
 
 /** A close friend's photo, the frame as the player sees it at the door, kept small. */

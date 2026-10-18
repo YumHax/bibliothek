@@ -7,7 +7,8 @@ import { isMet, standing } from '@/social/standing';
 import type { SocialAnchor, SocialBody, SocialServices, TalkSession } from '@/social/talk';
 import { hasWordFor } from '@/social/threads';
 import { tierOf, tierRank } from '@/social/tiers';
-import type { Fit, PersonId } from '@/social/types';
+import type { Fit, Manner, PersonId } from '@/social/types';
+import { mannerOf } from '@/social/voices';
 import type { FaceKey, GestureName } from './motion/gestures';
 import type { SocialAct } from './motion/repertoire';
 import { random } from '@/random';
@@ -33,6 +34,8 @@ export interface Mien {
   hello: string | null;
   /** They have a word or a need for the player (`threads.hasWordFor`): they beckon. */
   beckon: boolean;
+  /** Their manner (`voices.mannerOf`): how big their face goes before a choice. */
+  manner?: Manner | null;
 }
 
 /** What a clickable person asks of their conversation. */
@@ -53,7 +56,7 @@ interface Expressive {
   feel?(face: FaceKey, seconds: number): void;
   nod?(): void;
   /** Its own, temperament-aware way (`PersonModel.socialReact`), when it has one. */
-  socialReact?(act: SocialAct, strength: number): void;
+  socialReact?(act: SocialAct, strength: number, manner?: Manner): void;
 }
 
 /** How each reaction is acted by a body without its own way (a fixed table, every person alike). */
@@ -72,9 +75,9 @@ const ACTED: Record<SocialReaction, { gesture?: GestureName; face: FaceKey; nod?
 };
 
 /** Acts `reaction` on `body` (`strength` 0..1): its own way when it has one, else the table. */
-function actReaction(body: Expressive, reaction: SocialReaction, strength = 0.6): void {
+function actReaction(body: Expressive, reaction: SocialReaction, strength = 0.6, manner?: Manner | null): void {
   if (body.socialReact) {
-    body.socialReact(reaction, strength);
+    body.socialReact(reaction, strength, manner ?? undefined);
     return;
   }
   const act = ACTED[reaction];
@@ -109,10 +112,18 @@ function greetingOf(rank: number): Greeting {
   return 'callOut';
 }
 
-/** What a greeting says aloud, by who they are: their own hello, a neighbour's, or a plain one; nothing from the cold. */
-function helloOf(person: PersonId, greeting: Greeting): string | null {
+/** A barely-met face's word passing, by their manner (the gruff grunt, the shy hardly say it). */
+const GLANCE_HELLO: Record<Manner, string> = { gruff: 'Hm.', shy: '…Hello.', proud: 'Good day.', lively: 'Hiya!', warm: 'Hello there.' };
+
+/**
+ * What a greeting says aloud, by who they are and their day: their own hello, a neighbour's, or a plain one; nothing
+ * from the cold, and nothing but a look on a bad day.
+ */
+function helloOf(person: PersonId, greeting: Greeting, mood: 'good' | 'fine' | 'low' | 'annoyed'): string | null {
   if (greeting === 'shun' || greeting === 'avoid' || greeting === 'nod') return null;
-  if (greeting === 'glance') return 'Hello.';
+  if (mood === 'annoyed') return null;
+  const manner = mannerOf(person);
+  if (greeting === 'glance') return mood === 'low' ? null : manner ? GLANCE_HELLO[manner] : 'Hello.';
   const card = findPerson(person);
   const own = card?.lines?.hello;
   if (own?.length) return own[Math.floor(random() * own.length)]!;
@@ -126,7 +137,7 @@ function mienOf(person: PersonId, day: number, hour: number): Mien {
   const rank = tierRank(tierOf(s.warmth, s.trust));
   const { mood } = moodOf(person, day, hour);
   const greeting = greetingOf(rank);
-  return { face: faceOf(rank, mood), greeting, hello: helloOf(person, greeting), beckon: rank > tierRank('cold') && hasWordFor(person, day) };
+  return { face: faceOf(rank, mood), greeting, hello: helloOf(person, greeting, mood), beckon: rank > tierRank('cold') && hasWordFor(person, day), manner: mannerOf(person) };
 }
 
 /**
@@ -165,7 +176,7 @@ export function bodyOf(person: Speaking, said?: (line: string) => void): SocialB
       person.speak(line);
       said?.(line);
     },
-    react: (reaction, strength) => actReaction(person, reaction, strength),
+    react: (reaction, strength, manner) => actReaction(person, reaction, strength, manner),
     anchor: person.speechAnchor,
     anticipate: (fit) => person.anticipate?.(fit),
     hold: (on) => person.converse?.(on),
@@ -173,14 +184,14 @@ export function bodyOf(person: Speaking, said?: (line: string) => void): SocialB
 }
 
 /** A `Vendor`'s body (its `gesture` is a stance: the gestures go through `gestureNow`). */
-export function vendorBody(vendor: { speak(line: string): void; gestureNow(name: GestureName): void; feel(face: FaceKey, seconds: number): void; nod(): void; readonly speechAnchor: SocialAnchor; socialReact?(act: SocialAct, strength: number): void; anticipate?(fit: Fit | null): void; converse?(on: boolean): void }): SocialBody {
+export function vendorBody(vendor: { speak(line: string): void; gestureNow(name: GestureName): void; feel(face: FaceKey, seconds: number): void; nod(): void; readonly speechAnchor: SocialAnchor; socialReact?(act: SocialAct, strength: number, manner?: Manner): void; anticipate?(fit: Fit | null): void; converse?(on: boolean): void }): SocialBody {
   return bodyOf({
     speak: (line) => vendor.speak(line),
     gesture: (name) => vendor.gestureNow(name),
     feel: (face, s) => vendor.feel(face, s),
     nod: () => vendor.nod(),
     speechAnchor: vendor.speechAnchor,
-    ...(vendor.socialReact ? { socialReact: (act: SocialAct, strength: number) => vendor.socialReact!(act, strength) } : {}),
+    ...(vendor.socialReact ? { socialReact: (act: SocialAct, strength: number, manner?: Manner) => vendor.socialReact!(act, strength, manner) } : {}),
     ...(vendor.anticipate ? { anticipate: (fit: Fit | null) => vendor.anticipate!(fit) } : {}),
     ...(vendor.converse ? { converse: (on: boolean) => vendor.converse!(on) } : {}),
   });

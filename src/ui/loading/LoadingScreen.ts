@@ -169,6 +169,14 @@ export class LoadingScreen {
     // The bar stops where it is.
     this.fill.style.transform = `scaleX(${currentFill(this.fill)})`;
     this.root.classList.add('boot--failed');
-    this.line.textContent = 'Something went wrong. Reload the page to try again.';
+    this.line.textContent = 'Something went wrong while the flat was being set up. Your progress is safe.';
+    // The one place a button cannot hurt: a reload, the save untouched.
+    const reload = document.createElement('button');
+    reload.type = 'button';
+    reload.className = 'boot__reload';
+    reload.textContent = 'Reload the page';
+    reload.addEventListener('click', () => window.location.reload());
+    this.line.after(reload);
+    reload.focus();
   }
 }

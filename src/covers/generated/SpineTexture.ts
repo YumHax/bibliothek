@@ -212,32 +212,57 @@ function along(s: SpineCtx, text: string, from: number, to: number, size: number
 
 /**
  * The title as big as it fits between `from` and `to`, like a printed logo: a dark outline round a
- * bright fill (a light one on a pale ground), on two lines when one would come out too small.
+ * bright fill (a light one on a pale ground). It fills the spine's thickness and is condensed to fit its
+ * length, as the real logos are, before it is set smaller; on two lines when one would still come out small.
+ * The spine is what a row of boxes shows: read from a step back, the letters' height is what counts.
  */
 function title(s: SpineCtx, from: number, to: number, colour: string, onLight: boolean, family = TITLE_FONT): void {
   const { ctx, T } = s;
   const text = s.game.title;
   const room = (to - from) * s.L;
-  const single = fitFontSize(ctx, text, room, Math.round(T * 0.7), 8, family);
-  const parts = single < T * 0.42 ? splitTitle(text) : null;
-  const lines: [string, number, number][] = parts
+  const single = condensedFit(ctx, text, room, T * 0.78, family);
+  const parts = single.px < T * 0.5 ? splitTitle(text) : null;
+  const lines: [string, Fit, number][] = parts
     ? [
-        [parts[0], fitFontSize(ctx, parts[0], room, Math.round(T * 0.44), 8, family), T * 0.34],
-        [parts[1], fitFontSize(ctx, parts[1], room, Math.round(T * 0.28), 8, family), T * 0.76],
+        [parts[0], condensedFit(ctx, parts[0], room, T * 0.46, family), T * 0.31],
+        [parts[1], condensedFit(ctx, parts[1], room, T * 0.34, family), T * 0.74],
       ]
-    : [[text, single, T / 2 + single * 0.04]];
+    : [[text, single, T / 2 + single.px * 0.04]];
   const cx = ((from + to) / 2) * s.L;
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
-  for (const [line, px, y] of lines) {
-    ctx.font = `bold ${px}px ${family}`;
+  for (const [line, fit, y] of lines) {
+    ctx.save();
+    ctx.translate(cx, y);
+    ctx.scale(fit.squeeze, 1);
+    ctx.font = `bold ${fit.px}px ${family}`;
     ctx.lineJoin = 'round';
-    ctx.lineWidth = Math.max(2, px * 0.12);
-    ctx.strokeStyle = onLight ? 'rgba(255,255,255,0.85)' : 'rgba(0,0,0,0.85)';
-    ctx.strokeText(line, cx, y);
+    ctx.lineWidth = Math.max(2, fit.px * 0.12);
+    ctx.strokeStyle = onLight ? 'rgba(255,255,255,0.9)' : 'rgba(0,0,0,0.9)';
+    ctx.strokeText(line, 0, 0);
     ctx.fillStyle = colour;
-    ctx.fillText(line, cx, y);
+    ctx.fillText(line, 0, 0);
+    ctx.restore();
   }
+}
+
+/** A line of a title as set: its size (layout px) and how much narrower than the face's own it is drawn (1: not at all). */
+interface Fit {
+  px: number;
+  squeeze: number;
+}
+
+/** The narrowest a title is condensed (its width over the face's own) before it is set smaller. */
+const MIN_SQUEEZE = 0.62;
+
+/** `text` at `maxPx` tall, condensed to fit `room` when it is too long; still too long at `MIN_SQUEEZE`, smaller as well. */
+function condensedFit(ctx: CanvasRenderingContext2D, text: string, room: number, maxPx: number, family: string): Fit {
+  const px = Math.max(1, Math.round(maxPx));
+  ctx.font = `bold ${px}px ${family}`;
+  const width = ctx.measureText(text).width;
+  if (width <= room) return { px, squeeze: 1 };
+  if (width * MIN_SQUEEZE <= room) return { px, squeeze: room / width };
+  return { px: Math.max(1, Math.floor((px * room) / (width * MIN_SQUEEZE))), squeeze: MIN_SQUEEZE };
 }
 
 /** Nintendo's red oval: outlined red with red letters (on a dark ground), or white with red letters. */

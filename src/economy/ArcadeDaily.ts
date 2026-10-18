@@ -1,13 +1,13 @@
 import { KEYS, PersistedStore } from '@/persistence';
 import { dayKey, fromUtcDayKey } from './calendar';
-import { CHALLENGE_BAND, CHALLENGE_KINDS, CHALLENGE_REWARD, CHANGE_MACHINE, OUT_OF_ORDER_ODDS } from './pricing';
+import { CHALLENGE_BAND, CHALLENGE_KINDS, CHALLENGE_REWARD, CHANGE_MACHINE, OUT_OF_ORDER_ODDS, REPAIR_HOURS } from './pricing';
 import { rivalScore } from './rivals';
 import { dayStream } from '@/time/daily';
 import { formatNumber } from '@/text/count';
 
 const ARCADE_DAILY_KEY = KEYS.arcadeDaily;
 
-/** What a day's challenge asks: one play reaching the score, two plays each reaching it, or the day's plays adding up to it. */
+/** What a day's challenge asks: one play reaching the score, two plays each reaching it, the day's plays adding up to it, or a feat. */
 type ChallengeKind = keyof typeof CHALLENGE_KINDS.weights;
 const KINDS = Object.keys(CHALLENGE_KINDS.weights) as ChallengeKind[];
 
@@ -23,8 +23,10 @@ interface Challenge {
   progress: number;
   /** Where `progress` has to get to. */
   need: number;
-  /** The ask in a few words, for the boards and the screens ("SCORE 4,000", "SCORE 3,000 TWICE", "12,000 IN ALL"). */
+  /** The ask in a few words, for the boards and the screens ("SCORE 4,000", "SCORE 3,000 TWICE", "12,000 IN ALL", "A PERFECT WAVE"). */
   line: string;
+  /** The same in a sentence's words, for the post, the papers, the journal ("score 4,000", "4,000 twice", "a PERFECT WAVE"). */
+  ask: string;
   /** Set on the player's own best (they hold the machine's gold), not on the table's. */
   personal: boolean;
 }
@@ -38,6 +40,8 @@ interface Drawn {
   reward: number;
   personal: boolean;
   progress: number;
+  /** A feat challenge's feat (its caption). */
+  feat?: string;
 }
 
 interface DailyFile {
@@ -46,6 +50,10 @@ interface DailyFile {
   change?: string;
   /** The current day's challenge once drawn, and how far along it is. */
   drawn?: Drawn;
+  /** The repair man rung for the day's broken machine: the day, and the hour it works again. */
+  repair?: { day: string; ready: number };
+  /** The day the dead change machine was thumped (it gives a coin, once). */
+  thumped?: string;
 }
 
 interface ArcadeDailyOptions {
@@ -111,20 +119,22 @@ export class ArcadeDaily {
       done: this.state.challenge === day,
       progress: Math.min(drawn.progress, need),
       need,
-      line: challengeLine(drawn.kind, drawn.target),
+      line: challengeLine(drawn.kind, drawn.target, drawn.feat),
+      ask: challengeAsk(drawn.kind, drawn.target, drawn.feat),
       personal: drawn.personal,
     };
   }
 
   /**
-   * A play on `gameId` ended with `score`: it counts towards today's challenge when that is the machine's. True when
-   * the challenge is met now and not yet paid (the caller claims it, `claimChallenge`).
+   * A play on `gameId` ended with `score` (and `feats`): it counts towards today's challenge when that is the
+   * machine's. True when the challenge is met now and not yet paid (the caller claims it, `claimChallenge`).
    */
-  advance(gameId: string, score: number): boolean {
+  advance(gameId: string, score: number, feats: readonly string[] = []): boolean {
     const c = this.challenge();
     if (c.done || c.gameId !== gameId || score <= 0) return false;
     const drawn = this.state.drawn!;
-    const progress = c.kind === 'total' ? drawn.progress + score : drawn.progress + (score >= c.target ? 1 : 0);
+    const met = c.kind === 'feat' ? drawn.feat !== undefined && feats.includes(drawn.feat) : score >= c.target;
+    const progress = c.kind === 'total' ? drawn.progress + score : drawn.progress + (met ? 1 : 0);
     if (progress !== drawn.progress) {
       this.state = { ...this.state, drawn: { ...drawn, progress } };
       this.commit();
@@ -153,6 +163,34 @@ export class ArcadeDaily {
     return pool[Math.floor(rng() * pool.length)] ?? null;
   }
 
+  /**
+   * The player asked about the broken machine at `hour`: the repair man is rung (once a day) and has it working
+   * `REPAIR_HOURS` later. The hour it works again.
+   */
+  askRepair(hour: number): number {
+    const day = this.today();
+    if (this.state.repair?.day === day) return this.state.repair.ready;
+    // Before midnight (the day's broken machine changes then): the hour said is the hour it works.
+    const ready = Math.min(23, Math.ceil(hour) + REPAIR_HOURS);
+    this.state = { ...this.state, repair: { day, ready } };
+    this.commit();
+    return ready;
+  }
+
+  /** The hour today's broken machine works again (the repair man was rung), or null. */
+  get repairAt(): number | null {
+    return this.state.repair?.day === this.today() ? this.state.repair.ready : null;
+  }
+
+  /** The dead change machine thumped: a coin falls out once a day (true), then nothing. */
+  thump(): boolean {
+    const day = this.today();
+    if (this.state.thumped === day) return false;
+    this.state = { ...this.state, thumped: day };
+    this.commit();
+    return true;
+  }
+
   /** Whether the change machine works today (it has been claimed or not). */
   get changeMachineWorks(): boolean {
     return dayStream(`${this.today()}:change`)() < CHANGE_MACHINE.workingOdds;
@@ -178,7 +216,10 @@ export class ArcadeDaily {
   private draw(day: string): Drawn {
     const rng = dayStream(`${day}:challenge`);
     const gameId = this.games[Math.floor(rng() * this.games.length)] ?? 'stacker';
-    const kind = pickKind(rng());
+    const picked = pickKind(rng());
+    // A feat on a game that has one; a plain score on one that has none.
+    const feat = picked === 'feat' ? CHALLENGE_KINDS.feats[gameId] : undefined;
+    const kind: ChallengeKind = picked === 'feat' && !feat ? 'score' : picked;
     const best = this.options.bestOf?.(gameId) ?? 0;
     const personal = kind === 'score' && (this.options.gold?.(gameId) ?? false) && best > 0;
     const at = rng();
@@ -195,7 +236,7 @@ export class ArcadeDaily {
     }
     const target = signRound(raw);
     const reward = Math.round(CHALLENGE_REWARD.min + (CHALLENGE_REWARD.max - CHALLENGE_REWARD.min) * rng());
-    const drawn: Drawn = { day, gameId, kind, target, reward, personal, progress: 0 };
+    const drawn: Drawn = { day, gameId, kind, target: feat ? 0 : target, reward, personal, progress: 0, ...(feat ? { feat } : {}) };
     this.state = { ...this.state, drawn };
     this.commit();
     return drawn;
@@ -225,11 +266,22 @@ function signRound(raw: number): number {
 }
 
 /** The ask in a few words. */
-function challengeLine(kind: ChallengeKind, target: number): string {
+function challengeLine(kind: ChallengeKind, target: number, feat?: string): string {
   const score = formatNumber(target);
+  // The feat's own caption (ALL HOME, RALLY OF 8): no article, some take none.
+  if (kind === 'feat') return `${feat ?? 'A FEAT'} IN ONE PLAY`;
   if (kind === 'twice') return `SCORE ${score} TWICE`;
   if (kind === 'total') return `${score} IN ALL TODAY`;
   return `SCORE ${score}`;
+}
+
+/** The ask in a sentence's words. */
+function challengeAsk(kind: ChallengeKind, target: number, feat?: string): string {
+  const score = formatNumber(target);
+  if (kind === 'feat') return `${feat ?? 'a feat'} in one play`;
+  if (kind === 'twice') return `score ${score} twice`;
+  if (kind === 'total') return `${score} in all today`;
+  return `score ${score}`;
 }
 
 function readDaily(data: unknown): DailyFile | null {
@@ -240,6 +292,8 @@ function readDaily(data: unknown): DailyFile | null {
     ...(typeof parsed.challenge === 'string' ? { challenge: parsed.challenge } : {}),
     ...(typeof parsed.change === 'string' ? { change: parsed.change } : {}),
     ...(drawn ? { drawn } : {}),
+    ...(parsed.repair && typeof parsed.repair.day === 'string' && Number.isFinite(parsed.repair.ready) ? { repair: { day: parsed.repair.day, ready: parsed.repair.ready } } : {}),
+    ...(typeof parsed.thumped === 'string' ? { thumped: parsed.thumped } : {}),
   };
 }
 
@@ -248,7 +302,7 @@ function readDrawn(data: unknown): Drawn | null {
   const d = data as Partial<Drawn>;
   if (typeof d.day !== 'string' || typeof d.gameId !== 'string' || !KINDS.includes(d.kind as ChallengeKind)) return null;
   if (typeof d.target !== 'number' || typeof d.reward !== 'number') return null;
-  return { day: d.day, gameId: d.gameId, kind: d.kind as ChallengeKind, target: d.target, reward: d.reward, personal: d.personal === true, progress: typeof d.progress === 'number' && Number.isFinite(d.progress) ? d.progress : 0 };
+  return { day: d.day, gameId: d.gameId, kind: d.kind as ChallengeKind, target: d.target, reward: d.reward, personal: d.personal === true, progress: typeof d.progress === 'number' && Number.isFinite(d.progress) ? d.progress : 0, ...(typeof d.feat === 'string' ? { feat: d.feat } : {}) };
 }
 
 function mapDays(file: DailyFile, map: (day: string) => string): DailyFile {

@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { ANKLE_Y, HEAD_Y, NECK_PIVOT, PELVIS_Y, TORSO_PIVOT_Y, trunkSection, UPPER_ARM_L } from './body';
 import { ACROSS_CHEST, POSE_SPOTS, POSES, type ArmAngles, type Pose } from './poses';
-import { BOOK_GRIPS, CANE_ARM, heldMesh, heldOn, hoodMesh, PRAM_GRIPS, SUITCASE_ARM, UMBRELLA_ARM, type Held } from './held';
+import { BOOK_GRIPS, CANE_ARM, FIST_HOLE, heldMesh, heldOn, hoodMesh, PRAM_GRIPS, SUITCASE_ARM, UMBRELLA_ARM, UMBRELLA_GRIP, type Held } from './held';
 import { buildProxy } from './proxy';
 import { QUALITY } from '@/graphics/quality';
 import type { PersonLook } from './looks';
@@ -15,7 +15,7 @@ import { Footing } from './motion/footing';
 import { Gait } from './motion/gait';
 import { blankFace, FACE_CHANNELS, GesturePlayer, type FaceKey, type GestureName } from './motion/gestures';
 import { ankleOver, orientFoot, solveArm, solveLeg, type ArmSolution } from './motion/ik';
-import { idleFidget, listenFidget, respond, respondSocial, type Context, type SocialAct } from './motion/repertoire';
+import { idleFidget, listenFidget, respond, respondSocial, type Context, type Manner, type SocialAct } from './motion/repertoire';
 import { Breath } from './motion/breath';
 import { touchPoint, TOUCH_SPOTS } from './motion/touch';
 import { smooth } from '@/math/scalar';
@@ -527,8 +527,8 @@ export class PersonModel extends THREE.Group implements Performer {
    * A conversation's moment (`respondSocial`): a loved topic lights them up, a polite "meh" is a look away, scaled
    * by `strength` (0..1) and by how expressive they are (the reserved smile where others laugh).
    */
-  socialReact(act: SocialAct, strength: number): void {
-    const response = respondSocial(act, strength, this.context(), this.random);
+  socialReact(act: SocialAct, strength: number, manner?: Manner): void {
+    const response = respondSocial(act, strength, this.context(), this.random, manner);
     if (response.gesture) this.gesture(response.gesture);
     this.feel(response.face, response.seconds, response.fade);
     if (response.nod) this.nod();
@@ -954,6 +954,7 @@ export class PersonModel extends THREE.Group implements Performer {
       this.beatHands(upperDt, f);
       // Arms, hands, collarbones.
       for (const [i, arm] of this.rig.arms.entries()) this.moveArm(i, arm, upperDt, t, f.w, f.moving, f.standing, f.talk, f.tempo);
+      if (this.held === 'umbrella') this.umbrellaToHand();
       this.moveHead(upperDt, t, f.walking, f.seated, f.reaching, f.talk, g.head, g.ownGaze);
       if (full) {
         this.showFace(upperDt, t, f, g);
@@ -961,6 +962,16 @@ export class PersonModel extends THREE.Group implements Performer {
       }
     }
     if (full) this.rig.hairFollow?.update(this.rig.head, this.rig.skull);
+  }
+
+  /** The umbrella, upright on the torso, slid so its shaft runs through the right fist wherever this build's arm puts it. */
+  private umbrellaToHand(): void {
+    const mesh = this.heldMeshes.get('umbrella');
+    if (!mesh) return;
+    const wrist = this.rig.arms[1].wrist;
+    wrist.updateWorldMatrix(true, false);
+    const fist = this.rig.torso.worldToLocal(wrist.localToWorld(this.scratch.copy(FIST_HOLE)));
+    mesh.position.copy(fist).sub(UMBRELLA_GRIP);
   }
 
   /** The arms', the neck's and the shoulders' surfaces onto their bones as they are now (`LimbSkin`, `SpineSkin.shoulders`). */
@@ -1273,8 +1284,9 @@ export class PersonModel extends THREE.Group implements Performer {
   /** One arm: its goal (a gesture's key, something held up, a point to reach, the pose), eased on its springs, then set on its bones. */
   private moveArm(i: number, arm: ArmBones, dt: number, t: number, w: number, moving: boolean, standing: boolean, talk: number, tempo: number): void {
     const side = i ? 1 : -1;
-    const g = this.gestures.frame.arms[i];
     const held = this.held;
+    // The hand on an umbrella keeps it: a gesture moves the other arm only.
+    const g = i === 1 && held === 'umbrella' ? null : this.gestures.frame.arms[i];
     // A grip holds walking or standing (a box carried, a pram's handle, a book, a hand held); a reach only standing.
     const reachPoint = this.gripOf(i) ?? (moving ? null : this.reachTargets[i]);
     const holding = i === 1 && !reachPoint && (held === 'umbrella' || held === 'cane' || held === 'suitcase' || (moving && held === 'phone'));

@@ -1,8 +1,9 @@
 import type { NoticeActions } from '@/notices';
 import { randomStartSeconds } from '@/video/randomStart';
+import { LongplayPlaces } from './longplayPlaces';
 import type { VideoProvider } from '@/video/VideoProvider';
 import type { GameBox } from '@/world/GameBox';
-import { nowPlaying, type VideoScreen } from '@/world/screen';
+import { nowPlaying, type LongplayRemote, type VideoScreen } from '@/world/screen';
 import { programFor, type ProgramRunner } from '@/onscreen';
 
 export interface ScreenParts {
@@ -19,8 +20,17 @@ export interface ScreenParts {
 export class Screens {
   /** The screen last asked to play. */
   private active: VideoScreen | null = null;
+  /** The game whose longplay is on `active` (to keep where it was left when it is switched off). */
+  private watching: string | null = null;
+  /** Where each game's longplay was left off: the next play goes on from there. */
+  private readonly places = new LongplayPlaces();
+  /** A longplay came on (its picture running): the Session shows the remote's keys. */
+  onLongplayOn: (() => void) | null = null;
 
-  constructor(private readonly parts: ScreenParts) {}
+  constructor(private readonly parts: ScreenParts) {
+    // A cart that would not boot: the set shows its snow (`ProgramRunner`), and the old trick is suggested.
+    parts.programs?.listen({ failed: (_program, game) => parts.notices.react(`${game.title} won’t boot. A blow on the contacts and another go, maybe.`) });
+  }
 
   /**
    * Finds the game's longplay and shows it on `screen`; any other screen that was on is switched
@@ -28,9 +38,11 @@ export class Screens {
    * explained in the console only.
    */
   async playOn(screen: VideoScreen, box: Pick<GameBox, 'game'>): Promise<void> {
-    if (this.active && this.active !== screen) this.active.stop();
+    if (this.active && this.active !== screen) this.stop(this.active);
+    else this.keepPlace();
     this.active = screen;
     const { game } = box;
+    this.watching = null;
     // A game that is a program (`onscreen/programs`: the emulator's homebrew carts, a canvas game) runs instead.
     const make = this.parts.programs && screen.showFeed ? programFor(game) : null;
     if (make && this.parts.programs?.run(screen, make(), game)) {
@@ -52,7 +64,10 @@ export class Screens {
         this.parts.notices.react(`No longplay found for ${game.title}.`);
         return;
       }
-      screen.play(video, randomStartSeconds(video.durationSeconds), (videoId) => this.parts.videos.reject?.(game, videoId)); // skip intro and credits
+      // Where it was left last time, else a random spot past the intro and before the credits.
+      const start = this.places.at(game.id, video.videoId, video.durationSeconds) ?? randomStartSeconds(video.durationSeconds);
+      screen.play(video, start, (videoId) => this.parts.videos.reject?.(game, videoId));
+      this.watching = game.id;
       // The console of the game lights up while its longplay is on.
       nowPlaying.setPlatform(game.platform, game.id);
       let told = false;
@@ -60,6 +75,7 @@ export class Screens {
         if (told) return;
         told = true;
         this.parts.onScreenPlaying?.();
+        this.onLongplayOn?.();
       };
       if ((screen.state as string) === 'playing') tell(); // `play` may be on at once (narrowed to 'searching' above)
       const off = screen.onStateChange((state) => {
@@ -76,8 +92,22 @@ export class Screens {
   }
 
   stop(screen: VideoScreen): void {
+    if (this.active === screen) this.keepPlace();
     screen.stop();
     if (this.active === screen) this.active = null;
+  }
+
+  /** The remote of the longplay on, or null (nothing on, a program, still searching). */
+  get remote(): LongplayRemote | null {
+    const remote = this.active?.remote;
+    return remote?.active ? remote : null;
+  }
+
+  /** The longplay on is going off: where it got to is kept for the next play of its game. */
+  private keepPlace(): void {
+    const place = this.active?.remote?.place;
+    if (place && this.watching) this.places.keep(this.watching, place.videoId, place.seconds);
+    this.watching = null;
   }
 
   /** Switches off whatever plays (the player is leaving the flat: every screen is in it). */

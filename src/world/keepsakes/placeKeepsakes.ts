@@ -33,7 +33,8 @@ export function placeKeepsakes(zone: Zone, ctx: Pick<BuildContext, 'keepsakes' |
   };
 
   const put = (id: KeepsakeId): void => {
-    if (placed.has(id)) return;
+    // His key ring goes on the flat's keys in the hall's bowl (`hallway/HouseKeys.setFelixRing`), not on the shelf.
+    if (placed.has(id) || id === 'keyRing') return;
     placed.add(id);
     const line = keepsakeLine(id);
     if (id === 'cushion') {

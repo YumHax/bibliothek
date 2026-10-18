@@ -7,6 +7,13 @@ import { invisibleHitbox } from '../meshUtils';
 import { HoverGlint } from '../props/hoverGlint';
 import { ShutDoor } from '../props/ShutDoor';
 import type { AtticDoorPlan } from './atticPlan';
+import { nudge, tier } from '@/social/standing';
+import { atLeast } from '@/social/tiers';
+
+/** Théo, the student behind No 6 (`social/people/building`). */
+const STUDENT = 'student';
+/** A listen to his mix through the door, once a game day. */
+const LISTEN_WARMTH = 2;
 
 /** The maids' rooms' doors: narrow, brown, their numbers in white enamel. */
 const LEAF = { width: 0.72, height: 1.95, color: 0x5a4632 };
@@ -41,8 +48,15 @@ export class AtticDoor extends ShutDoor implements Interactable {
 
   activate(session: SessionActions): void {
     playKnock(3, 0.3);
-    session.react(this.plan.knock[this.knocks++ % this.plan.knock.length]!);
+    // Théo next door a friend: he answers for the rooms either side of his, and opens his own for a listen.
+    const friendly = this.plan.friendKnock && atLeast(tier(STUDENT), 'friend');
+    const lines = friendly ? this.plan.friendKnock! : this.plan.knock;
+    session.react(lines[this.knocks++ % lines.length]!);
+    if (friendly && this.plan.music) nudge(STUDENT, { warmth: LISTEN_WARMTH, day: this.day(), why: 'you listened to my mix', reason: 'listen' });
   }
+
+  /** The game day, for a listen counted once a day (set by the builder). */
+  day: () => number = () => 0;
 }
 
 /** The room's number on a white enamel oval, high on the leaf. */

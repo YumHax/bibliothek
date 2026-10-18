@@ -59,7 +59,7 @@ export class PointerLockFlow {
     canvas: HTMLElement,
     input?: Input,
     /** Where a refused lock is announced, and the controller mode's keys shown. */
-    private readonly notices?: { alert(text: string, ms?: number): void; tip(text: string, options?: { id?: string; ms?: number }): unknown },
+    private readonly notices?: { alert(text: string, ms?: number): void; tip(text: string, options?: { id?: string; head?: string; ms?: number }): unknown },
   ) {
     player.controls.addEventListener('lock', () => {
       const mode: RoomMode = player.hasPointerLock ? 'pointer' : (this.pendingVirtual ?? 'gamepad');
@@ -194,7 +194,7 @@ export class PointerLockFlow {
     this.player.enterVirtual();
     if (mode === 'gamepad' && !this.controllerTipShown) {
       this.controllerTipShown = true;
-      this.notices?.tip('Controller mode: [Start] opens the menu.', { id: 'controller-mode', ms: 6000 });
+      this.notices?.tip('[Start] opens the menu.', { id: 'controller-mode', head: 'Controller', ms: 6000 });
     }
   }
 

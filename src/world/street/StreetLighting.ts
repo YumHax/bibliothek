@@ -27,6 +27,8 @@ interface StreetLightingOptions {
    * one (`SunCascadeShadow`: railings, window bars and bench slats sharp underfoot, no second shadow map); none if unset.
    */
   nearReach?: number;
+  /** The sky's ambient at night (default `SKY_NIGHT`): more in a yard closed in by lit facades and no lamp posts (the courtyard). */
+  nightAmbient?: number;
 }
 
 /** The light's distance from the patch of street it shadows, and its shadow camera's depth. */
@@ -104,6 +106,7 @@ export class StreetLighting extends THREE.Group implements Furniture, Updatable,
   /** Where the near square of the sun's shadow is centred (world), when there is one. */
   private readonly nearCentre = new THREE.Vector3();
   private readonly nearReach: number;
+  private readonly nightAmbient: number;
 
   constructor(
     private readonly dayNight: DayNight,
@@ -116,6 +119,7 @@ export class StreetLighting extends THREE.Group implements Furniture, Updatable,
     this.reach = options.shadowReach ?? 28;
     this.groundY = options.groundY ?? 0;
     this.nearReach = options.nearReach ?? 0;
+    this.nightAmbient = options.nightAmbient ?? SKY_NIGHT;
     this.sun = new THREE.DirectionalLight(0xffffff, 0);
     if (this.nearReach > 0) this.sun.shadow = new SunCascadeShadow({ farReach: this.reach, nearReach: this.nearReach, nearCentre: this.nearCentre }, this.far.sunCascade.value);
     this.sun.castShadow = true;
@@ -210,7 +214,7 @@ export class StreetLighting extends THREE.Group implements Furniture, Updatable,
     if (this.occupied) {
       this.sky.color.copy(s.ambient).lerp(s.zenith, 0.25 + 0.3 * golden).lerp(COOL_SHADE, 0.25 * golden);
       this.sky.groundColor.copy(GROUND_BOUNCE).lerp(SNOW_BOUNCE, 0.85 * s.snowCover).lerp(GLOW, 0.2 * (1 - s.daylight));
-      const steady = SKY_NIGHT + SKY_DAY * s.daylight;
+      const steady = this.nightAmbient + SKY_DAY * s.daylight;
       const flash = 1.4 * s.lightning;
       this.skyLevel += (steady - this.skyLevel) * ease;
       this.sky.intensity = this.skyLevel + flash;

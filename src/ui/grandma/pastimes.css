@@ -2,66 +2,273 @@
 @layer tokens, base, components, panels;
 @layer panels {
   .meme-pastime {
+    /* Her parlour: the rose wallpaper the card is papered with, its stripe, the cream of its lettering. */
+    --mp-wall: #4a2f35;
+    --mp-wall-deep: #3a242a;
+    --mp-wall-stripe: rgb(255 228 214 / 0.05);
+    --mp-wall-ink: #f6e9dc;
+    --mp-wall-dim: #cdb8aa;
+    --mp-frame: #c9a46a;
     --mp-felt: #2f5a3c;
+    --mp-felt-deep: #234530;
     --mp-card: #f6f1e4;
     --mp-red: #b3262e;
     --mp-black: #1d1a17;
     --mp-back: #7a2a2e;
+    --mp-glow: rgb(255 214 112 / 0.85);
     --mp-yarn: #c0503a;
-    --mp-yarn-taut: #e8301e;
+    --mp-yarn-b: #a8412e;
+    --mp-yarn-taut: #8e1f12;
     --mp-skin: #e2b48e;
+    --mp-skin-shade: #c9946c;
+    --mp-skin-old: #e6c3a6;
+    --mp-jumper: #3d5a80;
+    --mp-jumper-rib: #2f4866;
+    --mp-cardigan: #6b3f6b;
+    --mp-steel: #b9bec6;
+    --mp-steel-knob: #8a5a2e;
+    --mp-chair: #7a4a52;
+    --mp-lap: #3f3550;
+    --mp-table: #6e4a2c;
+    --mp-paper: #e9d6bf;
+    --mp-paper-flower: rgb(170 70 90 / 0.35);
+    --mp-envelope: #eadcb8;
+    --mp-envelope-edge: #c8b58a;
+    --mp-pencil: #55524d;
+    --mp-tray: #7a5232;
+    --mp-tray-deep: #5a3a22;
+    --mp-tile: #f3e6c8;
+    --mp-tile-edge: #c9b48a;
+    --mp-coffee: rgb(120 72 30 / 0.28);
+    --mp-here: rgb(255 214 112 / 0.45);
     --mp-show: #1a2a8a;
     --mp-show-light: #ffe070;
+    /* Her set for the quiz: the walnut case, the screen's blues, its lettering, the lozenges. */
+    --mp-case: #6a4428;
+    --mp-case-dark: #4a2e1a;
+    --mp-case-edge: rgb(0 0 0 / 0.35);
+    --mp-show-mid: #3a4ad0;
+    --mp-show-deep: #0c1450;
+    --mp-show-ink: #f4f4ff;
+    --mp-show-glow: rgb(255 224 112 / 0.6);
+    --mp-show-vignette: rgb(0 0 0 / 0.6);
+    --mp-show-scan: rgb(255 255 255 / 0.04);
+    --mp-show-answer: rgb(10 16 70 / 0.65);
+    --mp-show-answer-hot: rgb(40 56 170 / 0.85);
+    --mp-show-right: #2e7a3c;
+    --mp-show-wrong: #8a2a2a;
+    --mp-show-sweep: rgb(255 255 255 / 0.45);
+    --mp-amber: #ffb648;
+    --mp-amber-glow: rgb(255 170 60 / 0.55);
+    --mp-podium: #26348f;
+    --mp-gold: #f2c14e;
+    /* The rubber's work on a wrong word: `CrosswordPanel`'s RUB_MS waits exactly this long. */
+    --mp-rub: 520ms;
   }
-  .meme-pastime .ui-panel__card { width: min(var(--card-w-md), 100%); }
-  /* Her words: a fixed height, so a longer line never pushes the buttons. */
-  .meme-pastime__her { min-height: 3.2em; margin: var(--sp-3) 0 0; font-family: var(--ui-font-hand); font-size: var(--fs-6); line-height: 1.35; color: var(--ui-text); }
+  .meme-pastime .ui-panel__card {
+    width: min(var(--card-w-md), 100%);
+    color: var(--mp-wall-ink);
+    background: repeating-linear-gradient(90deg, transparent 0 22px, var(--mp-wall-stripe) 22px 26px), linear-gradient(180deg, var(--mp-wall), var(--mp-wall-deep));
+    box-shadow: inset 0 0 0 1px var(--mp-frame), 0 18px 50px var(--shade-55);
+    --ui-text-dim: var(--mp-wall-dim);
+  }
+  .meme-pastime .ui-panel__header h2 { font-family: var(--ui-font-serif); font-weight: 400; letter-spacing: 0.02em; }
 
-  /* The quiz: the show's colours behind the question. */
-  .meme-quiz .ui-panel__body { background: linear-gradient(var(--mp-show), var(--ui-panel)); border-radius: var(--ui-radius-sm); padding: var(--sp-3); }
+  /* Mémé at the top: her face in a gilt frame, her words in a comic balloon whose tail points at her. */
+  .meme-says { display: flex; align-items: center; gap: var(--sp-3); margin: 0 0 var(--sp-3); }
+  .meme-says__face { flex: none; width: 70px; height: 70px; padding: 3px; border-radius: 50%; background: var(--mp-frame); box-shadow: 0 2px 6px var(--shade-45); }
+  .meme-says__face canvas { display: block; width: 64px; height: 64px; border-radius: 50%; }
+  .meme-says__balloon {
+    position: relative; flex: 1; min-width: 0; min-height: 4.6em; margin: 0; padding: var(--sp-2) var(--sp-3);
+    display: flex; flex-direction: column; justify-content: center;
+    border: 2px solid var(--ink-speech); border-radius: 1.2rem; background: var(--paper-speech); color: var(--ink-speech);
+    box-shadow: 3px 4px 0 var(--shade-45); font-family: var(--ui-font-comic); font-size: var(--fs-5); line-height: 1.25; text-wrap: pretty;
+  }
+  .meme-says__balloon::before { content: ''; position: absolute; left: -12px; top: 50%; translate: 0 -50%; border: 7px solid transparent; border-right: 10px solid var(--ink-speech); }
+  .meme-says__balloon::after { content: ''; position: absolute; left: -7px; top: 50%; translate: 0 -50%; border: 5px solid transparent; border-right: 7px solid var(--paper-speech); }
+  .meme-says__name { font-size: var(--fs-2); letter-spacing: 0.08em; text-transform: uppercase; opacity: 0.6; }
+  /* A thought's cloud: dashed and rounder, two little puffs for a tail, the words in italics. */
+  .meme-says__balloon--thinking { border-style: dashed; border-radius: 2rem; font-style: italic; }
+  .meme-says__balloon--thinking::before { left: -14px; border: 0; width: 9px; height: 9px; border-radius: 50%; background: var(--paper-speech); box-shadow: 0 0 0 2px var(--ink-speech); }
+  .meme-says__balloon--thinking::after { left: -24px; top: 62%; border: 0; width: 5px; height: 5px; border-radius: 50%; background: var(--paper-speech); box-shadow: 0 0 0 2px var(--ink-speech); }
+
+  /* --- the quiz: her old set, the walnut case round a curved blue screen, the scores on its foot --- */
+  .meme-quiz__set { padding: var(--sp-3) var(--sp-3) var(--sp-2); border-radius: var(--ui-radius-md); background: linear-gradient(160deg, var(--mp-case), var(--mp-case-dark)); box-shadow: inset 0 0 0 2px var(--mp-case-edge), 0 6px 16px var(--shade-45); }
+  .meme-quiz__screen { position: relative; overflow: hidden; min-height: 15.5em; padding: var(--sp-3); border-radius: 1.2em / 1em; background: radial-gradient(ellipse at 50% 40%, var(--mp-show-mid), var(--mp-show) 70%, var(--mp-show-deep)); color: var(--mp-show-ink); box-shadow: inset 0 0 1.4em var(--mp-show-vignette), 0 0 0 0.35em var(--mp-black); }
+  .meme-quiz__screen::after { content: ''; position: absolute; inset: 0; pointer-events: none; background: repeating-linear-gradient(to bottom, var(--mp-show-scan) 0 1px, transparent 1px 3px); }
+  .meme-quiz__show { margin: 0 0 var(--sp-1); text-align: center; color: var(--mp-show-light); font-family: var(--ui-font-display); font-size: var(--fs-6); letter-spacing: 0.12em; text-transform: uppercase; text-shadow: 0 0 0.6em var(--mp-show-glow); }
   .meme-quiz__count { margin: 0; color: var(--mp-show-light); font-size: var(--fs-4); letter-spacing: 0.08em; text-transform: uppercase; }
   .meme-quiz__question { margin: var(--sp-2) 0 var(--sp-3); font-size: var(--fs-7); font-weight: 600; min-height: 2.6em; }
   .meme-quiz__answers { display: grid; grid-template-columns: 1fr 1fr; gap: var(--sp-2); }
-  .meme-quiz__answer { position: relative; min-height: 2.8em; text-align: left; }
-  .meme-quiz__answer--right { border-color: var(--ui-success); background: var(--ui-success-soft); }
-  .meme-quiz__answer--wrong { border-color: var(--ui-danger); background: var(--ui-danger-soft); }
+  .meme-quiz__answers .meme-quiz__answer {
+    position: relative; overflow: visible; display: flex; align-items: center; min-height: 2.8em; text-align: left;
+    border-radius: var(--ui-radius-pill); background: var(--mp-show-answer); color: var(--mp-show-ink); border-color: var(--mp-show-light);
+    transition: background var(--dur-hover) var(--ui-ease), box-shadow var(--dur-hover) var(--ui-ease), opacity var(--dur-quick) var(--ui-ease);
+  }
+  .meme-quiz__answers .meme-quiz__answer:not(:disabled):hover,
+  .meme-quiz__answers .meme-quiz__answer:not(:disabled):focus-visible { background: var(--mp-show-answer-hot); box-shadow: 0 0 0 2px var(--mp-show-light), 0 0 1em var(--mp-show-glow); }
+  .meme-quiz__key { display: inline-grid; place-items: center; min-width: 1.6em; margin-right: var(--sp-2); color: var(--mp-show-light); font-weight: 700; }
+  .meme-quiz__key kbd { min-width: 1.4em; color: var(--mp-black); background: var(--mp-show-light); border-color: var(--mp-show-light); }
+  .meme-quiz__answers .meme-quiz__answer--right { border-color: var(--ui-success); background: var(--mp-show-right); overflow: hidden; }
+  .meme-quiz__answers .meme-quiz__answer--right::after { content: ''; position: absolute; inset: 0; background: linear-gradient(100deg, transparent 30%, var(--mp-show-sweep) 50%, transparent 70%); translate: -100% 0; animation: meme-quiz-sweep var(--dur-slow) var(--ui-ease) 1 forwards; pointer-events: none; }
+  .meme-quiz__answers .meme-quiz__answer--wrong { border-color: var(--ui-danger); background: var(--mp-show-wrong); }
+  .meme-quiz__answers .meme-quiz__answer--out { opacity: 0.55; }
   .meme-quiz__answer:disabled { opacity: 1; }
-  .meme-quiz__hers { position: absolute; top: calc(-1 * var(--sp-2)); right: var(--sp-2); padding: 0 var(--sp-1); border-radius: var(--ui-radius-pill); background: var(--mp-show-light); color: var(--mp-black); font-size: var(--fs-2); }
+  .meme-quiz__hers { position: absolute; top: calc(-1 * var(--sp-2)); right: var(--sp-2); padding: 0 var(--sp-2); border-radius: var(--ui-radius-pill); background: var(--mp-show-light); color: var(--mp-black); font-size: var(--fs-2); font-weight: 700; box-shadow: 0 2px 4px var(--shade-45); animation: meme-pop var(--dur-quick) var(--ui-ease-pop); }
+  .meme-quiz__foot { display: flex; align-items: center; justify-content: center; gap: var(--sp-3); margin-top: var(--sp-2); }
+  .meme-quiz__score { display: inline-flex; align-items: center; gap: var(--sp-2); color: var(--mp-wall-ink); font-size: var(--fs-3); letter-spacing: 0.06em; text-transform: uppercase; }
+  .meme-quiz__digits { display: inline-grid; place-items: center; min-width: 1.8em; padding: 0 var(--sp-1); border-radius: var(--ui-radius-xs); background: var(--mp-black); color: var(--mp-amber); font-family: var(--ui-font-led); font-size: var(--fs-7); line-height: 1.1; text-shadow: 0 0 0.4em var(--mp-amber-glow); }
+  .meme-quiz__knob { width: 1.1em; height: 1.1em; border-radius: 50%; background: radial-gradient(circle at 35% 30%, var(--mp-steel), var(--mp-case-dark)); box-shadow: 0 1px 2px var(--shade-45); }
+  /* The show's end: the bulbs round the screen chasing, the two podiums, the champion, the credits going by. */
+  .meme-quiz__set--end .meme-quiz__screen { animation: meme-quiz-bulbs var(--dur-pulse) steps(2) infinite; }
+  .meme-quiz__podiums { display: flex; justify-content: center; align-items: flex-end; gap: var(--sp-4); height: 7.5em; margin-top: var(--sp-2); }
+  .meme-quiz__podium { display: flex; flex-direction: column; align-items: center; justify-content: flex-start; width: 6em; height: calc(2.6em + var(--rise) * 0.9em); padding-top: var(--sp-1); border-radius: var(--ui-radius-sm) var(--ui-radius-sm) 0 0; background: linear-gradient(180deg, var(--mp-show-mid), var(--mp-podium)); box-shadow: inset 0 0 0 2px var(--mp-show-light); animation: meme-quiz-rise var(--dur-settle) var(--ui-ease-pop) both; }
+  .meme-quiz__podium-score { color: var(--mp-amber); font-family: var(--ui-font-led); font-size: var(--fs-8); line-height: 1; text-shadow: 0 0 0.4em var(--mp-amber-glow); }
+  .meme-quiz__podium-name { font-size: var(--fs-3); letter-spacing: 0.08em; text-transform: uppercase; }
+  .meme-quiz__podium--won { background: linear-gradient(180deg, var(--mp-gold), var(--mp-case)); box-shadow: inset 0 0 0 2px var(--mp-gold), 0 0 1.2em var(--mp-show-glow); }
+  .meme-quiz__podium--won .meme-quiz__podium-name::before { content: '★ '; color: var(--mp-show-light); }
+  .meme-quiz__champion { margin: var(--sp-2) 0 0; text-align: center; color: var(--mp-show-light); font-family: var(--ui-font-display); font-size: var(--fs-5); letter-spacing: 0.06em; text-transform: uppercase; }
+  .meme-quiz__credits { margin: var(--sp-2) 0 0; overflow: hidden; white-space: nowrap; font-size: var(--fs-2); letter-spacing: 0.1em; text-transform: uppercase; opacity: 0.75; animation: meme-quiz-credits var(--dur-spin) linear infinite; }
+  @keyframes meme-quiz-sweep { to { translate: 100% 0; } }
+  @keyframes meme-quiz-bulbs {
+    0% { box-shadow: inset 0 0 1.4em var(--mp-show-vignette), 0 0 0 0.35em var(--mp-black), 0 0 0 0.5em var(--mp-show-light); }
+    100% { box-shadow: inset 0 0 1.4em var(--mp-show-vignette), 0 0 0 0.35em var(--mp-black), 0 0 0 0.5em var(--mp-amber); }
+  }
+  @keyframes meme-quiz-rise { from { transform: scaleY(0.2); transform-origin: bottom; } to { transform: scaleY(1); transform-origin: bottom; } }
+  @keyframes meme-quiz-credits { from { text-indent: 100%; } to { text-indent: -100%; } }
+  @keyframes meme-pop { from { transform: scale(0.6); opacity: 0; } to { transform: scale(1); opacity: 1; } }
 
-  /* The crossword: the word's squares on the paper. */
-  .meme-crossword__clue { margin: 0 0 var(--sp-3); font-family: var(--ui-font-serif); font-size: var(--fs-6); }
-  .meme-crossword__squares { display: flex; flex-wrap: wrap; gap: 0; justify-content: center; }
-  .meme-crossword__square { display: grid; place-items: center; width: 2.2em; height: 2.2em; border: 2px solid var(--ink-black); margin-left: -2px; background: var(--paper-news); color: var(--ui-info-text); font-family: var(--ui-font-hand); font-size: var(--fs-7); }
-  .meme-crossword__square--given { color: var(--ink-black); }
-  .meme-crossword__squares--inked .meme-crossword__square { color: var(--ink-black); }
-  .meme-crossword__letters { display: flex; flex-wrap: wrap; gap: var(--sp-1); justify-content: center; margin-top: var(--sp-3); }
-  .meme-crossword__letter { min-width: 2em; padding: var(--sp-1); }
-  .meme-crossword__rub { min-width: auto; }
+  /* --- the crossword: the evening paper folded open, its patch of grid, the letter tray --- */
+  .meme-crossword__paper { position: relative; padding: var(--sp-3) var(--sp-4) var(--sp-2); border-radius: var(--ui-radius-2xs); background: var(--paper-news); color: var(--ink-news); box-shadow: 0 8px 20px var(--shade-45), inset 0 0 2.5em var(--shade-10); rotate: -0.6deg; }
+  .meme-crossword__masthead { display: flex; justify-content: space-between; margin: 0 0 var(--sp-2); padding-bottom: var(--sp-1); border-bottom: 3px double var(--ink-news); font-family: var(--ui-font-print); font-size: var(--fs-3); letter-spacing: 0.12em; text-transform: uppercase; }
+  .meme-crossword__ring { position: absolute; right: 1.2em; top: 2.2em; width: 4.4em; height: 4.4em; border-radius: 50%; background: radial-gradient(circle, transparent 58%, var(--mp-coffee) 62%, transparent 68%); pointer-events: none; }
+  .meme-crossword__clue { position: relative; margin: 0 0 var(--sp-3); font-family: var(--ui-font-serif); font-size: var(--fs-6); }
+  .meme-crossword__count { white-space: nowrap; }
+  .meme-crossword__grid { display: grid; grid-template-columns: repeat(var(--cols), 2.3em); justify-content: center; padding: var(--sp-2); }
+  .meme-crossword__square { position: relative; display: grid; place-items: center; width: 2.3em; height: 2.3em; margin: -1px 0 0 -1px; padding: 0; border: 2px solid var(--ink-black); background: var(--paper-news); color: var(--ink-black); font: inherit; }
+  .meme-crossword__glyph { font-family: var(--ui-font-hand); font-size: var(--fs-7); line-height: 1; }
+  .meme-crossword__num { position: absolute; top: 1px; left: 2px; font-family: var(--ui-font-print); font-size: var(--fs-0); line-height: 1; }
+  button.meme-crossword__square { cursor: pointer; }
+  button.meme-crossword__square:hover, button.meme-crossword__square:focus-visible { background: var(--mp-here); outline: none; }
+  .meme-crossword__square--pencil .meme-crossword__glyph { color: var(--mp-pencil); animation: meme-pop var(--dur-tap) var(--ui-ease-pop); }
+  .meme-crossword__square--down .meme-crossword__glyph { font-size: var(--fs-6); opacity: 0.85; }
+  .meme-crossword__square--black { background: var(--ink-black); }
+  /* The mark: the square the next letter goes into, tinted, a pencil stroke blinking under it. */
+  .meme-crossword__square--here { background: var(--mp-here); }
+  .meme-crossword__square--here::after { content: ''; position: absolute; left: 22%; right: 22%; bottom: 18%; height: 2px; border-radius: 1px; background: var(--mp-pencil); animation: meme-blink var(--dur-pulse) steps(2) infinite; }
+  /* Found: the pen goes over each letter in turn. */
+  .meme-crossword__grid--inked .meme-crossword__square--across .meme-crossword__glyph { color: var(--ink-letter); animation: meme-ink var(--dur-quick) var(--ui-ease) both; animation-delay: calc(var(--i) * var(--dur-tap)); }
+  /* Wrong: the rubber smudges the pencilled letters away. */
+  .meme-crossword__grid--rubbing .meme-crossword__square--pencil .meme-crossword__glyph { animation: meme-rub var(--mp-rub) ease-in forwards; }
+  .meme-crossword__hint { min-height: 1.6em; margin: var(--sp-1) 0 0; text-align: center; font-family: var(--ui-font-serif); font-size: var(--fs-3); font-style: italic; opacity: 0.75; }
+  .meme-crossword__hint kbd { font-style: normal; }
+  .meme-crossword__tray { display: grid; grid-template-columns: repeat(9, 1fr); gap: var(--sp-1); margin-top: var(--sp-3); padding: var(--sp-2); border-radius: var(--ui-radius-sm); background: linear-gradient(180deg, var(--mp-tray), var(--mp-tray-deep)); box-shadow: inset 0 2px 4px var(--shade-45); }
+  .meme-crossword__tile { display: grid; place-items: center; min-height: 2.1em; padding: 0; border: 1px solid var(--mp-tile-edge); border-radius: var(--ui-radius-xs); background: var(--mp-tile); color: var(--ink-news); font-family: var(--ui-font-serif); font-size: var(--fs-5); font-weight: 600; box-shadow: 0 2px 0 var(--mp-tile-edge); cursor: pointer; transition: transform var(--dur-hover) var(--ui-ease), box-shadow var(--dur-hover) var(--ui-ease); }
+  .meme-crossword__tile:hover, .meme-crossword__tile:focus-visible { transform: translateY(-2px); box-shadow: 0 4px 0 var(--mp-tile-edge), 0 0 0 2px var(--mp-gold); outline: none; }
+  .meme-crossword__tile:active { transform: translateY(1px); box-shadow: 0 1px 0 var(--mp-tile-edge); }
+  .meme-crossword__tile[aria-disabled='true'] { opacity: 0.6; cursor: default; }
+  .meme-crossword__tile--rub { font-family: var(--ui-font-body); font-size: var(--fs-1); font-weight: 400; line-height: 1.05; gap: 1px; }
+  .meme-crossword__rubber { width: 1.4em; height: 0.6em; border-radius: 2px; background: linear-gradient(90deg, var(--mp-red) 0 45%, var(--mp-card) 45%); }
+  @keyframes meme-blink { 50% { opacity: 0; } }
+  @keyframes meme-ink { from { color: var(--mp-pencil); transform: scale(1.15); } to { transform: scale(1); } }
+  @keyframes meme-rub { 40% { filter: blur(1px); opacity: 0.6; } to { filter: blur(3px); opacity: 0; } }
 
-  /* The cards: her hand, the pile, the player's hand on the felt. */
-  .meme-cards__table { display: flex; flex-direction: column; gap: var(--sp-3); padding: var(--sp-3); border-radius: var(--ui-radius-md); background: var(--mp-felt); }
-  .meme-cards__hand { display: flex; flex-wrap: wrap; justify-content: center; gap: var(--sp-1); min-height: 4.6em; }
-  .meme-cards__middle { display: flex; align-items: center; justify-content: center; gap: var(--sp-3); }
-  .meme-cards__card { position: relative; display: inline-grid; place-items: center; width: 3.2em; height: 4.6em; padding: 0; border: 1px solid var(--ui-border-strong); border-radius: var(--ui-radius-xs); background: var(--mp-card); color: var(--mp-black); font: inherit; box-shadow: var(--ui-shadow); }
-  button.meme-cards__card { cursor: pointer; transition: transform var(--dur-hover) var(--ui-ease); }
-  button.meme-cards__card:not(:disabled):hover, .meme-cards__card--lifted { transform: translateY(-0.4em); }
+  /* --- the cards: her hand, the pile, the player's hand fanned on the felt; the envelope's tally under it --- */
+  .meme-cards__table { display: grid; grid-template-rows: 4.8em 5em 5.8em; gap: var(--sp-2); padding: var(--sp-3); border-radius: var(--ui-radius-md); background: radial-gradient(ellipse at 50% 40%, var(--mp-felt), var(--mp-felt-deep)); box-shadow: inset 0 0 0 3px var(--mp-table), inset 0 0 2em var(--shade-45); }
+  .meme-cards__hand { display: flex; flex-wrap: nowrap; justify-content: center; align-items: flex-start; --overlap: clamp(0em, calc((var(--n) - 6) * 0.42em), 2.3em); }
+  .meme-cards__hand--yours { align-items: flex-end; transition: opacity var(--dur-quick) var(--ui-ease), filter var(--dur-quick) var(--ui-ease); }
+  .meme-cards__hand > .meme-cards__card + .meme-cards__card { margin-left: calc(var(--sp-1) - var(--overlap)); }
+  .meme-cards__hand--waiting { opacity: 0.72; filter: saturate(0.7); }
+  .meme-cards__middle { display: grid; grid-template-columns: 3.2em 3.2em 8em; align-items: center; justify-content: center; gap: var(--sp-3); }
+  .meme-cards__card { position: relative; display: inline-grid; place-items: center; flex: none; width: 3.2em; height: 4.6em; padding: 0; border: 1px solid var(--ui-border-strong); border-radius: var(--ui-radius-xs); background: var(--mp-card); color: var(--mp-black); font: inherit; box-shadow: var(--ui-shadow); }
+  button.meme-cards__card { cursor: pointer; transition: transform var(--dur-hover) var(--ui-ease), box-shadow var(--dur-hover) var(--ui-ease); }
+  button.meme-cards__card:disabled { cursor: default; }
+  /* On the player's turn the cards that would go stand proud; an eight glows; the one pointed at rises more. */
+  .meme-cards__card--goes { transform: translateY(-0.35em); box-shadow: var(--ui-shadow), 0 0 0 2px var(--mp-glow); }
+  .meme-cards__card--eight { box-shadow: var(--ui-shadow), 0 0 0 2px var(--mp-glow), 0 0 1em var(--mp-glow); }
+  button.meme-cards__card:not(:disabled):hover, button.meme-cards__card:not(:disabled):focus-visible, .meme-cards__card--lifted { z-index: var(--z-above); transform: translateY(-0.8em); outline: none; }
   .meme-cards__card--hearts, .meme-cards__card--diamonds { color: var(--mp-red); }
-  .meme-cards__card--back { background: repeating-linear-gradient(45deg, var(--mp-back) 0 4px, var(--mp-card) 4px 6px); }
-  .meme-cards__card--stock { background: repeating-linear-gradient(45deg, var(--mp-back) 0 4px, var(--mp-card) 4px 6px); color: var(--mp-card); font-size: var(--fs-2); }
+  .meme-cards__card--back, .meme-cards__card--stock { background: repeating-linear-gradient(45deg, var(--mp-back) 0 4px, var(--mp-card) 4px 6px); }
+  .meme-cards__card--stock { box-shadow: var(--ui-shadow), 2px 2px 0 var(--mp-card), 3px 3px 0 var(--mp-back); }
+  /* Her turn: one of her cards drawn a little out of her hand as she weighs it. */
+  .meme-cards__card--weighing { z-index: var(--z-above); transform: translateY(0.6em) rotate(-5deg); transition: transform var(--dur-quick) var(--ui-ease); }
+  /* The stock used up: its place chalked on the felt. */
+  .meme-cards__card--gone { background: transparent; border: 2px dashed var(--tint-35); box-shadow: none; }
   .meme-cards__rank { position: absolute; top: 0.2em; left: 0.3em; font-size: var(--fs-3); font-weight: 700; }
   .meme-cards__pip { font-size: var(--fs-8); }
-  .meme-cards__asked { color: var(--mp-card); font-family: var(--ui-font-hand); font-size: var(--fs-5); }
-  .meme-cards__suits { display: flex; flex-wrap: wrap; gap: var(--sp-2); justify-content: center; margin-top: var(--sp-2); }
-  .meme-cards__suit--hearts, .meme-cards__suit--diamonds { color: var(--mp-red); }
-  .meme-cards__tally { margin: var(--sp-1) 0 0; color: var(--ui-text-dim); font-family: var(--ui-font-hand); font-size: var(--fs-4); }
+  .meme-cards__cap { position: absolute; right: 0.15em; bottom: 0.15em; min-width: 1.2em; padding: 0 0.15em; font-size: var(--fs-0); }
+  .meme-cards__asked-slot { display: flex; align-items: center; min-height: 3em; }
+  .meme-cards__asked { padding: var(--sp-1) var(--sp-2); border: 1px dashed var(--tint-35); border-radius: var(--ui-radius-sm); color: var(--mp-card); font-family: var(--ui-font-hand); font-size: var(--fs-5); animation: meme-pop var(--dur-quick) var(--ui-ease-pop); }
+  .meme-cards__asked-suit { display: inline-grid; place-items: center; width: 1.4em; height: 1.4em; border-radius: 50%; background: var(--mp-card); color: var(--mp-black); font-family: var(--ui-font-body); }
+  .meme-cards__asked-suit.meme-cards__suit--hearts, .meme-cards__asked-suit.meme-cards__suit--diamonds { color: var(--mp-red); }
+  .meme-cards__under { display: flex; align-items: center; justify-content: center; min-height: 3.6em; margin-top: var(--sp-2); }
+  .meme-cards__suits { display: flex; flex-wrap: wrap; gap: var(--sp-2); justify-content: center; }
+  .meme-cards__suit b { font-size: var(--fs-6); }
+  .meme-cards__suits .meme-cards__suit--hearts b, .meme-cards__suits .meme-cards__suit--diamonds b { color: var(--mp-red); }
+  /* The back of her envelope: kraft paper, the two names, the strokes in pencil. */
+  .meme-cards__envelope { position: relative; display: grid; grid-template-columns: auto 1fr auto 1fr; align-items: center; gap: var(--sp-1) var(--sp-3); padding: var(--sp-2) var(--sp-4) var(--sp-2) var(--sp-3); border: 1px solid var(--mp-envelope-edge); border-radius: var(--ui-radius-2xs); background: var(--mp-envelope); color: var(--mp-pencil); font-family: var(--ui-font-hand); font-size: var(--fs-5); rotate: 1deg; box-shadow: 0 3px 8px var(--shade-45); }
+  .meme-cards__envelope::after { content: ''; position: absolute; top: 4px; right: 4px; width: 1.2em; height: 1.4em; border: 1px dashed var(--mp-envelope-edge); }
+  .meme-cards__envelope-name { font-weight: 700; }
+  .meme-cards__marks { display: inline-flex; flex-wrap: wrap; gap: var(--sp-2); min-width: 4em; }
+  .meme-cards__gate { position: relative; display: inline-flex; gap: 3px; height: 1.1em; }
+  .meme-cards__gate i { width: 2px; height: 100%; border-radius: 1px; background: var(--mp-pencil); }
+  .meme-cards__gate s { position: absolute; left: -3px; right: -3px; top: 50%; height: 2px; border-radius: 1px; background: var(--mp-pencil); rotate: -24deg; }
+  .meme-cards__nil { font-size: var(--fs-3); opacity: 0.7; }
 
-  /* The wool: the skein over the player's hands, the yarn to her needles, the knitting growing. */
-  .meme-wool__view { display: block; width: 100%; height: auto; }
-  .meme-wool__hand { fill: var(--mp-skin); }
-  .meme-wool__skein { fill: none; stroke: var(--mp-yarn); stroke-width: 6; }
-  .meme-wool__yarn { fill: none; stroke: var(--mp-yarn); stroke-width: 2.5; transition: stroke var(--dur-quick) var(--ui-ease); }
-  .meme-wool__yarn--taut { stroke: var(--mp-yarn-taut); stroke-width: 1.6; }
-  .meme-wool__needle { stroke: var(--ui-text-dim); stroke-width: 2.5; stroke-linecap: round; }
-  .meme-wool__knitting { height: 1.2em; margin-top: var(--sp-2); border-radius: var(--ui-radius-xs); background: var(--ui-fill); overflow: hidden; }
-  .meme-wool__rows { display: block; width: 0; height: 100%; background: repeating-linear-gradient(90deg, var(--mp-yarn) 0 6px, var(--mp-yarn-taut) 6px 7px); }
+  /* --- the wool: her parlour, the skein over the player's hands, the yarn to her needles, the piece growing --- */
+  .meme-wool__view { display: block; width: 100%; height: auto; border-radius: var(--ui-radius-sm); box-shadow: inset 0 0 0 1px var(--mp-frame), 0 6px 16px var(--shade-45); }
+  .meme-wool__paper { fill: var(--mp-paper); }
+  .meme-wool__paper-stripe { fill: var(--mp-wall-stripe); }
+  .meme-wool__paper-flower { fill: var(--mp-paper-flower); }
+  .meme-wool__chair { fill: var(--mp-chair); }
+  .meme-wool__lap { fill: var(--mp-lap); }
+  .meme-wool__table { fill: var(--mp-table); }
+  .meme-wool__sleeve { fill: var(--mp-jumper); }
+  .meme-wool__cuff-rib { fill: var(--mp-jumper-rib); }
+  .meme-wool__palm, .meme-wool__finger { fill: var(--mp-skin); stroke: var(--mp-skin-shade); stroke-width: 0.8; }
+  .meme-wool__skein path { fill: none; stroke: var(--mp-yarn); stroke-width: 3.2; stroke-linecap: round; }
+  .meme-wool__skein path:nth-child(even) { stroke: var(--mp-yarn-b); }
+  .meme-wool__yarn { fill: none; stroke: var(--mp-yarn); stroke-width: 2.4; stroke-linecap: round; transition: stroke var(--dur-quick) var(--ui-ease), stroke-width var(--dur-quick) var(--ui-ease), opacity var(--dur-tap) linear; }
+  .meme-wool__yarn--taut { stroke: var(--mp-yarn-taut); stroke-width: 1.5; }
+  .meme-wool__end { fill: none; stroke: var(--mp-yarn); stroke-width: 2; stroke-linecap: round; }
+  .meme-wool__knot { fill: var(--mp-yarn-taut); }
+  .meme-wool__needle { stroke: var(--mp-steel); stroke-width: 2.6; stroke-linecap: round; }
+  .meme-wool__needle-knob { fill: var(--mp-steel-knob); }
+  .meme-wool__her-hand { fill: var(--mp-skin-old); stroke: var(--mp-skin-shade); stroke-width: 0.8; }
+  .meme-wool__cuff { fill: var(--mp-cardigan); }
+  .meme-wool__row rect { fill: var(--mp-yarn); }
+  .meme-wool__row--b rect { fill: var(--mp-yarn-b); }
+  .meme-wool__row path { fill: none; stroke: var(--mp-yarn-taut); stroke-width: 0.7; opacity: 0.55; }
+  .meme-wool__scarf-row { fill: var(--mp-yarn); }
+  .meme-wool__scarf-row--b { fill: var(--mp-yarn-b); }
+  .meme-wool__scarf-band { fill: var(--mp-card); opacity: 0.85; }
+  .meme-wool__fringe { stroke: var(--mp-yarn); stroke-width: 2; stroke-linecap: round; }
+  .meme-wool__ball circle { fill: var(--mp-yarn-b); }
+  .meme-wool__ball path { fill: none; stroke: var(--mp-yarn); stroke-width: 1.4; }
+  .meme-wool__done { animation: meme-fade var(--dur-settle) var(--ui-ease) both; }
+  @keyframes meme-fade { from { opacity: 0; } }
+
+  .reduce-motion .meme-quiz__answer--right::after,
+  .reduce-motion .meme-quiz__set--end .meme-quiz__screen,
+  .reduce-motion .meme-quiz__podium,
+  .reduce-motion .meme-quiz__credits,
+  .reduce-motion .meme-quiz__hers,
+  .reduce-motion .meme-crossword__square--here::after,
+  .reduce-motion .meme-crossword__square--pencil .meme-crossword__glyph,
+  .reduce-motion .meme-crossword__grid--inked .meme-crossword__glyph,
+  .reduce-motion .meme-cards__asked,
+  .reduce-motion .meme-wool__done { animation: none; }
+  .reduce-motion .meme-crossword__grid--rubbing .meme-crossword__glyph { animation: none; opacity: 0; }
+
+  @media (max-width: 520px) {
+    .meme-says__face { width: 54px; height: 54px; }
+    .meme-says__face canvas { width: 48px; height: 48px; }
+    .meme-quiz__answers { grid-template-columns: 1fr; }
+    .meme-quiz__screen { min-height: 20em; }
+    .meme-crossword__grid { grid-template-columns: repeat(var(--cols), 1.9em); }
+    .meme-crossword__square { width: 1.9em; height: 1.9em; }
+    .meme-crossword__glyph { font-size: var(--fs-6); }
+    .meme-cards__card { width: 2.7em; height: 3.9em; }
+    .meme-cards__middle { grid-template-columns: 2.7em 2.7em 7em; }
+  }
 }

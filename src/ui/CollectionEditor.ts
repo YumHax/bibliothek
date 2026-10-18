@@ -3,11 +3,15 @@ import { PLATFORM_LIST, PLATFORMS, getPlatform } from '@/catalog/platforms';
 import { gameIdFor } from '@/catalog/nointro';
 import type { CollectionStore } from '@/collection/CollectionStore';
 import type { IndexMatch, LibretroIndex } from '@/collection/LibretroIndex';
+import type { StockItem } from '@/economy/StockItem';
 import { Arming } from './confirmTwice';
 import { ConfirmDialog } from './panel/ConfirmDialog';
 import { SheetPanel } from './panel/SheetPanel';
 import { attr, html, paint, type Html } from './panel/html';
-import { coverImg, emptyState, gameRow } from './panel/widgets';
+import { coverImg, emptyState } from './panel/widgets';
+import { COLLECTOR_SETS, setProgress } from '@/economy/collectorSets';
+import { loanOf } from '@/collection/loans';
+import { daysAgoWords } from '@/time/dayWords';
 import { rememberFocus } from './rememberFocus';
 import { fileStamp } from '@/text/clock';
 import { formatCount } from '@/text/count';
@@ -15,7 +19,26 @@ import { compareTitles, matchesSearch } from '@/text/strings';
 import { formatCoins } from '@/text/money';
 import './CollectionEditor.css';
 
-const STATUSES: GameStatus[] = ['owned', 'wishlist', 'lent'];
+/**
+ * What the editor's status menu offers. "Lent" is never set from here (a loan is a friend's or a neighbour's, with a
+ * day it comes back): a game already lent can only be brought home or wished for.
+ */
+const STATUSES: GameStatus[] = ['owned', 'wishlist'];
+
+/** A copy's state as a few words on its card (the condition, the printing, what sets it apart, whose it was). */
+function copyTags(g: Game): string[] {
+  const tags: string[] = [];
+  if (g.variant === 'sealed') tags.push('still sealed');
+  else tags.push(g.condition === 'worn' && !g.restored ? 'worn' : g.condition === 'noManual' || g.restored ? 'no manual' : 'complete');
+  if (g.edition === 'firstPrint') tags.push('first print');
+  if (g.edition === 'budget') tags.push('budget reprint');
+  if (g.variant === 'misprint') tags.push('misprint');
+  if (g.variant === 'crushed') tags.push('crushed box');
+  if (g.sticker) tags.push('price sticker');
+  if (g.bootleg) tags.push('unlicensed');
+  if (g.felixLot !== undefined) tags.push('Félix’s copy');
+  return tags;
+}
 
 /** How the list is ordered: by console (in groups), by title, by what was paid (dearest first), by arrival (newest first). */
 type SortBy = 'platform' | 'title' | 'paid' | 'added';
@@ -37,6 +60,15 @@ interface CollectionEditorOptions {
   coverUrl?: (game: Game) => string | undefined;
   /** "Show on shelf": the list closes and the room points at the box (`Browse`'s search). */
   onShow?: (game: Game) => void;
+  /** What a copy is worth on an average market day (coins), for its card; without it the card says nothing of worth. */
+  worth?: (game: Game) => number;
+  /** Today's game day: receipts read "three weeks ago", never a day number. */
+  today?: () => number;
+  /** Today's stalls and the copies on order: a wish's card says when a stall has it today or a copy is on its way. */
+  market?: {
+    peekToday(): readonly StockItem[] | null;
+    readonly orders?: { readonly list: readonly { game: Game; day: number }[] };
+  };
 }
 
 /**
@@ -59,12 +91,19 @@ export class CollectionEditor extends SheetPanel {
   private sort: SortBy = 'platform';
   private readonly coverUrl: CollectionEditorOptions['coverUrl'];
   private readonly onShow: CollectionEditorOptions['onShow'];
+  private readonly worth: CollectionEditorOptions['worth'];
+  private readonly today: () => number;
+  private readonly market: CollectionEditorOptions['market'];
+  /** Only the wishes on show ("Wishlist only"). */
+  private onlyWishes = false;
+  /** Wishes taken off the list while the sheet is up: their card stays in its place, faded, "Want it again" to undo. */
+  private readonly dropped = new Map<string, Game>();
 
   constructor(
     container: HTMLElement,
     private readonly store: CollectionStore,
     private readonly index: LibretroIndex,
-    { canAdd = false, coverUrl, onShow }: CollectionEditorOptions = {},
+    { canAdd = false, coverUrl, onShow, worth, today, market }: CollectionEditorOptions = {},
   ) {
     super(container, {
       title: 'Collection',
@@ -81,6 +120,9 @@ export class CollectionEditor extends SheetPanel {
     this.canAdd = canAdd;
     this.coverUrl = coverUrl;
     this.onShow = onShow;
+    this.worth = worth;
+    this.today = today ?? (() => 0);
+    this.market = market;
     this.dialog = new ConfirmDialog(container);
     this.fileInput = document.createElement('input');
     this.fileInput.type = 'file';
@@ -99,6 +141,7 @@ export class CollectionEditor extends SheetPanel {
 
   protected override onOpened(): void {
     this.removing.reset();
+    this.dropped.clear();
     super.onOpened();
   }
 
@@ -126,6 +169,8 @@ export class CollectionEditor extends SheetPanel {
       case 'sort': return this.sortBy(el.dataset.sort as SortBy);
       case 'show': return this.show(id!);
       case 'drop-wish': return this.dropWish(id!);
+      case 're-wish': return this.reWish(id!);
+      case 'only-wishes': return this.toggleOnlyWishes();
       default: return;
     }
   }
@@ -150,11 +195,26 @@ export class CollectionEditor extends SheetPanel {
     this.onShow(game);
   }
 
+  /** Off the wishlist: the card stays where it was, faded, until the sheet closes ("Want it again" undoes it). */
   private dropWish(id: string): void {
     const game = this.store.find(id);
-    if (!game) return;
+    if (!game || !this.store.isWanted(id)) return;
+    this.dropped.set(id, game);
     this.store.dropWish(id);
-    this.setStatus(`"${game.title}" is off your wishlist.`);
+    this.setStatus(`"${game.title}" is off your wishlist. Its card leaves your shelf.`);
+  }
+
+  private reWish(id: string): void {
+    const game = this.dropped.get(id);
+    if (!game) return;
+    this.dropped.delete(id);
+    this.store.want(game);
+    this.setStatus(`"${game.title}" is back on your wishlist.`, 'ok');
+  }
+
+  private toggleOnlyWishes(): void {
+    this.onlyWishes = !this.onlyWishes;
+    this.renderCollection();
   }
 
   // --- the panes --------------------------------------------------------------------------------
@@ -172,6 +232,7 @@ export class CollectionEditor extends SheetPanel {
         <div class="collection-editor__pane ui-card">
           <div class="collection-editor__list-head">
             <h3>Your games</h3>
+            <button type="button" class="ui-btn ui-btn--sm collection-editor__wish-filter" data-action="only-wishes" aria-pressed="${this.onlyWishes}"${attr('hidden', this.canAdd)}>Wishlist only</button>
             <div class="collection-editor__sort" role="radiogroup" aria-label="Order">
               <span class="collection-editor__meta">Order by</span>
               ${SORTS.map((s) => html`<button type="button" class="ui-btn ui-btn--sm" role="radio" data-action="sort" data-sort="${s.id}" aria-checked="${s.id === this.sort}">${s.label}</button>`)}
@@ -196,23 +257,41 @@ export class CollectionEditor extends SheetPanel {
   private renderCollection(): void {
     const listEl = this.listEl;
     if (!listEl) return;
-    const all = this.store.games;
-    const owned = all.filter((g) => g.status !== 'wishlist').length;
-    const wished = all.length - owned;
-    this.setTitle('Collection', `${formatCount(owned, 'game')}${wished ? `, ${wished} wished for` : ''}${this.store.isPersisted || !all.length ? '' : ' (built-in list)'}`);
+    const stored = this.store.games;
+    // A wish dropped while the sheet is up keeps its card in place (faded) until it closes.
+    const all = [...stored, ...[...this.dropped.values()].filter((g) => !this.store.has(g.id))];
+    const owned = stored.filter((g) => g.status !== 'wishlist').length;
+    const wished = stored.length - owned;
+    this.setTitle('Collection', `${formatCount(owned, 'game')}${wished ? `, ${wished} wished for` : ''}${this.store.isPersisted || !stored.length ? '' : ' (built-in list)'}`);
     for (const button of this.body.querySelectorAll<HTMLElement>('[data-action="sort"]')) button.setAttribute('aria-checked', String(button.dataset.sort === this.sort));
+    const filter = this.body.querySelector<HTMLElement>('[data-action="only-wishes"]');
+    if (filter) {
+      filter.setAttribute('aria-pressed', String(this.onlyWishes));
+      filter.hidden = this.canAdd || (!wished && !this.onlyWishes && !this.dropped.size);
+    }
 
     // The search field narrows the list (with the editor it also searches the index).
     const query = this.query;
     const platform = this.platform;
-    const games = all.filter((g) => (!platform || g.platform === platform) && (!query || matchesSearch(g.title, query)));
+    const games = all.filter((g) => (!platform || g.platform === platform) && (!query || matchesSearch(g.title, query)) && (!this.onlyWishes || g.status === 'wishlist'));
+    if (this.onlyWishes && !games.length) {
+      paint(
+        listEl,
+        emptyState(
+          query || platform ? 'None of your wishes matches that.' : 'Nothing on your wishlist. At the market, the mail-order counter takes wishes: “Want it” beside any game.',
+          'collection-editor__empty',
+        ),
+      );
+      return;
+    }
     if (all.length && !games.length) {
       paint(listEl, emptyState('None of your games matches that.', 'collection-editor__empty'));
       return;
     }
     if (this.sort !== 'platform') {
       const restoreFocus = rememberFocus(listEl);
-      paint(listEl, html`${sortGames(games, this.sort).map((g) => this.gameRow(g, true))}`);
+      const rows = sortGames(games, this.sort).map((g) => this.gameRow(g, true));
+      paint(listEl, this.canAdd ? html`${rows}` : html`<section class="collection-editor__page ui-paper">${rows}</section>`);
       restoreFocus();
       if (this.lastResults.length) this.renderResults(this.lastResults);
       return;
@@ -240,11 +319,30 @@ export class CollectionEditor extends SheetPanel {
       listEl,
       html`${PLATFORM_LIST.filter((p) => groups.has(p.id)).map((p) => {
         const list = groups.get(p.id)!.slice().sort((a, b) => compareTitles(a.title, b.title));
-        return html`<section class="collection-editor__group">
-            <h4 class="collection-editor__group-title">
-              <span class="collection-editor__swatch" style="background:${hexColor(p.accentColor)}"></span>
-              ${p.name} <span class="collection-editor__meta">${list.length}</span>
+        if (this.canAdd) {
+          return html`<section class="collection-editor__group">
+              <h4 class="collection-editor__group-title">
+                <span class="collection-editor__swatch" style="background:${hexColor(p.accentColor)}"></span>
+                ${p.name} <span class="collection-editor__meta">${list.length}</span>
+              </h4>
+              ${list.map((g) => this.gameRow(g, false))}
+            </section>`;
+        }
+        // The game proper: a page of the binder per console, its tab in the console's colour, the sets of that console it is filling.
+        const sets = COLLECTOR_SETS.filter((set) => set.pieces.every((piece) => piece.platform === p.id)).map((set) => {
+          const progress = setProgress(set, stored);
+          return { name: set.name, have: progress.filter((piece) => piece.have).length, of: progress.length };
+        });
+        const owned = list.filter((g) => g.status !== 'wishlist');
+        const wishes = list.filter((g) => this.store.isWanted(g.id)).length;
+        const worth = this.worth ? owned.reduce((sum, g) => sum + this.worth!(g), 0) : 0;
+        const count = this.onlyWishes ? `${wishes} wished for` : `${formatCount(owned.length, 'game')}${worth ? `, worth about ${formatCoins(worth)}` : ''}${wishes ? `, ${wishes} wished for` : ''}`;
+        return html`<section class="collection-editor__group collection-editor__page ui-paper" style="--tab:${hexColor(p.accentColor)}">
+            <h4 class="collection-editor__page-tab">
+              ${p.name}
+              <span class="collection-editor__page-count">${count}</span>
             </h4>
+            ${sets.length && !this.onlyWishes ? html`<ul class="collection-editor__sets">${sets.map((set) => html`<li class="${set.have === set.of ? 'is-done' : ''}">${set.name}: ${set.have === set.of ? 'complete' : `${set.have} of ${set.of}`}</li>`)}</ul>` : ''}
             ${list.map((g) => this.gameRow(g, false))}
           </section>`;
       })}`,
@@ -265,32 +363,59 @@ export class CollectionEditor extends SheetPanel {
         ${g.region ? html`<span class="collection-editor__meta">${g.region}</span>` : ''}
         <span class="collection-editor__badge collection-editor__badge--${status}">${status}</span>
         <select data-action="status" data-id="${g.id}" aria-label="Status">
-          ${STATUSES.map((s) => html`<option value="${s}"${attr('selected', s === status)}>${s}</option>`)}
+          ${(status === 'lent' ? [...STATUSES, 'lent' as const] : STATUSES).map((s) => html`<option value="${s}"${attr('selected', s === status)}>${s}</option>`)}
         </select>
         <button type="button" class="ui-btn${armed ? ' ui-btn--danger' : ''}" data-action="remove" data-id="${g.id}" aria-label="Remove ${g.title} from the collection">${armed ? 'Sure? Remove' : 'Remove'}</button>
       </div>`;
   }
 
-  /** The game proper's row: cover, title, where it stands, the receipt; "Show on shelf", "Not wanted" for a wish. */
+  /**
+   * The game proper's row, a card in the binder's pocket: the cover, the title, the copy's state in a few words, the
+   * receipt ("40 coins, the NES stall, three weeks ago"), what it is worth, who has it when it is lent; "Show on shelf",
+   * "Not wanted" for a wish (with where the market has it today), "Want it again" for one just dropped.
+   */
   private readRow(g: Game, withPlatform: boolean): Html {
     const status = g.status ?? 'owned';
+    if (status === 'wishlist') return this.wishRow(g, withPlatform);
     const paid = g.acquired;
-    const receipt = paid ? `${paid.price ? formatCoins(paid.price) : 'free'}, ${paid.where}, day ${paid.day}` : undefined;
-    return gameRow({
-      id: g.id,
-      cover: coverImg(this.coverUrl?.(g), g),
-      title: g.title,
-      metas: [
-        withPlatform && getPlatform(g.platform).shortName,
-        g.region,
-        status === 'wishlist' && html`<span class="collection-editor__badge collection-editor__badge--wishlist ui-badge">on your wishlist</span>`,
-        status === 'lent' && html`<span class="collection-editor__badge collection-editor__badge--lent ui-badge">lent out</span>`,
-        receipt,
-      ],
-      tail: html`${status !== 'lent' && this.onShow ? html`<button type="button" class="ui-btn" data-action="show" data-id="${g.id}">Show on shelf</button>` : ''}${
-        status === 'wishlist' ? html`<button type="button" class="ui-btn" data-action="drop-wish" data-id="${g.id}">Not wanted</button>` : ''
-      }`,
-    });
+    const receipt = paid ? `${paid.price ? formatCoins(paid.price) : 'Free'}, ${paid.where}, ${daysAgoWords(paid.day, this.today())}` : undefined;
+    const loan = status === 'lent' ? loanOf(g.id) : null;
+    const where = status === 'lent' ? (loan ? `with ${loan.who}, back ${loan.back}` : 'lent out') : null;
+    const worth = this.worth ? this.worth(g) : 0;
+    return html`<div class="collection-editor__card collection-editor__card--${status}" data-id="${g.id}">
+        ${coverImg(this.coverUrl?.(g), g, 'catalogue__cover collection-editor__card-cover')}
+        <span class="collection-editor__card-text">
+          <span class="collection-editor__card-title">${g.title}${withPlatform ? html` <small>${getPlatform(g.platform).shortName}</small>` : ''}${g.region ? html` <small>${g.region}</small>` : ''}</span>
+          <span class="collection-editor__card-tags">${where ? html`<span class="collection-editor__where">${where}</span>` : ''}${copyTags(g).map((tag) => html`<span class="collection-editor__tag">${tag}</span>`)}</span>
+          ${receipt ? html`<span class="collection-editor__receipt">${receipt}</span>` : ''}
+        </span>
+        ${worth ? html`<span class="collection-editor__worth">worth about <b>${formatCoins(worth)}</b></span>` : ''}
+        <span class="collection-editor__card-actions">${status !== 'lent' && this.onShow ? html`<button type="button" class="ui-btn" data-action="show" data-id="${g.id}">Show on shelf</button>` : ''}</span>
+      </div>`;
+  }
+
+  /**
+   * A wish's card, a handwritten slip in the pocket: the cover faded, "wished for", where the market has it today (a
+   * stall, the bargain bin, a copy on order) in red pen; "Show on shelf" (its card in its gap) and "Not wanted". One
+   * dropped while the sheet is up stays, struck through, with "Want it again".
+   */
+  private wishRow(g: Game, withPlatform: boolean): Html {
+    const dropped = !this.store.has(g.id);
+    const market = dropped ? undefined : wishMarketNote(g, this.market);
+    return html`<div class="collection-editor__card collection-editor__card--wishlist${dropped ? ' collection-editor__card--dropped' : ''}" data-id="${g.id}">
+        ${coverImg(this.coverUrl?.(g), g, 'catalogue__cover collection-editor__card-cover')}
+        <span class="collection-editor__card-text">
+          <span class="collection-editor__card-title">${g.title}${withPlatform ? html` <small>${getPlatform(g.platform).shortName}</small>` : ''}${g.region ? html` <small>${g.region}</small>` : ''}</span>
+          <span class="collection-editor__card-tags"><span class="collection-editor__where">${dropped ? 'off your wishlist' : 'wished for'}</span></span>
+          ${market ? html`<span class="collection-editor__receipt collection-editor__wish-news">${market}</span>` : ''}
+        </span>
+        <span></span>
+        <span class="collection-editor__card-actions">${
+          dropped
+            ? html`<button type="button" class="ui-btn" data-action="re-wish" data-id="${g.id}">Want it again</button>`
+            : html`${this.onShow ? html`<button type="button" class="ui-btn" data-action="show" data-id="${g.id}">Show on shelf</button>` : ''}<button type="button" class="ui-btn" data-action="drop-wish" data-id="${g.id}">Not wanted</button>`
+        }</span>
+      </div>`;
   }
 
   /** Two presses: the first arms the row's button, the second takes the game out (`confirmTwice`). */
@@ -411,6 +536,16 @@ function sortGames(games: readonly Game[], sort: Exclude<SortBy, 'platform'>): G
   if (sort === 'title') return list.sort(byTitle);
   if (sort === 'paid') return list.sort((a, b) => (b.acquired?.price ?? -1) - (a.acquired?.price ?? -1) || byTitle(a, b));
   return list.sort((a, b) => (b.addedAt ?? '').localeCompare(a.addedAt ?? '') || byTitle(a, b));
+}
+
+/** Where the market has a wished-for game: "On the NES stall today, 70 coins", in the bargain bin, on order; nothing otherwise. */
+function wishMarketNote(game: Game, market: CollectionEditorOptions['market']): string | undefined {
+  const item = market?.peekToday()?.find((i) => i.game.id === game.id);
+  if (item) {
+    const where = item.source === 'bin' ? 'In the bargain bin today' : `On the ${getPlatform(game.platform).shortName} stall today`;
+    return item.priced ? `${where}, ${formatCoins(item.price)}` : where;
+  }
+  return market?.orders?.list.some((o) => o.game.id === game.id) ? 'A used copy is on order at the market' : undefined;
 }
 
 function hexColor(color: number): string {

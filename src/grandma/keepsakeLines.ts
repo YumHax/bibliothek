@@ -81,7 +81,7 @@ export const KEEPSAKES: readonly KeepsakeLine[] = [
     name: 'His key ring',
     give: ['The keys are yours now. But not the ring. I kept the ring.', 'Well. Now I’m giving you the ring. Don’t lose it, it was his father’s.'],
     detail: '“A day late. And look what you did with it.”',
-    card: { look: 'note', title: 'A brass key ring', text: 'Worn smooth on one side by a thumb. A cardboard tag on it in Félix’s hand: 4th FLOOR, LEFT. MIND THE STEP.' },
+    card: { look: 'note', title: 'A brass key ring', text: 'Worn smooth on one side by a thumb. A cardboard tag on it in Félix’s hand: 5th FLOOR, LEFT. MIND THE STEP.' },
   },
   {
     id: 'stickers',

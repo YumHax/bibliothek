@@ -107,7 +107,7 @@ export class StreetRounds extends THREE.Group implements Furniture, Updatable {
     this.sweeper = make(1941, workLook(1941, 0x2f8a3a, 0xd8e84a), 'Street sweeper · say morning', () => options.talk('sweeper'), 1);
     this.cafe = shopDoors().find((d) => d.shop.name === 'PARKSIDE CAFE') ?? null;
     const remi = options.remi;
-    this.remi = remi ? make(1951, remi.look, `${remi.name} · say hello`, () => `“${pick(random, remi.lines)}”`) : null;
+    this.remi = remi ? make(1951, remi.look, `${remi.name} · say hello`, () => pick(random, remi.lines)) : null;
   }
 
   get footprint(): THREE.Box3 {

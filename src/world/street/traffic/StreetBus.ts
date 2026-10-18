@@ -220,8 +220,9 @@ export class StreetBus extends ScriptedVehicle implements Interactable {
   private board(session: SessionActions, fare: number, to: ZoneId, label: string): void {
     session.pay({
       price: fare,
+      title: 'The bus fare',
       paid: () => {
-        rideBy('bus');
+        rideBy({ by: 'bus' });
         session.travel(to);
         return `You pay the driver and take a seat, off to ${label}.`;
       },

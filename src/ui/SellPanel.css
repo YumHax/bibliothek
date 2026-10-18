@@ -1,5 +1,47 @@
-/* The WE BUY desk: the catalogue's layout (CataloguePanel.css); the sell button that asks twice is `.sell__armed` (design/components.css). */
+/*
+ * The WE BUY desk: the catalogue's layout (CataloguePanel.css) on the buyer's receipt pad: ruled paper with a torn
+ * perforation along the top, the offers in the till's figures. The sell button that asks twice is `.ui-btn--armed`.
+ */
 @layer tokens, base, components, panels;
 @layer panels {
-  .sell .catalogue__row .ui-btn { min-width: 6rem; }
+  .sell {
+    --sell-ink: #2a2318;
+    --sell-ink-soft: #5a4c36;
+    --sell-paper: #f6f1e2;
+    --sell-rule: rgb(170 60 60 / 0.2);
+  }
+  .sell .ui-panel__body {
+    position: relative;
+    padding-top: 1.1rem;
+    background:
+      radial-gradient(circle at 50% 0, transparent 0.32rem, var(--sell-paper) 0.34rem) 0 0 / 1.1rem 0.7rem repeat-x,
+      repeating-linear-gradient(var(--sell-paper) 0 2.6rem, var(--sell-rule) 2.6rem calc(2.6rem + 1px)) 0 0.7rem / 100% 100% no-repeat,
+      var(--sell-paper);
+    color: var(--sell-ink);
+  }
+  .sell .catalogue__row { border-bottom-color: transparent; }
+  .sell .catalogue__title { color: var(--sell-ink); }
+  .sell .catalogue__meta, .sell .catalogue__stall { color: var(--sell-ink-soft); }
+  .sell .catalogue__price { font-family: var(--ui-font-mono); color: var(--sell-ink); }
+  /* The armed label ("Sell for 120 coins?") takes the button's room without pushing the row about. */
+  .sell .catalogue__row .ui-btn { min-width: 11rem; white-space: nowrap; }
+  .sell .catalogue__empty, .sell .ui-empty-block { color: var(--sell-ink-soft); }
+  /* The order, as words written along the pad's top line: the one picked underlined in red. */
+  .sell__sort { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--sp-1) var(--sp-3); padding: 0 0.6rem var(--sp-2); font-size: var(--fs-4); }
+  .sell__sort-label { color: var(--sell-ink-soft); font-style: italic; }
+  .sell__sort-btn {
+    padding: 0.1rem 0.2rem;
+    border: 0;
+    background: transparent;
+    color: var(--sell-ink);
+    font: inherit;
+    cursor: pointer;
+    border-bottom: 2px solid transparent;
+  }
+  .sell__sort-btn:hover { border-bottom-color: var(--sell-rule); }
+  .sell__sort-btn[aria-pressed='true'] { font-weight: 700; border-bottom-color: var(--ink-red); }
+  .sell__sort-btn:focus-visible { outline: 2px solid var(--sell-ink); outline-offset: 2px; }
+  @media (max-width: 34rem) {
+    .sell .catalogue__row .ui-btn { min-width: 7rem; white-space: normal; }
+  }
 }

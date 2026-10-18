@@ -60,7 +60,7 @@ const SCAN_KEY = primaryCode('readStalls');
  * runs the day: sales, reactions, pennants, the boards, the crowd). Other shoppers buy copies too
  * (`RivalBuyers`); Q held reads the tables from the aisle (`PriceScanner`).
  */
-export function furnishMarket(zone: Zone, context: Pick<BuildContext, 'sky' | 'listener' | 'acoustics' | 'input' | 'market' | 'collection' | 'covers' | 'money' | 'social' | 'story' | 'today' | 'home'>): ZoneHandle {
+export function furnishMarket(zone: Zone, context: Pick<BuildContext, 'sky' | 'listener' | 'acoustics' | 'input' | 'market' | 'collection' | 'covers' | 'money' | 'social' | 'story' | 'today' | 'home' | 'notices'>): ZoneHandle {
   const { sky, listener, input, market: { stock: market, day: marketDay, hall: marketHall } } = context;
   const plan = MARKET_PLAN;
   if (PLATFORM_LIST.length > plan.stalls.length) {

@@ -1,6 +1,7 @@
 import { gameDayRandom } from '@/time/daily';
 import { shuffled } from '@/random';
 import { STREET_SHOPS } from './rules';
+import type { Game } from '@/catalog/types';
 
 /** One question of THE LOCAL's quiz: the answers as the quizmaster reads them out, `right` the good one's index. */
 export interface PubQuestion {
@@ -55,15 +56,35 @@ const BANK: readonly [string, string, string, string, string][] = [
   ['What colour is Knuckles the Echidna?', 'red', 'blue', 'yellow', 'green'],
 ];
 
-/** The questions of quiz night `day` (the same all night, a different round each week). */
-export function quizRound(day: number): PubQuestion[] {
+/**
+ * The questions of quiz night `day` (the same all night, a different round each week). The quizmaster knows the
+ * player is a collector: with enough games on their shelves, one or two questions are about games they own (the year
+ * one came out, who published it), so the round never quite repeats.
+ */
+export function quizRound(day: number, owned: readonly Game[] = []): PubQuestion[] {
   const random = gameDayRandom('pubQuiz', day);
-  return shuffled(random, BANK)
-    .slice(0, STREET_SHOPS.quiz.questions)
+  const own = collectionQuestions(random, owned);
+  return [...shuffled(random, BANK).slice(0, STREET_SHOPS.quiz.questions - own.length), ...own]
     .map(([question, ...answers]) => {
       const order = shuffled(random, [0, 1, 2, 3]);
       return { question, answers: order.map((i) => answers[i]!), right: order.indexOf(0) };
     });
+}
+
+/** Up to two questions about the player's own games, the good answer first: a release year, a publisher. */
+function collectionQuestions(random: () => number, owned: readonly Game[]): [string, string, string, string, string][] {
+  const out: [string, string, string, string, string][] = [];
+  const dated = shuffled(random, owned.filter((g) => /^\d{4}/.test(g.releaseDate ?? '')));
+  const year = dated[0];
+  if (year) {
+    const y = Number(year.releaseDate!.slice(0, 4));
+    out.push([`A collector’s question: which year did ${year.title} come out?`, `${y}`, `${y - 2}`, `${y + 1}`, `${y + 3}`]);
+  }
+  const publishers = [...new Set(owned.map((g) => g.publisher).filter((p): p is string => !!p))];
+  const published = shuffled(random, owned.filter((g) => g.publisher && g.id !== year?.id))[0];
+  const others = shuffled(random, publishers.filter((p) => p !== published?.publisher)).slice(0, 3);
+  if (published && others.length === 3) out.push([`And another for the collectors: who published ${published.title}?`, published.publisher!, others[0]!, others[1]!, others[2]!]);
+  return out;
 }
 
 /** What the other team got right of `round` (THE USUAL SUSPECTS, at the table by the dartboard): a good team, not a perfect one. */

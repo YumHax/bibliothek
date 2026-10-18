@@ -9,9 +9,8 @@ export const ROSSI_COACHING = 'rossi-coaching';
 
 /*
  * The building's word-of-mouth perks (docs/social.md "The building's perks"): what Sofia Rossi knows of the post and
- * of Comets (a lesson pays on the next COMET DASH game), the postman's offer, Pascal's strong arms and the Nguyens'
- * spare pad. Lines only where the game has no mechanism to change (the flat's furniture weighs nothing to carry; a
- * games night has no pad limit).
+ * of Comets (a lesson pays on the next COMET DASH game), and the others' word on what they do for the player: the
+ * postman's parcels up first, Pascal's arms on the furniture shop's pieces, the Nguyens' spare pad at games night.
  */
 
 /** The post as Sofia sees it from the sorting office (`collection/MailPost`). */

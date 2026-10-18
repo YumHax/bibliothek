@@ -1,6 +1,6 @@
 import { isAction } from '@/input/actions';
 import { actionKeyLabel } from '@/ui/keys';
-import { grabCap, grabVerb, grabVerbCap, useCap, useVerb } from '@/ui/verb';
+import { actionCap, grabCap, grabVerb, grabVerbCap, useCap, useVerb } from '@/ui/verb';
 import type { CoreParts } from './SessionParts';
 import type { KeyRoute, SessionHost } from './SessionHost';
 import { whyBlocked as why, type BlockerWords } from '@/furnishing/blockerText';
@@ -20,6 +20,11 @@ type BlockerLike = BlockerWords;
 interface MovedLike {
   readonly piece: PieceLike;
   readonly from: object;
+}
+
+/** A box put somewhere on the shelves: how they all stood before (the undo puts them back so). */
+interface ShelvedLike {
+  readonly shelves: object;
 }
 
 /** Carries the flat's furniture about (`furnishing/FurnitureCarrier`). */
@@ -65,7 +70,25 @@ export interface ShelfPlacingLike {
   /** The target is another box to swap with. */
   readonly swapping: boolean;
   place(): boolean;
+  /** How the shelves stand now, for the undo (null when a display is aimed at: not undone). */
+  snapshot?(): object | null;
+  restore?(snapshot: object): void;
+  /** The box in hand will go in spine out (the ghost stands so). */
+  readonly turned?: boolean;
+  /** The box in hand may stand spine out (not a landscape box). */
+  readonly canTurn?: boolean;
+  /** Spine out, or cover out again, for the box in hand; null when it cannot stand spine out. */
+  turnInHand?(): boolean | null;
+  /** Hands free: the shelf box aimed at turned where it stands; null when none is aimed at. */
+  turnAimed?(): { readonly title: string; readonly spineOut: boolean } | { readonly title: string; readonly refusal: 'landscape' | 'card' | 'full' } | null;
 }
+
+/** Why a box on a shelf would not turn, in words. */
+const TURN_REFUSALS = {
+  landscape: (title: string) => `${title} lies long: its spine runs along the top, so it stands cover out.`,
+  card: () => 'Only a card stands in that gap.',
+  full: (title: string) => `No room on that row to stand ${title} cover out.`,
+} as const;
 
 /** The room seen from above, its furniture moved with the mouse (`furnishing/planView/PlanView`). */
 export interface PlanViewLike {
@@ -90,7 +113,7 @@ export interface RearrangingParts extends Pick<CoreParts, 'player' | 'inspector'
  */
 export class Rearranging implements KeyRoute {
   /** The moves made, latest last (the undo takes them back one by one). */
-  private readonly history: MovedLike[] = [];
+  private readonly history: (MovedLike | ShelvedLike)[] = [];
   /** The tips told this session (each once). */
   private readonly told = new Set<string>();
 
@@ -183,11 +206,22 @@ export class Rearranging implements KeyRoute {
 
   onKey(code: string): boolean {
     const { furniture, shelfPlacing, inspector, planView } = this.parts;
-    // From above, every key is the planning view's (and L opens it with free hands).
+    // From above, every key is the planning view's (and L opens it with free hands), but the undo, which is the room's.
+    if (planView?.isOpen && !furniture?.piece && isAction(code, 'undoMove')) {
+      if (!this.undo()) this.host.react('Nothing to take back yet.');
+      return true;
+    }
     if (planView && (planView.isOpen || (!inspector.current && !furniture?.piece)) && planView.onKey(code)) return true;
     if (furniture?.piece) return this.carryingKey(code, furniture);
     if (inspector.current && isAction(code, 'putHere') && shelfPlacing?.active) {
       this.putHere();
+      return true;
+    }
+    if (inspector.current && isAction(code, 'spineOut') && shelfPlacing?.active && shelfPlacing.turnInHand) {
+      const spineOut = shelfPlacing.turnInHand();
+      if (spineOut === null) this.host.refuse(TURN_REFUSALS.landscape(inspector.current.game.title));
+      else this.host.react(spineOut ? 'Spine out' : 'Cover out');
+      this.carryChanged(); // the keys line says which way it goes in
       return true;
     }
     return this.freeHandsKey(code);
@@ -216,7 +250,28 @@ export class Rearranging implements KeyRoute {
     if (inspector.current || player.isSeated) return false;
     if (isAction(code, 'undoMove') && furniture?.atHome) return this.undo();
     if (isAction(code, 'moveFurniture') && furniture) return this.take(true);
+    if (isAction(code, 'turnShelfBox') && furniture?.atHome) return this.turnAimed();
     return false;
+  }
+
+  /**
+   * G with free hands at home: the shelf box aimed at (the crosshair, or the bookcase view's cursor: `ShelfViewing`)
+   * stands spine out, or cover out again (U takes it back). False when no box is aimed at.
+   */
+  turnAimed(): boolean {
+    const shelfPlacing = this.parts.shelfPlacing;
+    if (!shelfPlacing?.turnAimed) return false;
+    const before = shelfPlacing.snapshot?.() ?? null;
+    const turned = shelfPlacing.turnAimed();
+    if (!turned) return false;
+    if ('refusal' in turned) {
+      this.host.refuse(TURN_REFUSALS[turned.refusal](turned.title));
+      return true;
+    }
+    if (before) this.remember({ shelves: before });
+    this.host.react(turned.spineOut ? `${turned.title}, spine out` : `${turned.title}, cover out`);
+    this.tipOnce('undo-furniture', `[${actionKeyLabel('undoMove')}] undoes a move.`);
+    return true;
   }
 
   /** Takes the movable piece under the crosshair; `say` when there is none (M), else only a fixed piece is named. */
@@ -226,14 +281,14 @@ export class Rearranging implements KeyRoute {
     if (!piece) {
       const fixed = furniture.fixedAimed();
       if (fixed !== null) this.host.react(fixedLine(fixed));
-      else if (say) this.host.react('Only what you bought for the flat can be moved');
+      else if (say) this.host.react('Only what you bought for the flat can be moved.');
       return fixed !== null || say;
     }
     furniture.take(piece);
     this.parts.interactor.enabled = false;
     this.carryChanged();
     // "Put back" is where it came from (the right button, E); storing it out of the room (X) is in the keys card (hold H).
-    this.host.prompt(`[${useCap()}] set down · [${actionKeyLabel('turnPiece')}] turn · [${grabCap()}] put back`, { id: 'carrying-furniture', until: () => !this.carrying });
+    this.host.prompt(() => `[${useCap()}] set down · [${actionCap('turnPiece')}] turn · [${grabCap()}] put back`, { id: 'carrying-furniture', until: () => !this.carrying });
     return true;
   }
 
@@ -242,7 +297,12 @@ export class Rearranging implements KeyRoute {
     const target = shelfPlacing.target;
     if (!target) this.host.react(`Aim at a gap on a shelf, then ${grabVerb()} or press ${actionKeyLabel('putHere')}`);
     else if (!target.spot.fits) this.host.refuse(target.refusal ?? (shelfPlacing.swapping ? 'No room for the other box on that row.' : 'No room on that shelf.'));
-    else if (shelfPlacing.place()) this.host.putBack(); // it flies to its new spot
+    else {
+      const before = shelfPlacing.snapshot?.() ?? null;
+      if (!shelfPlacing.place()) return;
+      this.host.putBack(); // it flies to its new spot
+      if (before) this.remember({ shelves: before });
+    }
   }
 
   private setDown(): void {
@@ -262,11 +322,21 @@ export class Rearranging implements KeyRoute {
   private tipOnce(id: string, text: string): void {
     if (this.told.has(id)) return;
     this.told.add(id);
-    this.host.tip(text, { id });
+    this.host.tip(text, { id, head: 'Moving things' });
+  }
+
+  /** A box moved along the shelves from the bookcase view (`ShelfViewing`), and how they stood before: U takes it back. */
+  rememberShelves(before: object): void {
+    this.remember({ shelves: before });
+  }
+
+  /** U from the bookcase view (where the player sits, so `freeHandsKey` would not hear it): the last move taken back. */
+  undoLast(): boolean {
+    return this.parts.furniture?.atHome !== false && this.undo();
   }
 
   /** A move made (here or from above): the undo can take it back. */
-  private remember(moved: MovedLike): void {
+  private remember(moved: MovedLike | ShelvedLike): void {
     this.history.push(moved);
     if (this.history.length > UNDO_DEPTH) this.history.shift();
   }
@@ -280,9 +350,9 @@ export class Rearranging implements KeyRoute {
       return;
     }
     furniture.store();
-    this.history.splice(0, this.history.length, ...this.history.filter((move) => move.piece !== piece));
+    this.history.splice(0, this.history.length, ...this.history.filter((move) => !('piece' in move) || move.piece !== piece));
     this.end();
-    this.host.react(`${piece.name} put away`);
+    this.host.react(`${piece.name} put away.`);
     this.tipOnce('stored-furniture', 'Pause menu › Stored furniture takes it out again, in any room.');
   }
 
@@ -296,22 +366,32 @@ export class Rearranging implements KeyRoute {
     }
     this.parts.interactor.enabled = false;
     this.carryChanged();
-    this.host.prompt(`[${useCap()}] set down where it shows green · [${grabCap()}] put away`, { id: 'taken-out', until: () => !this.carrying });
+    // The carrying line's words (take), but "put away": it goes back where it came from, the storage.
+    this.host.prompt(() => `[${useCap()}] set down · [${actionCap('turnPiece')}] turn · [${grabCap()}] put away`, { id: 'taken-out', until: () => !this.carrying });
   }
 
   /** The last move taken back: the piece goes where it stood before, if nothing stands there now. */
   private undo(): boolean {
     // A move of a piece since put away, or taken down by a rebuild, cannot be undone: forgotten.
-    while (this.history.length && !this.parts.furniture!.available(this.history.at(-1)!.piece)) this.history.pop();
+    const gone = (move: MovedLike | ShelvedLike): boolean => 'piece' in move && !this.parts.furniture!.available(move.piece);
+    while (this.history.length && gone(this.history.at(-1)!)) this.history.pop();
     const last = this.history.at(-1);
     if (!last) return false;
+    if (!('piece' in last)) {
+      // A box moved on the shelves (or two swapped): every box back where it stood.
+      this.history.pop();
+      if (this.parts.inspector.current) this.host.putBack();
+      this.parts.shelfPlacing?.restore?.(last.shelves);
+      this.host.react('The shelves back as they were.');
+      return true;
+    }
     const blocker = this.parts.furniture!.moveTo(last.piece, last.from);
     if (blocker) {
       this.host.refuse(`The ${last.piece.name.toLowerCase()} cannot go back: ${why(blocker)}.`);
       return true;
     }
     this.history.pop();
-    this.host.react(`${last.piece.name} back where it was`);
+    this.host.react(`${last.piece.name} back where it was.`);
     return true;
   }
 

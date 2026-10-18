@@ -20,6 +20,8 @@ export type Activity =
   | 'rugScratch'
   | 'toy'
   | 'tvWatch'
+  | 'consoleNap'
+  | 'pawBox'
   | 'chase'
   | 'rub'
   | 'sunbathe'
@@ -39,6 +41,8 @@ interface ActivityDef {
 
 /** After finding the way to another room shut, the cat does not try again for this long. */
 const EXPLORE_RETRY_S = 45;
+/** The boxes a paw reaches: their centres this high off the floor (m), this near the cat when it decides, and where it stands to swat. */
+const PAW_REACH = { from: 0.05, to: 0.5, within: 4, standOff: 0.32 };
 /** How far from the player's feet (m) the cat stops for a treat. */
 const TREAT_DISTANCE = 0.45;
 
@@ -224,6 +228,46 @@ export const ACTIVITIES: Record<Activity, ActivityDef> = {
       }
       mind.setFacing(tmp);
       mind.goTo(goal, 'tvWatch');
+      return true;
+    },
+  },
+  // A game on (a longplay, a cart in the NES): the stand under the set warms, and a drowsy cat lies down against it.
+  consoleNap: {
+    weight: (mind) => (mind.ctx.tv?.isPlaying() && mind.ctx.tv.warmSpot ? 0.4 + 1.2 * mind.sleepDrive() : 0),
+    begin(mind) {
+      const tv = mind.ctx.tv;
+      if (!tv?.warmSpot) return false;
+      const { goal, tmp } = mind;
+      tv.warmSpot(goal).setY(0);
+      if (!mind.ctx.nav.isFree(goal) && !mind.ctx.nav.randomFreePoint(goal, goal.clone(), 0.4)) return false;
+      tv.screenPoint?.(tmp);
+      mind.setFacing(tmp.setY(0));
+      mind.goTo(goal, 'lie');
+      return true;
+    },
+  },
+  // A low box on the shelves, just within reach of a paw: out of its row it comes, half way (the player pushes it back).
+  pawBox: {
+    weight: (mind) => (mind.ctx.boxes ? 0.06 + 0.14 * active(mind) : 0),
+    begin(mind) {
+      const { boxes, cat, nav } = mind.ctx;
+      if (!boxes) return false;
+      const { tmp, tmp2, goal } = mind;
+      const low = [...boxes()].filter((box) => {
+        if (!box.parent) return false;
+        box.getWorldPosition(tmp);
+        return tmp.y > PAW_REACH.from && tmp.y < PAW_REACH.to && tmp.distanceTo(cat.position) < PAW_REACH.within;
+      });
+      const box = low[Math.floor(random() * low.length)];
+      if (!box) return false;
+      box.getWorldPosition(tmp);
+      tmp2.subVectors(cat.position, tmp).setY(0);
+      if (tmp2.lengthSq() < 1e-4) return false;
+      goal.copy(tmp).setY(0).addScaledVector(tmp2.normalize(), PAW_REACH.standOff);
+      if (!nav.isFree(goal)) return false;
+      mind.pawing = box;
+      mind.setFacing(tmp);
+      mind.goTo(goal, 'pawBox');
       return true;
     },
   },

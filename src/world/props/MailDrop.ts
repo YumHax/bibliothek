@@ -107,7 +107,8 @@ export class MailDrop extends Prop implements Interactable {
     if (!top) return;
     this.remove(top.sheet);
     disposeTree(top.sheet);
-    session.read(mailCard(top.piece, { effect: top.piece.effect ?? 'Read, and into the recycling.' }));
+    // The effect line is for what the piece changed: a plain flyer says nothing more (it goes in the recycling unsaid).
+    session.read(mailCard(top.piece, top.piece.effect ? { effect: top.piece.effect } : {}));
     this.refresh();
   }
 

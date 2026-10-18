@@ -67,7 +67,7 @@ class Rituals implements MemeFeatureLive {
   }
 
   extras(session: SessionActions): TalkExtra[] {
-    return [...this.lunch.extras(session), ...this.favours.extras(), ...this.portion()];
+    return [...this.lunch.extras(session), ...this.favours.extras(), ...this.occasions.extras(), ...this.portion()];
   }
 
   /** A portion of her recipe cooked at home, in the bag: given, her verdict. */

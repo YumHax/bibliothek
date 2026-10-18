@@ -1,13 +1,19 @@
+import type { StreetMark } from '@/social/street/streetMarks';
+
 /*
  * MÉMÉ'S STORIES (docs/grandma.md "Her presence"): what she tells when the player sits with her a while, a few lines
  * each. Some only once the memory named has been seen (what she can bring herself to talk about, like her chat).
  */
 
-/** One of her stories: its lines in turn; `after`, the memory (`MEMORIES` id) it waits for. */
+/**
+ * One of her stories: its lines in turn; `after`, the memory (`MEMORIES` id) it waits for; `found`, a secret of Front
+ * Street's the player has come upon (`social/street/streetMarks`: the carving, the dusty pane) that she has a story of.
+ */
 export interface GrandmaStory {
   id: string;
   lines: readonly string[];
   after?: string;
+  found?: StreetMark;
 }
 
 export const GRANDMA_STORIES: readonly GrandmaStory[] = [
@@ -100,11 +106,23 @@ export const GRANDMA_STORIES: readonly GrandmaStory[] = [
     ],
   },
   {
+    // How he went, told only once the player has seen him for the last time (the last Wednesday, memory 5).
+    id: 'howHeWent',
+    after: 'leaving',
+    lines: [
+      'You never asked me how. That’s all right. Nobody does.',
+      'His heart. He’d been in hospital that winter, and they let him home in the spring, and he was so pleased.',
+      'Then one morning, in his armchair by the window, a manual open on his knees. Some racing game.',
+      'The neighbour found him on the Tuesday. The radio was still on, the morning show.',
+      'I like to think he was reading the controls out loud to nobody. He did that.',
+    ],
+  },
+  {
     id: 'brothers',
     after: 'row',
     lines: [
       'They were close, once, the boys. Gaspard taught Félix to ride a bike.',
-      'Then Gaspard went into insurance and started measuring everything in money.',
+      'Then Gaspard went into cars and started measuring everything in money.',
       'He used to say Félix would die poor. Félix said he’d die surrounded by friends.',
       'They were both a bit right. That’s the sad part.',
     ],
@@ -117,6 +135,46 @@ export const GRANDMA_STORIES: readonly GrandmaStory[] = [
       'The flat, the shelves, how he’d leave it all to you, sorted.',
       'Then Gaspard came round with his papers and his nice pen.',
       'I should have rung Félix back. I thought there was time. There’s never time.',
+    ],
+  },
+  {
+    id: 'railing',
+    found: 'secret:carving',
+    lines: [
+      'You found it? On the park railing? F.A. 1983. Oh, I could have killed him.',
+      'Twenty-three, and at it with his father’s penknife like a schoolboy. I caught him on the way back from the shops.',
+      'I meant to box his ears. Instead I took the knife and put my own initials beside his.',
+      'Don’t tell anyone. A grown woman, carving railings. Your grandfather laughed for a week.',
+    ],
+  },
+  {
+    id: 'continue',
+    found: 'secret:dust',
+    lines: [
+      'CONTINUE? on that old shop window? That was his. Félix wrote it everywhere.',
+      'The shop sold radios, then nothing. He used to press his nose to the glass as a boy.',
+      'When he got his first console he said a game is never over, you just haven’t pressed the button yet.',
+      'I think he left that cartridge for whoever came looking. That would be him all over.',
+    ],
+  },
+  {
+    id: 'ferrand',
+    found: 'ferrandOpened',
+    lines: [
+      'Ferrand opened his door? To you? He hasn’t opened it to me since the 1991 election.',
+      'He and Félix had the racing on Sundays, across the landing, the radio between them. Félix always lost.',
+      'Forty francs, he owed him? He’s forgotten nothing, that man. Nothing.',
+      'Take him a slice of tart one Sunday. He won’t open. But the plate will come back washed.',
+    ],
+  },
+  {
+    id: 'roger',
+    found: 'phoneFelix',
+    lines: [
+      'Somebody rang the phone box on Front Street asking for Félix? An old man, a soft voice?',
+      'That’s Roger. He ran the radio shop with the dusty window, years back. He sold Félix his first cartridges.',
+      'He doesn’t know. Nobody told him. I couldn’t.',
+      'If he rings again, tell him Odette says come for lunch. Sunday. He’ll know the way.',
     ],
   },
   {

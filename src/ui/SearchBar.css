@@ -1,4 +1,4 @@
-/* Quick search: a text field at the top of the screen with up to 6 results under it. Its exit fade is the one `SearchBar.ts` waits for. */
+/* Quick search: a text field at the top of the screen with the best few results under it (covers beside them), letters on screen for a controller. Its exit fade is the one `SearchBar.ts` waits for. */
 @layer tokens, base, components, panels;
 @layer panels {
   .search-bar {
@@ -45,11 +45,12 @@
     box-shadow: var(--ui-shadow);
   }
   .search-bar__results:empty { display: none; }
+  .search-bar__results { max-height: min(24rem, 55vh); overflow-y: auto; }
 
   .search-bar__item {
     display: flex;
-    justify-content: space-between;
-    gap: var(--sp-4);
+    align-items: center;
+    gap: var(--sp-3);
     padding: 0.45rem 0.7rem;
     border-radius: var(--ui-radius-sm);
     font-size: var(--fs-6);
@@ -59,7 +60,19 @@
   .search-bar__item--active,
   .search-bar__item--active:hover { background: var(--ui-fill-hover); }
   .search-bar__item mark { background: none; color: var(--ui-accent); font-weight: 600; }
+  .search-bar__item:focus-visible { background: var(--ui-fill-hover); }
+  .search-bar__cover {
+    flex: none;
+    width: 1.6rem;
+    height: 2.2rem;
+    object-fit: cover;
+    border-radius: var(--ui-radius-2xs);
+    background: var(--ui-fill);
+  }
+  .search-bar__title { flex: 1; min-width: 0; }
   .search-bar__meta { color: var(--ui-text-dim); font-size: 0.85em; white-space: nowrap; }
+  .search-bar__more { justify-content: center; color: var(--ui-text-dim); font-size: var(--fs-4); }
+  .search-bar__pad { padding: var(--sp-2); border-radius: var(--ui-radius); background: var(--ui-panel); border: 1px solid var(--ui-border); box-shadow: var(--ui-shadow); }
   .search-bar__empty { padding: 0.45rem 0.7rem; color: var(--ui-text-dim); font-size: var(--fs-5); }
 
   .search-bar__help {

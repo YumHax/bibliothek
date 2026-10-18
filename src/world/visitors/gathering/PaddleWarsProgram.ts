@@ -14,7 +14,7 @@ interface MatchEvents {
 /**
  * A games night's match on the living room's TV: the arcade's PADDLE WARS hosted by `ArcadeProgram`
  * (the player on pad one, a friend as player two: their name on the screen, PADDLE WARS's player
- * two plays as it plays), nothing paid out at home, GAMES NIGHT where the ticket count would be,
+ * two playing as well as they do, `skill`), nothing paid out at home, GAMES NIGHT where the ticket count would be,
  * its blips from a chip speaker at the TV (`speaker`, the evening's). The match ends by itself:
  * the set goes off. Each goal and the final tally go to the evening (`events`).
  */
@@ -22,11 +22,11 @@ export class PaddleWarsProgram extends ArcadeProgram<Duel> {
   private you = 0;
   private them = 0;
 
-  constructor(opponent: string, speaker: ChipSpeaker, private readonly events: MatchEvents) {
+  constructor(opponent: string, skill: number, speaker: ChipSpeaker, private readonly events: MatchEvents) {
     super(new Duel(), {
       title: 'PADDLE WARS',
       hint: 'W / S move the paddle · hold Space to smash',
-      opponent: { name: opponent, skill: 0.7 },
+      opponent: { name: opponent, skill },
       banner: 'GAMES NIGHT',
       speaker,
       holdEnd: FINAL_HOLD,

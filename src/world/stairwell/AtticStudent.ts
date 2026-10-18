@@ -19,7 +19,7 @@ const who = plan.student;
 /** What he says when asked how the night went, in turn. */
 const LINES = [
   'Lab until eleven, then the bar, then the lab again. Don’t ask.',
-  'The lift up to the attic is slower than my code. And my code is slow.',
+  'Five floors of stairs at this hour? No. The lift and I have an arrangement.',
   'I recapped a Mega Drive tonight. It smelled like 1991.',
   'Leclerc banged on the pipes again. I had the music at, like, two.',
 ];

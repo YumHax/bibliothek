@@ -2,7 +2,10 @@ import './PlanView.css';
 import * as THREE from 'three';
 import type { Updatable } from '@/core/Engine';
 import { isAction } from '@/input/actions';
+import { lastDevice } from '@/input/lastDevice';
+import { writeWithCaps } from '@/notices/keyCaps';
 import { actionKeyLabel } from '@/ui/keys';
+import { zoneName } from '@/ui/menu/zoneNames';
 import type { Zone } from '@/world/zone/Zone';
 import { inFlat } from '@/world/worldPlan';
 import type { ZoneId } from '@/world/zoneIds';
@@ -38,7 +41,7 @@ interface PlanPlayer {
 }
 
 /** What the planning view uses of the carrier. */
-type PlanCarrier = Pick<FurnitureCarrier, 'piece' | 'fits' | 'blocker' | 'aiming' | 'snapping' | 'setAim' | 'aimed' | 'take' | 'turn' | 'setDown' | 'cancel' | 'store' | 'lastMove'>;
+type PlanCarrier = Pick<FurnitureCarrier, 'piece' | 'fits' | 'blocker' | 'aiming' | 'snapping' | 'setAim' | 'aimed' | 'fixedAimed' | 'take' | 'turn' | 'setDown' | 'cancel' | 'store' | 'lastMove'>;
 
 interface PlanViewDeps {
   camera: THREE.PerspectiveCamera;
@@ -73,8 +76,20 @@ interface PlanViewDeps {
 export class PlanView implements Updatable {
   private open_ = false;
   private readonly hud: HTMLDivElement;
+  /** The room's name on the plan's title block ("Living room", "from above" under it). */
+  private readonly title: HTMLElement;
+  /** The second, quieter row: what a plan is for besides taking and setting down (undo, grid, put away). */
+  private readonly more: HTMLElement;
+  /** The grid's state, always shown while planning: "Grid on" or "Free". */
+  private readonly grid: HTMLElement;
   private readonly status: HTMLSpanElement;
+  /** The drafting film over the view: a faint grid, corner marks and a vignette (CSS only). */
+  private readonly film: HTMLDivElement;
   private readonly cursor: HTMLDivElement;
+  /** The fixed piece under the cursor (a built-in that stays), named on the status line; '' for an unnamed one. */
+  private fixedHovered: string | null = null;
+  /** The strip's text last written (rewritten only when it changes: the caps are elements). */
+  private written = { keys: '', more: '' };
   private readonly cursorAt = new THREE.Vector2();
   private readonly ndc = new THREE.Vector2();
   private readonly raycaster = new THREE.Raycaster();
@@ -93,18 +108,37 @@ export class PlanView implements Updatable {
   private readonly keys: HTMLElement;
 
   constructor(private readonly deps: PlanViewDeps) {
+    this.film = document.createElement('div');
+    this.film.className = 'plan-view-film';
+    this.film.hidden = true;
+    this.film.innerHTML = '<span class="plan-view-film__corner" data-at="tl"></span><span class="plan-view-film__corner" data-at="tr"></span><span class="plan-view-film__corner" data-at="bl"></span><span class="plan-view-film__corner" data-at="br"></span>';
     this.hud = document.createElement('div');
     this.hud.className = 'plan-view-hud';
     this.hud.hidden = true;
+    const head = document.createElement('div');
+    head.className = 'plan-view-hud__head';
+    this.title = document.createElement('strong');
+    this.title.className = 'plan-view-hud__title';
+    const from = document.createElement('span');
+    from.className = 'plan-view-hud__from';
+    from.textContent = 'from above';
+    head.append(this.title, from);
     this.keys = document.createElement('span');
-    this.hud.append(this.keys);
+    this.keys.className = 'plan-view-hud__keys';
+    const row = document.createElement('div');
+    row.className = 'plan-view-hud__row';
+    this.more = document.createElement('span');
+    this.more.className = 'plan-view-hud__more';
+    this.grid = document.createElement('span');
+    this.grid.className = 'plan-view-grid';
+    row.append(this.more, this.grid);
     this.status = document.createElement('span');
     this.status.className = 'plan-view-status';
-    this.hud.append(this.status);
+    this.hud.append(head, this.keys, row, this.status);
     this.cursor = document.createElement('div');
     this.cursor.className = 'plan-view-cursor';
     this.cursor.hidden = true;
-    deps.container.append(this.hud, this.cursor);
+    deps.container.append(this.film, this.hud, this.cursor);
 
     this.outlineRoot.name = 'PlanViewHover';
     this.outlineRoot.matrixAutoUpdate = false;
@@ -146,6 +180,8 @@ export class PlanView implements Updatable {
     if (this.open_) return;
     const { camera, player, carrier, interactor } = this.deps;
     if (!player.isLocked) return;
+    // The plan is moved with a mouse (the locked pointer's moves): on a touchscreen a finger held on a piece moves it.
+    if (lastDevice() === 'touch') return this.deps.say?.('Planning from above takes a mouse: hold a finger on a piece to move it');
     const reason = this.deps.blocked?.() ?? (player.isSeated ? 'Stand up first' : carrier.piece ? 'Set it down first' : null);
     if (reason) return this.deps.say?.(reason);
     const zone = this.deps.zone();
@@ -167,6 +203,9 @@ export class PlanView implements Updatable {
     this.cursorAt.set(rect.width / 2, rect.height / 2);
     this.placeCursor();
     document.body.classList.add('plan-view');
+    this.title.textContent = zoneName(zone.id);
+    this.written = { keys: '', more: '' };
+    this.film.hidden = false;
     this.hud.hidden = false;
     this.cursor.hidden = false;
     this.refresh();
@@ -189,6 +228,7 @@ export class PlanView implements Updatable {
     player.controls.enabled = this.lookWas;
     if (interactor) interactor.enabled = true;
     document.body.classList.remove('plan-view');
+    this.film.hidden = true;
     this.hud.hidden = true;
     this.cursor.hidden = true;
   }
@@ -240,7 +280,10 @@ export class PlanView implements Updatable {
     this.hoverClock -= dt;
     if (this.hoverClock <= 0) {
       this.hoverClock = HOVER_EVERY;
-      this.setHovered(this.deps.carrier.piece ? null : this.pick());
+      const carrying = this.deps.carrier.piece != null;
+      const piece = carrying ? null : this.pick();
+      this.setHovered(piece);
+      this.fixedHovered = carrying || piece ? null : this.deps.carrier.fixedAimed();
     }
     this.refresh();
   }
@@ -259,7 +302,10 @@ export class PlanView implements Updatable {
       return;
     }
     const piece = this.hovered ?? this.pick();
-    if (!piece) return;
+    if (!piece) {
+      if (this.fixedHovered !== null) this.deps.say?.(this.fixedHovered ? `The ${this.fixedHovered} stays where it is` : 'That stays where it is');
+      return;
+    }
     this.setHovered(null);
     carrier.take(piece);
     this.refresh();
@@ -330,7 +376,6 @@ export class PlanView implements Updatable {
   /** The piece under the cursor, outlined. */
   private setHovered(piece: Piece | null): void {
     this.hovered = piece;
-    this.cursor.dataset.over = String(piece !== null);
     if (!piece) {
       this.outline.object.visible = false;
       return;
@@ -343,32 +388,48 @@ export class PlanView implements Updatable {
   }
 
   /**
-   * The strip's keys for the state the view is in (three groups at most, docs/notices.md "Prompt"): with free hands how to
-   * take a piece and leave, while a piece is carried how to set it down, turn it and put it back. The grid (G) and putting
-   * away (X) are in the keys card (hold H) and the help.
+   * The strip's two rows for the state the view is in, keys as caps (docs/notices.md "Prompt": three groups at most a
+   * row). With free hands: take a piece, leave; under it, the undo. While a piece is carried: set it down, turn it, put
+   * it back; under it, the grid and putting it away. The mouse is the view's, so the caps are the mouse's and the keys'.
    */
-  private keysFor(carrying: boolean): string {
+  private rowsFor(carrying: boolean): { keys: string; more: string } {
     const k = actionKeyLabel;
     return carrying
-      ? `<strong>Planning</strong> · click to set down · wheel or ${k('turnPiece')} turns · right-click puts back`
-      : `<strong>Planning</strong> · click a piece to take it · ${k('planView')} leaves`;
+      ? { keys: `[Click] set down · [${k('turnPiece')}] or wheel: turn · [Right-click] put back`, more: `[${k('gridSnap')}] grid · [${k('storePiece')}] put away` }
+      : { keys: `[Click] a piece to take it · [${k('planView')}] leave`, more: `[${k('undoMove')}] undo the last move` };
   }
 
-  /** The strip's second line: what is carried and whether it fits, or what is under the cursor. */
+  /** The strip: the rows for the state, the grid's state, and the status (what is carried and whether it fits, or what is under the cursor). */
   private refresh(): void {
     const { carrier } = this.deps;
     const piece = carrier.piece;
-    const keys = this.keysFor(piece != null);
-    if (this.keys.innerHTML !== keys) this.keys.innerHTML = keys;
+    const rows = this.rowsFor(piece != null);
+    if (rows.keys !== this.written.keys) writeWithCaps(this.keys, rows.keys);
+    if (rows.more !== this.written.more) writeWithCaps(this.more, rows.more);
+    this.written = rows;
+    const grid = carrier.snapping ? 'Grid on' : 'Free';
+    if (this.grid.textContent !== grid) this.grid.textContent = grid;
+    this.grid.dataset.on = String(carrier.snapping);
+    this.grid.hidden = piece == null;
+    let text: string;
+    let state: string;
     if (piece) {
-      const grid = carrier.snapping ? '' : ' · free';
-      this.status.textContent = carrier.fits ? `${piece.name} · click to set down${grid}` : `${piece.name}: ${carrier.aiming ? why(carrier.blocker) : 'aim at the floor'}${grid}`;
-      this.status.dataset.fits = String(carrier.fits);
+      text = carrier.fits ? piece.name : `${piece.name}: ${carrier.aiming ? why(carrier.blocker) : 'aim at the floor'}`;
+      state = carrier.fits ? 'fits' : 'blocked';
+    } else if (this.hovered) {
+      text = this.hovered.name;
+      state = 'over';
+    } else if (this.fixedHovered !== null) {
+      text = this.fixedHovered ? `The ${this.fixedHovered} stays where it is` : 'That stays where it is';
+      state = 'fixed';
     } else {
-      this.status.textContent = this.hovered ? `${this.hovered.name} · click to take it` : '';
-      this.status.dataset.fits = 'true';
+      // The line keeps its height when there is nothing to name (the strip never jumps).
+      text = ' ';
+      state = 'idle';
     }
-    this.status.hidden = this.status.textContent === '';
+    if (this.status.textContent !== text) this.status.textContent = text;
+    this.status.dataset.state = state;
+    this.cursor.dataset.state = piece ? (carrier.fits ? 'carry' : 'blocked') : state;
   }
 }
 

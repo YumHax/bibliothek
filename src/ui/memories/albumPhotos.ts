@@ -1,7 +1,8 @@
 import { seededRng } from '@/random';
 
 /*
- * The album's prints when no still was taken this session (a memory seen before a reload, `MemoryProjector.still`):
+ * The album's prints when a memory left no still on this device (`MemoryProjector.still`: taken the first time it
+ * played, kept by `memories/memoryStills`; a save carried from elsewhere, or one from before stills were kept):
  * an old sepia snapshot drawn on a canvas, a few soft shapes of what the memory is about (the tree, the shelves, the
  * cabinet…), a faded vignette, a grain. Drawn once per memory and kept.
  */

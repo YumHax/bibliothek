@@ -127,6 +127,14 @@ export class CabinetScreens {
     this.texture.needsUpdate = true;
   }
 
+  /** The tube gone dark (no power): black glass until something draws again. */
+  drawBlank(): void {
+    this.ctx.fillStyle = '#050505';
+    this.ctx.fillRect(0, 0, this.ctx.canvas.width, this.ctx.canvas.height);
+    this.frozenValid = false;
+    this.texture.needsUpdate = true;
+  }
+
   /** The next `paintGame` draws whatever the throttle says (a show just started). */
   drawSoon(): void {
     this.drawClock = 1;

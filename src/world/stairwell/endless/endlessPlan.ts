@@ -40,7 +40,19 @@ export const ENDLESS_PLAN = {
   /** Said once it is over (walked back up, or the lift taken). */
   over: 'Your own floor’s light clicks on somewhere above. Just a building again.',
   /** The nameless door: its caption, and what a knock gets. */
-  door: { label: 'A door · knock', knock: 'You knock. Nothing. Then, from the other side, three knocks back.' },
+  door: {
+    label: 'A door · knock',
+    knock: 'You knock. Nothing. Then, from the other side, three knocks back.',
+    /** From this wrap on, a second knock is answered once for good: a voice almost known, and a card slid under the door. */
+    answerFrom: 5,
+    answer: 'Three knocks back. Then, very close to the wood, a voice you almost know: “Not yet, kiddo. Put the place back first.” Something slides under the door.',
+    card: {
+      title: 'Slid under the door',
+      text: 'A square photo, the colours gone orange: this landing, but the wallpaper is the old one, and a man in a cardigan sits on the top step with a Game Boy, grinning at whoever holds the camera.\n\nOn the back, in pencil: “The stairs go on as long as you let them. Go home.”',
+      from: 'F.',
+    },
+    after: 'You knock. The wood is just wood now. Somewhere above, your own floor’s light clicks.',
+  },
   /** The lower and the upper landing's floor heights (local). */
   get lowerY(): number {
     return landingY(this.lower);

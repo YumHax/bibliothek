@@ -35,6 +35,12 @@ export const SELLERS: Readonly<Record<SellerKind, SellerProfile>> = {
   loft: { platforms: 'mixed', lot: [5, 8], discount: [0.25, 1.05], condition: { worn: 0.35, noManual: 0.35 }, firstPrint: 0.1, haggle: { floor: -0.08, patience: 1 }, console: 0.45, hours: [[10, 19], [12, 20]] },
 };
 
+/**
+ * The whole table at once: a parent clearing out and someone moving away put a price on everything left on it
+ * (`share` of what the copies ask one by one, haggles included), a card propped against the boxes.
+ */
+export const TABLE_LOT = { share: 0.9, kinds: ['clearOut', 'mover'] as readonly SellerKind[] } as const;
+
 export const CLASSIFIEDS = {
   /** Ads put in on a game day: none this often, two this often, else one. */
   perDay: { none: 0.3, two: 0.25 },

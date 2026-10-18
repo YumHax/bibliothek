@@ -1,0 +1,114 @@
+/*
+ * A swap on the landing: a card at the neighbour's door. The neighbour speaks at the top (`panel/speaker`); under
+ * them the doormat, their box held out on the left and the player's on the right, "for" between them. Once agreed,
+ * their box slides over to the player's side; once refused, their door swings shut over the mat.
+ */
+@layer tokens, base, components, panels;
+@layer panels {
+  .neighbour-trade__card {
+    --card-w: var(--card-w-lg);
+    --mat: #6b5233;
+    --mat-weave: rgba(0, 0, 0, 0.16);
+    --mat-edge: #3e2f1d;
+    --door: #5a3b26;
+    --door-panel: rgba(255, 255, 255, 0.06);
+    --arrive-ms: 520ms;
+    --shut-ms: 420ms;
+  }
+  /* The doormat: a coir weave the two boxes stand on. */
+  .neighbour-trade__table {
+    position: relative;
+    display: grid;
+    grid-template-columns: 1fr auto 1fr;
+    align-items: end;
+    gap: var(--sp-3);
+    min-height: 14.5rem;
+    padding: var(--sp-4) var(--sp-4) var(--sp-3);
+    border-radius: var(--ui-radius-sm);
+    border: 3px solid var(--mat-edge);
+    background:
+      repeating-linear-gradient(90deg, var(--mat-weave) 0 2px, transparent 2px 5px),
+      repeating-linear-gradient(0deg, var(--mat-weave) 0 2px, transparent 2px 5px),
+      var(--mat);
+    overflow: hidden;
+  }
+  .neighbour-trade__side {
+    display: grid;
+    justify-items: center;
+    gap: var(--sp-1);
+    margin: 0;
+    text-align: center;
+    color: var(--paper-speech);
+  }
+  .neighbour-trade__whose {
+    font-family: var(--ui-font-hand);
+    font-size: var(--fs-t1);
+    color: var(--ui-accent-bright);
+  }
+  .neighbour-trade__cover {
+    display: grid;
+    place-items: end center;
+    width: 6.5rem;
+    height: 8.5rem;
+  }
+  .neighbour-trade__img {
+    max-width: 100%;
+    max-height: 100%;
+    box-shadow: 4px 6px 0 var(--shade-45);
+    transition: transform var(--dur-settle) var(--ui-ease);
+  }
+  .neighbour-trade__cover .catalogue__cover--placeholder { width: 6rem; height: 8rem; box-shadow: 4px 6px 0 var(--shade-45); }
+  .neighbour-trade__side:first-child .neighbour-trade__img { transform: rotate(-3deg); }
+  .neighbour-trade__side:last-child .neighbour-trade__img { transform: rotate(2.5deg); }
+  .neighbour-trade__side figcaption { display: grid; gap: 0.1rem; max-width: 10rem; }
+  .neighbour-trade__title { font-weight: 600; line-height: 1.2; }
+  .neighbour-trade__note { font-size: var(--fs-3); opacity: 0.8; }
+  .neighbour-trade__side--empty { align-self: center; gap: var(--sp-2); }
+  .neighbour-trade__gone { font-weight: 600; text-decoration: line-through; opacity: 0.75; }
+  /* "for", hand-written between the two boxes, and an arrow both ways under it. */
+  .neighbour-trade__for {
+    align-self: center;
+    display: grid;
+    justify-items: center;
+    font-family: var(--ui-font-hand);
+    font-size: var(--fs-t3);
+    color: var(--paper-speech);
+  }
+  .neighbour-trade__for::after { content: '⇄'; font-family: var(--ui-font-body); font-size: var(--fs-t2); opacity: 0.8; }
+  /* Asking twice: the player's box lifts a little off the mat. */
+  .neighbour-trade__table--armed .neighbour-trade__side:last-child .neighbour-trade__img { transform: translateY(-8px) rotate(-1deg); }
+  /* Agreed: their box slides over from the left. */
+  .neighbour-trade__side--arrived { animation: neighbour-trade-arrive var(--arrive-ms) var(--ui-ease) both; }
+  @keyframes neighbour-trade-arrive {
+    from { opacity: 0; transform: translateX(-9rem) rotate(-6deg); }
+    to { opacity: 1; transform: none; }
+  }
+  .neighbour-trade__table--done .neighbour-trade__for::after { content: '→'; }
+  .neighbour-trade__after { margin: var(--sp-3) 0 0; font-size: var(--fs-5); color: var(--ui-text-dim); }
+  /* Refused: their door swings shut over the left half of the mat. */
+  .neighbour-trade__table--shut { grid-template-columns: 1fr 1fr; }
+  .neighbour-trade__shut-door {
+    align-self: stretch;
+    margin: calc(-1 * var(--sp-4)) 0 calc(-1 * var(--sp-3)) calc(-1 * var(--sp-4));
+    background:
+      linear-gradient(var(--door-panel), var(--door-panel)) 18% 12% / 64% 34% no-repeat,
+      linear-gradient(var(--door-panel), var(--door-panel)) 18% 82% / 64% 34% no-repeat,
+      var(--door);
+    box-shadow: 6px 0 12px var(--shade-45);
+    transform-origin: left center;
+    animation: neighbour-trade-shut var(--shut-ms) var(--ui-ease) both;
+  }
+  @keyframes neighbour-trade-shut {
+    from { transform: perspective(600px) rotateY(-70deg); }
+    to { transform: none; }
+  }
+  .neighbour-trade__door { margin: var(--sp-4) 0; text-align: center; color: var(--ui-text-dim); }
+  /* Out of reach: still reachable, so the press can let the neighbour say why. */
+  .neighbour-trade__swap--off { opacity: 0.6; }
+  @media (max-width: 30rem) {
+    .neighbour-trade__cover { width: 5rem; height: 6.5rem; }
+  }
+  /* Reduced motion: the game's setting (`.reduce-motion` on <html>, settings/motion), never the media query alone. */
+  .reduce-motion .neighbour-trade__side--arrived,
+  .reduce-motion .neighbour-trade__shut-door { animation: none; }
+}

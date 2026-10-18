@@ -1,0 +1,14 @@
+/* Low quality (no post passes): the room in shade round the box being examined (`graphics/readingDim`). */
+@layer tokens, base, components, panels;
+@layer panels {
+  .reading-dim {
+    position: fixed;
+    inset: 0;
+    pointer-events: none;
+    /* The canvas's own level, after it in the page: over the room, under the HUD. */
+    z-index: var(--z-canvas);
+    background: radial-gradient(circle at var(--reading-x, 50%) var(--reading-y, 50%), transparent var(--reading-r, 30vh), var(--shade-90) calc(var(--reading-r, 30vh) * 1.9 + 30vh));
+    /* The veil's ink is 90 % black: the opacity brings it to the dim asked for. */
+    opacity: calc(var(--reading-dim, 0) / 0.9);
+  }
+}

@@ -98,6 +98,9 @@ export const KIDS_LINES = {
   otherMachine: ['That doesn’t even go in my handheld.', 'I can’t play that here though.'],
   talkedOut: ['Stop asking, I’m trying to play!', 'Ask me tomorrow. I’m busy.'],
   thinking: ['Hmm…', 'Let me think…', 'Wait wait wait.'],
+  /** An offer pressed while they are still thinking the last one over, or before one of their carts is picked. */
+  busy: ['Hang on, I’m still thinking!', 'One at a time!'],
+  pickFirst: ['Pick one of mine first!', 'For which one? Point at it.'],
   swapOpen: ['Swap? Show me what you’ve got.', 'OK, but no rubbish ones.', 'I only swap good ones.'],
   challenge: ['Bet you can’t beat me. One go!', 'You? Against me? OK. One go.', 'My score’s on it. Try and beat it.'],
   won: ['No way! Again tomorrow. I’m practising tonight.', 'You cheated. How did you do that?', 'OK that was good. Lucky, but good.'],

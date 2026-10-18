@@ -94,11 +94,11 @@ function blockHtml(block: Block, ctx: PageContext): Html {
 function haulHtml(e: JournalEntry, ctx: PageContext): Html {
   const game = gameBehind(e, ctx);
   const platform = typeof e.data?.platform === 'string' ? e.data.platform : '';
-  const price = typeof e.data?.price === 'number' ? formatCoins(e.data.price) : '';
+  const amount = typeof e.data?.price === 'number' ? formatCoins(e.data.price) : '';
   return html`<li class="journal-haul__item">
       <span class="journal-haul__pocket">${game ? coverImg(ctx.options.coverUrl?.(game), game, 'journal-haul__cover') : ''}</span>
       <span class="journal-haul__name">${e.text}${platform ? html` <small>${platform}</small>` : ''}</span>
-      ${price ? html`<span class="journal-haul__price">${price}</span>` : ''}
+      ${amount ? html`<span class="journal-haul__price">${amount}</span>` : ''}
     </li>`;
 }
 

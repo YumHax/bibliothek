@@ -102,12 +102,12 @@ export const FACADES: readonly FacadeSpec[] = [
   { id: 'arcade', from: [2, -12], to: [14, -12], storeys: 5, seed: 23, shops: [{ kind: 'arcade', from: 0.4, to: 11.6, door: 6 }], detail: NEAR },
   { id: 'n3', from: [14, -12], to: [26, -12], storeys: 4, seed: 37, shops: [{ kind: 'laundry', from: 0.4, to: 5.8 }, { kind: 'florist', from: 6.2, to: 11.6, door: 8.9 }], detail: NEAR },
   { id: 'n4', from: [26, -12], to: [36, -12], storeys: 6, seed: 41, shops: [{ kind: 'tabac', from: 0.4, to: 4.8 }, { kind: 'bar', from: 5.2, to: 9.6, name: 'THE ANCHOR' }], detail: NEAR },
-  { id: 'n5', from: [36, -12], to: [50, -12], storeys: 5, seed: 43, shops: [{ kind: 'shut', from: 0.4, to: 6.6 }, { kind: 'butcher', from: 7.4, to: 13.6 }], detail: MID },
-  { id: 'n6', from: [50, -12], to: [64, -12], storeys: 6, seed: 45, shops: [{ kind: 'cafe', from: 0.6, to: 6.8 }], door: 10.5, detail: FAR },
-  { id: 'n7', from: [64, -12], to: [80, -12], storeys: 5, seed: 47, shops: [{ kind: 'pharmacy', from: 0.6, to: 6.4 }, { kind: 'bakery', from: 9.4, to: 15.4 }], detail: FAR },
-  { id: 'n8', from: [80, -12], to: [96, -12], storeys: 6, seed: 49, shops: [{ kind: 'grocer', from: 0.6, to: 6.4 }], door: 11, detail: FAR },
-  { id: 'n9', from: [96, -12], to: [112, -12], storeys: 5, seed: 51, shops: [{ kind: 'bar', from: 8.4, to: 15.4 }], door: 4, detail: FAR, nameplates: [{ at: 15.1, name: 'FRONT STREET' }] },
-  { id: 'n10', from: [120, -12], to: [136, -12], storeys: 6, seed: 56, shops: [{ kind: 'laundry', from: 0.6, to: 6 }], door: 11, detail: FAR, nameplates: [{ at: 0.9, name: 'FRONT STREET' }] },
+  { id: 'n5', from: [36, -12], to: [50, -12], storeys: 5, seed: 43, shops: [{ kind: 'shut', from: 0.4, to: 6.6 }, { kind: 'butcher', from: 7.4, to: 13.6, name: 'PELLETIER & SON' }], detail: MID },
+  { id: 'n6', from: [50, -12], to: [64, -12], storeys: 6, seed: 45, shops: [{ kind: 'cafe', from: 0.6, to: 6.8, name: 'THE KETTLE' }], door: 10.5, detail: FAR },
+  { id: 'n7', from: [64, -12], to: [80, -12], storeys: 5, seed: 47, shops: [{ kind: 'pharmacy', from: 0.6, to: 6.4, name: 'MILL LANE PHARMACY' }, { kind: 'bakery', from: 9.4, to: 15.4, name: 'THE FLOUR POT' }], detail: FAR },
+  { id: 'n8', from: [80, -12], to: [96, -12], storeys: 6, seed: 49, shops: [{ kind: 'grocer', from: 0.6, to: 6.4, name: 'BELLA FRUTTA' }], door: 11, detail: FAR },
+  { id: 'n9', from: [96, -12], to: [112, -12], storeys: 5, seed: 51, shops: [{ kind: 'bar', from: 8.4, to: 15.4, name: 'THE PIGEON' }], door: 4, detail: FAR, nameplates: [{ at: 15.1, name: 'FRONT STREET' }] },
+  { id: 'n10', from: [120, -12], to: [136, -12], storeys: 6, seed: 56, shops: [{ kind: 'laundry', from: 0.6, to: 6, name: 'SUDS & BUBBLES' }], door: 11, detail: FAR, nameplates: [{ at: 0.9, name: 'FRONT STREET' }] },
   // Across the street (faces -z; left end is +x). fA and fB close Park Street's end.
   { id: 'fA', from: [-29, 12], to: [-40, 12], storeys: 6, seed: 81, shops: [{ kind: 'grocer', from: 0.4, to: 5.6, name: 'PARK FRUIT & VEG' }], door: 8, detail: NEAR, nameplates: [{ at: 10.1, name: 'FRONT STREET' }] },
   { id: 'fB', from: [-16, 12], to: [-29, 12], storeys: 5, seed: 82, shops: [{ kind: 'books', from: 0.4, to: 6.2, name: 'COMICS & MANGA' }, { kind: 'pets', from: 6.8, to: 12.6, door: 9.7, name: 'PAWS & CLAWS' }], detail: NEAR },
@@ -115,12 +115,12 @@ export const FACADES: readonly FacadeSpec[] = [
   { id: 'retro', from: [10, 12], to: [-2, 12], storeys: 5, seed: 71, shops: [{ kind: 'retro', from: 1.2, to: 10.8, door: 7 }], detail: NEAR },
   { id: 'f3', from: [22, 12], to: [10, 12], storeys: 6, seed: 67, shops: [{ kind: 'bakery', from: 0.4, to: 5.8 }, { kind: 'cafe', from: 6.2, to: 11.6, name: 'SUNNY SIDE CAFE' }], detail: NEAR },
   { id: 'f4', from: [36, 12], to: [22, 12], storeys: 5, seed: 53, shops: [{ kind: 'pharmacy', from: 0.4, to: 6.6 }, { kind: 'furniture', from: 7.4, to: 13.6, door: 10.5, name: 'SECOND HOME' }], detail: NEAR },
-  { id: 'f5', from: [50, 12], to: [36, 12], storeys: 6, seed: 55, shops: [{ kind: 'florist', from: 0.6, to: 6.2 }, { kind: 'tabac', from: 8, to: 13.4 }], detail: MID },
-  { id: 'f6', from: [63, 12], to: [50, 12], storeys: 5, seed: 57, shops: [{ kind: 'books', from: 0.6, to: 6.4 }], door: 9.5, detail: FAR },
-  { id: 'f7', from: [78, 12], to: [63, 12], storeys: 6, seed: 59, shops: [{ kind: 'cafe', from: 0.6, to: 7 }, { kind: 'shut', from: 8, to: 14.4 }], detail: FAR },
-  { id: 'f8', from: [94, 12], to: [78, 12], storeys: 5, seed: 61, shops: [{ kind: 'bakery', from: 9, to: 15.4 }], door: 4, detail: FAR },
-  { id: 'f9', from: [112, 12], to: [94, 12], storeys: 6, seed: 63, shops: [{ kind: 'bar', from: 0.6, to: 7 }, { kind: 'grocer', from: 11, to: 17.4 }], detail: FAR },
-  { id: 'f10', from: [136, 12], to: [112, 12], storeys: 5, seed: 65, shops: [{ kind: 'pharmacy', from: 0.6, to: 6.4 }], door: 14, detail: FAR },
+  { id: 'f5', from: [50, 12], to: [36, 12], storeys: 6, seed: 55, shops: [{ kind: 'florist', from: 0.6, to: 6.2, name: 'GREEN FINGERS' }, { kind: 'tabac', from: 8, to: 13.4, name: 'THE PAPER STOP' }], detail: MID },
+  { id: 'f6', from: [63, 12], to: [50, 12], storeys: 5, seed: 57, shops: [{ kind: 'books', from: 0.6, to: 6.4, name: 'PAGE TURNER' }], door: 9.5, detail: FAR },
+  { id: 'f7', from: [78, 12], to: [63, 12], storeys: 6, seed: 59, shops: [{ kind: 'cafe', from: 0.6, to: 7, name: 'THE CORNER CUP' }, { kind: 'shut', from: 8, to: 14.4 }], detail: FAR },
+  { id: 'f8', from: [94, 12], to: [78, 12], storeys: 5, seed: 61, shops: [{ kind: 'bakery', from: 9, to: 15.4, name: 'CRUMBS' }], door: 4, detail: FAR },
+  { id: 'f9', from: [112, 12], to: [94, 12], storeys: 6, seed: 63, shops: [{ kind: 'bar', from: 0.6, to: 7, name: 'THE CROWN' }, { kind: 'grocer', from: 11, to: 17.4, name: 'THE CORNER SHOP' }], detail: FAR },
+  { id: 'f10', from: [136, 12], to: [112, 12], storeys: 5, seed: 65, shops: [{ kind: 'pharmacy', from: 0.6, to: 6.4, name: 'TERMINUS PHARMACY' }], door: 14, detail: FAR },
   // Our building round the corner bay (`CORNER_BAY`), in its stone: the collection room's left wall with its two
   // windows (world z -1.8 and 1.8), the kitchen wing's blind front, its side on Park Street with the kitchen's window.
   {
@@ -198,7 +198,10 @@ export function doorOnPavement(door: ShopDoor): boolean {
   return isWalkable([door.at[0] + Math.sin(door.yaw) * DOOR_STEP, door.at[1] + Math.cos(door.yaw) * DOOR_STEP]);
 }
 
-/** The door on the walkable pavements of each shop one walks into, by its zone (the first of a kind, should two share one). */
+/**
+ * The door on the walkable pavements of each shop one walks into, by its zone (the first of a kind, should two share
+ * one: a second florist's door is a plain shop's, GREEN FINGERS, `ShopEntrance`).
+ */
 export function walkInShops(): { zone: ShopZoneId; door: ShopDoor }[] {
   const seen = new Set<ShopZoneId>();
   return shopDoors().flatMap((door) => {

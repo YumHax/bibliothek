@@ -20,6 +20,8 @@ import { formatCoins, formatTickets } from '@/text/money';
 interface MysteryGameSource {
   collection: { owns(id: string): boolean };
   games: readonly Game[];
+  /** More of the index's games, asked for as the counter opens (the box never runs dry while the index has some). */
+  more?: () => Promise<readonly Game[]>;
   /** A game's shop price: the box holds nothing dearer than `MYSTERY_GAME_MAX_PRICE` (unpriced: anything but a grail). */
   worth?: (game: Game) => number;
 }
@@ -95,6 +97,8 @@ export class PrizePanel extends ModalPanel {
   private readonly detailEl: HTMLElement;
   private readonly munchEl: HTMLElement;
   private readonly photos = new Map<string, string>();
+  /** The index's games fetched for the mystery box (`MysteryGameSource.more`). */
+  private extra: readonly Game[] = [];
   private selected: string;
   private status: Slip = { text: '', error: false, prize: null };
   private shownTickets: number;
@@ -165,6 +169,9 @@ export class PrizePanel extends ModalPanel {
     this.shownCoins = this.wallet.coins;
     this.render();
     this.loadPhotos();
+    void this.mystery?.more?.().then((games) => {
+      this.extra = games;
+    }, () => {});
   }
 
   protected override onClosed(): void {
@@ -202,9 +209,13 @@ export class PrizePanel extends ModalPanel {
     this.detailEl.querySelector<HTMLButtonElement>('button[data-action="pin"]')?.focus();
   }
 
-  /** Nothing left of it to take: a prize with a home already there, a plate on every cabinet. */
+  /**
+   * Nothing left of it to take: a prize with a home already there, a plate on every cabinet, the week's retired cabinet
+   * the one in the living room already (another week's swaps it: the old one goes back to the hall).
+   */
   private soldOut(p: Prize): boolean {
     if (p.special === 'sponsor') return !this.back || this.back.cabinets().every((c) => this.sponsored().includes(c.id));
+    if (p.special === 'cabinet') return !this.back || this.prizes.gamesOf(p.id).at(-1) === retiredOnOffer(this.back.today());
     return soldOnce(p) && this.prizes.count(p.id) > 0;
   }
 
@@ -260,7 +271,17 @@ export class PrizePanel extends ModalPanel {
 
   private take(id: string): void {
     const prize = PRIZES.find((p) => p.id === id);
-    if (!prize || prize.tickets === null || this.soldOut(prize) || !this.forSale().includes(prize)) return;
+    if (!prize || prize.tickets === null || !this.forSale().includes(prize)) return;
+    // Out of reach but still pressable (a controller can land on it): the press says why.
+    if (this.soldOut(prize)) {
+      this.slip(prize.special === 'sponsor' ? 'Every cabinet has your plate already.' : 'That one is at home already.', false, id);
+      return;
+    }
+    const short = prize.tickets - this.wallet.tickets;
+    if (short > 0) {
+      this.slip(`${formatTickets(short)} short for that one. A few more games and it’s yours.`, true, id);
+      return;
+    }
     if (prize.special === 'sponsor' && this.sponsorGame && this.sponsored().includes(this.sponsorGame)) return;
     const game = prize.game ? (prize.special === 'rare' ? this.drawRareGame() : this.drawMysteryGame()) : null;
     if (prize.game && !game) {
@@ -303,7 +324,7 @@ export class PrizePanel extends ModalPanel {
   private drawMysteryGame(): Game | null {
     const mystery = this.mystery;
     if (!mystery) return null;
-    const unowned = mystery.games.filter((g) => !mystery.collection.owns(g.id) && !isGrail(g.id));
+    const unowned = [...mystery.games, ...this.extra].filter((g) => !mystery.collection.owns(g.id) && !isGrail(g.id));
     const worth = mystery.worth;
     const left = worth ? unowned.filter((g) => worth(g) <= MYSTERY_GAME_MAX_PRICE) : unowned;
     return left[Math.floor(random() * left.length)] ?? null;
@@ -342,7 +363,8 @@ export class PrizePanel extends ModalPanel {
     if (!p.special) return true;
     const back = this.back;
     if (!back) return false;
-    if (p.special === 'limited') return limitedOnOffer(back.today()).id === p.id;
+    // Every limited edition home already: the week's slot is not kept for one that is at home.
+    if (p.special === 'limited') return limitedOnOffer(back.today()).id === p.id && PRIZES.some((l) => l.special === 'limited' && this.prizes.count(l.id) === 0);
     if (p.special === 'sponsor') return back.cabinets().length > 0;
     return true;
   }
@@ -438,8 +460,8 @@ export class PrizePanel extends ModalPanel {
       <p class="prizes__blurb">${p.blurb}</p>
       <p class="prizes__where">${p.game ? 'Comes home in the parcel.' : this.whereItGoes(p)}${owned && !soldOnce(p) && p.special !== 'sponsor' ? html` <b>${owned} at home already.</b>` : ''}</p>
       ${this.backRoomHtml(p, done)}
-      <div class="prizes__price"><span class="prizes__stub prizes__stub--big">${p.tickets}</span>${short > 0 && !done ? html`<span class="prizes__need">you have ${have}</span>` : ''}</div>
-      <button type="button" class="prizes__take" data-action="take" data-prize="${p.id}"${attr('disabled', done || short > 0 || choosing)}>${label}</button>
+      <div class="prizes__price"><span class="prizes__stub prizes__stub--big">${p.tickets}</span>${short > 0 && !done ? html`<span class="prizes__need">you have ${formatTickets(have)}</span>` : ''}</div>
+      <button type="button" class="prizes__take" data-action="take" data-prize="${p.id}" aria-disabled="${done || short > 0 || choosing ? 'true' : 'false'}">${label}</button>
       ${this.goal ? html`<button type="button" class="prizes__pin${pinned ? ' prizes__pin--on' : ''}" data-action="pin" data-prize="${p.id}" aria-pressed="${pinned ? 'true' : 'false'}"${attr('disabled', done && !pinned)}>${pinned ? 'Pinned as your goal · unpin' : 'Pin as my goal'}</button>` : ''}
       ${status?.text ? html`<p class="prizes__slip${status.error ? ' prizes__slip--error' : ''}">${status.text}</p>` : ''}`,
     );
@@ -463,7 +485,11 @@ export class PrizePanel extends ModalPanel {
         })}
       </div>`;
     }
-    if (p.special === 'cabinet') return done ? '' : html`<p class="prizes__where">This week it is the <b>${this.titleOf(retiredOnOffer(back.today()))}</b> cabinet.</p>`;
+    if (p.special === 'cabinet') {
+      if (done) return '';
+      const home = this.prizes.gamesOf(p.id).at(-1);
+      return html`<p class="prizes__where">This week it is the <b>${this.titleOf(retiredOnOffer(back.today()))}</b> cabinet.${home ? html` Yours, the ${this.titleOf(home)}, goes back to the hall in the swap.` : ''}</p>`;
+    }
     if (p.special === 'limited') return done ? '' : html`<p class="prizes__where">Only this week: next week, another takes its place.</p>`;
     return '';
   }
@@ -493,7 +519,7 @@ export class PrizePanel extends ModalPanel {
         <b>Tickets for coins</b>
         ${status?.text
           ? html`<span class="prizes__worth prizes__worth--said${status.error ? ' prizes__worth--error' : ''}" role="status">${status.text}</span>`
-          : html`<span class="prizes__worth">${gain ? html`Your tickets are worth <em>${formatCoins(gain)}</em>` : `${formatTickets(TICKETS_PER_COIN)} make a coin`}</span>`}
+          : html`<span class="prizes__worth">${gain ? html`Your tickets are worth <em>${formatCoins(gain)}</em>` : 'Feed it your tickets, it pays out coins'}</span>`}
       </p>
       <div class="prizes__feeds">${steps}</div>
       <button type="button" class="prizes__cash-all" data-action="exchange" data-coins="Infinity"${attr('disabled', !gain)}><span class="prizes__coin" aria-hidden="true"></span>${all}</button>`,

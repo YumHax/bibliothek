@@ -3,6 +3,8 @@ import type { Placement } from '../Placement';
 import type { DecorEntry } from '../props/decor';
 import type { HomeUpgrade } from '@/economy/HomeUpgrades';
 import type { PlatformId } from '@/catalog/types';
+import type { FireplaceNote } from '../annex/Fireplace';
+import { ANNEX_PLAN } from '../annex/annexPlan';
 
 /*
  * THE NEIGHBOURS' FLATS: the flats behind the doors on the stairs, one shell dressed for whoever the
@@ -44,7 +46,15 @@ export type Dressing =
   /** An old vector console (the Vectrex) on a table, its screen glowing: shown, not for sale. */
   | { kind: 'vectrex'; at: Placement }
   /** An upright piano against a wall, its lid up. */
-  | { kind: 'piano'; at: Placement; color?: number };
+  | { kind: 'piano'; at: Placement; color?: number }
+  /** A marble chimneypiece (`annex/Fireplace`: Mrs Roux's, the same one the flat gains when her rooms are joined), what is on its mantel read with a click. */
+  | { kind: 'fireplace'; at: Placement; note: FireplaceNote; mantel: { photo: number; note: number } }
+  /**
+   * The host's own pastime, done with them (`HostHabit`): a click over `at` (a box `size` m, its bottom there) says the
+   * next of `lines` and warms them, once a game day. `gift: 'gameBoy'`: a Game Boy mended at the kitchen table may be
+   * given here (the Nguyen twins share one), said with `gift` lines.
+   */
+  | { kind: 'habit'; at: Placement; size: [number, number, number]; label: string; lines: string[]; gift?: { what: 'gameBoy'; label: string; line: string } };
 
 /**
  * One neighbour's flat as the player finds it: who (their door on the stairs, `doorKey(k, i)`), how they look (the
@@ -75,7 +85,17 @@ export interface NeighbourHost {
   dressing: Dressing[];
   /** Which side of the building their window looks out of (`NEIGHBOUR_FLAT_PLAN.outlook`); default the courtyard. */
   side?: 'street' | 'courtyard';
+  /** How their TV corner stands (`NEIGHBOUR_FLAT_PLAN.layouts`); default `'usual'`. */
+  layout?: TvCornerLayout;
 }
+
+/** Where a host's TV, its side table and the two armchairs stand: each flat its own way round (`NEIGHBOUR_FLAT_PLAN.layouts`). */
+interface TvCorner {
+  tv: Placement;
+  sideTable: Placement;
+  seats: { player: Placement; host: Placement };
+}
+export type TvCornerLayout = 'usual' | 'byTheWindow';
 
 /** The parts of the flat every host has: the door, the vestibule, the window, the TV and its side table, two armchairs, the shelf of games. */
 export const NEIGHBOUR_FLAT_PLAN = {
@@ -105,6 +125,24 @@ export const NEIGHBOUR_FLAT_PLAN = {
   sideTable: { at: { floor: [2.85, -1.35] } as Placement },
   /** The two armchairs facing the TV: the player's, the host's (`rest.seat`). */
   seats: { player: { floor: [1.15, -1.0], rotationY: Math.PI / 2 } as Placement, host: { floor: [1.15, 0.35], rotationY: Math.PI / 2 } as Placement },
+  /**
+   * The TV corner as each host has it (`NeighbourHost.layout`), moved into place when they are visited (the same TV,
+   * table and armchairs: one zone for six flats). `usual` is the build's; `byTheWindow` slides the set towards the
+   * window, the table on its other side and the armchairs turned in a little, for hosts with nothing at the right
+   * wall's front end.
+   */
+  layouts: {
+    usual: {
+      tv: { floor: [2.9, -0.35], rotationY: -Math.PI / 2 },
+      sideTable: { floor: [2.85, -1.35] },
+      seats: { player: { floor: [1.15, -1.0], rotationY: Math.PI / 2 }, host: { floor: [1.15, 0.35], rotationY: Math.PI / 2 } },
+    },
+    byTheWindow: {
+      tv: { floor: [2.9, -0.95], rotationY: -Math.PI / 2 },
+      sideTable: { floor: [2.85, 0.15] },
+      seats: { player: { floor: [1.3, -1.7], rotationY: Math.PI / 2 - 0.3 }, host: { floor: [1.2, -0.25], rotationY: Math.PI / 2 + 0.3 } },
+    },
+  } satisfies Record<TvCornerLayout, TvCorner>,
   /** Where the host waits to say hello: by the opening, facing the vestibule. */
   greet: { at: [-1.55, 0.35] as [number, number], yaw: Math.PI * 0.85 },
   /** The shelf of their games against the back wall. */
@@ -145,7 +183,7 @@ export const NEIGHBOUR_HOSTS: readonly NeighbourHost[] = [
     },
     lines: [
       'My grandson left all these games when he moved to Lyon. Take what you like, I don’t know what they’re worth.',
-      'Henri, my late husband, sat in that armchair every evening for forty years.',
+      'Lucien, my late husband, sat in that armchair every evening for forty years. He mended radios in it.',
       'The budgies are called Pompidou and Giscard. Don’t ask.',
       'The stairs get longer every year, I swear it.',
       'You play those games all night, I hear the music through the wall. I don’t mind. It’s company.',
@@ -153,13 +191,15 @@ export const NEIGHBOUR_HOSTS: readonly NeighbourHost[] = [
     watching: ['Ah, this one! My grandson played it on Sundays. The music goes round and round.', 'I never understood who the little man is cross with.'],
     rest: { seat: true },
     dressing: [
-      { kind: 'piece', id: 'sideboard', at: { wall: 'left', along: -0.8, y: 0 } },
+      // Her marble fireplace on the party wall, as the joined rooms keep it (`annex/annexPlan`'s): Lucien's photo on it.
+      { kind: 'fireplace', at: { wall: 'left', along: -0.8, y: 0 }, mantel: ANNEX_PLAN.mantel, note: { caption: 'Lucien’s photo on the mantelpiece · look', title: 'On the mantelpiece', text: 'A photo in a gilt frame: a man with a soldering iron and a grin, a radio in pieces on the table in front of him. Lucien, 1979, it says on the back, in her hand. Beside it, her reading glasses and a box of matches for a fire nobody lights.' } },
       { kind: 'piece', id: 'livingRug', variant: 0, at: { floor: [1.4, -0.3] } },
       { kind: 'birdcage', at: { floor: [-2.6, -1.9] } },
-      { kind: 'decor', entry: { kind: 'pictureFrame', at: { wall: 'left', along: -0.8, y: 1.6 }, options: { motif: 'botanical', width: 0.55, height: 0.7, frameColor: 0x8a6a3a, seed: 3 } } },
+      { kind: 'habit', at: { floor: [-2.6, -1.9] }, size: [0.55, 1.7, 0.55], label: 'Pompidou and Giscard · whistle to them', lines: ['You whistle. Pompidou whistles back, Giscard sulks. “He is like that with everyone, dear.”', 'A millet spray through the bars: both budgies at once, a little war of feathers. She laughs till she coughs.', '“Say bonjour, Pompidou.” Pompidou says nothing, very loudly.'] },
+      { kind: 'decor', entry: { kind: 'pictureFrame', at: { wall: 'left', along: -0.8, y: 1.85 }, options: { motif: 'botanical', width: 0.55, height: 0.6, frameColor: 0x8a6a3a, seed: 3 } } },
       { kind: 'decor', entry: { kind: 'pictureFrame', at: { wall: 'right', along: 1.4, y: 1.6 }, options: { motif: 'mountains', width: 0.45, height: 0.35, frameColor: 0xb89a5a, seed: 7 } } },
       { kind: 'decor', entry: { kind: 'plant', at: { floor: [0.25, -2.25] }, options: { kind: 'fig', pot: 'ceramic', seed: 5 } } },
-      { kind: 'piece', id: 'radio', at: { floor: [-2.95, -0.8] } },
+      { kind: 'piece', id: 'radio', at: { floor: [-2.95, 0.55] } },
       { kind: 'decor', entry: { kind: 'wallCalendar', at: { wall: 'front', along: 0.8, y: 1.5 } } },
     ],
   },
@@ -209,6 +249,14 @@ export const NEIGHBOUR_HOSTS: readonly NeighbourHost[] = [
     dressing: [
       { kind: 'piece', id: 'bed', at: { wall: 'left', along: -1.2, y: 0 } },
       { kind: 'piece', id: 'floorCushions', at: { floor: [1.9, 0.55] } },
+      {
+        kind: 'habit',
+        at: { floor: [1.9, 0.55] },
+        size: [1.1, 0.6, 1.0],
+        label: 'The twins’ corner · play a round with them',
+        lines: ['A round of their racing game, one controller passed between three. Mai wins. Tuan says she cheated. She did.', 'You are made to be the monster. You are a very good monster, they agree, for a grown-up.', 'They teach you the secret code. It does nothing. They are delighted that it does nothing.'],
+        gift: { what: 'gameBoy', label: 'The twins’ corner · give them the Game Boy you mended', line: 'You hand over the Game Boy you mended at the kitchen table. Silence, then two screams. “One EACH!” Mrs Nguyen has to sit down.' },
+      },
       { kind: 'poster', at: { wall: 'left', along: -1.1, y: 1.85 }, title: 'GALAXY RACER', sub: 'IN CINEMAS', colors: [0x1a2a5a, 0xf0c040], width: 0.6, height: 0.85 },
       { kind: 'poster', at: { wall: 'right', along: 1.6, y: 1.7 }, title: 'NEON CITY', sub: 'WORLD TOUR', colors: [0x6a1a4a, 0x40e0d0], width: 0.55, height: 0.75 },
       { kind: 'poster', at: { wall: 'front', along: 0.6, y: 1.75 }, title: 'LEVEL UP', sub: 'GAME FAIR', colors: [0xe8e0d0, 0xc0302a], width: 0.5, height: 0.7 },
@@ -218,7 +266,7 @@ export const NEIGHBOUR_HOSTS: readonly NeighbourHost[] = [
   },
   {
     // The 2nd, left: R. Haddad, who swaps games (`NeighbourTrades`), a tidy collector's flat.
-    k: 3, i: 0, who: 'R. Haddad', seed: 41, inviteAt: 20, walls: 0xe6e1d8,
+    k: 3, i: 0, who: 'R. Haddad', seed: 41, inviteAt: 20, walls: 0xe6e1d8, layout: 'byTheWindow',
     platforms: ['megadrive', 'snes', 'ps1'], shelf: 6, favourite: 'megadrive',
     welcome: {
       first: 'The collector from the fifth! Come in, come in. I’ve been hoping you’d knock.',
@@ -236,6 +284,7 @@ export const NEIGHBOUR_HOSTS: readonly NeighbourHost[] = [
     dressing: [
       { kind: 'piece', id: 'sideboard', at: { wall: 'left', along: -1.1, y: 0 } },
       { kind: 'piece', id: 'readingCorner', at: { floor: [-2.4, -1.8], rotationY: Math.PI / 4 } },
+      { kind: 'habit', at: { floor: [-2.4, -1.8] }, size: [0.9, 1.2, 0.9], label: 'His reading corner · borrow a book, talk it over', lines: ['He lends you a thriller set in a game studio. “The murderer is the producer. It is always the producer.”', 'Half an hour on the history of the Game Boy. He has notes. He has footnotes.', 'He reads you a page aloud, badly on purpose, doing all the voices. Then very well, to show he can.'] },
       { kind: 'piece', id: 'livingRug', variant: 1, at: { floor: [1.3, -0.3] } },
       { kind: 'decor', entry: { kind: 'pictureFrame', at: { wall: 'left', along: -1.1, y: 1.7 }, options: { motif: 'poster', width: 0.6, height: 0.8, seed: 17 } } },
       { kind: 'decor', entry: { kind: 'plant', at: { floor: [2.85, -2.2] }, options: { kind: 'yucca', pot: 'ceramic', seed: 19 } } },
@@ -261,6 +310,7 @@ export const NEIGHBOUR_HOSTS: readonly NeighbourHost[] = [
     rest: { at: [-0.6, -1.7], yaw: Math.PI * 0.9 },
     dressing: [
       { kind: 'piece', id: 'kitchenTable', at: { floor: [-0.9, -0.6] } },
+      { kind: 'habit', at: { floor: [-0.9, -0.6] }, size: [1.0, 0.85, 0.8], label: 'Her kitchen table · a slice of her tarte', lines: ['Tarte aux pommes, still warm. She watches you eat the whole slice before she says a word about anyone.', 'A second slice, “or it goes to waste.” It would never go to waste. She knows everything about the 2nd floor by the end of it.', 'She writes the recipe down for you, then keeps one ingredient back. “A woman must have her secrets.”'] },
       { kind: 'dogBasket', at: { floor: [-2.6, -1.9] }, color: 0x8a3a3a },
       { kind: 'piece', id: 'kitchenRug', at: { floor: [-0.9, -0.6] } },
       { kind: 'piece', id: 'appliances', at: { floor: [-2.9, -0.4], rotationY: Math.PI / 2 } },
@@ -271,7 +321,7 @@ export const NEIGHBOUR_HOSTS: readonly NeighbourHost[] = [
   },
   {
     // The 1st, left: J.-P. Martin's clutter, the Vectrex he will never sell.
-    k: 4, i: 0, who: 'J.-P. Martin', seed: 83, inviteAt: 25, walls: 0xcdbf9e,
+    k: 4, i: 0, who: 'J.-P. Martin', seed: 83, inviteAt: 25, walls: 0xcdbf9e, layout: 'byTheWindow',
     platforms: ['nes', 'megadrive', 'n64', 'ps1'], shelf: 6, favourite: 'nes',
     welcome: {
       first: 'Ah, the young collector. Come in, if you can find the floor. Mind the crates.',

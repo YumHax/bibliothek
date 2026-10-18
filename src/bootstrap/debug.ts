@@ -31,6 +31,8 @@ import { ritualsDebugEvents } from '@/grandma/ritualsDebug';
 import { familyDebugEvents } from '@/family/familyDebug';
 import type { Travel } from '@/world/travel';
 import type { ZoneId } from '@/world/zoneIds';
+import { SEED_GAMES } from '@/catalog';
+import { forceCatOut } from '@/world/cat/escapes';
 
 /** Every light (every shadow-casting one with `shadowed`) in the zones but `current`, for the F9 bisection. */
 function lightsOutside(zones: readonly { readonly group: THREE.Object3D }[], current: object, shadowed: boolean): THREE.Light[] {
@@ -71,6 +73,41 @@ export function debugSubjects(parts: Omit<DebugSubjects, 'day'> & { today: { rea
   return { day: () => today.gameDay, ...stores };
 }
 
+/** How many test cartridges "Fill the shelves" adds: more than every bookcase holds, so the overflow shows. */
+const FILL_COUNT = 160;
+
+/**
+ * The flat and the collection (docs/checks.md "Debug mode"): the shelves filled past their room with test carts (the
+ * overflow), the collection emptied, a parcel of three games in the hall, the cat hungry or out, the clock set.
+ */
+function flatDebugEvents(services: Services, cat: { makeHungry(): void } | undefined): DebugEvent[] {
+  const { collection, today, sky } = services;
+  const fill = (): void => {
+    const start = collection.games.filter((g) => g.id.startsWith('debug-fill-')).length;
+    for (let i = start; i < start + FILL_COUNT; i++) {
+      collection.add({ id: `debug-fill-${i}`, title: `Test Cart ${i + 1}`, platform: (['nes', 'snes', 'megadrive', 'gb'] as const)[i % 4]!, status: 'owned', acquired: { price: 0, where: 'the debug panel', day: today.gameDay } });
+    }
+  };
+  // Three of the built-in games the collection lacks, one at a time: under the import threshold, they go in the parcel.
+  const parcel = (): void => {
+    for (const game of SEED_GAMES.filter((g) => !collection.has(g.id)).slice(0, 3)) {
+      collection.add({ ...game, status: 'owned', addedAt: new Date().toISOString(), acquired: { price: 0, where: 'the debug panel', day: today.gameDay } });
+    }
+  };
+  const clock = (hours: number): DebugEvent => ({ label: `Clock to ${String(hours).padStart(2, '0')}:00`, run: () => sky.dayNight.setTime(hours) });
+  return [
+    { label: 'Fill the shelves past their room', run: fill },
+    { label: 'Empty the collection', run: () => [...collection.games].forEach((g) => collection.remove(g.id)), reload: true },
+    { label: 'A parcel of three games in the hall', run: parcel },
+    ...(cat ? [{ label: 'The cat hungry now', run: () => cat.makeHungry() }] : []),
+    { label: 'The cat slips out now', run: forceCatOut },
+    clock(8),
+    clock(13),
+    clock(19),
+    clock(23),
+  ];
+}
+
 /** The key that opens the debug panel (physical: the one left of 1, `²` on AZERTY), and F8 where that one is missing. */
 const PANEL_KEYS = ['Backquote', 'F8'];
 
@@ -81,7 +118,7 @@ const PANEL_KEYS = ['Backquote', 'F8'];
  * makes today a bulky-waste day (the courtyard's pile shows the next time the yard is built), `bibliothek.filmNight()`
  * puts the collection's first game on the courtyard's sheet and the film night on now, dark or not.
  */
-export function installDebugPanel(services: Services, parts: { input: Input; openPanel(panel: DebugPanel): void; modalOpen(): boolean; travel: Pick<Travel, 'everyStop' | 'go'> }): void {
+export function installDebugPanel(services: Services, parts: { input: Input; openPanel(panel: DebugPanel): void; modalOpen(): boolean; travel: Pick<Travel, 'everyStop' | 'go'>; cat?: { makeHungry(): void } }): void {
   const { today, wallet } = services;
   const party = (): void => forcePartyOn(today.gameDay);
   const estateSale = (): void => forceEstateSale(today.gameDay);
@@ -101,6 +138,7 @@ export function installDebugPanel(services: Services, parts: { input: Input; ope
     { label: 'A film night in the courtyard now', run: filmNight },
     { label: '5000 coins', run: () => wallet.earnCoins(5000) },
     { label: '500 tickets', run: () => wallet.addTickets(500) },
+    ...flatDebugEvents(services, parts.cat),
   ];
   // Mémé's: back to the first day, every memory ready or seen, the Sunday envelope again (docs/story.md "Mémé").
   events.push(...grandmaDebugEvents(services.grandma), ...grandmaHintDebugEvents(services.grandmaHints), ...albumDebugEvents(services.albumFinds), ...keepsakeDebugEvents(services.keepsakes, services.collection), ...presenceDebugEvents(services.grandmaPresence), ...lindenDebugEvents(services.grandmaBread, services.sharedRide, () => services.today.gameDay));

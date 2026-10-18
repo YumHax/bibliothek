@@ -43,12 +43,14 @@ export class Labelling implements KeyRoute {
     private readonly openPanel: (panel: ModalLike) => void,
     /** A piece of furniture is being carried: the hands are full. */
     private readonly carrying: () => boolean = () => false,
+    /** Facing a bookcase (the bookcase view sits the eye, but K works there, aimed with its cursor). */
+    private readonly facing: () => boolean = () => false,
   ) {}
 
   onKey(code: string): boolean {
     const maker = this.parts.labelMaker;
     if (!maker || !isAction(code, 'labelShelf') || !maker.owned || !maker.atHome) return false;
-    if (this.parts.inspector.current || this.parts.player.isSeated || this.carrying()) return false;
+    if (this.parts.inspector.current || (this.parts.player.isSeated && !this.facing()) || this.carrying()) return false;
     const spot = maker.aim();
     if (!spot) {
       this.host.react(`Aim at a shelf’s edge, then ${actionKeyLabel('labelShelf')} to label it`);

@@ -41,7 +41,7 @@ export function furnishMemeRecipes(zone: Zone, ctx: Pick<BuildContext, 'sky' | '
   const cook = (): void => {
     const out = rituals.dishOut;
     if (out) {
-      notices.react(`There’s still some of ${recipeOf(out).dish} out`);
+      notices.react(`There’s still some of ${recipeOf(out).dish} out.`);
       return;
     }
     const id = rituals.nextToCook();

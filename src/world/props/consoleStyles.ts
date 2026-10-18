@@ -65,6 +65,9 @@ interface PadSpec {
 
 /** Where the console sits in its slot and where the pad lies in front of it (local z). */
 const CONSOLE_Z = -0.075;
+/** The names a console's pad and its cable go by (`Console.padModel`). */
+const PAD_NAME = 'ConsolePad';
+const PAD_CABLE_NAME = 'ConsolePadCable';
 const PAD_POS = new THREE.Vector3(0.05, 0, 0.135);
 
 /** A material of the console's own, tinted on hover (`ConsoleVisual.hover`); every other look is a shared `paint`. */
@@ -102,6 +105,8 @@ function cross(parent: THREE.Object3D, size: number, thick: number, height: numb
 /** Builds a gamepad in front of the console and a cable back to it. */
 function pad(v: ConsoleVisual, spec: PadSpec): void {
   const g = new THREE.Group();
+  // Named for the pad picked up to play a program (`player/padInView` lifts a copy of it into view, this one hidden).
+  g.name = PAD_NAME;
   g.position.copy(PAD_POS);
   g.rotation.y = 0.22;
   const body = tinted(v, spec.color);
@@ -134,6 +139,7 @@ function pad(v: ConsoleVisual, spec: PadSpec): void {
   mid.y = 0.003;
   const curve = new THREE.CatmullRomCurve3([from, mid, to]);
   const cable = new THREE.Mesh(new THREE.TubeGeometry(curve, 12, 0.0025, 5), dark);
+  cable.name = PAD_CABLE_NAME;
   cable.castShadow = true;
   v.group.add(cable);
 }
@@ -374,6 +380,12 @@ function generic(p: Platform, v: ConsoleVisual): void {
   part(g, w * 0.6, 0.015, d * 0.7, tinted(v, accent.clone().multiplyScalar(0.7).getHex(), 0.55), { y: 0.0525 });
   powerLed(g, p, 0xc0392b, [0.02, 0.005, 0.01], { x: w * 0.35, y: 0.0475, z: d * 0.3 }); // power LED
   pad(v, { color: accent.clone().multiplyScalar(0.85).getHex(), buttons: [[0.024, 0.006, 0x2a2a2e], [0.04, 0.006, 0x2a2a2e]] });
+}
+
+/** A built console's pad and the cable to it (null on a console without one). */
+export function padOf(group: THREE.Object3D): { pad: THREE.Object3D; cable: THREE.Object3D | null } | null {
+  const pad = group.getObjectByName(PAD_NAME);
+  return pad ? { pad, cable: group.getObjectByName(PAD_CABLE_NAME) ?? null } : null;
 }
 
 /** Builds the low-poly console (and controller) for `platform`, laid out around a slot's floor centre. */

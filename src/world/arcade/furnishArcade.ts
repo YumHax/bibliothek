@@ -36,6 +36,7 @@ import { LightGun } from './LightGun';
 import { DancePad } from './DancePad';
 import { MedalRow, MedalRowTicker } from './MedalRow';
 import { InstructionCard } from './InstructionCard';
+import { CardReading } from './CardReading';
 import { GlowPool } from './GlowPool';
 import type { CabinetAttachment } from './CabinetAttachment';
 import type { Station } from './Station';
@@ -127,7 +128,7 @@ function placeCabinets(zone: Zone, { input, listener, arcade }: ArcadeBuild, hal
   const { tournament, replays, scores, medals } = arcade;
   const nextPlayCost = (): number => hall.nextPlayCost();
   return plan.cabinets.map((c) => {
-    const game: ArcadeGame = ARCADE_GAMES[c.game]({ remoteScreen: arcade.screen ?? null });
+    const game: ArcadeGame = ARCADE_GAMES[c.game]({ remoteScreen: arcade.screen ?? null, freePlay: c.freePlay ?? false });
     let attachment: CabinetAttachment | undefined;
     if (c.attachment === 'gun') attachment = new LightGun({ listener });
     if (c.attachment === 'pad') attachment = new DancePad({ centreZ: plan.padCentreZ, ...(game instanceof StepBeat ? { glow: (lane) => game.panelGlow(lane) } : {}) });
@@ -144,6 +145,7 @@ function placeCabinets(zone: Zone, { input, listener, arcade }: ArcadeBuild, hal
         replays,
         ...(medals ? { medals } : {}),
         outOfOrder: hall.isBroken(game.id),
+        brokenClick: () => hall.brokenClick(),
         ...(attachment ? { attachment } : {}),
         ...(c.glowLight === false ? { glowLight: false } : {}),
         ...(c.wear !== undefined ? { wear: c.wear } : {}),
@@ -151,6 +153,7 @@ function placeCabinets(zone: Zone, { input, listener, arcade }: ArcadeBuild, hal
       c.at,
     );
     if (game.demoable !== false) stations.add(cabinet, game.id, c.watchAt);
+    placeWith(zone, cabinet, new CardReading(cabinet.card, cabinet));
     if (plan.tournament.games.includes(c.game)) {
       const topper = new TournamentTopper(() => tournament.isOn && tournament.gameId === game.id);
       topper.position.set(0, plan.tournament.topperY, 0);
@@ -169,7 +172,7 @@ function placeCabinets(zone: Zone, { input, listener, arcade }: ArcadeBuild, hal
  */
 function placeMachines(zone: Zone, { input, listener, arcade }: ArcadeBuild, hall: ArcadeHall, stations: Stations) {
   const plan = ARCADE_PLAN;
-  const context: MachineContext = { input, listener, scores: arcade.scores, nextPlayCost: () => hall.nextPlayCost(), outOfOrder: (id) => hall.isBroken(id), jackpot: arcade.jackpot, habits: arcade.habits };
+  const context: MachineContext = { input, listener, scores: arcade.scores, nextPlayCost: () => hall.nextPlayCost(), outOfOrder: (id) => hall.isBroken(id), brokenClick: () => hall.brokenClick(), jackpot: arcade.jackpot, habits: arcade.habits, ...(arcade.prizes ? { ownsPrize: (id: string) => arcade.prizes!.owns(id) } : {}) };
   const rows: MedalRow[] = [];
   const placed = plan.machines.map((m) => {
     const machine = zone.placeAt(buildMachine(m.kind, context, m.options), m.at);
@@ -179,6 +182,7 @@ function placeMachines(zone: Zone, { input, listener, arcade }: ArcadeBuild, hal
       const card = new InstructionCard({ title: m.card.title ?? machine.game.title, lines: m.card.lines, accent: 0xff2fa0 });
       card.position.set(...m.card.at);
       machine.add(card);
+      placeWith(zone, machine, new CardReading(card, machine));
     }
     if (m.medalsAt && arcade.medals) {
       const row = new MedalRow(arcade.medals, machine.game.id);

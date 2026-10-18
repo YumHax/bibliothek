@@ -9,7 +9,9 @@ Something in the middle of the view extends `CardPanel` (`src/ui/panel/CardPanel
 `dismiss` verb ("Put it back", also the button's aria-label) and its own classes, implements `render(): Html` for the
 body and `actions()` for its buttons (the dismiss is added, the primary one last), and reacts in `onAction(action, el)`
 to any `[data-action]` click. A full-screen list over the blurred room extends `SheetPanel` (`MarketPanel` when the
-wallet shows): `render()` paints `this.body`, `search` adds the one debounced field (`onSearch(query, platform)`),
+wallet shows; `MarketPanel`'s `scene: true` makes it a moment at a stall instead: the room lightly dimmed, the scene
+centred at its own size under a striped awning with the title painted on it and the purse as a chip that bumps when
+coins change: the haggle, the job lot, the swap tag and the notice board): `render()` paints `this.body`, `search` adds the one debounced field (`onSearch(query, platform)`),
 `onOpened(...args)` sets state then calls `super`. Something with a layout of its own (the prize counter, the arcade
 screen, a conversation) stays on the base `ModalPanel` and still gets the policies.
 
@@ -18,11 +20,39 @@ nested template or an array goes in whole, `raw()` admits a helper's markup, `pa
 `innerHTML` is written. The widgets (`priceHtml`, `walletLine`, `coverImg`, `gameRow`, `tabs` + `nextTab`, `emptyState`
 in `src/ui/panel/widgets.ts`) return the same `Html`.
 
+An empty list is drawn, not one dim line: `emptyState(text, { pictogram, title, action })` gives a pictogram in a
+dashed disc (any name in `panel/pictograms`), a head in the hand face, the why, and a button to the next step (its
+`data-action` reaches `onAction`). Inked in `currentColor`, so it suits dark cards and paper alike. A class name alone
+(`emptyState(text, 'my__empty')`) keeps the old single line.
+
+```ts
+paint(this.body, emptyState('Pieces you put away wait here.', { pictogram: 'sofa', title: 'Nothing put away', action: { label: 'Plan a room', action: 'plan' } }));
+```
+
+A person the panel deals with talks from a `Speaker` (`src/ui/panel/speaker.ts`), never from the status line: their
+face (a roster person's portrait; someone with no card but a walker in the street, `seed`, painted from that walker's
+look by `ui/social/strangerFace`; else a silhouette tinted from the name), the name tag, and a comic balloon in the
+speech notices' paper and ink. Two lines' height always (no shift), each `say` pops in (still under reduced motion).
+It owns its element: made and mounted once in the constructor, it survives the body's repaints.
+
+```ts
+this.keeper = new Speaker({ name: 'Bernard' }); // { name, person?: PersonId, seed?: number, backdrop? }; options { face?: px, className? }
+this.keeper.mountAbove(this.body); // above the status line; later: this.keeper.say('“Twelve the lot.”', 'smile'), say(null) hides it
+```
+
+A pick in the street (`ui/street/ChoicePanel`) is dressed as its moment by the deal's `look`, never one more dark list:
+`bus` (line 38's blind and route board, a stop per choice, the fare on a ticket that tears off on the pick), `taxi`
+(the meter's digits, the answers as the player's own balloons), `post` (a postcard, the people as faces, the name
+written in on the pick), `stall` (a chalk board under fairy lights, each item with its picture and price); `who` puts
+the person asking at the top (a `Speaker`). The pick's little scene plays (~0.3 to 0.6 s, none under reduced motion)
+before the card closes and the pick is heard.
+
 The base owns the policies: it registers with the controller navigation (`registerPanel`), closes on its dismiss,
 Esc and B, and on a backdrop press only when the press began there; it focuses `[data-autofocus]`, else the first
 control, else the dismiss; `refresh()` repaints and keeps the focus; `setStatus(text, 'info' | 'error' | 'ok')` writes
 the frame's live line. Override `onKey` for the panel's own keys, `onEnter` for the shortcut when no control is
-focused, `onBack` to step back from a sub-page (Esc and B honour it before closing), `onSide` for tabs. An
+focused, `onBack` to step back from a sub-page (Esc and B honour it before closing), `onSide` for tabs, `onMove` for
+a D-pad move or arrow key asked before the focus walks (a grid, the darts' aim). An
 irreversible press takes `new Arming(() => this.refresh())` (`src/ui/confirmTwice.ts`) and `arming.press(key)`:
 the first press arms and the label says so (`armedLine`), the second within `CONFIRM_MS` acts (a thing in the world on
 its zone's clock passes that clock as the third argument and calls `expire()` from its update, so a dormant zone keeps
@@ -34,10 +64,20 @@ an `also` button: the wipes offer "Download a copy first"). Something out of rea
 that passes by itself ("Pricing…"). Listeners go through `this.listen(target, type, handler)` so
 `dispose()` removes them with the panel.
 
-Not on the kit yet: Overlay, TravelMenu, SearchBar, GamePanel, PayoutOverlay and the settings widgets (the audit's
-F11/F27), and the world's own press-twice copies (Purchases, CopyOpening, ForSale, CartonCorner, ArcadePlay,
+The surfaces that are not panels (the Overlay and its pause menu, the travel menu, the quick search, the wallet chip,
+the settings widgets, the Controls screen, `?payout`) still paint through `html` / `paint`. Not on the kit yet: GamePanel,
+CatSettings and the DreamCard (the audit's F11/F27), and the world's own press-twice copies (Purchases, CopyOpening, ForSale, CartonCorner, ArcadePlay,
 ProgramPlay, WallClock, NoticeDismiss). A panel registry (one `openPanel(id, data)` through the Session instead of the
 seven "give it data then open" verbs) needs the Session's routing first.
+
+A text field a controller cannot type into takes the letters on screen (`panel/letterPad`, `LetterPad`): a grid of keys
+under the field, Space and Delete in words, walked in two dimensions from the panel's `onMove` (`pad.move(direction)`),
+shown only when the last device is a controller (the quick search, the label maker). A thumbnail made with `coverImg(src,
+game)` becomes the made-up box when its image fails, whatever its class.
+
+The pause menu groups its buttons (`Overlay.addPauseButton(id, label, run, shown, { group, key })`): Your things,
+Going out, This room, each a head over its buttons two by two; a group with nothing to offer here is gone, and a
+button's key cap (`key`, a code) shows on a keyboard only.
 
 ## Social pieces
 

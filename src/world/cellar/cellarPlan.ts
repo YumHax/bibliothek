@@ -96,7 +96,7 @@ export const CELLAR_PLAN = {
     { n: 2, faces: 'south', tag: '—', state: 'open', find: { line: 'An old tenant’s carton, left behind. Under a jumper, a game.' } },
     { n: 3, faces: 'east', tag: 'NGUYEN', state: 'locked', locked: 'Padlocked. Bikes, a pram, a box marked XMAS.' },
     { n: 4, faces: 'west', tag: 'HADDAD', state: 'locked', locked: 'Padlocked. Wine racks, neatly labelled. Of course.' },
-    { n: 5, faces: 'north', tag: '5TH · YOU', state: 'ours', find: { line: 'Your box. The previous tenant left a carton: magazines, cables, and a game.' } },
+    { n: 5, faces: 'north', tag: '5TH · YOU', state: 'ours', find: { line: 'Your box. The house clearance never came down here: a carton with F.A. on the lid, cables, magazines, and one of his games.' } },
     { n: 6, faces: 'east', tag: 'GIRARD', state: 'locked', locked: 'Padlocked. Fishing rods and a dartboard.' },
     { n: 7, faces: 'north', tag: 'DUBOIS', state: 'locked', locked: 'Padlocked. A freezer hums inside. A big one.' },
     { n: 8, faces: 'east', tag: 'LAMBERT', state: 'open', find: { line: 'The door hangs off its hinge. A carton marked GAMES, soft with damp. One survived.' } },
@@ -118,6 +118,23 @@ export const CELLAR_PLAN = {
   huntSpots: {
     chalk: { at: [4.0 - 0.01, 1.3, -4.8] as [number, number, number], yaw: -Math.PI / 2 },
     box5: { at: [0, 0, 0] as [number, number, number], yaw: 0 },
+  },
+  /**
+   * Our box (No 5) was Félix's: the sale of his flat never reached the cellar (docs/story.md, Act 3 "The building").
+   * His carton holds one of his own copies (`economy/felixLots`, his F.A. sticker) and the note taped inside its lid,
+   * read once when the padlock first comes off. Emptied, it is where the flat's put-away furniture is seen, under
+   * dust sheets (`Furnishings.storedPieces`, up to `sheets`).
+   */
+  felixBox: {
+    n: 5,
+    note: {
+      title: 'Taped inside the lid',
+      text: 'If you are reading this, the clearance men never found the cellar. Good.\n\nI kept this one down here where nobody would put a price on it. The cables are for whoever needs them. The game is for whoever has the flat after me.\n\nIf it is you, kiddo: a Saturday morning, the curtains shut, the sound up. That is how it is played.',
+      from: 'F.',
+    },
+    emptied: 'Your box, swept out. Félix’s carton is upstairs now.',
+    sheeted: (n: number) => (n === 1 ? 'Your box. The furniture you put away waits under a dust sheet.' : `Your box. The ${n} pieces you put away wait under dust sheets.`),
+    sheets: 4,
   },
   /** The torch the concierge's key hangs with: always on down here. */
   torch: { intensity: 7, angle: 0.5, penumbra: 0.55, distance: 10 },

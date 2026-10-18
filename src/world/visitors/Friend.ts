@@ -12,6 +12,8 @@ const CORNERS = 0.25;
 /** Something the friend waits for the player to answer (a game they would like to borrow): the caption, and what a click does. */
 interface FriendRequest {
   label: string;
+  /** The player's words for it in a conversation ("You’d like to borrow Zelda?"); default the caption's verb. */
+  say?: string;
   answer(session: SessionActions): void;
 }
 

@@ -39,17 +39,21 @@ export function localBounds(item: THREE.Object3D, riders: readonly THREE.Object3
   for (const root of [item, ...riders]) {
     if (!root.visible) continue;
     root.updateWorldMatrix(true, true);
-    // What is drawn only: a hidden part (a staged lamp, a shut box's insides) takes no room.
+    // What is drawn only: a hidden part (a staged lamp, a shut box's insides) takes no room, nor one the camera never
+    // sees (a shelf's shadow proxy, a unit cube at its feet drawn in the shadow maps only: off layer 0).
     root.traverseVisible((obj) => {
       const mesh = obj as THREE.Mesh;
-      if (!mesh.isMesh) return;
+      if (!mesh.isMesh || !mesh.layers.isEnabled(0)) return;
       const material = mesh.material as THREE.Material | THREE.Material[];
       if (!Array.isArray(material) && !material.visible) return;
-      const geometry = mesh.geometry;
-      if (!geometry.boundingBox) geometry.computeBoundingBox();
-      if (!geometry.boundingBox || geometry.boundingBox.isEmpty()) return;
+      // Instances: the box round those drawn (none drawn, none counted), not the one geometry at the mesh's origin.
+      const instanced = (mesh as THREE.InstancedMesh).isInstancedMesh;
+      const owner: { boundingBox: THREE.Box3 | null; computeBoundingBox(): void } = instanced ? (mesh as THREE.InstancedMesh) : mesh.geometry;
+      if (instanced || !owner.boundingBox) owner.computeBoundingBox();
+      const box = owner.boundingBox;
+      if (!box || box.isEmpty()) return;
       partMatrix.multiplyMatrices(toItem, mesh.matrixWorld);
-      bounds.union(scratch.copy(geometry.boundingBox).applyMatrix4(partMatrix));
+      bounds.union(scratch.copy(box).applyMatrix4(partMatrix));
     });
   }
   return bounds;

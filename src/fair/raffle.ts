@@ -80,10 +80,47 @@ export const raffle = {
     return this.drawn(hours) && this.won(day) && today(day).prize !== 'taken';
   },
   takePrize(day: number): void {
-    commit({ ...today(day), prize: 'taken' });
+    // An old Fair's prize taken off the kiosk's ledge after tickets for a new Fair were bought: the new ones stay.
+    if (state.day !== day) return;
+    commit({ ...state, prize: 'taken' });
   },
-  /** The number read out from the drum on `day` (four figures). */
+  /** The number printed on the player's `n`th ticket of `day` (from 1; four figures). */
+  ticketNumber(day: number, n: number): number {
+    return 1000 + Math.floor(gameDayRandom(`raffle-ticket:${n}`, day)() * 9000);
+  },
+  /**
+   * The number read out from the drum on `day` (four figures): one of the player's own when they won (which one,
+   * drawn for the day), else somebody else's (never one of theirs).
+   */
   number(day: number): number {
-    return 1000 + Math.floor(gameDayRandom('raffle-number', day)() * 9000);
+    const s = today(day);
+    if (this.won(day)) return this.ticketNumber(day, 1 + Math.floor(gameDayRandom('raffle-which', day)() * s.tickets));
+    const theirs = new Set(Array.from({ length: s.tickets }, (_, i) => this.ticketNumber(day, i + 1)));
+    let n = 1000 + Math.floor(gameDayRandom('raffle-number', day)() * 9000);
+    while (theirs.has(n)) n = n === 9999 ? 1000 : n + 1;
+    return n;
+  },
+  /**
+   * A Fair before `day` whose prize the player won and never took off the stall (gone home before six): its day, or
+   * null. The prize waits at the newsagent's kiosk on Front Street (`world/street/shops/Newsagent`) until taken; a card
+   * about it comes through the door (`unclaimedCard`).
+   */
+  unclaimed(day: number): number | null {
+    return state.day >= 0 && state.day < day && state.tickets > 0 && state.prize !== 'taken' && this.won(state.day) ? state.day : null;
+  },
+  /** The card through the door the days after a Fair whose prize was never taken: the number, and where it waits. */
+  unclaimedCard(day: number): { title: string; lines: string[]; look: 'note'; from: string; hand: 'pen' } | null {
+    const fair = this.unclaimed(day);
+    if (fair === null || day - fair > UNCLAIMED_CARD_DAYS) return null;
+    return {
+      title: 'Your number came up!',
+      lines: [`The Fair’s raffle: number ${this.number(fair)}. That’s your ticket.`, 'You’d gone by the time the drum turned, so I left your prize with the newsagent’s kiosk on Front Street.', 'Ask at the hatch. — the overflow stall'],
+      look: 'note',
+      from: 'The Fair’s overflow stall',
+      hand: 'pen',
+    };
   },
 };
+
+/** The card about an unclaimed prize comes through the door this many days after the Fair (the prize waits longer). */
+const UNCLAIMED_CARD_DAYS = 3;

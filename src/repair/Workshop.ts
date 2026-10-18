@@ -8,8 +8,21 @@ export interface HomeConsole extends BrokenConsole {
   atShop?: number;
 }
 
+/** A job left open on the kitchen table (`ui/repair/RepairPanel`): where it stands, kept across a reload. */
+export interface BenchState {
+  step: string;
+  screws: boolean[];
+  scrub: number;
+  stroke: number;
+  swapOut: boolean;
+  joints: boolean[];
+  solderStage: 'out' | 'in';
+}
+
 interface WorkshopState {
   consoles: HomeConsole[];
+  /** The jobs left open, by console id. */
+  benches: Record<string, BenchState>;
   /** Consoles mended so far, and sold on (the journal's and the job cards' count). */
   repaired: number;
   sold: number;
@@ -17,7 +30,7 @@ interface WorkshopState {
   crateDays: number[];
 }
 
-const defaults = (): WorkshopState => ({ consoles: [], repaired: 0, sold: 0, crateDays: [] });
+const defaults = (): WorkshopState => ({ consoles: [], benches: {}, repaired: 0, sold: 0, crateDays: [] });
 
 /**
  * The consoles the player bought broken to mend at the kitchen table (docs/household.md "Repairing a console"): what
@@ -75,6 +88,18 @@ export class Workshop {
     return ready;
   }
 
+  /** The job left open on console `id`, or null. */
+  benchOf(id: string): BenchState | null {
+    return this.state.benches[id] ?? null;
+  }
+
+  /** Keeps the job on console `id` where it stands (null: nothing to keep, or done). */
+  keepBench(id: string, bench: BenchState | null): void {
+    const rest = Object.fromEntries(Object.entries(this.state.benches).filter(([key]) => key !== id));
+    if (!bench && Object.keys(rest).length === Object.keys(this.state.benches).length) return;
+    this.commit({ benches: bench ? { ...rest, [id]: bench } : rest });
+  }
+
   get repaired(): number {
     return this.state.repaired;
   }
@@ -117,6 +142,13 @@ export class Workshop {
     return coins;
   }
 
+  /** The working console `id` given away (the Nguyen twins' Game Boy): gone from the workshop; false when it is not a working one. */
+  give(id: string): boolean {
+    if (!this.state.consoles.some((c) => c.id === id && c.fixed)) return false;
+    this.commit({ consoles: this.state.consoles.filter((c) => c.id !== id) });
+    return true;
+  }
+
   private commit(patch: Partial<WorkshopState>): void {
     this.state = { ...this.state, ...patch };
     this.store.save(this.state);
@@ -129,12 +161,24 @@ function readState(data: unknown): WorkshopState | null {
   const raw = data as Partial<Record<keyof WorkshopState, unknown>>;
   const isCount = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v) && v >= 0;
   const consoles = Array.isArray(raw.consoles) ? raw.consoles.filter(isConsole) : [];
+  const benches: Record<string, BenchState> = {};
+  if (raw.benches && typeof raw.benches === 'object') {
+    for (const [id, b] of Object.entries(raw.benches as Record<string, unknown>)) if (consoles.some((c) => c.id === id && !c.fixed) && isBench(b)) benches[id] = b;
+  }
   return {
     consoles,
+    benches,
     repaired: isCount(raw.repaired) ? raw.repaired : 0,
     sold: isCount(raw.sold) ? raw.sold : 0,
     crateDays: Array.isArray(raw.crateDays) ? raw.crateDays.filter(isCount) : [],
   };
+}
+
+function isBench(v: unknown): v is BenchState {
+  if (!v || typeof v !== 'object') return false;
+  const b = v as Partial<BenchState>;
+  const bools = (a: unknown): boolean => Array.isArray(a) && a.every((x) => typeof x === 'boolean');
+  return typeof b.step === 'string' && bools(b.screws) && bools(b.joints) && typeof b.scrub === 'number' && typeof b.stroke === 'number' && typeof b.swapOut === 'boolean' && (b.solderStage === 'out' || b.solderStage === 'in');
 }
 
 function isConsole(v: unknown): v is HomeConsole {

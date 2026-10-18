@@ -26,7 +26,8 @@ const pick = <T>(list: readonly T[]): T | undefined => list[Math.floor(random() 
  * GASPARD RINGS (docs/grandma.md "Her presence"): once Félix's notebook is found (the row's memory open) and at most
  * once a week, on some visits the rotary telephone by the door rings while the player is there: she gets up to it,
  * her side of the call is heard ("Yes, Gaspard. No, Gaspard."), her face falls, she hangs up and comes back with a
- * word about her son. Gaspard in person is the end of the story's (docs/grandma.md "The end of the story").
+ * word about her son. Gaspard in person is the end of the story's (docs/grandma.md "The end of the story"): after the
+ * reckoning he never rings again if she showed him the door or he left without a word; sorry, he rings as a son does.
  */
 export const gaspardCall: MemeFeature = {
   id: 'gaspardCall',
@@ -37,9 +38,12 @@ export const gaspardCall: MemeFeature = {
     let ringIn: number | null = null;
     return {
       arrived(arrival) {
-        const open = scene.visits.hasSeen('row') || scene.visits.facts().notebookFound;
+        const end = scene.ctx.family?.gaspardEnd ?? null;
+        const open = (scene.visits.hasSeen('row') || scene.visits.facts().notebookFound) && end !== 'gone' && end !== 'silent';
         // Not while he is at her table himself (one of his Sundays).
-        const here = scene.ctx.family?.gaspardAt(scene.day(), scene.hour()) ?? false;
+        // Not his ring while he sits at her table (or is due at it this hour).
+        const family = scene.ctx.family;
+        const here = family ? family.gaspardIn(scene.day()) || family.gaspardAt(scene.day(), scene.hour()) : false;
         ringIn = !arrival.first && open && !here && presence.gaspardMayRing(scene.day()) && random() < CHANCE ? arrival.helloEnds + AFTER.min + random() * (AFTER.max - AFTER.min) : null;
       },
       left() {
@@ -55,36 +59,37 @@ export const gaspardCall: MemeFeature = {
         }
         ringIn = null;
         presence.gaspardRang(scene.day());
-        call(scene);
+        call(scene, scene.ctx.family?.gaspardEnd === 'apologised');
       },
     };
   },
 };
 
-/** The bell, her walk to it, her side of the call, back to her seat with a word. */
-function call(scene: MemeScene): void {
+/** The bell, her walk to it, her side of the call (a softer one once he has said sorry), back to her seat with a word. */
+function call(scene: MemeScene, mended: boolean): void {
+  const talk: { pickUp: string; side: readonly (readonly string[])[]; back: readonly string[] } = mended ? PRESENCE_TALK.gaspardMended : PRESENCE_TALK.gaspard;
   const { phone } = PRESENCE_PLAN.spots;
   const set = scene.world(phone.at[0], BELL.y, phone.at[1]);
   const ear = scene.ctx.listener.getWorldPosition(new THREE.Vector3());
   playRotaryRing(BELL.rings, BELL.level * loudness(ear.distanceTo(set), { referenceDistance: 1, maxDistance: BELL.maxDistance }), { pan: stereoPan(scene.ctx.listener, set), walls: 0 });
-  const side = pick(PRESENCE_TALK.gaspard.side) ?? [];
+  const side = pick(talk.side) ?? [];
   scene.zone.after(GET_UP, () =>
     walkHer(scene, phone, () => {
       scene.meme.setPose('phone');
-      scene.meme.speak(PRESENCE_TALK.gaspard.pickUp);
-      scene.meme.feel({ frown: 0.6 }, 3);
+      scene.meme.speak(talk.pickUp);
+      scene.meme.feel(mended ? { smile: 0.3 } : { frown: 0.6 }, 3);
       side.forEach((line, i) =>
         scene.zone.after((i + 1) * WORD_GAP, () => {
           scene.meme.say(line);
-          scene.meme.feel({ frown: 0.8, squint: 0.3 }, WORD_GAP);
+          scene.meme.feel(mended ? { smile: 0.25 } : { frown: 0.8, squint: 0.3 }, WORD_GAP);
         }),
       );
       scene.zone.after((side.length + 1) * WORD_GAP, () => {
         scene.meme.setPose('stand');
-        scene.meme.gesture('sigh');
+        scene.meme.gesture(mended ? 'touchCheek' : 'sigh');
         scene.zone.after(HANG_UP, () =>
           walkHome(scene, () => {
-            const back = pick(PRESENCE_TALK.gaspard.back);
+            const back = pick(talk.back);
             if (back) scene.meme.speak(back);
             scene.release(OWNER);
           }),

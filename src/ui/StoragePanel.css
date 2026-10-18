@@ -1,41 +1,122 @@
-/* The furniture put away: a small card over the view (`.ui-modal--centre`); the card shell is the kit's. */
+/*
+ * The box room: a card over the view (`.ui-modal--centre`) whose pieces hang as luggage tags under the room they
+ * were put away from, each with the shop's photo on a cream ground (its square reserved, so a late photo moves
+ * nothing) or a drawn sofa, a ×N for twins, and the verb that shows on hover and focus.
+ */
 @layer tokens, base, components, panels;
 @layer panels {
-  .storage-panel__card { --card-w: 26rem; }
-  .storage-panel__card h2 {
-    margin: 0 0 0.8rem;
-    font-family: var(--ui-font-display);
+  .storage-panel__card {
+    --card-w: var(--card-w-lg);
+    --tag-paper: var(--paper-shop);
+    --tag-ink: var(--ink-shop);
+    --tag-string: var(--ink-gold);
+  }
+  .storage-panel__lede {
+    margin: 0 0 var(--sp-3);
+    font-size: var(--fs-5);
+    color: var(--ui-text-dim);
+  }
+  .storage-panel__room + .storage-panel__room { margin-top: var(--sp-4); }
+  .storage-panel__room-name {
+    margin: 0 0 var(--sp-2);
+    font-family: var(--ui-font-hand);
     font-weight: 400;
     font-size: var(--fs-t2);
+    color: var(--ui-accent);
   }
-  .storage-panel__list {
+  .storage-panel__tags {
     list-style: none;
     margin: 0;
     padding: 0;
     display: grid;
-    gap: 0.4rem;
+    grid-template-columns: repeat(auto-fill, minmax(8.5rem, 1fr));
+    gap: var(--sp-3);
   }
-  .storage-panel__list li {
-    display: flex;
-    align-items: center;
-    gap: 0.6rem;
+  /* A luggage tag: the cut corners, the eyelet and its string, the photo on the card, the name in pen. */
+  .storage-panel__tag {
+    position: relative;
+    display: grid;
+    grid-template-rows: auto auto;
+    justify-items: center;
+    gap: var(--sp-1);
+    width: 100%;
+    padding: 1.1rem var(--sp-2) var(--sp-3);
+    font: inherit;
+    color: var(--tag-ink);
+    background: var(--tag-paper);
+    border: 0;
+    clip-path: polygon(14% 0, 86% 0, 100% 10%, 100% 100%, 0 100%, 0 10%);
+    cursor: pointer;
+    transition: transform var(--dur-hover) var(--ui-ease), filter var(--dur-hover) ease;
+  }
+  .storage-panel__tag::before {
+    content: '';
+    position: absolute;
+    top: 0.35rem;
+    left: 50%;
+    width: 0.5rem;
+    height: 0.5rem;
+    margin-left: -0.25rem;
+    border-radius: 50%;
+    background: var(--ui-panel-solid);
+    box-shadow: 0 0 0 2px var(--tag-string);
+  }
+  .storage-panel__tag:hover,
+  .storage-panel__tag:focus-visible { transform: rotate(-2deg) translateY(-2px); filter: brightness(1.04); }
+  .storage-panel__tag:active { transform: scale(0.98); }
+  .storage-panel__tag:focus-visible { outline: 2px solid var(--focus); outline-offset: 3px; }
+  .storage-panel__photo {
+    display: grid;
+    place-items: center;
+    width: 5.5rem;
+    aspect-ratio: 1;
+    border-radius: var(--ui-radius-xs);
+    background: color-mix(in srgb, var(--tag-ink) 6%, var(--tag-paper));
+    overflow: hidden;
+  }
+  .storage-panel__photo img {
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+  }
+  .storage-panel__photo img:not([src]) { visibility: hidden; }
+  .storage-panel__pictogram {
+    width: 3rem;
+    height: 3rem;
+    color: color-mix(in srgb, var(--tag-ink) 55%, transparent);
   }
   .storage-panel__name {
-    flex: 1;
-    font-weight: 600;
+    font-family: var(--ui-font-hand);
+    font-size: var(--fs-t1);
+    line-height: 1.1;
+    text-align: center;
   }
-  .storage-panel__room,
-  .storage-panel__note,
-  .storage-panel__empty {
-    font-size: var(--fs-4);
-    color: var(--ui-text-dim);
+  .storage-panel__count {
+    position: absolute;
+    top: 0.9rem;
+    right: 0.5rem;
+    padding: 0 0.35em;
+    border-radius: var(--ui-radius-pill);
+    background: var(--tag-ink);
+    color: var(--tag-paper);
+    font-size: var(--fs-2);
+    font-weight: 700;
   }
-  .storage-panel__note {
-    margin: 0.8rem 0 0;
+  /* The verb, written under the name once the tag is pointed at (its line kept, so nothing moves). */
+  .storage-panel__verb {
+    font-size: var(--fs-2);
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--ink-red);
+    opacity: 0;
+    transition: opacity var(--dur-hover) ease;
   }
-  .storage-panel__card footer {
-    display: flex;
-    justify-content: flex-end;
-    margin-top: 0.9rem;
+  .storage-panel__tag:hover .storage-panel__verb,
+  .storage-panel__tag:focus-visible .storage-panel__verb { opacity: 1; }
+  @media (pointer: coarse) {
+    .storage-panel__verb { opacity: 1; }
   }
+  /* Reduced motion: the game's setting (`.reduce-motion` on <html>, settings/motion), never the media query alone. */
+  .reduce-motion .storage-panel__tag:hover,
+  .reduce-motion .storage-panel__tag:focus-visible { transform: none; }
 }

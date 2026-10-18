@@ -152,15 +152,27 @@ function bouquetMesh(seed: number): THREE.Object3D {
   return group;
 }
 
-/** A cigarette between the fingers, its tip glowing (the wrist's frame). */
+/**
+ * Where a cigarette is pinched, in the wrist's frame (`handGeometry`: the hand down -y, its palm on -x, the index at
+ * +z): between the index and the middle finger a centimetre past the knuckles, where the fingers hardly move as the hand
+ * curls; it runs across them, the filter out of the palm side (towards the lips on a draw), the lit end out of the back.
+ */
+const CIGARETTE = { y: -0.095, z: 0.0175, filter: [-0.027, -0.005], paper: [-0.005, 0.043] } as const; // convention-ok: the cigarette's own lengths across the fingers, not a layer
+
+/** A cigarette between the index and the middle finger, its tip glowing (the wrist's frame, `CIGARETTE`). */
 function cigaretteMesh(): THREE.Object3D {
   const group = new THREE.Group();
-  const stick = new THREE.Mesh(new THREE.CylinderGeometry(0.004, 0.004, 0.07, 5), new THREE.MeshStandardMaterial({ color: 0xf2efe8, roughness: 0.7 }));
-  stick.rotation.x = Math.PI / 2;
-  stick.position.set(0.02, -0.075, 0.05);
-  const ember = new THREE.Mesh(new THREE.SphereGeometry(0.0045, 5, 4), new THREE.MeshStandardMaterial({ color: 0x3a1a0a, emissive: 0xff5a1a, emissiveIntensity: 2.5 }));
-  ember.position.set(0.02, -0.075, 0.087);
-  group.add(stick, ember);
+  const across = (from: number, to: number, material: THREE.Material): THREE.Mesh => {
+    const mesh = new THREE.Mesh(new THREE.CylinderGeometry(0.0039, 0.0039, to - from, 6), material);
+    mesh.rotation.z = Math.PI / 2;
+    mesh.position.set((from + to) / 2, CIGARETTE.y, CIGARETTE.z);
+    return mesh;
+  };
+  const filter = across(CIGARETTE.filter[0], CIGARETTE.filter[1], new THREE.MeshStandardMaterial({ color: 0xc98a4a, roughness: 0.8 }));
+  const paper = across(CIGARETTE.paper[0], CIGARETTE.paper[1], new THREE.MeshStandardMaterial({ color: 0xf2efe8, roughness: 0.7 }));
+  const ember = new THREE.Mesh(new THREE.SphereGeometry(0.0042, 6, 4), new THREE.MeshStandardMaterial({ color: 0x3a1a0a, emissive: 0xff5a1a, emissiveIntensity: 2.5 }));
+  ember.position.set(CIGARETTE.paper[1], CIGARETTE.y, CIGARETTE.z);
+  group.add(filter, paper, ember);
   return group;
 }
 
@@ -175,6 +187,10 @@ export const UMBRELLA_ARM: ArmAngles = { ux: -0.3, uz: 0.05, lx: -1.25, ly: -0.4
 /** Where the shaft stands, in the torso's frame (the chest's, from the waist; the hand's grip at its foot), and how tall it is. */
 const SHAFT = { x: 0.07, z: 0.3, bottom: 0.12, top: 1.24 };
 const CANOPY = { radius: 0.55, rise: 0.2, ribs: 8 };
+/** Where the fist closes on the shaft, in the umbrella's frame: a hand's width above the crook of the handle. */
+export const UMBRELLA_GRIP = new THREE.Vector3(SHAFT.x, SHAFT.bottom + 0.05, SHAFT.z);
+/** The middle of a curled hand's fingers, in the wrist's frame (`handGeometry`: the palm on -x): what a shaft passes through. */
+export const FIST_HOLE = new THREE.Vector3(-0.017, -0.078, 0);
 
 /** A phone in the hand (the wrist's frame, the hand hanging down from it). */
 function phoneMesh(): THREE.Object3D {
@@ -216,10 +232,10 @@ function umbrellaMesh(seed: number): THREE.Object3D {
   handle.rotation.z = Math.PI;
   const cloth = new THREE.MeshStandardMaterial({ color: CANOPIES[seed % CANOPIES.length]!, roughness: 0.55, side: THREE.DoubleSide });
   const canopy = new THREE.Mesh(new THREE.ConeGeometry(CANOPY.radius, CANOPY.rise, CANOPY.ribs, 1, true), cloth);
-  // Centred over the head rather than the hand: the shaft leans in a little.
-  canopy.position.set(0.02, SHAFT.top + 0.02 + CANOPY.rise / 2, 0.1);
+  // Centred over the head rather than the hand (`PersonModel` brings the shaft to the fist, ahead of the chest): the shaft leans in a little.
+  canopy.position.set(0.02, SHAFT.top + 0.02 + CANOPY.rise / 2, 0);
   const tip = new THREE.Mesh(new THREE.CylinderGeometry(0.006, 0.006, 0.08, 5), metal);
-  tip.position.set(0.02, SHAFT.top + 0.02 + CANOPY.rise + 0.03, 0.1);
+  tip.position.set(0.02, SHAFT.top + 0.02 + CANOPY.rise + 0.03, 0);
   group.add(shaft, handle, canopy, tip);
   return group;
 }

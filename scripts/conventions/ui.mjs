@@ -2,22 +2,10 @@
 // `paint()`, takes its keys, its focus, its status line and its "press twice" from the base, and never writes raw
 // markup or a tooltip. Loaded by ../check-conventions.mjs; see there for a rule's shape.
 //
-// The surfaces outside the kit (the Overlay, the travel menu, the search bar, the game panel, the HUD, the settings
-// widgets: the audit's F11 / F27) are excepted by name until they join it; a new file is not.
+// The surfaces outside the kit (the game panel's review card: the audit's F11) are excepted by name until they join
+// it; a new file is not. (The dream card joined it, `paint` since 2026-10-18.)
 const OUTSIDE_THE_KIT = [
-  'ui/Overlay.ts',
-  'ui/TravelMenu.ts',
-  'ui/SearchBar.ts',
   'ui/GamePanel.ts',
-  'ui/PayoutOverlay.ts',
-  'ui/WalletHud.ts',
-  'ui/QualityPicker.ts',
-  'ui/CatSettings.ts',
-  'ui/household/DreamCard.ts',
-  'ui/menu/ControlsScreen.ts',
-  'ui/menu/MenuNav.ts',
-  'ui/settings/fields.ts',
-  'ui/settings/KeyBindingsForm.ts',
 ];
 
 export const rules = [
@@ -36,6 +24,13 @@ export const rules = [
     within: ['ui/'],
     except: ['ui/html.ts', 'ui/panel/html.ts', 'ui/keys.ts', 'ui/fuzzy.ts', 'ui/coverPlaceholder.ts', 'ui/repair/RepairPanel.ts', ...OUTSIDE_THE_KIT],
     hint: 'interpolate into the html`` tag (ui/panel/html): it escapes; SVG built as text goes through raw()',
+  },
+  {
+    name: 'reduced-motion media query',
+    // Code reads the game's setting (`reduceMotion()` from settings/motion), which maps the system's query itself.
+    test: (line) => /prefers-reduced-motion/.test(line),
+    except: ['settings/motion.ts'],
+    hint: 'read reduceMotion() from @/settings/motion (Settings > Display, or the system when left to it)',
   },
   {
     name: 'raw keydown listener',
@@ -74,5 +69,15 @@ export const rules = [
     test: (line) => /const SEARCH_DEBOUNCE/.test(line),
     except: ['ui/panel/SheetPanel.ts'],
     hint: 'the sheet has a search field (SheetPanelOptions.search) and the one debounce (ui/panel/SheetPanel)',
+  },
+  {
+    name: 'bare price',
+    // An amount printed as a bare figure ("Sell · 45", "bought for 12"): the player reads coins as "45 coins" everywhere.
+    // Caught: an interpolation that is only a name ending in price / cost / paid / fee / deposit, outside an attribute
+    // value; a line drawing the coin itself (`__coin`, `ui-coin`) names the unit by picture. A variable holding the
+    // finished markup or words takes a name that says so (`priceTag`, `amount`).
+    test: (line) => /(?<![=:"'\w-])\$\{\s*(?:[\w$]+(?:\?\.|!?\.))*[\w$]*?(?:price|cost|paid|fee|deposit)\s*\}/i.test(line) && !/__coin\b|\bui-coin\b/.test(line),
+    within: ['ui/', 'notices/'],
+    hint: 'formatCoins(n) from @/text/money in words, priceHtml(n) from ui/panel/widgets for a price column',
   },
 ];

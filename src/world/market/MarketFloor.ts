@@ -24,6 +24,8 @@ import type { LotCrate } from './LotCrate';
 import type { WishPennant } from './WishPennant';
 import { REACTIONS, stallLines } from './stallTalk';
 import { random } from '@/random';
+import { stallPerson } from '@/social/market';
+import { formatCoins } from '@/text/money';
 
 /** One stall as the hall keeps track of it: what stands there, who sells, what is on it and what went. */
 export interface FloorStall {
@@ -41,7 +43,7 @@ interface MarketFloorOptions {
   /** The market's zone: the day's boxes are placed into it and taken out of it. */
   zone: Zone;
   /** What the floor reads of the context: the day's stock and the hall, the collection and the covers, the money, the sky's hours, the day. */
-  context: Pick<BuildContext, 'collection' | 'covers' | 'market' | 'money' | 'sky' | 'today'>;
+  context: Pick<BuildContext, 'collection' | 'covers' | 'market' | 'money' | 'sky' | 'today' | 'notices'>;
   /** One per platform, in stall order, their stallholders and pennants placed. */
   stalls: FloorStall[];
   /** The bargain bins: the first always, the Flea Fair's extra ones after it. */
@@ -66,6 +68,9 @@ const CROWD_LEVEL = { day: 1, night: 0.3, bigDay: 1.35 };
 const KEENNESS = { day: 1, rain: 0.5, night: 0.3 };
 /** Chance a stallholder says something when a box of theirs is picked up (every other move always gets a word). */
 const PICK_UP_REMARK = 0.45;
+/** The day's stock did not come (the lookup failed): what the stallholders say over a bare table, and when they look again (s). */
+const STOCK_LATE = ['The van’s late. Boxes aren’t here yet, give me a minute.', 'Still waiting on my stock. Have a coffee, come back.', 'Nothing out yet, sorry. The boxes are stuck in traffic.'];
+const STOCK_RETRY_S = 25;
 
 /**
  * The market's day on the floor, once the hall stands: lays the day's stock out as `ForSaleBox`es
@@ -92,6 +97,8 @@ export class MarketFloor {
   private stallStock = 0;
   /** False once the zone has unloaded: async work arriving later places nothing. */
   private live = true;
+  /** The market day the stallholders last said the stock is late: said once a day, the lookups after it quiet. */
+  private lateSaid: unknown = null;
   private readonly unsubscribe: Array<() => void> = [];
 
   constructor(private readonly options: MarketFloorOptions) {
@@ -138,7 +145,20 @@ export class MarketFloor {
       this.layOut(items);
       this.refreshPennants();
       this.refreshNotices();
-    }).catch((err) => console.warn('[market] no stock today', err));
+    }).catch((err) => {
+      console.warn('[market] no stock today', err);
+      if (!this.live || market.day !== day) return;
+      // The tables stay bare for now: the stallholders say why (once), and look again in a little while.
+      if (this.lateSaid !== day) {
+        this.lateSaid = day;
+        this.options.stalls.forEach((entry, i) => this.options.zone.after(0.6 + i * 0.5, () => {
+          if (this.live) entry.vendor.say(STOCK_LATE[i % STOCK_LATE.length]!);
+        }));
+      }
+      this.options.zone.after(STOCK_RETRY_S, () => {
+        if (this.live && market.day === day && !this.displayed.size) this.stockUp();
+      });
+    });
   }
 
   /**
@@ -216,8 +236,15 @@ export class MarketFloor {
     if (!entry || !box) return false;
     this.options.context.market.stock.soldToRival(box.item);
     entry.vendor.say(REACTIONS.bought[Math.floor(random() * REACTIONS.bought.length)]!);
+    this.missedWish(box, `A shopper at the ${entry.platform.shortName} stall`);
     this.takeOff(box);
     return true;
+  }
+
+  /** A copy off the player's wishlist went to someone else: they hear of it (once per copy), not only the pennant dropping. */
+  private missedWish(box: ForSaleBox, who: string): void {
+    if (!this.options.context.collection.isWanted(box.item.game.id)) return;
+    this.options.context.notices.slip({ title: `${box.item.game.title} has gone`, detail: `${who} bought the copy off your wishlist.` });
   }
 
   /** The stalls as the hall keeps them (the rival collector picks his copy from them). */
@@ -234,6 +261,7 @@ export class MarketFloor {
     const entry = this.options.stalls.find((e) => e.boxes.has(box));
     this.options.context.market.stock.soldToRival(box.item);
     entry?.vendor.say(REACTIONS.bought[Math.floor(random() * REACTIONS.bought.length)]!);
+    this.missedWish(box, 'Victor');
     this.takeOff(box);
     return true;
   }
@@ -253,7 +281,7 @@ export class MarketFloor {
       ];
       noticeBoard.setCards(ads.slice(0, NOTICE_BOARD_MAX_CARDS - pinned.length).map((ad, i) => ({
         title: ad.kind === 'wanted' ? 'WANTED' : 'FOR SALE',
-        lines: [ad.game.title, `${ad.kind === 'wanted' ? `paying ${ad.pay}` : `${ad.price}`} coins`, `— ${ad.from}`],
+        lines: [ad.game.title, ad.kind === 'wanted' ? `paying ${formatCoins(ad.pay)}` : formatCoins(ad.price), `— ${ad.from}`],
         color: ad.kind === 'wanted' ? '#fff1a8' : '#d6ecff',
         tilt: ((i * 37) % 9 - 4) * 0.02,
       })).concat(pinned));
@@ -329,6 +357,7 @@ export class MarketFloor {
       isWanted: () => collection.isWanted(item.game.id),
       compare: () => ({ owned: collection.owns(item.game.id), cheaperElsewhere: this.cheaperElsewhere(item) }),
       where: entry ? `the ${entry.platform.shortName} stall` : BIN_WHERE,
+      seller: entry ? stallPerson(entry.platform.id) : undefined,
       behindGlass: entry?.stall.behindGlass,
       react: (reaction) => this.reactAt(entry, reaction),
       speak: entry ? (line) => entry.vendor.speak(line) : undefined,

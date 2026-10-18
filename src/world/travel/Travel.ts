@@ -89,8 +89,8 @@ export class Travel {
   private readonly tint: (id: ZoneId) => string | undefined;
   private readonly interlude: NonNullable<TravelOptions['interlude']>;
   private readonly snapshot: () => HTMLCanvasElement | null;
-  /** Called when a trip could not be made (the destination would not load): the player is told, back where they stood. */
-  onFailed: (() => void) | null = null;
+  /** Called when a trip to `id` could not be made (the destination would not load): the player is told, back where they stood. */
+  onFailed: ((id: ZoneId) => void) | null = null;
   /** Called once the curtain is down on the way out: what belonged where the player was goes (the words said there). */
   onDepart: (() => void) | null = null;
 
@@ -110,7 +110,10 @@ export class Travel {
   choices(): TravelChoice<ZoneId>[] {
     const current = this.here();
     // At home, "Home" is no destination (the pause menu's Go out lists the rest).
-    return this.stops.filter((s) => s.id !== current && !s.unlisted && !(inFlat(current) && inFlat(s.id))).map(({ id, label }) => ({ id, label }));
+    // Each with where it is and the photo of it as it was last left (the menu groups and shows them).
+    return this.stops
+      .filter((s) => s.id !== current && !s.unlisted && !(inFlat(current) && inFlat(s.id)))
+      .map(({ id, label }) => ({ id, label, place: placeWords(zonePlan(id).kind), photo: cardOf(id).photo }));
   }
 
   /** `?debug`'s "Go to": every stop but the one the player is in, those only their own door reaches included. */
@@ -175,7 +178,7 @@ export class Travel {
         await played;
         duckScene(1, CURTAIN_S);
         await this.curtain.in();
-        this.onFailed?.();
+        this.onFailed?.(stop.id);
         return;
       }
       this.player.setPosition(spot.position.x, spot.position.z, spot.position.y);

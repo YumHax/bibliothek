@@ -1,4 +1,8 @@
-/* The newsagent's scratch card: a lottery ticket over the view (`.ui-modal--centre`), in its own printed colours. */
+/*
+ * The newsagent's scratch card: a lottery ticket held over the view (`.ui-modal--centre`), printed in its own inks:
+ * the logo band with its serial, the six silver cells in a printed frame, the prize table as a ticket's "match 3"
+ * box, a WINNER stamp across it or "Not a winner" under the silver.
+ */
 @layer tokens, base, components, panels;
 @layer panels {
   .scratch-panel__card {
@@ -9,12 +13,21 @@
     --scratch-gold: #ffd23a;
     --scratch-gold-shade: #7a2a10;
     --scratch-gold-glow: rgba(255, 210, 58, 0.7);
-    --scratch-seven: #d92a2a;
-    background: linear-gradient(160deg, var(--scratch-ink-1), var(--scratch-ink-2) 60%, var(--scratch-ink-3));
-    color: var(--ui-text);
+    --scratch-frame: rgba(255, 210, 58, 0.55);
+    --scratch-print: #fff4dc;
+    --scratch-stamp: #e0302a;
+    --scratch-weave: rgba(255, 255, 255, 0.035);
+    position: relative;
+    overflow: hidden;
+    background:
+      repeating-linear-gradient(45deg, var(--scratch-weave) 0 6px, transparent 6px 12px),
+      linear-gradient(160deg, var(--scratch-ink-1), var(--scratch-ink-2) 60%, var(--scratch-ink-3));
+    color: var(--scratch-print);
     text-align: center;
   }
-  .scratch-panel__card header h2 {
+  /* The band at the top: the logo, the serial in small print. */
+  .scratch-panel__band { display: grid; justify-items: center; gap: 0.1rem; margin-bottom: var(--sp-2); padding-bottom: var(--sp-2); border-bottom: 2px dashed var(--scratch-frame); }
+  .scratch-panel__band h2 {
     margin: 0;
     font-family: var(--ui-font-display);
     font-weight: 400;
@@ -23,17 +36,18 @@
     color: var(--scratch-gold);
     text-shadow: 0 2px 0 var(--scratch-gold-shade);
   }
-  .scratch-panel__card header p {
-    margin: var(--sp-1) 0 0.8rem;
-    font-size: var(--fs-3);
-    color: var(--ui-text-dim);
-  }
+  .scratch-panel__serial { font-family: var(--ui-font-led); font-size: var(--fs-3); letter-spacing: 0.12em; opacity: 0.7; }
+  .scratch-panel__play { position: relative; }
   .scratch-panel__cells {
     display: grid;
     grid-template-columns: repeat(3, 1fr);
     gap: var(--sp-2);
     margin: 0 auto;
     max-width: 19rem;
+    padding: var(--sp-2);
+    border: 2px solid var(--scratch-frame);
+    border-radius: var(--ui-radius-md);
+    background: var(--shade-25);
   }
   .scratch-panel__cell {
     position: relative;
@@ -51,36 +65,48 @@
     cursor: crosshair;
     touch-action: none;
   }
-  .scratch-panel__symbol {
+  .scratch-panel__symbol { position: absolute; inset: 12%; display: grid; place-items: center; }
+  .scratch-panel__picture { width: 100%; height: 100%; }
+  .scratch-panel__cell--win { box-shadow: inset 0 0 0 3px var(--scratch-gold), 0 0 14px var(--scratch-gold-glow); animation: scratch-win var(--dur-pulse) ease-in-out 3 alternate; }
+  @keyframes scratch-win { to { scale: 1.06; } }
+  /* The stamp across the ticket when it wins: red ink, tilted, landing. */
+  .scratch-panel__stamp {
     position: absolute;
-    inset: 0;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-size: 2.2rem;
-  }
-  .scratch-panel__symbol--seven {
+    left: 50%;
+    top: 50%;
+    margin: 0;
+    padding: 0.2rem 0.9rem;
+    border: 3px solid var(--scratch-stamp);
+    border-radius: var(--ui-radius-xs);
+    background: color-mix(in srgb, var(--scratch-print) 85%, transparent);
+    color: var(--scratch-stamp);
     font-family: var(--ui-font-display);
-    color: var(--scratch-seven);
-    font-size: 2.6rem;
+    font-size: var(--fs-t2);
+    letter-spacing: 0.06em;
+    white-space: nowrap;
+    translate: -50% -50%;
+    rotate: -12deg;
+    pointer-events: none;
+    animation: scratch-stamp var(--dur-fall) var(--ui-ease-pop) both;
   }
-  .scratch-panel__cell--win {
-    box-shadow: inset 0 0 0 3px var(--scratch-gold), 0 0 14px var(--scratch-gold-glow);
-  }
-  .scratch-panel__result {
-    min-height: 1.4em;
-    margin: 0.8rem 0 0.2rem;
-    font-weight: 600;
-  }
-  .scratch-panel__hint {
-    margin: 0 0 0.8rem;
-    font-size: var(--fs-2);
-    color: var(--ui-text-dim);
-  }
+  @keyframes scratch-stamp { from { scale: 1.8; opacity: 0; } }
+  .scratch-panel__lost { margin: var(--sp-2) 0 0; font-family: var(--ui-font-led); font-size: var(--fs-5); letter-spacing: 0.1em; text-transform: uppercase; opacity: 0.75; }
+  /* The prize table: the back of a ticket, three pictures and what they pay, a line each. */
+  .scratch-panel__table { margin: var(--sp-3) auto 0; max-width: 19rem; padding: var(--sp-2) var(--sp-3); border-radius: var(--ui-radius-sm); background: var(--scratch-print); color: var(--scratch-ink-1); }
+  .scratch-panel__table h3 { margin: 0 0 var(--sp-1); font-family: var(--ui-font-display); font-weight: 400; font-size: var(--fs-3); letter-spacing: 0.1em; text-transform: uppercase; color: var(--scratch-ink-3); }
+  .scratch-panel__table ul { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: 1fr 1fr; gap: 0.15rem var(--sp-3); }
+  .scratch-panel__prize { display: flex; align-items: center; gap: 0.1rem; padding: 0.1rem 0.2rem; border-radius: var(--ui-radius-2xs); }
+  .scratch-panel__prize:last-child { grid-column: 1 / 3; justify-content: center; }
+  .scratch-panel__prize.is-won { background: var(--scratch-gold); }
+  .scratch-panel__mini { width: 1.15rem; height: 1.15rem; }
+  .scratch-panel__pays { margin-left: auto; padding-left: var(--sp-2); font-size: var(--fs-3); font-weight: 700; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .scratch-panel__prize:last-child .scratch-panel__pays { margin-left: var(--sp-2); }
+  .scratch-panel__hint { margin: var(--sp-2) 0 0; font-size: var(--fs-2); opacity: 0.75; }
   .scratch-panel__card footer {
     display: flex;
     gap: var(--sp-2);
     justify-content: center;
     flex-wrap: wrap;
   }
+  .reduce-motion .scratch-panel__cell--win, .reduce-motion .scratch-panel__stamp { animation: none; }
 }

@@ -1,7 +1,7 @@
 import { type ApiRequest, type ApiResponse, json } from './http';
 import type { ArtStore } from './artStore';
 import { type ArtResult, artResponse, hit, pausedResponse } from './artCache';
-import { shrinkArt } from './imageProcessing';
+import { XL_ART_SIZE, shrinkArt } from './imageProcessing';
 import { PoliteFetcher, UpstreamPaused } from './politeFetch';
 import { SCAN_KINDS, type ScanKind } from './launchbox';
 
@@ -16,6 +16,8 @@ const FILE = /^([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\.(
 const MISS_TTL_MS = 7 * 24 * 3600 * 1000;
 /** Longest side kept per kind: a back carries small print, a spine is long and thin. */
 const MAX_SIDE: Record<ScanKind, number> = { back: 1024, spine: 1024, cart: 512, disc: 512 };
+/** `?size=xl` (the box in hand, held up to the eye to read): the back's small print, the label's. */
+const XL_SIDE: Record<ScanKind, number> = { back: XL_ART_SIZE, spine: 1024, cart: 1024, disc: 1024 };
 
 /** The image host is a CDN: two at a time, a short gap, a pause when it keeps failing. */
 const IMAGES = new PoliteFetcher({
@@ -32,6 +34,8 @@ interface ScanRequest {
   kind: ScanKind;
   uuid: string;
   ext: 'png' | 'jpg';
+  /** Asked `?size=xl`: kept at `XL_SIDE`, stored apart. */
+  xl?: boolean;
 }
 
 export class ScanCache {
@@ -51,7 +55,7 @@ export class ScanCache {
 
   get(req: ScanRequest): Promise<ArtResult> {
     // Stored under a `.png` name whatever the source: the store puts the encoding's own extension on it.
-    const key = `${req.kind}/${req.uuid}.png`;
+    const key = `${req.kind}${req.xl ? '@xl' : ''}/${req.uuid}.png`;
     let pending = this.inflight.get(key);
     if (!pending) {
       pending = this.resolve(req, key).finally(() => this.inflight.delete(key));
@@ -72,7 +76,7 @@ export class ScanCache {
       return { status: 404 };
     }
     if (!upstream.ok) throw new Error(`upstream ${upstream.status} for ${key}`);
-    const art = await shrinkArt(Buffer.from(await upstream.arrayBuffer()), MAX_SIDE[req.kind]);
+    const art = await shrinkArt(Buffer.from(await upstream.arrayBuffer()), (req.xl ? XL_SIDE : MAX_SIDE)[req.kind]);
     await this.store.write(key, art);
     return hit(art);
   }
@@ -84,7 +88,7 @@ export async function handleScanRequest(cache: ScanCache, req: ApiRequest): Prom
   const parsed = ScanCache.parsePath(req.url.pathname);
   if (!parsed) return json(400, { error: 'expected /api/scan/<back|spine|cart|disc>/<uuid>.<png|jpg>' });
   try {
-    return artResponse(await cache.get(parsed), req);
+    return artResponse(await cache.get({ ...parsed, xl: req.url.searchParams.get('size') === 'xl' }), req);
   } catch (err) {
     if (err instanceof UpstreamPaused) return pausedResponse(err);
     throw err;

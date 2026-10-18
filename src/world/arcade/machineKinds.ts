@@ -1,6 +1,7 @@
 import type * as THREE from 'three';
 import type { Input } from '@/core/Input';
 import type { ArcadeMachineLike } from '@/game/SessionActions';
+import type { Interactable } from '@/interaction/Interactable';
 import { PLAY_COST, WHEEL_SLICES, pointsPerTicket } from '@/economy/pricing';
 import { clawPrizeFor } from '@/economy/Prizes';
 import type { ArcadeHabits } from '@/economy/ArcadeHabits';
@@ -25,18 +26,22 @@ export interface MachineContext {
   nextPlayCost: () => number;
   /** Whether the machine of this game id is out of order today. */
   outOfOrder: (id: string) => () => boolean;
+  /** A broken machine tried: the attendant's answer. */
+  brokenClick?: () => string;
   /** The ticket wheel's progressive pot. */
   jackpot: Jackpot;
   /** Plays per machine (the one store, `bootstrap/services`): the claw's grip luck follows the player's plays. */
   habits: ArcadeHabits;
+  /** Whether a prize is at home already (the claw restocks with the others first). */
+  ownsPrize?: (id: string) => boolean;
 }
 
 /** A machine the player plays standing at it, that the crowd's regulars take too. */
-type PhysicalMachine = Furniture & Station & ArcadeMachineLike;
+type PhysicalMachine = Furniture & Station & ArcadeMachineLike & Interactable;
 
 /** The wiring of a ticket machine playing game `id`: its payout rate and its out-of-order days go by the id. */
 function ticketWiring(ctx: MachineContext, id: string): TicketMachineWiring {
-  return { input: ctx.input, listener: ctx.listener, nextPlayCost: ctx.nextPlayCost, pointsPerTicket: pointsPerTicket(id), outOfOrder: ctx.outOfOrder(id) };
+  return { input: ctx.input, listener: ctx.listener, nextPlayCost: ctx.nextPlayCost, pointsPerTicket: pointsPerTicket(id), outOfOrder: ctx.outOfOrder(id), ...(ctx.brokenClick ? { brokenClick: ctx.brokenClick } : {}) };
 }
 
 /**
@@ -48,7 +53,7 @@ function ticketWiring(ctx: MachineContext, id: string): TicketMachineWiring {
 export const MACHINE_KINDS = {
   pinball: (ctx: MachineContext, options: PinballOptions) => new Pinball(options, { ...ticketWiring(ctx, 'pinball'), scores: ctx.scores }),
   claw: (ctx: MachineContext, options: ClawMachineOptions) =>
-    new ClawMachine(options, { input: ctx.input, listener: ctx.listener, playCost: () => PLAY_COST, prizeFor: (color) => clawPrizeFor(color)?.id, outOfOrder: ctx.outOfOrder('claw'), luck: ctx.habits }),
+    new ClawMachine(options, { input: ctx.input, listener: ctx.listener, playCost: () => PLAY_COST, prizeFor: (color) => clawPrizeFor(color)?.id, outOfOrder: ctx.outOfOrder('claw'), luck: ctx.habits, ...(ctx.ownsPrize ? { owns: ctx.ownsPrize } : {}), ...(ctx.brokenClick ? { brokenClick: ctx.brokenClick } : {}) }),
   alley: (ctx: MachineContext, options: AlleyRollerOptions) => new AlleyRoller(options, { ...ticketWiring(ctx, 'alley'), scores: ctx.scores }),
   hoops: (ctx: MachineContext, options: HoopShotOptions) => new HoopShot(options, { ...ticketWiring(ctx, 'hoops'), scores: ctx.scores }),
   wheel: (ctx: MachineContext, options: Omit<TicketWheelOptions, 'slices' | 'jackpot'>) => new TicketWheel({ slices: WHEEL_SLICES, jackpot: ctx.jackpot, ...options }, ticketWiring(ctx, 'wheel')),

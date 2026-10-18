@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import type { Updatable } from '@/core/Engine';
 import type { Interactable } from '@/interaction/Interactable';
 import type { SessionActions } from '@/game/SessionActions';
+import { poweredAt } from '@/building/mains';
 import { KettleBoil } from '@/audio/kitchenSounds';
 import { cylinderMesh, invisibleHitbox } from '../meshUtils';
 import { Prop, part } from '../props/Prop';
@@ -78,7 +79,10 @@ export class Kettle extends Prop implements Interactable, Updatable {
     this.time += dt;
     if (this.boiling) {
       this.progress = Math.min(1, this.progress + dt / BOIL_SECONDS);
-      if (this.progress >= 1) this.switchOff();
+      if (this.progress >= 1) {
+        this.switchOff();
+        this.onBoiled?.();
+      } else if (!poweredAt(this)) this.switchOff();
     } else if (this.cooling > 0) {
       this.cooling = Math.max(0, this.cooling - dt);
     }
@@ -111,13 +115,21 @@ export class Kettle extends Prop implements Interactable, Updatable {
     this.glint.set(hovered);
   }
 
+  /** The water came to the boil (not switched off early): the room makes a pot of tea of it. */
+  onBoiled: (() => void) | null = null;
+
   label(): string {
-    return this.boiling ? 'Kettle · switch off' : 'Kettle · boil';
+    if (!poweredAt(this)) return 'Kettle · no power';
+    return this.boiling ? 'Kettle · switch off' : 'Kettle · boil, for a pot of tea';
   }
 
-  activate(_session: SessionActions): void {
+  activate(session: SessionActions): void {
     if (this.boiling) {
       this.switchOff();
+      return;
+    }
+    if (!poweredAt(this)) {
+      session.refuse('Click. Nothing: the power is off in the whole building.');
       return;
     }
     this.boiling = true;

@@ -32,6 +32,8 @@ What points the player at the album's next photo, always in her words or in a th
   waits, read off the phone at the next click (`MISSED`). Once a memory.
 - **She writes** (`world/hallway/mail.ts`'s `grandma` source, from the mat or our flap in the hall): a memory ready, no
   visit for three days and no call picked up about it, her letter in pen with a photo's corner in its P.S. (`LETTERS`).
+  Before the very first visit, from game day 2, her invitation once (`INVITATION`, kept in `posted` as `invite`): come
+  for Sunday lunch, the album is out, number 14, and the 38 in a P.S.
   Once a memory.
 - **The journal** (`upcomingGrandma`'s `hint`, from `GrandmaHints.journal`): "Mémé rang / wrote: more photos on her
   table" for a memory ready she told of; else, once she has said more than the vaguest, her words about the next
@@ -62,7 +64,8 @@ day's tea); her words are `grandma/presenceLines.ts` and `grandma/storyLines.ts`
   `setCurtainsDrawn`), the plant by day, the frame over the telephone; a word to herself now and then.
 - **Gaspard rings** (`visit/gaspardCall.ts`): once the notebook is found (the row's memory open), at most once a week,
   on half the visits: the rotary set's bell (`audio/grandmaVoice` `playRotaryRing`), her side of the call heard, her
-  face falling, a word about him once she sits again.
+  face falling, a word about him once she sits again. After the reckoning he never rings if it ended `gone` or
+  `silent`; `apologised`, he rings as a son does (`PRESENCE_TALK.gaspardMended`: her smile, a softer word after).
 - **She remembers** (`visit/remembers.ts`): after the hello, one thing true in the save, each now and then: a Sunday
   missed since the last visit, the scarf (worn or not), the cat by name (or the want of one), the game she was last
   shown, a neighbour met (`social/standing` `isMet`) or none yet.
@@ -81,20 +84,38 @@ feature has her (`world/grandma/visit/pastimes.ts`; panels in `ui/grandma/`, mad
 `bibliothek.grandmaPastimes.v1`). Each warms her once a game day (`PASTIME_DEEDS`, reason `pastime-<id>`).
 
 - **The quiz** (her afternoon at the set, once a day): `OldTelevision.showQuiz` holds the set on the game show while
-  `QuizPanel` asks five questions (`quizBank.ts`, the ones not asked lately first). A few seconds into each she blurts
+  `QuizPanel` asks five questions, drawn as her set (the walnut case, the curved blue screen, its scanlines, the show's
+  name lit up, the answers on lozenges A to D): the show's (`quizBank.ts`, the ones not asked lately first) with two of
+  hers slipped in, one about the family (`FAMILY_QUIZ`, each once its memory is seen: the sports pages, the cushion, the
+  three letters, "money asleep", the 412 lots; Speedy and Georges always) and one about the player's shelves
+  (`collectionQuestion`: which of four is theirs, five games or more). A few seconds into each of the show's she blurts
   an answer (general knowledge and the old telly she often gets; the video games she only guesses) unless the player
-  answers first; the end says who got how many. Four right and ahead of her: two coins "for being clever" (`QUIZ_COIN`).
-- **The crossword** (her morning at the table, once a day): `CrosswordPanel`, the paper's clue and the word's squares
-  with the letters she has (`crosswordBank.ts`); typed with the letter keys (`KeyboardEvent.code`) or the letters under
-  it, Backspace rubs out. Two misses and she finds one more letter; "Leave it to her" ends it.
+  answers first; hers she leaves to the player. The end is the show's last card: two podiums with the scores, the
+  night's champion, the applause (`audio/pastimeSounds`: the jingle on, her ding as she buzzes in, the applause). Four
+  right and ahead of her: two coins "for being clever" (`QUIZ_COIN`).
+- **The crossword** (her morning at the table, once a day): `CrosswordPanel`, the paper's clue and its patch of grid:
+  the word across with the letters she has (`crosswordBank.ts`, 41 words), the easy words going down through them in her
+  ink (`downWordsOf`, from a stock never used as a day's word), the black squares round them, on the evening paper (its
+  masthead, her coffee's ring, the clue with its letter count). A mark shows the square the next letter goes into (a
+  click on a square moves it); typed with the letter keys (`KeyboardEvent.code`) or the letter tray under the paper (the
+  D-pad walks it), in pencil; Backspace rubs out. Wrong, the row shudders and the rubber clears it; two misses and she
+  finds one more letter; found, the pen goes over it. "Leave it to her" ends it.
 - **The cards** (evening, as often as liked): she walks from her armchair to her place at the table
   (`GRANDMA_FLAT_PLAN.pastimes.toTable`) and `CardsPanel` deals crazy eights (`crazyEights.ts`: match the suit or the
   rank, an eight names the suit, nothing to play means a draw, first out wins). Once a game she may slip down a card
-  that does not match and own up. The tally on the back of her envelope is kept; after, she walks back to her knitting.
-- **The wool** (evening, once a day): `WoolPanel`, the skein on the player's hands and the yarn tightening as she
-  pulls; a give of slack (the button, Space, Enter) keeps it running, too tight it snaps and she ties a knot (no
-  harm). She talks the while. `WOOL_FOR_SCARF` (3) sessions run to their end knit the player's scarf
+  that does not match and own up. The player's hand is fanned (tighter as it grows); on their turn the cards that would
+  go stand proud, an eight glows; on hers she thinks it over in a thought's cloud, one of her cards lifted. Keys 1 to 9
+  play a card, D draws. The tally on the back of her envelope (in five-bar gates) is kept; after, she walks back to her
+  knitting.
+- **The wool** (evening, once a day): `WoolPanel`, her parlour drawn: the skein looped over the player's hands, the yarn
+  running to her needles, the piece hanging under them a row longer every few seconds. The yarn tightens as she pulls
+  (straighter, darker, trembling; the hands lean in); a give of slack (the button, Space, Enter) dips the hands and lets
+  it run, too tight it snaps with a twang and she ties a knot that stays on the yarn (no harm). She talks the while;
+  at the end the finished piece lies on her lap. `WOOL_FOR_SCARF` (3) sessions run to their end knit the player's scarf
   (`GrandmaVisits.knitScarf`, the wardrobe's `memeScarf`), even before she is Close; after it the wool goes to socks.
+
+In all four she sits at the top with her words in a comic balloon and her face answering how it goes
+(`ui/grandma/memeSays`).
 
 `?debug`: "the quiz, the crossword and the wool open again today", "one more go at the wool and the scarf is done".
 
@@ -109,11 +130,16 @@ occasion first, then lunch on a lunch day, else (or once lunch is cleared) her f
   to 14:00. Coming in then, the envelope is not given at the door (`GrandmaVisits.holdEnvelope`, asked by `arrive`);
   she calls the player to the table and walks to her chair (`herWay`, `RITUALS_PLAN.lunch.herChair`; lunchtime coming
   while the player is in, she calls them then). The chair at the table's end (a `Hotspot`) or "Sit down to lunch" sits
-  the player (`RITUALS_PLAN.lunch.seat`): the blanquette served (`SundayTable.serve('served')`: the lid off, rice and
-  sauce on the plates), three of her lines, then the meal in a fade (`Pastimes`, the clock to 14:15), the tart
-  (`serve('dessert')`), the envelope (`takeEnvelope`, the reward banner), on Christmas her present
+  the player (`RITUALS_PLAN.lunch.seat`): the season's dish served (`dishOf`: a blanquette in winter, a navarin in
+  spring, stuffed tomatoes in summer, a pot-au-feu in autumn; `SundayTable.serve('served')`: the lid off, the plates
+  filled), three of her lines (one of a memory seen, `LUNCH_LINES.remembers`, most Sundays), then the meal in a fade
+  (`Pastimes`, the clock to 14:15), the season's tart (`serve('dessert')`), the envelope (`takeEnvelope`, the reward
+  banner). With Gaspard at the table (`FamilyStory.gaspardAt`) his plate is laid at the door end (`SundayTable.setGuest`,
+  `GRANDMA_FLAT_PLAN.dressing.lunch.guest`; never over her birthday cake), she talks to him (`GASPARD_TALK.lunch`), none
+  of her lines names him behind his back and the envelope comes with "Gaspard, look the other way". On Christmas her present
   (`LUNCH.christmasCoins`, once a year), a recipe the first times, and she clears up and goes back to her seat. Standing
-  up before the fade, the place stays laid. Leaving without eating, the envelope is in the coat pocket (a banner).
+  up before the fade, the place stays laid. Before the fade she asks for the bread (`LUNCH_LINES.bread`): a click on it
+  (`RITUALS_PLAN.lunch.bread`) passes it and she thanks the player; left `waits` s, she reaches across herself. Leaving without eating, the envelope is in the coat pocket (a banner).
   The decor lays the table on Christmas too (`furnishGrandmaDecor`, `lunchOf`).
 - **Recipes** (`recipes.ts`, `visit/teachRecipe.ts`): the blanquette at the end of the first lunch, the yoghurt cake at
   the second, her plum jam with the thanks for the first favour; a `read` card in her hand each time. At home, once
@@ -122,7 +148,8 @@ occasion first, then lunch on a lunch day, else (or once lunch is cleared) her f
   for `RITUALS.dishDays` (`MemeDish`): a friend who drops by has some like the cake (`bootstrap/worldLife` hosting),
   and a portion goes in the bag for her ("Give her some of your blanquette", her verdict). One dish out at a time.
 - **Favours** (`favours.ts`, `visit/favoursAtHers.ts`): from her second visit, `RITUALS.favour.gapDays` after the
-  last was done, one at a time, asked after her hello: a thump on her set (a `Hotspot` round it), the clock run down
+  last was done, one at a time, asked after her hello (once each has been asked, one comes back only
+  `againGapDays` after the last and none more than `most` times in all: never a chore): a thump on her set (a `Hotspot` round it), the clock run down
   (`LongcaseClock.setStopped`: no swing, no tick, still hands; wound with her key, a `Hotspot` on its hood), a croissant
   from Front Street's bakery (`pocket`'s croissant, given in the conversation), Félix's Mega Drive from her cupboard
   (`Workshop.add`, asked only once the kitchen has its table: mended at home, or sold, she knows on the next visit). On
@@ -130,10 +157,14 @@ occasion first, then lunch on a lunch day, else (or once lunch is cleared) her f
   recipe the first time.
 - **Occasions** (`occasions.ts`, `visit/occasionsAtHers.ts`): her birthday is her card's (`social/mood.isBirthday`,
   game days; the journal and "Wish her a happy birthday" are the social layer's): her cake with its candles on the table
-  (`SundayTable.setBirthday`), her words on the way in, and a present that day (flowers, cake, the latest game, a
-  portion) moves her. Christmas (real date): her tree in the corner from December to 6 January (`treeSeason`; put aside
+  (`SundayTable.setBirthday`), her words on the way in ("Help me with the candles"), the cake clickable while they burn
+  ("Her birthday cake · blow out the candles": the flames out, her clap and her wish), and a present that day (flowers,
+  cake, the latest game, a portion) moves her. Christmas (real date): her tree in the corner from December to 6 January (`treeSeason`; put aside
   while a memory plays), her words and lunch on the 24th and 25th. All Saints: the chrysanthemums on her table from 31
-  October to 3 November, her words on the 1st (she went to see Félix). Each occasion's words once (`GrandmaRituals.keep`).
+  October to 3 November, her words on the 1st (she went to see Félix), and that day her conversation's "Go and see Félix
+  with her": the 38 to the cemetery and back in a fade (`CEMETERY`, 100 game minutes), her word after, a journal line,
+  her warmth (once a year, `cemetery:<year>`). Each occasion's words once (`GrandmaRituals.keep`). How Félix died she
+  tells only once the last Wednesday is seen (`storyLines` `howHeWent`: his heart, home from hospital that spring, in his armchair, a manual open).
 - **Social and journal** (`social/grandmaRitualsSocial.ts`): lunch, a favour, a portion and each occasion warm her once
   a game day; the journal lists the open favour and Christmas lunch from 20 December.
 - **Debug** (`grandma/ritualsDebug.ts`): lunch again today, every recipe taught, her ways reset, her birthday, Christmas
@@ -184,7 +215,10 @@ his roll of F.A. stickers.
 **At home** (`world/keepsakes/placeKeepsakes.ts`, spots in `ROOM_PLAN.keepsakes`), each the moment it is given (the
 flat's zones never unload): the small ones on **Félix's shelf** (`FelixShelf`, two walnut boards on the front wall
 over the radiator, put up with the first), each in its spot and riding it (`KeepsakeProp`: caption its name, a click
-reads its card); the cushion on the TV rug, where the child sat. The shelf and the cushion are the flat's furniture
+reads its card); the cushion on the TV rug, where the child sat; the key ring on the flat's keys in the hall's bowl
+(`HouseKeys.setFelixRing`: a worn brass ring and its tag, read on taking them). The stickers go on the backs of the
+games that come home after them (`grandma/stickerRoll`: `Game.hisSticker`, 24 on the half roll; the box card's "His
+sticker" stamp), his own copies already having theirs. The shelf and the cushion are the flat's furniture
 (`Furnishings.register`, keys `felixShelf` / `felixCushion`): right-click to move them, the shelf along any wall.
 
 **Félix's lots** (`economy/felixLots.ts`: `FELIX_LOTS`, 24 seed games numbered within 1 to 412, Mémé's pencil
@@ -246,8 +280,15 @@ numbers in its `FAMILY`); the words are `grandma/gaspardLines.ts` (`GASPARD_TALK
   to talk about the sale." opens three ways, four with the sale's catalogue given by her (`Keepsakes` 'catalogue'):
   she saw it from the back row, or the catalogue (she stands up, "Gaspard. Sit down.", he says sorry: `apologised`);
   he sold to Crane (she shows him the door, "Odette remembers": `gone`); say nothing (he leaves, she speaks after:
-  `silent`). Played a `beat` apart after the conversation closes; Mémé is taken (`claim('gaspard')`) while standing.
-  Settled for good: the journal's headline, his memory of it, her warmth when the player spoke up. He never comes again.
+  `silent`). With Gaspard's letter given by her (`Keepsakes` 'gaspardLetter'), "Show him the letter he wrote Félix" is
+  one more way to `apologised`. Played a `beat` apart after the conversation closes; Mémé is taken
+  (`claim('gaspard')`) while standing. Settled for good: the journal's headline, his memory of it, her warmth when the
+  player spoke up. `gone` or `silent`, he never comes again.
+- **Gaspard back** (`FamilyStory.returning`, `gaspardBack`): after `apologised`, one Sunday `backAfter` days or more
+  on, he is at her table once more: on his feet after her hello, sorry to the player this time (`GASPARD_TALK.back`),
+  and the copy of Félix's he kept back from the sale held out (`family/gaspardReturn`: the lowest lot of the catalogue
+  not home, a slip of his in the box, into the parcel with a big banner; `onGaspardBack`). She has him stay for lunch;
+  he has his own chat, and leaves after the tart.
 - **The Christmas Game Boy** (`world/grandma/visit/gameBoyReturn.ts`, `family/craneGameBoy.ts`): memory 6 seen, she
   tells on the way in that lot one went to Victor Crane (`trail`). His conversation, wherever met, then has "The Game
   Boy from lot one?": a close friend gives it, anyone else hears a price by his tier (`PRICE`, never more than first
@@ -260,11 +301,15 @@ numbers in its `FAMILY`); the words are `grandma/gaspardLines.ts` (`GASPARD_TALK
   Saturday); the journal shows it coming (`upcomingFamily`). The gatherings' director starts it on that day in
   `visitHours` (it holds the day: no friend rings first): up the stairs slowly, the bell, a word at the door and on the
   kitchen, two shelves (Félix's notebook games named by their boxes, `FelixNotebook.isHis`) and the window, an
-  armchair (a word for the cat or the TV), then she asks for her photo. "Take her photo for the album" (or a click on
+  armchair (a word for the cat or the TV), then she asks for her photo. Her first word is on the kitchen as it is
+  (`kitchenDressed`: "He'd have hated what you did with it", else "bare as a church"); her chat brings up how things
+  went first (`EPILOGUE_TALK.visit.reflect`: Gaspard's end, Félix's grey cart run, the Game Boy by her bed); a later
+  visit brings the cake she promised (`bringCake`, the household's cake on the kitchen table). "Take her photo for the album" (or a click on
   her without the social layer) renders the frame as the player sees it, 4:3, into `albumPrints` as the epilogue's
-  print (`EPILOGUE_PRINT`), with the shutter. She waits for it up to `waitPhoto` s, then takes the 38 home. Nobody
-  answering, she tries the next Saturday (`missed`); a planned day gone by moves to the next (`tidy`). After her first
-  visit she drops in some Saturdays (`againOdds`, `againGap`).
+  print (`EPILOGUE_PRINT`), with the shutter. She waits for it up to `waitPhoto` s, then takes the 38 home; no photo
+  taken, she comes back for it the next Saturday (`planVisit` from `finish`). Nobody answering, she tries the next
+  Saturday (`missed`); a planned day gone by moves to the next (`tidy`). After her first visit she drops in some
+  Saturdays (`againOdds`, `againGap`). Her photo in the album, the closing reel plays at home (docs/story.md "The end").
 - **Debug** (`family/familyDebug`, the panel's Now): Gaspard at her table today (memory 4 seen; 6 for the reckoning),
   the Game Boy's trail told again on the next visit, the Game Boy home to give her, her visit as soon as the player is
   home.
@@ -277,7 +322,9 @@ Where the 38 lets the player off and what is met on the way up (`src/world/linde
 - **Linden Avenue** (`furnishLindenAvenue`, `LINDEN_PLAN`): the stretch of the avenue her window paints
   (`LindenView`), walked between the works' fences (`WorksFences`, x ±18, WORKS AHEAD), the facades going on past them
   to the bends. Her side: the pharmacy, **number 14** (`herDoor`: a travel door up to her landing; `lindenHers` has a
-  hole where it stands), **Lebrun's** bakery under her, the **dépôt-vente**; across: LE TILLEUL café, books, the
+  hole where it stands), **Lebrun's** bakery under her, the **dépôt-vente**; across: **LE TILLEUL** café (`TilleulWindow`,
+  7:00 to 22:00: its owner's word through the glass; with the reckoning open, what the café saw the week before the
+  sale, Gaspard and a man in a camel coat shaking hands; after, how it went), books, the
   tabac, and **line 38's stop** (`LindenStop`: the shelter and the pole; clicked, the bus back to Front Street at any
   hour, the fare paid on the way out covering it). Plane trees, cast-iron lamps on a crook, cars parked both sides
   (`LindenCars`, the street's models, solid), bollards (`Bollards`) along the flush kerbs, the zebra from her door
@@ -296,7 +343,8 @@ Where the 38 lets the player off and what is met on the way up (`src/world/linde
   hours (`LINDEN_PLAN.dogWalk`: out of the door and back, once a slot, while the player is on the avenue); clicked, a
   word (Odette, the radiator, the postman). Biscotte is heard barking down the well from the landing (`DoorDog`).
 - **Her landing** (`furnishLindenLanding`, `LINDEN_LANDING_PLAN`): her door (a doorway into her flat), Mr Ferrand's
-  across (`FerrandDoor`: knocked on, his radio answers), the glazed stairs door down to the avenue, the light on its
+  across (`FerrandDoor`: knocked on, his radio answers; the fourth knock, once ever, he opens on the chain for Félix's
+  family and passes a racing page through, `streetMarks` 'ferrandOpened', and Mémé has the story of it), the glazed stairs door down to the avenue, the light on its
   button. Her hello is said as the player steps into her flat from it, as before (`Arrivals`, occupancy).
 - **The 38's regulars** (`ui/busRide/busRiders`): drawn on the ride by the hour and the day: the man with his
   baguette in the seat in front (early morning, early evening), the schoolgirl with her headphones by the pole (school

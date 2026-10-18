@@ -59,6 +59,8 @@ export interface PersonFact {
   text: string;
   /** Said when it comes up in talk: "I play every evening. You must hear it through the floor!" */
   says: string;
+  /** The same said down the phone, when `says` needs them in front of you ("Look at this scar"). */
+  phoneSays?: string;
   /** Learned from this tier on (talking at a lower tier never brings it up). Default 'polite'. */
   from?: TierId;
 }
@@ -83,6 +85,8 @@ export interface PersonTopic {
   fit: Fit;
   /** Their answers (one drawn each time). */
   answers: readonly string[];
+  /** One more answer, told only to a friend once the others are (`people/deeper`): what they'd not tell anyone else. */
+  deeper?: string;
   from?: TierId;
   /** Open from the first meeting (what anyone could see: the piano heard, the dog walked). */
   obvious?: boolean;
@@ -94,6 +98,20 @@ export interface PersonTopic {
   memory?: string;
   /** As the People book lists it under "What matters to them": "The piano". */
   name: string;
+  /**
+   * How it goes down the phone (docs/social.md "The phone"): the words that need them in front of you ("Something
+   * smells good!", "Sit, there's enough for an army") said as on a call, each in place of its in-person one; `false`:
+   * not a thing to bring up without being there (it is not offered on a call).
+   */
+  phone?: PhoneTopic | false;
+}
+
+/** A topic's words on a call, each in place of the in-person one (`PersonTopic.phone`). */
+interface PhoneTopic {
+  say?: string;
+  again?: string;
+  answers?: readonly string[];
+  deeper?: string;
 }
 
 /**
@@ -114,8 +132,15 @@ export interface SocialEffect {
   text: string;
 }
 
-/** The lines a card may give of its own (they replace the shared lines of `socialLines` when present). */
-export type LineKey = 'hello' | 'cold' | 'hostile' | 'chat' | 'joke' | 'tease' | 'leaving' | 'bye' | 'repeat';
+/**
+ * The lines a card may give of its own (they replace the shared lines of `socialLines` when present): `thanks` for a
+ * gift that pleased them, `news` for news that did, `birthday` their word of it, `hurt` an insult's answer, `twice`
+ * the second conversation of a day, `call` their first word ringing the player ({name}: theirs).
+ */
+export type LineKey = 'hello' | 'cold' | 'hostile' | 'chat' | 'joke' | 'tease' | 'leaving' | 'bye' | 'repeat' | 'thanks' | 'news' | 'birthday' | 'hurt' | 'twice' | 'call';
+
+/** How someone carries themselves in a conversation, from their traits (`voices.mannerOf`): their body's way. */
+export type Manner = 'gruff' | 'shy' | 'proud' | 'lively' | 'warm';
 
 /** Someone the player can know. Data: `src/social/people/*`. */
 export interface PersonCard {
@@ -163,6 +188,14 @@ export interface PersonCard {
   effects?: readonly SocialEffect[];
   /** Their own words (they replace the shared lines of `socialLines` when present). */
   lines?: Partial<Record<LineKey, readonly string[]>>;
+  /**
+   * Their words on a call, in place of `lines` (docs/social.md "The phone"): `hello` picking up, `leaving` letting the
+   * player go, `bye` hanging up (their `lines` of these three are never said on the phone), and any other key whose
+   * words need them in front of you ("You look tired").
+   */
+  phoneLines?: Partial<Record<LineKey, readonly string[]>>;
+  /** Their introduction when the first conversation is a call (a friend from before, Mémé), when `intro` needs a face. */
+  phoneIntro?: string;
   /** Where the warmth starts (a friend from before, the rival). Default 0. */
   startWarmth?: number;
   startTrust?: number;
@@ -170,6 +203,8 @@ export interface PersonCard {
   listed?: 'met' | 'always';
   /** Family (Mémé): their warmth never drifts and never falls under `startWarmth`, whatever happens. */
   family?: boolean;
+  /** Met only at gatherings (the open house's guests): nobody to ask a favour of, nor to do one for. */
+  occasional?: boolean;
 }
 
 /** A moment they remember. */

@@ -1,0 +1,184 @@
+/*
+ * The film night's pick: the sheet's frame over a night yard (deep blue, a few stars), the bedsheet pegged up at the
+ * top with the projector's beam on it, and the player's games below as ticket stubs with a perforated edge. A pick
+ * flickers on the sheet before the panel goes.
+ */
+@layer tokens, base, components, panels;
+@layer panels {
+  .screening {
+    --night: #10182b;
+    --night-2: #1b2640;
+    --star: rgba(255, 248, 220, 0.55);
+    --bedsheet: #f1ece0;
+    --bedsheet-ink: #2a2620;
+    --beam: rgba(255, 244, 205, 0.16);
+    --stub: #e9dcc0;
+    --stub-ink: #3a2c1c;
+    --stub-on: #c9473a;
+    --poster-glow: rgba(255, 240, 200, 0.6);
+    --perforation: #000;
+    --flicker-ms: 700ms;
+    background:
+      radial-gradient(1px 1px at 12% 18%, var(--star), transparent 60%),
+      radial-gradient(1px 1px at 78% 9%, var(--star), transparent 60%),
+      radial-gradient(1.5px 1.5px at 55% 22%, var(--star), transparent 60%),
+      radial-gradient(1px 1px at 91% 31%, var(--star), transparent 60%),
+      linear-gradient(var(--night), var(--night-2));
+  }
+  .screening .catalogue__header h2 { font-family: var(--ui-font-print); letter-spacing: 0.01em; }
+  .screening .catalogue__blurb { font-family: var(--ui-font-hand); font-size: var(--fs-t1); opacity: 0.85; }
+
+  /* --- the sheet on the wall ---------------------------------------------------------------------------- */
+
+  .screening__stage {
+    position: relative;
+    display: grid;
+    justify-items: center;
+    padding: var(--sp-2) 0 var(--sp-3);
+  }
+  .screening__sheet {
+    position: relative;
+    z-index: var(--z-above);
+    display: flex;
+    align-items: center;
+    gap: var(--sp-4);
+    width: min(30rem, 100%);
+    height: 9.5rem;
+    box-sizing: border-box;
+    padding: var(--sp-3) var(--sp-4);
+    background:
+      radial-gradient(ellipse at 50% 45%, var(--tint-50), transparent 70%),
+      var(--bedsheet);
+    color: var(--bedsheet-ink);
+    /* Pegged at the top corners, sagging a little between them. */
+    border-radius: 0 0 40% 40% / 0 0 6% 6%;
+    box-shadow: 0 10px 30px var(--shade-55);
+  }
+  .screening__sheet::before,
+  .screening__sheet::after {
+    content: '';
+    position: absolute;
+    top: -0.35rem;
+    width: 0.5rem;
+    height: 1rem;
+    border-radius: var(--ui-radius-2xs);
+    background: var(--ink-gold);
+  }
+  .screening__sheet::before { left: 1.2rem; }
+  .screening__sheet::after { right: 1.2rem; }
+  .screening__poster { flex: none; display: grid; place-items: center; width: 5.6rem; height: 7.6rem; }
+  .screening__poster-img { max-width: 100%; max-height: 100%; box-shadow: 0 0 0 4px var(--bedsheet), 0 0 18px var(--poster-glow); }
+  .screening__poster .catalogue__cover--placeholder { width: 5.4rem; height: 7.4rem; }
+  .screening__billing { display: grid; gap: var(--sp-1); min-width: 0; }
+  .screening__bill-title {
+    font-family: var(--ui-font-print);
+    font-size: var(--fs-t3);
+    line-height: 1.1;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+  .screening__bill-meta { font-size: var(--fs-4); opacity: 0.7; }
+  .screening__tonight {
+    justify-self: start;
+    padding: 0.1rem 0.5rem;
+    border: 2px solid var(--stub-on);
+    color: var(--stub-on);
+    font-family: var(--ui-font-display);
+    font-size: var(--fs-2);
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    transform: rotate(-3deg);
+  }
+  .screening__sheet--blank { justify-content: center; }
+  .screening__blank-line { font-family: var(--ui-font-hand); font-size: var(--fs-t1); opacity: 0.55; }
+  /* The beam from the projector, behind the sheet's bottom edge. */
+  .screening__beam {
+    position: absolute;
+    left: 50%;
+    bottom: -0.5rem;
+    width: min(34rem, 100%);
+    height: 11rem;
+    translate: -50% 0;
+    background: linear-gradient(to top, var(--beam), transparent);
+    clip-path: polygon(48% 100%, 52% 100%, 100% 0, 0 0);
+    pointer-events: none;
+  }
+  /* The pick: the picture flickers up, as a projector catching. */
+  .screening__sheet--picked .screening__poster,
+  .screening__sheet--picked .screening__billing { animation: screening-flicker var(--flicker-ms) steps(1, end) both; }
+  @keyframes screening-flicker {
+    0% { opacity: 0; }
+    15% { opacity: 1; }
+    25% { opacity: 0.3; }
+    40% { opacity: 1; }
+    50% { opacity: 0.6; }
+    65%, 100% { opacity: 1; }
+  }
+
+  /* --- the ticket stubs ------------------------------------------------------------------------------- */
+
+  .screening .catalogue__scroll { background: transparent; border: 0; box-shadow: none; }
+  .screening__stubs {
+    list-style: none;
+    margin: 0;
+    padding: 0 0 var(--sp-3);
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(17rem, 1fr));
+    gap: var(--sp-2);
+  }
+  .screening__stub-btn {
+    position: relative;
+    display: flex;
+    align-items: center;
+    gap: var(--sp-3);
+    width: 100%;
+    padding: var(--sp-2) var(--sp-4) var(--sp-2) var(--sp-3);
+    font: inherit;
+    text-align: left;
+    color: var(--stub-ink);
+    background: var(--stub);
+    border: 0;
+    border-radius: var(--ui-radius-xs);
+    /* The torn, perforated edge on the right. */
+    -webkit-mask: radial-gradient(circle at right 0.35rem center, transparent 0.18rem, var(--perforation) 0.2rem) right / 0.7rem 0.7rem repeat-y, linear-gradient(var(--perforation), var(--perforation)) left / calc(100% - 0.7rem) 100% no-repeat;
+    mask: radial-gradient(circle at right 0.35rem center, transparent 0.18rem, var(--perforation) 0.2rem) right / 0.7rem 0.7rem repeat-y, linear-gradient(var(--perforation), var(--perforation)) left / calc(100% - 0.7rem) 100% no-repeat;
+    cursor: pointer;
+    transition: transform var(--dur-hover) var(--ui-ease), filter var(--dur-hover) ease;
+  }
+  .screening__stub-btn:hover,
+  .screening__stub-btn:focus-visible { transform: translateY(-2px) rotate(-0.6deg); filter: brightness(1.06); }
+  .screening__stub-btn:focus-visible { outline: 2px solid var(--ui-accent-bright); outline-offset: 2px; }
+  .screening .screening__stub-cover.catalogue__cover { width: 2.6rem; height: 3.4rem; object-fit: cover; flex: none; }
+  .screening__stub-text { flex: 1; min-width: 0; display: grid; }
+  .screening__stub-title { font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .screening__stub-meta { font-size: var(--fs-3); opacity: 0.7; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .screening__stub-verb {
+    flex: none;
+    font-family: var(--ui-font-display);
+    font-size: var(--fs-1);
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    opacity: 0;
+    transition: opacity var(--dur-hover) ease;
+  }
+  .screening__stub-btn:hover .screening__stub-verb,
+  .screening__stub-btn:focus-visible .screening__stub-verb,
+  .screening__stub--on .screening__stub-verb { opacity: 1; }
+  .screening__stub--on .screening__stub-btn { background: var(--bedsheet); box-shadow: inset 4px 0 0 var(--stub-on); cursor: default; }
+  .screening__stub--on .screening__stub-verb { color: var(--stub-on); }
+  @media (pointer: coarse) {
+    .screening__stub-verb { opacity: 1; }
+  }
+  @media (max-width: 34rem) {
+    .screening__sheet { height: 8rem; }
+    .screening__poster { width: 4.4rem; height: 6rem; }
+    .screening__bill-title { font-size: var(--fs-t1); }
+  }
+  /* Reduced motion: the game's setting (`.reduce-motion` on <html>, settings/motion), never the media query alone. */
+  .reduce-motion .screening__sheet--picked .screening__poster,
+  .reduce-motion .screening__sheet--picked .screening__billing { animation: none; }
+  .reduce-motion .screening__stub-btn:hover,
+  .reduce-motion .screening__stub-btn:focus-visible { transform: none; }
+}

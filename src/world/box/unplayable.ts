@@ -5,3 +5,8 @@ export function unplayableWhy(box: GameBox): string {
   if (box.isSealed) return 'still in its shrink-wrap (open it first)';
   return box.statusStyle === 'lent' ? 'lent out' : 'on your wishlist';
 }
+
+/** What goes into its console: a PlayStation's disc, anyone else's cartridge. */
+export function mediaWord(box: Pick<GameBox, 'game'>): string {
+  return box.game.platform === 'ps1' ? 'disc' : 'cartridge';
+}

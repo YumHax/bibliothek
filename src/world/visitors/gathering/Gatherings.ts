@@ -10,19 +10,26 @@ import { GATHERING_RULES } from './gatheringPlan';
 import type { Occasion } from './host';
 import { ClubVisit } from './ClubVisit';
 import { MemeVisit, type MemeVisitDeps } from './MemeVisit';
-import { GamesNight } from './GamesNight';
+import { GamesNight, nightGuests } from './GamesNight';
 import { NightPhotos } from './NightPhotos';
 import { OpenHouse } from './OpenHouse';
 import { clockShort } from '@/text/clock';
 import { formatCount } from '@/text/count';
 
+/** "Sam and Inès", "Sam, Inès and Marco". */
+function andList(names: readonly string[]): string {
+  return names.length <= 1 ? (names[0] ?? '') : `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]!}`;
+}
+
 /** A games night may still start this late (the friends were asked for the evening and the player came home late). */
 const NIGHT_LATEST = 22.5;
 
-/** A line of the phone's page for the gatherings: what it asks for, a word on it, whether it can be asked now. */
+/** A line of the phone's Invite app for the gatherings: what it asks for, who answers, a word on it, whether it can be asked now. */
 interface PhoneEventRow {
   id: 'gamesNight' | 'openHouse';
   label: string;
+  /** Who answers the ring (the call screen's name). */
+  who: string;
   note: string;
   enabled: boolean;
 }
@@ -60,6 +67,11 @@ export class Gatherings extends Prop implements Updatable, ActivityAware, Occasi
     this.forced = options.force;
     options.host.attach(this);
     this.hangPhotos();
+  }
+
+  /** A gathering is on in the flat right now (the building's power cut waits for it to end). */
+  get underWay(): boolean {
+    return this.current !== null;
   }
 
   // --- Occasion -------------------------------------------------------------------------------------
@@ -170,8 +182,8 @@ export class Gatherings extends Prop implements Updatable, ActivityAware, Occasi
     const house = this.houseRefusal();
     const { aheadDays, from } = GATHERING_RULES.openHouse;
     return [
-      { id: 'gamesNight', label: 'Have everyone round tonight', note: night ?? 'a games night: PADDLE WARS on the TV', enabled: night === null },
-      { id: 'openHouse', label: 'Ring THE GAMING WEEKLY', note: house ?? `announce an open house, in ${aheadDays} days from ${from}:00`, enabled: house === null },
+      { id: 'gamesNight', label: 'Have everyone round tonight', who: 'Your friends', note: night ?? 'a games night: PADDLE WARS on the TV', enabled: night === null },
+      { id: 'openHouse', label: 'An open house', who: 'THE GAMING WEEKLY', note: house ?? `announced in the paper, ${aheadDays} days from now, from ${from}:00`, enabled: house === null },
     ];
   }
 
@@ -186,14 +198,18 @@ export class Gatherings extends Prop implements Updatable, ActivityAware, Occasi
       const hour = Math.max(from, host.options.clock.state.hours + inHours);
       book.planNight(day, hour);
       host.options.journal?.note('visit', 'Asked everyone round for a games night', { weight: 'note' });
-      return `Everyone: “Games night? We’re in. See you around ${clockShort(hour)}!”`;
+      // A friend gone cold says no on the phone; the others are in.
+      const { coming, away } = nightGuests();
+      const yes = `${andList(coming.map((f) => f.name))}: “Games night? We’re in. See you around ${clockShort(hour)}!”`;
+      const no = away.map((f) => `${f.name}: “I’m busy tonight. Have fun.”`);
+      return coming.length === 1 ? `${coming[0]!.name}: “Just us, then? I’m in. See you around ${clockShort(hour)}.”${no.length ? ` ${no.join(' ')}` : ''}` : [yes, ...no].join(' ');
     }
     const why = this.houseRefusal();
     if (why) return why;
     const { aheadDays, from, until } = GATHERING_RULES.openHouse;
     book.announceHouse(day + aheadDays);
     host.options.journal?.note('visit', 'Open house announced in THE GAMING WEEKLY', { weight: 'note' });
-    return `THE GAMING WEEKLY: “An open house, lovely. It goes in tomorrow’s paper: the day after, ${from}:00 to ${clockShort(until)}. Two coins at the door, I’ll put.”`;
+    return `THE GAMING WEEKLY: “An open house, lovely. It goes in tomorrow’s paper: the day after, ${from}:00 to ${clockShort(until)}. A few coins at the door for the jar, I’ll put.”`;
   }
 
   private nightRefusal(): string | null {
@@ -202,6 +218,8 @@ export class Gatherings extends Prop implements Updatable, ActivityAware, Occasi
     if (this.current) return 'You have people round right now.';
     if (host.options.clock.state.hours >= GATHERING_RULES.gamesNight.callUntil) return 'Too late to ask everyone round tonight. Another day.';
     if (host.rangOn(day) && !book.nightOn(day)) return 'You had a visitor today already. Another day.';
+    if (host.invitedOn(day)) return 'Not tonight: you asked a friend round today already.';
+    if (!nightGuests().coming.length) return 'Nobody picks up tonight. Your friends are keeping their distance.';
     return book.nightRefusal(day);
   }
 

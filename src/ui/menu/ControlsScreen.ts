@@ -1,5 +1,5 @@
 import { CONTROLS, CONTROL_DEVICES, CONTROL_GROUPS, type ControlDevice, type ControlGroup, type ControlHint } from '../controls';
-import { escapeHtml } from '../html';
+import { html, paint, raw, type Html } from '../panel/html';
 import { onKeyLabelsChange, renderKeys } from '../keys';
 
 /**
@@ -19,20 +19,18 @@ export class ControlsScreen {
   constructor() {
     this.element = document.createElement('div');
     this.element.className = 'menu__controls-screen';
-    this.element.innerHTML = `
-      <div class="menu__tabs" role="tablist" aria-label="Where">
-        ${CONTROL_GROUPS.map(
-          (g) => `<button type="button" class="ui-btn" role="tab" id="controls-tab-${g.id}" aria-controls="controls-panel" data-nav data-group="${g.id}">${g.label}</button>`,
-        ).join('')}
-      </div>
-      <div class="menu__segmented" role="radiogroup" aria-label="Device">
-        ${CONTROL_DEVICES.map(
-          (d) => `<button type="button" class="ui-btn" role="radio" data-nav data-device="${d.id}">${d.label}</button>`,
-        ).join('')}
-      </div>
-      <div class="menu__body" id="controls-panel" role="tabpanel">
-        <table class="menu__controls"><tbody></tbody></table>
-      </div>`;
+    paint(
+      this.element,
+      html`<div class="menu__tabs" role="tablist" aria-label="Where">
+          ${CONTROL_GROUPS.map((g) => html`<button type="button" class="ui-btn" role="tab" id="controls-tab-${g.id}" aria-controls="controls-panel" data-nav data-group="${g.id}">${g.label}</button>`)}
+        </div>
+        <div class="menu__segmented" role="radiogroup" aria-label="Device">
+          ${CONTROL_DEVICES.map((d) => html`<button type="button" class="ui-btn" role="radio" data-nav data-device="${d.id}">${d.label}</button>`)}
+        </div>
+        <div class="menu__body" id="controls-panel" role="tabpanel">
+          <table class="menu__controls"><tbody></tbody></table>
+        </div>`,
+    );
     this.tabs = this.element.querySelector('.menu__tabs')!;
     this.devices = this.element.querySelector('.menu__segmented')!;
     this.table = this.element.querySelector('tbody')!;
@@ -74,18 +72,19 @@ export class ControlsScreen {
   }
 
   private render(): void {
-    this.table.innerHTML = CONTROLS.filter((c) => c.group === this.group)
-      .map((c) => {
+    paint(
+      this.table,
+      html`${CONTROLS.filter((c) => c.group === this.group).map((c) => {
         const keys = keysFor(c, this.device);
         // Not on this device: said in words, not by the dimming alone.
-        return `<tr${keys ? '' : ' class="menu__controls--na"'}><th scope="row">${keys ?? '<span class="menu__controls-none">not on this device</span>'}</th><td>${escapeHtml(c.action)}</td></tr>`;
-      })
-      .join('');
+        return html`<tr${keys ? '' : raw(' class="menu__controls--na"')}><th scope="row">${keys ?? html`<span class="menu__controls-none">not on this device</span>`}</th><td>${c.action}</td></tr>`;
+      })}`,
+    );
   }
 }
 
 /** The line's keys on `device`, or null when that device has no way to do it. */
-function keysFor(hint: ControlHint, device: ControlDevice): string | null {
+function keysFor(hint: ControlHint, device: ControlDevice): Html | null {
   const markup = device === 'keyboard' ? hint.keys : device === 'gamepad' ? hint.pad : hint.touch;
-  return markup === undefined ? null : renderKeys(markup);
+  return markup === undefined ? null : raw(renderKeys(markup));
 }

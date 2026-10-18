@@ -3,12 +3,15 @@ import type { Updatable } from '@/core/Engine';
 import type { Interactable } from '@/interaction/Interactable';
 import type { SessionActions } from '@/game/SessionActions';
 import type { BoxArtLoader } from '@/covers/BoxArtLoader';
-import type { StockItem } from '@/economy/StockItem';
+import { StockItem } from '@/economy/StockItem';
+import type { Game } from '@/catalog/types';
 import { RAFFLE, raffle } from '@/fair/raffle';
 import { formatCoins } from '@/text/money';
 import type { Furniture } from '../../Furniture';
 import type { Walker } from '../../people/Walker';
 import { ForSaleBox } from '../../market/ForSaleBox';
+import { GameBox } from '../../GameBox';
+import { disposeTree } from '../../materials/sharedResources';
 import { cylinderMesh, invisibleHitbox } from '../../meshUtils';
 import { METAL, paint } from '../../materials/palette';
 
@@ -32,11 +35,16 @@ interface RaffleDrumOptions {
   cheer?: () => void;
 }
 
+/** The Fair of game day `day`'s raffle prize: a boxed game, the same whenever it is drawn (the drum's, the kiosk's). */
+export function rafflePrize(stock: { randomGames(seed: string, count: number): Promise<Game[]> }, day: number): Promise<StockItem | null> {
+  return stock.randomGames(`raffle:${day}`, 1).then(([game]) => (game ? new StockItem(game, 'complete', 'bin', { list: 0, final: true }) : null));
+}
+
 /** The drum's radius and length, its axle's height over the table. */
 const DRUM = { radius: 0.13, length: 0.26, axle: 0.2 };
 /** The number is read out to a player this near (m). */
 const HEARD_WITHIN = 25;
-const SOLD = ['“Good luck, love. It’s drawn at six.”', '“In it goes. Fingers crossed.”', '“Another one? Somebody wants that prize.”'];
+const SOLD = ['Good luck, love. It’s drawn at six.', 'In it goes. Fingers crossed.', 'Another one? Somebody wants that prize.'];
 
 /**
  * The Grand Flea Fair's raffle drum on the overflow stall (`fair/raffle`): a wire drum on a stand with a crank. Before
@@ -52,6 +60,10 @@ export class RaffleDrum extends THREE.Group implements Furniture, Interactable, 
   private wasDrawn: boolean;
   private prizeBox: ForSaleBox | null = null;
   private fetching = false;
+  /** The prize on show before the draw (a plain box, nobody's yet), and its title for the caption. */
+  private shown: THREE.Group | null = null;
+  private showing = false;
+  private shownTitle = '';
   private line = 0;
   private readonly eye = new THREE.Vector3();
   private readonly here = new THREE.Vector3();
@@ -108,7 +120,10 @@ export class RaffleDrum extends THREE.Group implements Furniture, Interactable, 
   label(): string {
     const day = this.options.day();
     const hours = this.options.hours();
-    if (!raffle.drawn(hours)) return raffle.canBuy(day, hours) ? `Raffle · buy a ticket (${formatCoins(RAFFLE.price)})` : 'Raffle · your tickets are in the drum';
+    if (!raffle.drawn(hours)) {
+      const prize = this.shownTitle ? `, ${this.shownTitle} to win` : '';
+      return raffle.canBuy(day, hours) ? `Raffle · buy a ticket (${formatCoins(RAFFLE.price)})${prize}` : `Raffle · your tickets are in the drum${prize}`;
+    }
     if (raffle.waiting(day, hours)) return 'Raffle · your number came up!';
     return `Raffle · drawn: number ${raffle.number(day)}`;
   }
@@ -118,9 +133,9 @@ export class RaffleDrum extends THREE.Group implements Furniture, Interactable, 
     const today = day();
     const now = hours();
     if (raffle.drawn(now)) {
-      if (raffle.waiting(today, now)) keeper.speak(`“Number ${raffle.number(today)}, that’s you! The prize is on the table, it’s yours.”`);
-      else if (raffle.tickets(today)) keeper.speak(`“Number ${raffle.number(today)} won it. Not yours this time, love. Next Fair!”`);
-      else keeper.speak(`“Drawn at six: number ${raffle.number(today)}. Next Fair, there’s always another prize.”`);
+      if (raffle.waiting(today, now)) keeper.speak(`Number ${raffle.number(today)}, that’s you! The prize is on the table, it’s yours.`);
+      else if (raffle.tickets(today)) keeper.speak(`Number ${raffle.number(today)} won it. Not yours this time, love. Next Fair!`);
+      else keeper.speak(`Drawn at six: number ${raffle.number(today)}. Next Fair, there’s always another prize.`);
       return;
     }
     if (!raffle.canBuy(today, now)) {
@@ -129,11 +144,12 @@ export class RaffleDrum extends THREE.Group implements Furniture, Interactable, 
     }
     session.pay({
       price: RAFFLE.price,
+      title: 'A raffle ticket',
       paid: () => {
-        raffle.buy(today);
+        const n = raffle.buy(today);
         this.spin = 1.5;
         keeper.speak(SOLD[this.line++ % SOLD.length]!);
-        return 'A pink ticket, its stub torn off for you. The other half goes in the drum.';
+        return `A pink ticket, number ${raffle.ticketNumber(today, n)}, its stub torn off for you. The other half goes in the drum.`;
       },
     });
   }
@@ -149,7 +165,7 @@ export class RaffleDrum extends THREE.Group implements Furniture, Interactable, 
       viewer.getWorldPosition(this.eye);
       this.getWorldPosition(this.here);
       if (this.eye.distanceTo(this.here) < HEARD_WITHIN) {
-        keeper.speak(`“And the winner is… number ${raffle.number(today)}!”`);
+        keeper.speak(`And the winner is… number ${raffle.number(today)}!`);
         keeper.gesture('clap');
         this.options.cheer?.();
       }
@@ -160,6 +176,42 @@ export class RaffleDrum extends THREE.Group implements Furniture, Interactable, 
       this.drum.rotation.x += dt * 6 * Math.min(1, this.spin);
     }
     if (raffle.waiting(today, now) && !this.prizeBox && !this.fetching) this.layPrize(today);
+    this.showPrize(drawn);
+  }
+
+  /**
+   * Before the draw the prize lies face up on the table for all to see (not to take); once drawn, it is the winner's:
+   * the player's own `ForSaleBox` (`layPrize`), or gone home with somebody else.
+   */
+  private showPrize(drawn: boolean): void {
+    if (drawn) {
+      if (this.shown) {
+        this.remove(this.shown);
+        disposeTree(this.shown);
+        this.shown = null;
+      }
+      return;
+    }
+    if (this.shown || this.showing || !this.parent) return;
+    this.showing = true;
+    void this.options.prize().then((item) => {
+      if (!item || !this.parent || raffle.drawn(this.options.hours())) return;
+      const box = new GameBox(item.game, this.options.covers);
+      const { depth } = box.dimensions;
+      // Face up, as the winner's copy will lie (`ForSaleBox`'s flat pose), where it will wait: zone-local `prizeAt`.
+      const holder = new THREE.Group();
+      const face = new THREE.Group();
+      face.rotation.x = -Math.PI / 2;
+      box.position.set(0, 0, depth / 2);
+      face.add(box);
+      holder.add(face);
+      this.updateMatrixWorld(true);
+      holder.position.copy(this.worldToLocal(this.parent.localToWorld(this.options.prizeAt.clone())));
+      holder.rotation.y = this.options.prizeYaw - this.rotation.y;
+      this.add(holder);
+      this.shown = holder;
+      this.shownTitle = item.game.title;
+    });
   }
 
   /** The prize on the table, free to its winner. */
@@ -168,7 +220,7 @@ export class RaffleDrum extends THREE.Group implements Furniture, Interactable, 
     void this.options.prize().then((item) => {
       if (!item || this.prizeBox) return;
       const { host, covers, wallet, prizeAt, prizeYaw } = this.options;
-      const box = new ForSaleBox(item, covers, { pose: { kind: 'flat' }, tag: false, wallet, where: 'the Grand Flea Fair’s raffle', free: true, thanks: () => '“Enjoy it! Proper boxed, that one.”' });
+      const box = new ForSaleBox(item, covers, { pose: { kind: 'flat' }, tag: false, wallet, where: 'the Grand Flea Fair’s raffle', free: true, thanks: () => 'Enjoy it! Proper boxed, that one.' });
       box.onSold = () => {
         host.remove(box);
         box.dispose();

@@ -3,10 +3,13 @@ import { gameDayRandom } from '@/time/daily';
 import { addExtras } from '../extras';
 import { pairKey, life, saveLife } from '../life/lifeStore';
 import { findPerson, shortName } from '../people';
+import { addEffectSource } from '../perks';
 import { isMet, nudge, standing } from '../standing';
 import type { TalkExtra } from '../talk';
 import { addThreadSource, type Thread } from '../threads';
-import type { PersonId, SocialPlace } from '../types';
+import { atLeast, tierOf } from '../tiers';
+import { addTopicSource } from '../topicSources';
+import type { PersonId, PersonTopic, SocialPlace } from '../types';
 import { witnessed } from '../witnesses';
 import { conflictOf, saveConflicts, type ConflictState } from './conflictStore';
 import { CONFLICT, CONFLICTS, type ConflictPlan, type ConflictSide } from './conflictsPlan';
@@ -38,6 +41,54 @@ export function startConflicts(d: ConflictDeps): void {
   d.onNewDay(settle);
   addExtras((ctx) => CONFLICTS.flatMap((plan) => extrasOf(plan, ctx.person, ctx.day, ctx.place)));
   addThreadSource((id, day) => CONFLICTS.flatMap((plan) => threadsOf(plan, id, day)));
+  addTopicSource((id) => CONFLICTS.map((plan) => bystanderTopic(plan, id)).find((t) => t !== null) ?? null);
+  // The music row settled for Mr Leclerc, or made up: the attic plays quieter (`neighbourNoisePlan`'s `softer`).
+  addEffectSource((id, key) => {
+    if (id !== 'student' || key !== 'quietAttic') return undefined;
+    const noise = conflictOf('noise');
+    return noise.side === 'a' || typeof noise.peace === 'number' ? true : undefined;
+  });
+}
+
+/** Whether `plan` is brewing: started, no side taken, not blown over, not made up. */
+function brewing(state: ConflictState): boolean {
+  return state.started !== null && state.side === null && state.lapsed === null && typeof state.peace !== 'number';
+}
+
+/** What the rest of the building says of `plan` while it brews, asked: a resident met who is neither side, by temperament. */
+function bystanderTopic(plan: ConflictPlan, id: PersonId): PersonTopic | null {
+  const state = conflictOf(plan.id);
+  const card = findPerson(id);
+  if (!brewing(state) || !card || card.group !== 'building' || sideOf(plan, id) || !isMet(id)) return null;
+  const age = card.look.age;
+  if (age === 'child' || age === 'teen') return null;
+  const t = plan.talk;
+  const eager = card.traits.includes('gossip') || card.traits.includes('chatty');
+  const grumbler = card.traits.includes('grumpy') || card.traits.includes('neat') || card.traits.includes('proud');
+  const answer = eager ? t.eager : grumbler ? t.grumble : t.plain;
+  return { id: `event:conflict-${plan.id}`, say: fill(t.say, plan, state), name: fill(t.name, plan, state), icon: 'chat', fit: eager ? 'loves' : 'likes', obvious: true, answers: [fill(answer, plan, state)] };
+}
+
+/** Whether the player is a friend of both sides of `plan` (who can make them make up). */
+function friendOfBoth(plan: ConflictPlan): boolean {
+  return [plan.a.person, plan.b.person].every((id) => {
+    const s = standing(id);
+    return atLeast(tierOf(s.warmth, s.trust), 'friend');
+  });
+}
+
+/** The two made up, by the player: both warm to them and trust them with it, and the distance between them goes. */
+function makePeace(plan: ConflictPlan, place: SocialPlace, day: number): void {
+  const state = conflictOf(plan.id);
+  if (!brewing(state)) return;
+  state.peace = day;
+  saveConflicts();
+  easeTie(plan);
+  for (const side of [plan.a, plan.b]) {
+    nudge(side.person, { warmth: CONFLICT.peace.warmth, trust: CONFLICT.peace.trust, raw: true, why: 'you patched things up', day, memory: 'you got us to make up', memoryWeight: 10 });
+    witnessed(side.person, 'defend', place, day);
+  }
+  deps?.note(`Got ${shortName(plan.a.person)} and ${shortName(plan.b.person)} to make up`);
 }
 
 function fill(text: string, plan: ConflictPlan, state: ConflictState): string {
@@ -68,7 +119,7 @@ function settle(day: number): void {
       if (day < Math.max(plan.earliest, a + CONFLICT.startDays, b + CONFLICT.startDays)) continue;
       start(plan, state, day);
       changed = true;
-    } else if (state.side === null && state.lapsed === null && day - state.started > CONFLICT.lapseDays) {
+    } else if (brewing(state) && day - state.started > CONFLICT.lapseDays) {
       state.lapsed = day;
       easeTie(plan);
       for (const id of [plan.a.person, plan.b.person]) nudge(id, { warmth: CONFLICT.lapse.warmth, why: 'you kept out of it', day });
@@ -126,7 +177,7 @@ function extrasOf(plan: ConflictPlan, id: PersonId, day: number, place: SocialPl
   const side = sideOf(plan, id);
   if (!side || !isMet(id)) return [];
   const state = conflictOf(plan.id);
-  if (state.started === null || state.lapsed !== null) return [];
+  if (state.started === null || state.lapsed !== null || typeof state.peace === 'number') return [];
   const mine: ConflictSide = plan[side];
   const key = `conflict-${plan.id}-${side}`;
   const out: TalkExtra[] = [];
@@ -143,6 +194,13 @@ function extrasOf(plan: ConflictPlan, id: PersonId, day: number, place: SocialPl
       take(plan, side, place, day);
       return { line: fill(mine.took, plan, state) };
     } });
+    // A friend of both, who has heard both sides, can get them to make up.
+    if (state.told.a && state.told.b && friendOfBoth(plan)) {
+      out.push({ id: `${key}-peace`, group: 'promise', label: fill(plan.peace.label, plan, state), once: true, fit: 'likes', run: () => {
+        makePeace(plan, place, day);
+        return { line: fill(plan.peace[side], plan, state) };
+      } });
+    }
     // Standing up for the other side to this one's face.
     if (side === 'a' && plan.defend) {
       const defend = plan.defend;
@@ -186,7 +244,7 @@ function extrasOf(plan: ConflictPlan, id: PersonId, day: number, place: SocialPl
 function threadsOf(plan: ConflictPlan, id: PersonId, day: number): Thread[] {
   const side = sideOf(plan, id);
   const state = conflictOf(plan.id);
-  if (!side || state.started === null || state.lapsed !== null || !isMet(id)) return [];
+  if (!side || state.started === null || state.lapsed !== null || typeof state.peace === 'number' || !isMet(id)) return [];
   const mine = plan[side];
   if (state.side === null) return [{ person: id, kind: 'need', text: fill(mine.need, plan, state), day: state.started }];
   if (state.decided === null || day <= state.decided) return [];

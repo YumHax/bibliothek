@@ -43,11 +43,18 @@ const JUNK: readonly { name: string; line: string }[] = [
   { name: 'A bag of manuals', line: 'Manuals for games nobody has ever heard of. You read two anyway.' },
   { name: 'A cartridge with no label', line: 'Bare plastic, a bit of tape that says "MIKE". It plays nothing you can tell.' },
   { name: 'A memory card', line: '15 blocks, all full: someone’s whole childhood of save files.' },
-  { name: 'A broken console', line: 'A Mega Drive with no lid and a smell of burnt dust. Not today.' },
+  { name: 'A broken console', line: 'A Mega Drive with no lid and a smell of burnt dust. One for the kitchen table and a screwdriver.' },
   { name: 'A jar of buttons', line: 'Shirt buttons. Hundreds. Why are they in a box of games?' },
   { name: 'A Christmas catalogue', line: 'Every console of 1993 at its 1993 price. Painful reading.' },
-  { name: 'A shoebox of tokens', line: 'Arcade tokens from a hall that closed long ago. They will not work at yours.' },
+  { name: 'A shoebox of tokens', line: 'Arcade tokens from a hall that closed long ago. Gus buys old tokens for his jar: a coin or two each handful.' },
 ];
+
+/** The junk that does something once out of the carton: the old tokens (coins), the broken console (the kitchen table's repair). */
+const TOKENS_JUNK = 'A shoebox of tokens';
+export const BROKEN_CONSOLE_JUNK = 'A broken console';
+/** A manual among them may be the one a copy of the player's lacks; the bare cart may be someone's own game, burnt onto it. */
+export const MANUALS_JUNK = 'A bag of manuals';
+export const BARE_CART_JUNK = 'A cartridge with no label';
 
 /** The well-known titles a carton may hide (the built-in list, no grail). */
 function gems(): Game[] {
@@ -88,8 +95,10 @@ export function drawSealedLot(seed: string, pool: readonly Game[], owns: (id: st
     }
     const junk = JUNK[Math.floor(rng() * JUNK.length)]!;
     const [c0, c1] = SEALED_LOT.coins;
-    const coins = rng() < SEALED_LOT.coinsOdds ? c0 + Math.floor(rng() * (c1 - c0 + 1)) : 0;
-    items.push({ kind: 'junk', name: junk.name, line: coins ? `${junk.line} And at the bottom, ${coins} loose ${plural(coins, 'coin')}.` : junk.line, coins });
+    // The old tokens are always worth Gus's few coins; anything else hides a coin or two now and then.
+    const tokens = junk.name === TOKENS_JUNK;
+    const coins = tokens || rng() < SEALED_LOT.coinsOdds ? c0 + Math.floor(rng() * (c1 - c0 + 1)) : 0;
+    items.push({ kind: 'junk', name: junk.name, line: coins && !tokens ? `${junk.line} And at the bottom, ${coins} loose ${plural(coins, 'coin')}.` : junk.line, coins });
   }
   // Now and then a gem: a well-known title, under everything else.
   if (rng() < SEALED_LOT.gemOdds) {

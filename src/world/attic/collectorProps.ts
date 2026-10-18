@@ -56,8 +56,13 @@ export class SheetedFurniture extends Prop implements Interactable {
     return `A ${this.kind} under a dust sheet · lift a corner`;
   }
 
+  /** Something found when a corner is lifted (the builder's: once), its line; null when nothing is left to find. */
+  find: ((session: SessionActions) => string | null) | null = null;
+
   activate(session: SessionActions): void {
-    session.react(this.kind === 'sofa' ? 'Green velvet, the colour of a billiard table. A cloud of dust, and a Game Boy cartridge down the side: blank label.' : 'A leather armchair, cracked, moulded to whoever sat in it for years facing that cabinet.');
+    const found = this.find?.(session);
+    if (found) return session.react(found);
+    session.react(this.kind === 'sofa' ? 'Green velvet, the colour of a billiard table. A cloud of dust, and nothing down the side now.' : 'A leather armchair, cracked, moulded to whoever sat in it for years facing that cabinet.');
   }
 }
 

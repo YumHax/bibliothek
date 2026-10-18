@@ -100,6 +100,8 @@ const CANCELLED = Symbol('cancelled');
 const IN_DOORWAY = 1;
 /** Where a held box is, in front of the chest (friend-local), and how far it tilts back. */
 const HOLD = { y: 1.08, z: 0.3, tilt: -0.3 };
+/** A borrowed box under the arm, against the hip, till they are gone (friend-local). */
+const TUCK = { x: 0.2, y: 0.98, z: 0.06, roll: 0.25 };
 /**
  * A shut door on the way: the hand goes to its handle `ahead` m towards where they are going, `y` m over the floor,
  * `reach` s before it swings open (`VISIT_RULES.beats.doorOpens`), and comes off it `release` s after; the other hand
@@ -155,6 +157,8 @@ export class Visit {
   private readonly gaze = new THREE.Vector3();
   private watching = false;
   private held: HeldBox | null = null;
+  /** A game they borrowed, carried off under the arm (`tuck`), disposed with the visit. */
+  private tucked: (THREE.Object3D & { dispose?: () => void }) | null = null;
   /** The armchair claimed for the sit, let go when they get up or the visit ends. */
   private claimed: RouteSeat | null = null;
   /** Their footsteps: where the last one fell (zone-local) and how far they walked since. */
@@ -263,6 +267,7 @@ export class Visit {
     this.letInReject?.(CANCELLED);
     this.letInResolve = this.letInReject = null;
     this.dropHeld();
+    this.untuck();
     this.release();
     this.friend.request = null;
     this.friend.hold(null);
@@ -294,6 +299,8 @@ export class Visit {
     const target = near ? Math.min(this.fadeTarget, 0.3) : this.fadeTarget;
     this.fade += Math.sign(target - this.fade) * Math.min(Math.abs(target - this.fade), dt * 2.5);
     this.friend.setFade(this.fade);
+    // The box under the arm goes with them (the body's fade does not reach what they carry).
+    if (this.tucked) this.tucked.visible = this.fade > 0.3;
     this.watchCat();
   }
 
@@ -501,6 +508,7 @@ export class Visit {
     this.throughFront = false;
     this.cancelled = true;
     this.dropHeld();
+    this.untuck();
     this.release();
     this.friend.request = null;
     this.friend.hold(null);
@@ -845,6 +853,23 @@ export class Visit {
       this.friend.localToWorld(hands[1].set(half, HOLD.y, HOLD.z));
       return hands;
     });
+  }
+
+  /** A game lent to them: its box under the arm, against the hip, until they are gone (its shelf shows the gap's note meanwhile). */
+  tuck(box: THREE.Object3D & { dispose?: () => void }): void {
+    this.untuck();
+    this.tucked = box;
+    box.position.set(TUCK.x, TUCK.y, TUCK.z);
+    box.rotation.set(0, Math.PI / 2, TUCK.roll);
+    this.friend.add(box);
+  }
+
+  private untuck(): void {
+    const box = this.tucked;
+    if (!box) return;
+    this.tucked = null;
+    box.removeFromParent();
+    box.dispose?.();
   }
 
   /** The held box goes back on its shelf. */

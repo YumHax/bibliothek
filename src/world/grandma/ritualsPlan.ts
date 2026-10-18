@@ -20,6 +20,11 @@ export const RITUALS_PLAN = {
     seat: { at: [2.2, -0.15] as Vec2, eye: 1.2, yaw: Math.PI / 2 },
     /** The click on that chair while lunch waits: a box over its seat. */
     seatSpot: { at: [2.28, -0.15] as Vec2, size: [0.5, 0.9, 0.5] as [number, number, number] },
+    /**
+     * The bread on its board (`grandmaFlatPlan`'s table layout, here room-local on the table's top): clicked when she
+     * asks for it over the meal; how long she waits before reaching across for it herself (s).
+     */
+    bread: { at: [0.9, 0.72, -0.4] as [number, number, number], size: [0.32, 0.16, 0.26] as [number, number, number], waits: 9 },
   },
   favours: {
     /** Round the set on the sideboard (set-local, from its foot) and the clock's hood (clock-local), a box to click. */

@@ -53,13 +53,26 @@ export const EPILOGUE_TALK = {
   visit: {
     /** On the landing / just inside (the first time, then later visits). */
     enter: ['Five floors! Félix did these every day? No wonder he had calves like a postman.', 'Hello, love. Don’t mind me, I’ll get my breath back in a minute. Or ten.'],
-    enterAgain: ['It’s me! I was passing. On the 38, which goes nowhere near here, but still.', 'I brought nothing. I brought myself, that’s plenty.'],
+    enterAgain: 'It’s me! I was passing. On the 38, which goes nowhere near here, but still.',
     /** At a shelf, a game of Félix's notebook looked at (`{title}`). */
     his: ['{title}. That was his. I’d know that box anywhere.', 'Oh, {title}. He talked about that one at Sunday lunch for a month.'],
     /** At a shelf, another game (`{title}`). */
     shelf: ['All these boxes… he’d have been so jealous. And proud. Mostly jealous.', '{title}. I’ve no idea, love, but it’s very neatly put.', 'You’ve dusted. Félix never dusted.'],
     window: ['He could see the bakery from here. He bought far too many croissants.', 'Look at that, the whole street. I only get the plane trees.'],
     kitchen: 'And the kitchen! He’d have hated what you did with it. I love it.',
+    /** The same, the kitchen still as bare as the day the flat was emptied. */
+    kitchenBare: 'And the kitchen… bare as a church. Félix ate standing up too. You two!',
+    /** A later visit: the cake she promised, out on the kitchen table (or one there already). */
+    cake: 'I said I’d bring a cake, so I did. Lemon. It’s on your kitchen table, mind the cat.',
+    cakeThere: 'I brought a cake, and you’ve got one already. Greedy. I’ll take mine home for the canary.',
+    /** Sat down, once a visit, how things went (the first that applies, then the next on later visits). */
+    reflect: {
+      apologised: 'Gaspard rang me on Wednesday. Just to ring. And he says he said sorry to you too. Forty years, it took.',
+      gone: 'Gaspard hasn’t rung. I don’t miss him. I miss who he was at six.',
+      silent: 'Gaspard sends nothing. You said nothing that day, and it said everything.',
+      prototype: 'And Félix’s grey cartridge, the moon one! You found it. He’d have danced on this rug.',
+      gameBoy: 'I keep the Game Boy by my bed. I don’t play it. I just like it there, with its sports pages.',
+    },
     cat: 'And who’s this? Félix sneezed at cats. He’d have kept it anyway.',
     tv: 'So that’s where the television goes. He had it there too, you know.',
     sit: 'There. I’ll just sit a minute. Félix’s armchair was by the window, but this will do.',

@@ -1,5 +1,7 @@
 import { audioBus, startedAudioContext } from './audioContext';
 import { spatialInput, type Spatial } from './spatial';
+import { shot, type OneShotOptions } from './oneShot';
+import { noiseBurst, tone } from './synth';
 
 /** The ringtone's notes (Hz): a soft rising four-note figure, played twice a ring, like a phone's default marimba. */
 const NOTES = [784, 988, 1175, 988];
@@ -40,4 +42,34 @@ export function playPhoneRing(level = 0.08, spatial?: Spatial): number {
   }
   window.setTimeout(() => out.disconnect(), (t - ctx.currentTime + 0.6) * 1000);
   return t - ctx.currentTime;
+}
+
+/** The line in the player's ear (`ui/household/PhonePanel`): heard over the room's duck, like any sound of their own. */
+const EARPIECE: OneShotOptions = { channel: 'foreground' };
+/** The European ringing tone: 425 Hz, a burr this long, then a pause. */
+const RINGBACK_HZ = 425;
+const RINGBACK_S = 1;
+
+/** The far end ringing: one burr of the ringing tone, small in the earpiece (a ring placed from the phone's panel). */
+export function playRingback(level = 0.05): void {
+  shot(level, RINGBACK_S + 0.1, EARPIECE, ({ ctx, out, t }) => {
+    tone(ctx, out, t, { frequency: RINGBACK_HZ, level: 1, length: RINGBACK_S, attack: 0.02, hold: RINGBACK_S - 0.08 });
+    // The line's hiss under it, as faint as a mobile's.
+    noiseBurst(ctx, out, t, { band: 2400, q: 0.4, level: 0.08, length: RINGBACK_S, attack: 0.05, hold: RINGBACK_S - 0.15 });
+  });
+}
+
+/** Someone picks up: the click of the line opening and a breath of room on it. */
+export function playPickUp(level = 0.08): void {
+  shot(level, 0.3, EARPIECE, ({ ctx, out, t }) => {
+    noiseBurst(ctx, out, t, { band: 1800, q: 1.2, level: 1, length: 0.04, attack: 0 });
+    noiseBurst(ctx, out, t + 0.04, { band: 900, q: 0.5, level: 0.15, length: 0.25, attack: 0.03 });
+  });
+}
+
+/** The call ends: the three short falling pips a mobile plays when the line drops. */
+export function playHangUp(level = 0.05): void {
+  shot(level, 0.6, EARPIECE, ({ ctx, out, t }) => {
+    [0, 1, 2].forEach((i) => tone(ctx, out, t + i * 0.16, { frequency: 620 - i * 60, level: 1, length: 0.11, attack: 0.005, hold: 0.06 }));
+  });
 }

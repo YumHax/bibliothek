@@ -6,6 +6,8 @@ import type { GatheringDeps } from './deps';
 import { GATHERING_LINES, GATHERING_RULES, GUESTS } from './gatheringPlan';
 import { Party, type PartyMember } from './Party';
 import { random } from '@/random';
+import { isMet } from '@/social/standing';
+import { dayStream } from '@/time/daily';
 import { formatCount } from '@/text/count';
 import { formatCoins } from '@/text/money';
 
@@ -83,8 +85,10 @@ export class OpenHouse {
 
   private launchWave(): void {
     const { perWave, waveGap } = this.rules;
+    // Who comes in which wave changes with the day (the same order every afternoon would be a script).
+    const start = Math.floor(dayStream(`house:${this.day}`)() * GUESTS.length);
     for (let i = 0; i < perWave; i++) {
-      const plan = GUESTS[(this.waves * perWave + i) % GUESTS.length];
+      const plan = GUESTS[(start + this.waves * perWave + i) % GUESTS.length];
       if (plan) this.party.add(plan, i * PAIR_GAP);
     }
     this.waves += 1;
@@ -100,7 +104,9 @@ export class OpenHouse {
     host.coinsFrom(m.plan, entry);
     this.guests += 1;
     this.coins += entry;
-    return fill(host.line('houseEnter', GATHERING_LINES.houseEnter), { coins: entry });
+    const coins = fill(host.line('houseEnter', GATHERING_LINES.houseEnter), { coins: entry });
+    // Someone met at an earlier open house says so.
+    return isMet(m.plan.id) ? `${host.line('houseBack', GATHERING_LINES.houseBack)} ${coins}` : coins;
   }
 
   /** A guest's round: `stops` of the shelves, the window and the cases, each guest starting further along. */

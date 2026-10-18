@@ -1,5 +1,5 @@
 import { Voice, type AmbientVoice } from './ambient';
-import { RadioTune } from './RadioTune';
+import { RadioTune, type RadioStation } from './RadioTune';
 import { noiseBurst, rand, tone } from './synth';
 
 /*
@@ -151,6 +151,15 @@ export class RadioVoice implements AmbientVoice {
 
   get isOn(): boolean {
     return this.tune.isOn;
+  }
+
+  /** The station on the dial (`RadioTune`). */
+  get station(): RadioStation {
+    return this.tune.tunedTo;
+  }
+
+  tuneTo(station: RadioStation): void {
+    this.tune.tune(station);
   }
 
   setOn(on: boolean): void {

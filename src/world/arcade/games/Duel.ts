@@ -38,6 +38,17 @@ const RALLY_STEP = 5;
 const RALLY_CAP = 8;
 const RALLY_GOAL = 30;
 const SERVE_DELAY = 0.8;
+/** A goal won at the end of this many returns or more: a feat (a feat challenge asks for it). */
+const LONG_RALLY = 8;
+/** A serve fired while the paddle moves: a power serve, this much faster, sent steep the way it moved. */
+const POWER_SERVE = { speed: 1.3, angle: 0.55 };
+/** Each set is played on its own court (round and round): the floor, the net's dashes, the lines. */
+const COURTS = [
+  { floor: '#05080f', net: 'rgba(255,255,255,0.18)', line: null },
+  { floor: '#06140c', net: 'rgba(200,255,210,0.28)', line: 'rgba(200,255,210,0.12)' },
+  { floor: '#160a06', net: 'rgba(255,214,170,0.3)', line: 'rgba(255,190,120,0.12)' },
+  { floor: '#0a0618', net: 'rgba(214,190,255,0.3)', line: 'rgba(190,150,255,0.14)' },
+] as const;
 
 interface Ball {
   x: number;
@@ -55,7 +66,7 @@ interface Ball {
  * ball, sharper opponent, two more seconds. W / S move; the ball comes back off the paddle at an
  * angle that depends on where it hits (the edges send it steep, which player two struggles to
  * follow); fire pressed just before it lands smashes it (too early, a plain return), and player
- * two smashes back now and then.
+ * two smashes back now and then. Serving on the move is a power serve (faster, steep); every set has its own court.
  */
 export class Duel extends BaseGame {
   readonly id = 'duel';
@@ -133,7 +144,7 @@ export class Duel extends BaseGame {
       const b = this.ball;
       b.y = this.server === 1 ? this.p1 : this.p2;
       b.x = this.server === 1 ? PADDLE_X + PADDLE_W + BALL : SCREEN_W - PADDLE_X - PADDLE_W - BALL;
-      if (this.serveIn <= 0 || (this.server === 1 && press)) this.serve();
+      if (this.serveIn <= 0 || (this.server === 1 && press)) this.serve(this.server === 1 && press ? dir : 0);
       return;
     }
     if (press && this.ball.vx < 0) this.smashArm = SMASH_WINDOW;
@@ -184,6 +195,7 @@ export class Duel extends BaseGame {
       this.goals += 1;
       this.addScore(GOAL_POINTS + RALLY_GOAL * Math.min(this.returns, RALLY_CAP), SCREEN_W - 50, b.y, '#7ee787');
       if (this.returns >= 3) this.fx.pop(`RALLY OF ${this.returns}`, SCREEN_W / 2, PLAY_TOP + 44, '#ffe066', 8);
+      if (this.returns >= LONG_RALLY) this.feat(`RALLY OF ${LONG_RALLY}`);
       this.fx.flash('#7ee787', 0.08);
       this.fx.burst(SCREEN_W - 4, b.y, '#7ee787', 22, 120, 2);
       this.addTime(GOAL_SECONDS, SCREEN_W / 2, PLAY_TOP + 60);
@@ -197,9 +209,20 @@ export class Duel extends BaseGame {
   }
 
   protected paint(ctx: CanvasRenderingContext2D): void {
-    ctx.fillStyle = '#05080f';
+    const court = COURTS[(this.set - 1) % COURTS.length]!;
+    ctx.fillStyle = court.floor;
     ctx.fillRect(0, 0, SCREEN_W, SCREEN_H);
-    ctx.fillStyle = 'rgba(255,255,255,0.18)';
+    if (court.line) {
+      // The court's own lines: a box round it and the service lines.
+      ctx.strokeStyle = court.line;
+      ctx.lineWidth = 1;
+      ctx.strokeRect(PADDLE_X - 4, PLAY_TOP + 2, SCREEN_W - 2 * (PADDLE_X - 4), SCREEN_H - PLAY_TOP - 4);
+      ctx.beginPath();
+      ctx.moveTo(PADDLE_X - 4, (PLAY_TOP + SCREEN_H) / 2);
+      ctx.lineTo(SCREEN_W - PADDLE_X + 4, (PLAY_TOP + SCREEN_H) / 2);
+      ctx.stroke();
+    }
+    ctx.fillStyle = court.net;
     for (let y = PLAY_TOP + 4; y < SCREEN_H; y += 12) ctx.fillRect(SCREEN_W / 2 - 1, y, 2, 6);
     drawText(ctx, `${this.you}`, SCREEN_W / 2 - 34, PLAY_TOP + 22, 20, 'rgba(126,231,135,0.8)');
     drawText(ctx, `${this.them}`, SCREEN_W / 2 + 34, PLAY_TOP + 22, 20, 'rgba(99,179,255,0.8)');
@@ -276,12 +299,19 @@ export class Duel extends BaseGame {
     this.ball.vy = 0;
   }
 
-  private serve(): void {
+  /** Off it goes; `moving` (-1 up, +1 down) when the player served on the move: a power serve that way. */
+  private serve(moving = 0): void {
     this.serveIn = 0;
-    const angle = (this.rand() - 0.5) * 0.8;
+    const power = moving !== 0;
+    const angle = power ? moving * POWER_SERVE.angle : (this.rand() - 0.5) * 0.8;
     const dir = this.server === 1 ? 1 : -1;
-    this.ball.vx = Math.cos(angle) * this.serveSpeed * dir;
-    this.ball.vy = Math.sin(angle) * this.serveSpeed;
+    const speed = this.serveSpeed * (power ? POWER_SERVE.speed : 1);
+    this.ball.vx = Math.cos(angle) * speed * dir;
+    this.ball.vy = Math.sin(angle) * speed;
+    if (power) {
+      this.fx.pop('POWER SERVE', PADDLE_X + 40, this.p1 - 16, '#ffe066', 7);
+      this.fx.burst(PADDLE_X + PADDLE_W, this.p1, '#ffe066', 8, 70, 1);
+    }
     this.aimError = (this.rand() - 0.5) * 2 * OPPONENT.error * (1.7 - this.opponentSkill);
     this.sound('shoot');
   }

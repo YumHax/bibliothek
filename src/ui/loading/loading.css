@@ -60,4 +60,23 @@
   /* Fixed height: a line coming or going never moves the bar. */
   .boot__line { min-height: 1.4em; margin: 0; font-size: var(--fs-4); color: var(--ui-text-dim); text-align: center; }
   .boot--failed .boot__line { color: var(--ui-danger-text); }
+  /* After a failed start: a reload, your progress is kept. */
+  .boot__reload {
+    margin-top: var(--sp-2);
+    padding: 0.5rem 1.2rem;
+    border: 1px solid var(--ui-border-strong);
+    border-radius: var(--ui-radius-pill);
+    background: var(--ui-fill);
+    color: var(--ui-text);
+    font: inherit;
+    font-weight: 600;
+    cursor: pointer;
+    animation: boot-in var(--dur-enter) var(--ui-ease) both;
+  }
+  .boot__reload:hover { background: var(--ui-fill-hover); }
+  .boot__reload:focus-visible { outline: 2px solid var(--ui-accent); outline-offset: 2px; }
+  @keyframes boot-in {
+    from { opacity: 0; translate: 0 0.3rem; }
+    to   { opacity: 1; translate: 0 0; }
+  }
 }

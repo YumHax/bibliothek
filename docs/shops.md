@@ -35,7 +35,9 @@ window on the front wall, for anything running round the walls) and `seed` (the 
   clutter goes `on: 'counter'` (its top is 0.95; the till sits at the middle, the bell at one end, so keep |x| off
   0 and the ends). `windowDisplay` is the plinth inside the front window: x runs along the window, +z into the shop,
   0 is the middle of its top. Its top is at `SILL + 0.05` (0.6 m) and it is 0.5 m deep unless `ShopPlan.windowDisplay`
-  says otherwise (`false`: no plinth). Price-tagged `displays` can stand on the same surfaces.
+  says otherwise (`false`: no plinth). Price-tagged `displays` can stand on the same surfaces. A display one sits in
+  (the armchair, `DisplayPiece.seat`) is tried before it is bought (`ForSale`): the first click sits the player in it,
+  and sitting there a click is the purchase.
 
 ## Common props (`common/props.ts`)
 
@@ -66,6 +68,13 @@ Helpers for a shop's own classes:
   - `ShopFitting` (`setLit(on)`): the shop's one switch works it along with the ceiling lamp.
   - `ShopVoiced` (`voices()`): `furnishShop` puts each voice on a `PointSound` at the prop.
   - `Glows`: emissive materials of the prop's own, dimmed together.
+
+## Touching the props
+
+The pet shop's rescue tin takes a coin (Nadia's warmth, once a day), its cat can be stroked (she stirs), the tanks
+tapped, the hamster and the tortoise watched: `shop/shopTouches` lays a click box over each prop of those names as it
+stands (`ShopTouch`); a new touchable prop is a line in its `TOUCHES`. The clerk says hello as the player comes in
+(`clerk.greetings`: a stranger's line, or a known face's once met).
 
 ## Each shop's own props
 

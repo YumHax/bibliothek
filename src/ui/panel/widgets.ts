@@ -1,7 +1,9 @@
 import type { Game } from '@/catalog/types';
+import { getPlatform } from '@/catalog/platforms';
 import { formatCoins } from '@/text/money';
 import { coverAttrs } from '../coverPlaceholder';
 import { html, raw, type Html, type HtmlValue } from './html';
+import { inlinePictogram } from './pictograms';
 
 /*
  * The pieces the panels share: a price with the coin glyph, the wallet's line, a cover thumbnail with its made-up
@@ -25,6 +27,12 @@ export function walletLine(coins: number): string {
  * paints a made-up box from when the image fails to load.
  */
 export function coverImg(src: string | undefined, game?: Game, className = 'catalogue__cover'): Html {
+  // No art at all but the game known: its made-up box at once (what a failed image becomes), so rows keep their column.
+  if (!src && game) {
+    const platform = getPlatform(game.platform);
+    const own = className.split(/\s+/).filter((c) => c && c !== 'catalogue__cover').join(' ');
+    return html`<span class="catalogue__cover catalogue__cover--placeholder${own ? ` ${own}` : ''}" aria-hidden="true" style="--cover-colour:#${platform.accentColor.toString(16).padStart(6, '0')}"><span class="catalogue__cover-band">${platform.shortName}</span><span class="catalogue__cover-title">${game.title}</span></span>`;
+  }
   if (!src) return html``;
   return html`<img class="${className}" src="${src}" alt=""${game ? raw(coverAttrs(game)) : ''} loading="lazy" />`;
 }
@@ -81,7 +89,28 @@ export function nextTab<Id extends string>(ids: readonly Id[], active: Id, direc
   return ids[(at + direction + ids.length) % ids.length]!;
 }
 
-/** A list with nothing in it: one line saying why. */
-export function emptyState(text: string, className = 'catalogue__empty'): Html {
-  return html`<p class="${className}">${text}</p>`;
+interface EmptyOptions {
+  /** A pictogram's name (`panel/pictograms`: box, sofa, film, letter, shelf, magnifier…) drawn above the words. */
+  pictogram?: string;
+  /** A short head in the panel's voice ("Nothing put away"), the text under it says why or what fills it. */
+  title?: string;
+  /** The next step: a button with this `data-action` (and `data-id`), handled by the panel's `onAction`. */
+  action?: { label: string; action: string; id?: string };
+  className?: string;
+}
+
+/**
+ * A list with nothing in it. With a class name only (or nothing) it is the one line saying why; with options it
+ * is a small drawn block: the pictogram, a head, the line, and the button to the next step. Inks with
+ * `currentColor`, so it sits on the dark kit and on a panel's paper alike.
+ */
+export function emptyState(text: string, options: string | EmptyOptions = 'catalogue__empty'): Html {
+  if (typeof options === 'string') return html`<p class="${options}">${text}</p>`;
+  const { pictogram, title, action, className } = options;
+  return html`<div class="ui-empty-block${className ? ` ${className}` : ''}">
+    ${pictogram ? inlinePictogram(pictogram, 'ui-empty-block__picture') : ''}
+    ${title ? html`<p class="ui-empty-block__title">${title}</p>` : ''}
+    <p class="ui-empty-block__text">${text}</p>
+    ${action ? html`<button type="button" class="ui-btn ui-empty-block__action" data-action="${action.action}"${action.id !== undefined ? html` data-id="${action.id}"` : ''}>${action.label}</button>` : ''}
+  </div>`;
 }

@@ -38,6 +38,8 @@ interface Saved {
   stage: StoryStage;
   /** The game day the stage was reached (the gates and the post's patience count from it). */
   since: number;
+  /** The last stage the keeper (Marco) said his word on after handing the cart over (`found`, `ended`), or null. */
+  keeper: StoryStage | null;
 }
 
 /**
@@ -59,10 +61,10 @@ export class PrototypeStory {
 
   constructor(private readonly deps: StoryDeps, storage: Storage | null = safeStorage(), key: string = KEYS.prototypeStory) {
     // Version 1: the stage and the day it was reached.
-    this.store = new PersistedStore<Saved>({ key, version: 1, storage, defaults: () => ({ stage: 'waiting', since: 0 }), read: readSaved });
+    this.store = new PersistedStore<Saved>({ key, version: 1, storage, defaults: () => ({ stage: 'waiting', since: 0, keeper: null }), read: readSaved });
     this.state = this.store.load();
     // A save that already holds the cart (an imported collection) is past the trail.
-    if (deps.collection.owns(PROTOTYPE_ID) && rank(this.state.stage) < rank('found')) this.state = { stage: 'found', since: deps.today.gameDay };
+    if (deps.collection.owns(PROTOTYPE_ID) && rank(this.state.stage) < rank('found')) this.state = { stage: 'found', since: deps.today.gameDay, keeper: null };
   }
 
   /** What tells the player (made after the stores: `bootstrap/ui`). */
@@ -112,6 +114,10 @@ export class PrototypeStory {
     const after = (STORY_RULES.fallbackAfter as Partial<Record<StoryStage, number>>)[stage];
     if (after === undefined || day - this.state.since < after) return null;
     switch (stage) {
+      case 'clipping':
+        // Never asked at a stall: the NES stall's flyer through the door.
+        this.reach('stall', `The NES stall's flyer: ${'Halcyon Byte'} were over the launderette`);
+        return LINES.stallFlyer;
       case 'stall':
         this.reach('radio', 'Radio Brocante wrote back about MOONPOST');
         return LINES.radioLetter;
@@ -160,20 +166,36 @@ export class PrototypeStory {
     return LINES.trader;
   }
 
-  /** A friend round, clicked to chat: the keeper hands the cart over, the others say where it is. */
-  atFriend(friendId: string): string | null {
-    if (this.state.stage !== 'trader') return null;
-    if (friendId !== KEEPER.id) return LINES.otherFriend;
-    this.give(`a gift from ${KEEPER.name}`);
-    return LINES.keeper;
+  /**
+   * A friend round (or rung up), clicked to chat: the keeper hands the cart over, the others say where it is. After,
+   * the keeper has a word once on the cart not run yet ("let me watch"), and once on it having run.
+   */
+  atFriend(friendId: string, byPhone = false): string | null {
+    const { stage } = this.state;
+    if (stage === 'trader') {
+      if (friendId !== KEEPER.id) return LINES.otherFriend;
+      this.give(`a gift from ${KEEPER.name}`);
+      return byPhone ? LINES.keeperByPhone : LINES.keeper;
+    }
+    if (friendId !== KEEPER.id || (stage !== 'found' && stage !== 'ended') || this.state.keeper === stage) return null;
+    // Given this very visit: the next word waits for another day.
+    if (stage === 'found' && this.deps.today.gameDay === this.state.since) return null;
+    this.state = { ...this.state, keeper: stage };
+    this.store.save(this.state);
+    return stage === 'found' ? LINES.keeperFound : LINES.keeperEnded;
+  }
+
+  /** Someone rung up from the bedroom's phone: the keeper answers as on a visit (`atFriend`), nobody else has a word. */
+  onPhone(personId: string): string | null {
+    return personId === KEEPER.id ? this.atFriend(personId, true) : null;
   }
 
   /** The demo played to its end on the TV: Hana's letter, and the trail is done. */
   demoFinished(): void {
     if (rank(this.state.stage) >= rank('ended')) return;
     this.reach('ended', 'MOONPOST ran to its end on the TV');
-    this.notices?.read({ title: 'A letter, folded in the box', text: LINES.letter, look: 'letter', from: LINES.letterFrom, date: LINES.letterDate });
-    this.notices?.reward({ title: 'The lost prototype: delivered', detail: 'MOONPOST ran on your TV, thirty-odd years late. It stays on your shelves.', big: true });
+    this.notices?.read({ title: 'A letter for Félix, folded in the box', text: LINES.letter, look: 'letter', from: LINES.letterFrom, date: LINES.letterDate });
+    this.notices?.reward({ title: 'The lost prototype: delivered', detail: 'MOONPOST ran on Félix’s TV, thirty-odd years late. His hunt is over; the cart stays on your shelves.', big: true });
   }
 
   /** The journal's page: the clues found and the next lead; null before the trail starts. */
@@ -197,11 +219,11 @@ export class PrototypeStory {
 
   private reach(stage: StoryStage, journalLine: string): void {
     if (rank(stage) <= rank(this.state.stage)) return;
-    this.state = { stage, since: this.deps.today.gameDay };
+    this.state = { ...this.state, stage, since: this.deps.today.gameDay };
     this.store.save(this.state);
     this.deps.journal?.note('story', journalLine, { weight: 'headline' });
     if (stage === 'arcade') this.advertise();
-    if (stage !== 'found' && stage !== 'ended') this.notices?.react('A new lead: in the journal, the MOONPOST file');
+    if (stage !== 'found' && stage !== 'ended') this.notices?.react('A new lead: in the journal, the MOONPOST file.');
     for (const cb of [...this.listeners]) cb();
   }
 }
@@ -213,5 +235,6 @@ function readSaved(data: unknown): Saved | null {
   const d = data as Partial<Saved>;
   const stage = ORDER.includes(d.stage as StoryStage) ? (d.stage as StoryStage) : null;
   if (!stage) return null;
-  return { stage, since: typeof d.since === 'number' && Number.isFinite(d.since) ? d.since : 0 };
+  const keeper = ORDER.includes(d.keeper as StoryStage) ? (d.keeper as StoryStage) : null;
+  return { stage, since: typeof d.since === 'number' && Number.isFinite(d.since) ? d.since : 0, keeper };
 }

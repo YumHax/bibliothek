@@ -75,9 +75,10 @@ export function wireRivalry(deps: RivalryDeps): void {
           let paid = false;
           ctx.session.pay({
             price: COFFEE_PRICE,
+            title: 'An espresso for Victor',
             paid: () => {
               paid = true;
-              return 'An espresso for Victor, as wagered.';
+              return 'As wagered. He will hear of it.';
             },
           });
           if (!paid) return { line: 'Can’t stretch to an espresso? I’ll wait. Not for ever.' };
@@ -140,7 +141,8 @@ function showCollection(deps: RivalryDeps): { line: string } {
   notices.read({
     title: 'Victor’s collection',
     text: 'A third-floor flat by the river, every wall shelved floor to ceiling, the boxes in archival sleeves, a ladder on a rail. Eleven thousand games, catalogued in his father’s handwriting and then his own. He talks for two hours and you do not notice them pass. At the door he says it is the first time anyone has looked at it properly.',
-    effect: gift ? `${gift.title}: a duplicate of his, for you.` : 'He has nothing you don’t have: he says that is a first, too.',
+    // The gift is the banner's to tell (it waits for the card): the card says only when there is none.
+    ...(gift ? {} : { effect: 'He has nothing you don’t have: he says that is a first, too.' }),
     look: 'note',
   });
   if (gift) {

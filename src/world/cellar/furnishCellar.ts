@@ -2,6 +2,8 @@ import * as THREE from 'three';
 import type { Zone } from '../zone/Zone';
 import type { BuildContext, ZoneHandle } from '../buildContext';
 import { StockItem } from '@/economy/StockItem';
+import { FELIX_LOTS, felixCopy, felixLotGame } from '@/economy/felixLots';
+import { canonicalGameId } from '@/catalog';
 import { ForSaleBox } from '../market/ForSaleBox';
 import { pointSound } from '../build/hearing';
 import { ShutDoor } from '../props/ShutDoor';
@@ -33,7 +35,7 @@ const STEP: Record<StorageBox['faces'], [number, number]> = { north: [0, 1], sou
  * board (a power cut is reset here too), the rat, the drips, the stairs back up to the hall, and whatever another
  * feature dresses the cellars with (`huntHook`). A zone reached by travel only, no `Room`: returns its light level.
  */
-export function furnishCellar(zone: Zone, ctx: Pick<BuildContext, 'sky' | 'listener' | 'acoustics' | 'collection' | 'covers' | 'market' | 'money' | 'today'>): ZoneHandle {
+export function furnishCellar(zone: Zone, ctx: Pick<BuildContext, 'sky' | 'listener' | 'acoustics' | 'collection' | 'covers' | 'market' | 'money' | 'today' | 'notices' | 'home'>): ZoneHandle {
   const { listener, acoustics } = ctx;
   const hearing = { listener, acoustics };
   const origin = new THREE.Vector3();
@@ -56,6 +58,7 @@ export function furnishCellar(zone: Zone, ctx: Pick<BuildContext, 'sky' | 'liste
       const [x, z] = cellCentre(c, r);
       const [dc, dr] = STEP[box.faces];
       const front = zone.place(new CellarBox(box), new THREE.Vector3(x + (dc * CELL) / 2, 0, z + (dr * CELL) / 2), FACING[box.faces]);
+      if (box.n === plan.felixBox.n) dressFelixBox(front, ctx);
       if (box.find && !isTaken(box.n)) void placeFind(zone, front, ctx);
     }
   }
@@ -90,10 +93,12 @@ async function placeFind(zone: Zone, front: CellarBox, { covers, collection, mon
   zone.onUnload(() => {
     unloaded = true;
   });
-  const games = await market.stock.randomGames(`cellar:${front.number}`, 6).catch(() => []);
+  // Our box is Félix's: one of his own copies (his sticker on the back) the sale never reached; the others an old tenant's game.
+  const his = front.number === plan.felixBox.n ? FELIX_LOTS.find((lot) => !collection.owns(canonicalGameId(lot.id)) && felixLotGame(lot)) : undefined;
+  const games = his ? [felixCopy(his)].filter((g): g is NonNullable<typeof g> => g !== null) : await market.stock.randomGames(`cellar:${front.number}`, 6).catch(() => []);
   const game = games.find((g) => !collection.owns(g.id));
   if (!game || unloaded) return;
-  const item = new StockItem(game, 'worn', 'bin', { list: 0, final: true });
+  const item = new StockItem(game, his ? 'complete' : 'worn', 'bin', { list: 0, final: true });
   const box = new ForSaleBox(item, covers, {
     pose: { kind: 'flat' },
     tag: false,
@@ -101,7 +106,7 @@ async function placeFind(zone: Zone, front: CellarBox, { covers, collection, mon
     where: CELLAR_WHERE,
     free: true,
     isWanted: () => collection.isWanted(game.id),
-    thanks: () => 'Nobody will miss it down here.',
+    thanks: () => (his ? 'His round sticker on the back. Home, after all.' : 'Nobody will miss it down here.'),
   });
   const at = zone.toLocal(front.localToWorld(front.cartonTop.clone()));
   box.onSold = () => {
@@ -109,4 +114,19 @@ async function placeFind(zone: Zone, front: CellarBox, { covers, collection, mon
     markTaken(front.number);
   };
   zone.place(box, at, front.rotation.y + 0.3);
+}
+
+/**
+ * Our box, which was Félix's (`CELLAR_PLAN.felixBox`): his note read the first time the padlock comes off, and once his
+ * carton is emptied, the flat's put-away furniture seen at the back under dust sheets, what a click there says.
+ */
+function dressFelixBox(front: CellarBox, { notices, home }: Pick<BuildContext, 'notices' | 'home'>): void {
+  const { felixBox } = plan;
+  front.onFirstOpen = () => notices.read({ title: felixBox.note.title, text: felixBox.note.text, from: felixBox.note.from, look: 'note' });
+  const stored = home.furnishings?.storedPieces().length ?? 0;
+  if (stored > 0) front.showStored(stored, felixBox.sheets);
+  front.openLine = () => {
+    if (!isTaken(felixBox.n)) return null;
+    return front.storedCount > 0 ? felixBox.sheeted(front.storedCount) : felixBox.emptied;
+  };
 }

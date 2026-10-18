@@ -15,11 +15,26 @@ function inForce(e: SocialEffect, tier: TierId, trust: number): boolean {
   return e.down ? tierRank(tier) <= tierRank(e.at) : atLeast(tier, e.at);
 }
 
+type EffectSource = (id: PersonId, key: string) => number | boolean | undefined;
+
+/** Effects that come from what happened rather than a tier (a quarrel settled: the attic quieter). */
+const sources = new Set<EffectSource>();
+
+/** Adds effects `source` says are in force, before the cards' own. Returns the removal. */
+export function addEffectSource(source: EffectSource): () => void {
+  sources.add(source);
+  return () => sources.delete(source);
+}
+
 /**
  * The value of `id`'s effect `key` now (`true` for an on / off one), or undefined when none of theirs is in force.
  * With several in force for one key (a perk and a deeper one), the one of the furthest tier wins.
  */
 export function effect(id: PersonId, key: string): number | boolean | undefined {
+  for (const source of sources) {
+    const v = source(id, key);
+    if (v !== undefined) return v;
+  }
   const card = findPerson(id);
   if (!card?.effects) return undefined;
   const s = standing(id);

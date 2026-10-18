@@ -1,9 +1,11 @@
 import type * as THREE from 'three';
 import type { SessionActions } from '@/game/SessionActions';
-import { createCanvas, toTexture } from '@/covers/generated/canvasUtils';
+import { createCanvas } from '@/covers/generated/canvasUtils';
+import { sharedCanvasTexture } from '../materials/sharedResources';
+import { frozenRng } from '@/random';
 import { ATTIC_PLAN, LIFT_CODE } from '../attic/atticPlan'; // imports-ok: the lift climbs to the attic: its code and its stop are the attic's plan
 import { LiftCode } from './liftCode';
-import { landingY } from '@/world/measures/building';
+import { STOREYS, landingY } from '@/world/measures/building';
 
 /** `climbing`: past our landing, up to the attic (the panel's code, `ATTIC_PLAN.liftCode`). */
 export type LiftPhase = 'shut' | 'opening' | 'open' | 'closing' | 'moving' | 'climbing';
@@ -36,7 +38,7 @@ export class AtticRide {
   /** The panel's presses, for the code. */
   private readonly code = new LiftCode(LIFT_CODE, ATTIC_PLAN.liftCode.gap);
   /** The ride: off to our landing first (`toTop`), the climb past it, then gone up (`away`, the view dark). */
-  private secret: { session: SessionActions; stage: 'toTop' | 'climb' | 'away'; for: number } | null = null;
+  private secret: { session: SessionActions; stage: 'toTop' | 'climb' | 'away'; for: number; to: 'attic' | 'roof' } | null = null;
   /** Back down from the attic: the gate folds open on our landing as the player comes back into the stairwell. */
   private backFromAttic = false;
 
@@ -85,7 +87,7 @@ export class AtticRide {
     if (!secret || car.y < top) return;
     if (secret.stage === 'climb') {
       secret.stage = 'away';
-      secret.session.travel('attic');
+      secret.session.travel(secret.to);
       return;
     }
     // Still here a while after the view should have gone (the attic did not load): back down to our landing.
@@ -98,11 +100,20 @@ export class AtticRide {
     }
   }
 
-  /** The code was pressed: to our landing (from wherever), then on up past it. */
-  private goUpstairs(session: SessionActions): void {
+  /**
+   * The roof key turned in the panel's keyhole (Mme Pereira's, at Close): the same climb past our landing, all the way up
+   * to the roof's door this time, no code needed.
+   */
+  keyRide(session: SessionActions): void {
+    if (this.secret) return;
+    this.goUpstairs(session, 'roof');
+  }
+
+  /** The code was pressed (or the roof key turned): to our landing (from wherever), then on up past it. */
+  private goUpstairs(session: SessionActions, to: 'attic' | 'roof' = 'attic'): void {
     const car = this.host.car;
-    this.secret = { session, stage: 'toTop', for: 0 };
-    session.react('The lamp flickers. Somewhere above, a motor nobody has heard in years wakes up.');
+    this.secret = { session, stage: 'toTop', for: 0, to };
+    session.react(to === 'roof' ? 'The key turns with a clack. The lamp steadies, and the car starts up past our landing, for the roof.' : 'The lamp flickers. Somewhere above, a motor nobody has heard in years wakes up.');
     if (car.phase === 'moving') car.target = 0;
     else if (car.stop === 0 && car.phase === 'shut') car.phase = this.startClimb();
     else this.host.send(0);
@@ -128,27 +139,99 @@ export class AtticRide {
   }
 }
 
-/** The code scratched with a key into the car's varnish, under its mirror: pale, thin, a little crooked. */
-export function scratchedCodeTexture(): THREE.CanvasTexture {
-  const [canvas, ctx] = createCanvas(384, 90);
-  ctx.clearRect(0, 0, canvas.width, canvas.height);
-  ctx.strokeStyle = 'rgba(214, 180, 140, 0.55)';
-  ctx.fillStyle = 'rgba(214, 180, 140, 0.55)';
-  ctx.lineWidth = 2;
-  ctx.font = 'italic 46px "Courier New", monospace';
+/**
+ * The lower edge of the car's mirror, scratched over the years: keys dragged across it, initials, a heart, a date, and
+ * among them, small, the old code as Albert Vasseur kept it, floor by floor in tally strokes (four, two, a gated five,
+ * two, one, a ring for the ground floor). Nothing says it is a code: it reads as such only to whoever already knows
+ * there is one, and Lambert's card sends them to the mirror (`building/hunt`).
+ */
+export function mirrorScratchesTexture(): THREE.CanvasTexture {
+  return sharedCanvasTexture('lift-mirror-scratches', paintScratches, { anisotropy: 'facing' });
+}
+
+function paintScratches(): HTMLCanvasElement {
+  const W = 768;
+  const H = 232;
+  const [canvas, ctx] = createCanvas(W, H);
+  ctx.clearRect(0, 0, W, H);
+  const rng = frozenRng('lift-mirror-scratches');
+  const pale = (a: number): string => `rgba(236, 238, 240, ${a})`;
+  ctx.lineCap = 'round';
+  // Years of keys: long faint drags, short nicks.
+  for (let i = 0; i < 46; i++) {
+    const x = rng() * W;
+    const y = 20 + rng() * (H - 40);
+    const long = rng() < 0.4;
+    const len = long ? 60 + rng() * 200 : 6 + rng() * 22;
+    const a = (rng() - 0.5) * (long ? 0.5 : 2.4);
+    ctx.strokeStyle = pale(long ? 0.12 + rng() * 0.12 : 0.2 + rng() * 0.2);
+    ctx.lineWidth = long ? 1 : 1.5;
+    ctx.beginPath();
+    ctx.moveTo(x, y);
+    ctx.lineTo(x + len * Math.cos(a), y + len * Math.sin(a));
+    ctx.stroke();
+  }
+  // Initials, a heart, a year: what people scratch in lifts.
+  ctx.strokeStyle = pale(0.34);
+  ctx.lineWidth = 1.6;
+  ctx.font = 'italic 34px "Courier New", monospace';
   ctx.textBaseline = 'middle';
-  const marks = ATTIC_PLAN.liftCode.floors.map((name) => name.replace(/(st|nd|rd|th)$/, ''));
-  marks.forEach((mark, i) => {
-    ctx.save();
-    ctx.translate(16 + i * 60, 46 + (i % 2 ? 4 : -3));
-    ctx.rotate((i % 3 - 1) * 0.08);
-    ctx.strokeText(mark, 0, 0);
-    ctx.restore();
-  });
-  // A stray scratch through it, as if keys did the rest.
+  ctx.save();
+  ctx.translate(70, 70);
+  ctx.rotate(-0.12);
+  ctx.strokeText('J+M', 0, 0);
+  ctx.restore();
+  heart(ctx, 196, 62, 15);
+  ctx.save();
+  ctx.translate(560, 54);
+  ctx.rotate(0.06);
+  ctx.font = 'italic 26px "Courier New", monospace';
+  ctx.strokeText('1974', 0, 0);
+  ctx.restore();
+  ctx.save();
+  ctx.translate(300, 176);
+  ctx.rotate(0.04);
+  ctx.font = 'italic 24px "Courier New", monospace';
+  ctx.strokeText('KIKI', 0, 0);
+  ctx.restore();
+  // The code, small, low in the right-hand corner: tally strokes a floor, the groups a little apart.
+  ctx.strokeStyle = pale(0.42);
+  ctx.lineWidth = 1.4;
+  let x = 520;
+  const foot = 196;
+  const tall = 16;
+  for (const k of LIFT_CODE) {
+    const count = STOREYS - k;
+    if (count === 0) {
+      ctx.beginPath();
+      ctx.arc(x + 5, foot - tall / 2, 5, 0, Math.PI * 2);
+      ctx.stroke();
+      x += 22;
+      continue;
+    }
+    const strokes = Math.min(count, 4);
+    for (let i = 0; i < strokes; i++) {
+      ctx.beginPath();
+      ctx.moveTo(x + i * 5, foot);
+      ctx.lineTo(x + i * 5 + 1, foot - tall);
+      ctx.stroke();
+    }
+    if (count >= 5) {
+      ctx.beginPath();
+      ctx.moveTo(x - 3, foot - 3);
+      ctx.lineTo(x + strokes * 5, foot - tall + 2);
+      ctx.stroke();
+    }
+    x += strokes * 5 + 14;
+  }
+  return canvas;
+}
+
+/** A small scratched heart round (x, y). */
+function heart(ctx: CanvasRenderingContext2D, x: number, y: number, r: number): void {
   ctx.beginPath();
-  ctx.moveTo(10, 70);
-  ctx.lineTo(370, 58);
+  ctx.moveTo(x, y + r);
+  ctx.bezierCurveTo(x - 1.6 * r, y - 0.2 * r, x - 0.7 * r, y - 1.3 * r, x, y - 0.4 * r);
+  ctx.bezierCurveTo(x + 0.7 * r, y - 1.3 * r, x + 1.6 * r, y - 0.2 * r, x, y + r);
   ctx.stroke();
-  return toTexture(canvas, 'facing');
 }

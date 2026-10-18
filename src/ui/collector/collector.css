@@ -29,7 +29,7 @@
     --paper-edge: #ece6d4;
     --paper-edge-2: #ddd5c0;
     /* The stamps: their paper, the cancellation, the glassine mount waiting for one; a colour per group. */
-    --stamp-paper: #fbf8ef;
+    --stamp-paper: var(--paper-journal);
     --stamp-ink: #fffaf0;
     --postmark: rgba(28, 28, 40, 0.55);
     --glassine: rgba(255, 255, 255, 0.45);
@@ -53,7 +53,7 @@
     /* The bookplate, the snapshots and their tape. */
     --plate-ink: #3a2a1a;
     --plate-paper: #f3ead2;
-    --snap-paper: #fdfcf8;
+    --snap-paper: var(--paper-letter);
     --tape: rgba(236, 228, 190, 0.7);
     /* The dividers. */
     --tab-contents: #d9cfb4;

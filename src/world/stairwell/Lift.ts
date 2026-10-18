@@ -11,8 +11,10 @@ import { liftGate } from './stairRoutes';
 import { mainsOn } from '@/building/mains';
 import { coproChoice } from '@/building/coproState';
 import { AtticRide, type LiftCarState, type LiftPhase } from './liftAttic';
-import { CAGE, GATE_HEIGHT, STOPS, buildCage, buildCar, panelY, panelZ } from './liftBody';
-import { LiftButton, PANEL_BUTTON } from './LiftButton';
+import { CAGE, GATE_HEIGHT, STOPS, buildCage, buildCar, floorMark, panelSpot, runShare } from './liftBody';
+import { KEYHOLE, LiftButton, gateHit, panelButton } from './LiftButton';
+import type { FoldingGate } from './FoldingGate';
+import { hasKey } from '@/building/keys';
 import { loudness } from '@/audio/hearing';
 
 interface LiftOptions {
@@ -42,8 +44,8 @@ const isEnd = (k: number): boolean => k === 0 || k === STOREYS;
 const GATE_SECONDS = 0.45;
 /** The car's speed once the co-ownership voted its overhaul, times `liftSpeed`. */
 const OVERHAULED_SPEED = 1.5;
-/** Standing in the car this long with its gate open sends it to the other stop (s). */
-const DEPART_AFTER = 0.6;
+/** Standing in the car this long with its gate open sends it to the other stop (s): time to reach the panel first. */
+const DEPART_AFTER = 1.4;
 /** The gate folds open by itself for anyone this close to it with the car behind it (m). */
 const OPEN_NEAR = 1.8;
 /** Seconds a rider takes to step in before the gate folds shut behind them. */
@@ -55,22 +57,33 @@ const EYE = 1.7;
 
 /**
  * The old lift in the stairwell's well: an iron cage the full height of the building, a wooden car
- * riding in it between our landing and the entrance hall, stopping on every landing, folding
- * lattice gates on every landing. At the two ends it mostly runs itself (`autoPilot`): it comes to
- * the player on our landing or in the hall, opens for them, and leaves for the other end a beat
- * after they step in; on the floors between, the brass button on the landing calls it and the
- * gate opens as they walk up. The panel in the car sends it to any floor at once, even on its way. The gate folds shut, the car hums down (or up) the shaft with the player in it
- * (`floorAt` is their ground while inside), the gate folds open. The gates are colliders while
- * shut; while the car moves a box across its open front keeps the player in. Heard where it is.
+ * riding in it between our landing and the entrance hall, stopping on every landing, a folding
+ * gate on every landing under a brass dial whose needle follows the car. At the two ends it mostly
+ * runs itself (`autoPilot`): it comes to the player on our landing or in the hall, opens for them,
+ * and leaves for the other end a beat after they step in; on the floors between, the gate itself or
+ * the brass button by it calls the car (busy, the call waits its turn, the button's lamp lit) and
+ * the gate opens as they walk up. The panel in the car (two columns of numbered buttons, the one
+ * it is going to lit) sends it to any floor at once, even on its way. The gate folds shut, the car
+ * hums down (or up) the shaft with the player in it (`floorAt` is their ground while inside), the
+ * gate folds open. The gates are colliders while shut; while the car moves a box across its open
+ * front keeps the player in. Heard where it is.
  */
 export class Lift extends Prop implements Updatable, OccupancyAware, LiftRides {
   readonly contactShadow = false;
-  /** The call buttons on every landing, and the panel's in the car: for the builder to place. */
+  /** The call buttons and gates on every landing, and the panel's buttons in the car: for the builder to place. */
   readonly buttons: LiftButton[] = [];
   /** The panel's buttons, one a floor, and the floor each sends the car to. */
   private readonly panel: { button: LiftButton; k: number }[] = [];
+  /** Each landing's call button (its lamp lit while the car is coming). */
+  private readonly calls = new Map<number, LiftButton>();
+  /** The roof key's keyhole over the panel's buttons. */
+  private readonly roofKeyhole: LiftButton;
   private readonly car = new THREE.Group();
-  private readonly gates: Map<number, THREE.Mesh>;
+  private readonly gates: Map<number, FoldingGate>;
+  /** Each landing's dial's needle. */
+  private readonly needles: Map<number, THREE.Object3D>;
+  /** A landing called while the car was busy: it goes there next. */
+  private queued: number | null = null;
   private readonly lamp: THREE.MeshBasicMaterial;
   /** The car: its height (local), the stop it is at or left, the one it goes to, its gate (0 shut .. 1 open), what it is doing. */
   private readonly state: LiftCarState = { y: landingY(0), stop: 0, target: 0, gate: 0, phase: 'shut' };
@@ -144,24 +157,36 @@ export class Lift extends Prop implements Updatable, OccupancyAware, LiftRides {
   constructor(private readonly options: LiftOptions) {
     super();
     this.name = 'Lift';
-    this.gates = buildCage(this);
+    const cage = buildCage(this);
+    this.gates = cage.gates;
+    this.needles = cage.needles;
     this.lamp = new THREE.MeshBasicMaterial({ color: 0xffe2b0 });
     buildCar(this.car, this.lamp);
     this.add(this.car);
-    // The buttons are placed in the zone on their own (to be clickable); the one in the car rides with it (`render`).
+    // The buttons are placed in the zone on their own (to be clickable); the ones in the car ride with it (`render`).
+    const width = plan.car.x1 - plan.car.x0;
     for (const k of STOPS) {
       const call = new LiftButton(() => this.callLabel(k), (session) => this.call(k, session));
       // On the cage's front post, east of the gate, facing the landing.
-      call.position.set(CAGE.x1 + 0.02, landingY(k) + 1.15, CAGE.z1 + 0.04);
+      call.position.set(CAGE.x1, landingY(k) + 1.2, CAGE.z1 + 0.025);
+      this.calls.set(k, call);
       this.buttons.push(call);
+      // The gate itself calls the car too, or opens when it is behind it; open, the crosshair goes through it into the car.
+      const gate = new LiftButton(() => this.gateLabel(k), (session) => this.call(k, session), gateHit(width, GATE_HEIGHT), () => this.gateOpenAt(k));
+      gate.position.set((plan.car.x0 + plan.car.x1) / 2, landingY(k), plan.car.z1 + 0.04);
+      this.buttons.push(gate);
     }
-    // The panel's buttons ride with the car (`render`), on the east wall facing in: the top floor's highest.
+    // The panel's buttons ride with the car (`render`), on the east wall facing in: ours top left, the ground floor bottom right.
     for (const k of STOPS) {
-      const button = new LiftButton(() => this.rideLabel(k), (session) => this.ride(k, session), PANEL_BUTTON);
+      const button = new LiftButton(() => this.rideLabel(k), (session) => this.ride(k, session), panelButton(floorMark(k)));
       button.rotation.y = -Math.PI / 2;
       this.panel.push({ button, k });
       this.buttons.push(button);
     }
+    // Over the buttons, a little keyhole marked TOIT: the roof key (Mme Pereira's) takes the car up to the roof.
+    this.roofKeyhole = new LiftButton(() => this.keyholeLabel(), (session) => this.turnRoofKey(session), KEYHOLE);
+    this.roofKeyhole.rotation.y = -Math.PI / 2;
+    this.buttons.push(this.roofKeyhole);
     this.render();
   }
 
@@ -297,6 +322,7 @@ export class Lift extends Prop implements Updatable, OccupancyAware, LiftRides {
         if (left - step < 0.002) {
           this.y = goal;
           this.stop = this.target;
+          if (this.queued === this.stop) this.queued = null;
           this.phase = this.attic.restAt('opening');
           this.clank();
         }
@@ -320,9 +346,41 @@ export class Lift extends Prop implements Updatable, OccupancyAware, LiftRides {
 
   private callLabel(k: number): string {
     if (this.target === k && (this.running || this.target !== this.stop)) return 'The lift is on its way';
-    if (this.running || this.target !== this.stop) return 'The lift is busy';
-    if (this.stop === k) return 'The lift is here';
+    if (this.queued === k) return 'The lift is busy · it comes here next';
+    if (this.running || this.attic.active) return 'The lift is busy · call it after';
+    if (this.stop === k) return 'The lift is here · open';
     return 'The lift · call';
+  }
+
+  /** The gate, hovered from the landing (or from inside the car, shut on its landing). */
+  private gateLabel(k: number): string {
+    if (this.stop === k && !this.running && this.target === k) return 'The lift’s gate · open';
+    return this.callLabel(k);
+  }
+
+  /** Whether landing `k`'s gate stands open (or nearly) with the car behind it: clicks go through it into the car. */
+  private gateOpenAt(k: number): boolean {
+    return k === this.stop && this.phase !== 'moving' && this.phase !== 'climbing' && this.gate > 0.6;
+  }
+
+  /** Floor `k` is where the car is going: its panel button and its landing's lamp are lit. */
+  private headingTo(k: number): boolean {
+    return (this.target === k && this.target !== this.stop) || this.queued === k;
+  }
+
+  private keyholeLabel(): string {
+    if (this.attic.active) return 'Going up…';
+    return hasKey('roof') ? 'Keyhole marked TOIT · turn the roof key' : 'A little keyhole marked TOIT';
+  }
+
+  private turnRoofKey(session: SessionActions): void {
+    if (!hasKey('roof')) return session.react('A brass keyhole, marked TOIT. The flat’s key is far too big for it.');
+    if (!mainsOn()) return session.refuse('The key turns, and nothing: no power.');
+    if (!this.playerAboard) return session.react('The keyhole is inside the car: step in first.');
+    if (this.attic.active) return;
+    this.armed = false;
+    this.autoDeparture = false;
+    this.attic.keyRide(session);
   }
 
   private rideLabel(k: number): string {
@@ -336,9 +394,13 @@ export class Lift extends Prop implements Updatable, OccupancyAware, LiftRides {
   private call(k: number, session: SessionActions): void {
     if (!mainsOn()) return session.refuse('Nothing: no power in the building.');
     if (this.running || this.attic.active) {
-      session.react(this.target === k ? 'The lift is on its way.' : `The lift is busy, off to ${floorName(this.target)}.`);
+      if (this.target === k) return session.react('The lift is on its way.');
+      if (this.attic.active) return session.react('The lift is busy.');
+      this.queued = k;
+      session.react(`The lift is busy, off to ${floorName(this.target)}. Its lamp is lit: it comes here next.`);
       return;
     }
+    this.queued = null;
     if (this.stop === k) {
       this.target = k;
       this.autoDeparture = false;
@@ -419,9 +481,10 @@ export class Lift extends Prop implements Updatable, OccupancyAware, LiftRides {
    * sas crossed, and it is already on its way), folds its gate open for whoever walks up to it on
    * any landing, and at either end leaves for the other a beat after the player steps in (the panel
    * still sends it anywhere at once). Not on the floors between: the stairs run past them, and it
-   * would chase the player down the building; there the landing's button calls it. Sent off by
-   * itself and the rider steps back out: it stays. It never sends the rider it just brought
-   * straight back: they have to step out first.
+   * would chase the player down the building; there the gate or its button calls it. Free again
+   * after a call it could not take, it goes there first. Sent off by itself and the rider steps
+   * back out: it stays. It never sends the rider it just brought straight back: they have to step
+   * out first.
    */
   private autoPilot(dt: number): void {
     const { inCar, at } = this.locatePlayer();
@@ -433,6 +496,7 @@ export class Lift extends Prop implements Updatable, OccupancyAware, LiftRides {
     if (this.phase === 'opening' || this.phase === 'closing' || this.phase === 'moving') return;
     // Carrying a resident: the ride goes where they go (the player may ride along), nowhere else meanwhile.
     if (this.errand) return;
+    if (this.serveQueued(inCar)) return;
     if (at !== null && at !== this.stop && isEnd(at)) {
       this.send(at, false);
       return;
@@ -442,6 +506,20 @@ export class Lift extends Prop implements Updatable, OccupancyAware, LiftRides {
       return;
     }
     this.departWithRider(dt, inCar);
+  }
+
+  /** Free again: off to the landing called while it was busy (aboard, the player has the panel: the call is dropped). */
+  private serveQueued(inCar: boolean): boolean {
+    const k = this.queued;
+    if (k === null) return false;
+    this.queued = null;
+    if (inCar) return false;
+    if (k === this.stop) {
+      if (this.phase === 'shut') this.phase = 'opening';
+      return true;
+    }
+    this.send(k, false);
+    return true;
   }
 
   /** Where the player stands, car-local: aboard (stepping out re-arms the departure), or on which landing. */
@@ -498,12 +576,18 @@ export class Lift extends Prop implements Updatable, OccupancyAware, LiftRides {
 
   private render(): void {
     this.car.position.y = this.y;
-    for (const { button, k } of this.panel) button.position.set(plan.car.x1 - 0.047, this.y + panelY(k), panelZ(0.03));
-    for (const [k, gate] of this.gates) {
-      const open = k === this.stop && this.phase !== 'moving' ? this.gate : 0;
-      // The lattice folds towards its west post.
-      gate.scale.x = 1 - 0.85 * open;
+    for (const { button, k } of this.panel) {
+      const at = panelSpot(plan.car, k);
+      button.position.set(at.x, this.y + at.y, at.z);
+      button.setLit(mainsOn() && this.target === k && this.target !== this.stop);
     }
+    const keyhole = panelSpot(plan.car, -1);
+    this.roofKeyhole.position.set(keyhole.x, this.y + keyhole.y, keyhole.z);
+    for (const [k, call] of this.calls) call.setLit(mainsOn() && this.headingTo(k));
+    for (const [k, gate] of this.gates) gate.setOpen(k === this.stop && this.phase !== 'moving' ? this.gate : 0);
+    // The dials' needles, from ours (left) to the ground floor (right).
+    const turn = Math.PI / 2 - runShare(this.y) * Math.PI;
+    for (const needle of this.needles.values()) needle.rotation.z = turn;
     // Climbing to the attic, the car's lamp stutters.
     const stutter = Math.sin(this.clock * 37) > 0.55 || Math.sin(this.clock * 11.3) > 0.8 ? 0.25 : 0.85;
     this.lamp.color.setScalar(!mainsOn() ? 0.04 : this.phase === 'moving' ? 0.95 : this.phase === 'climbing' ? stutter : 1);

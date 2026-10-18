@@ -1,51 +1,88 @@
-/* The label maker: a small card over the view (`.ui-modal--centre`); the card shell is the kit's. */
+/*
+ * The label maker, held in the hands (`.ui-modal--centre`): the card is its moulded plastic body, its brand in
+ * raised letters, the text in its recessed window, the tape reels as the colour picks, and the printed tape coming
+ * out of the slot onto the shelf's veneer below.
+ */
 @layer tokens, base, components, panels;
 @layer panels {
   .label-panel__card {
     --card-w: var(--card-w-sm);
+    --maker: #b8312a;
+    --maker-shade: #8a221d;
+    --maker-light: rgba(255, 255, 255, 0.22);
+    --maker-window: #1c1a18;
+    --maker-letter: #f3ead8;
     /* The shelf's veneer the label goes on. */
     --label-veneer: #80603d;
     --label-veneer-shade: #6b4a2b;
     display: grid;
     gap: var(--sp-3);
+    color: var(--maker-letter);
+    background:
+      radial-gradient(ellipse at 30% 0, var(--maker-light), transparent 55%),
+      linear-gradient(var(--maker), var(--maker-shade));
+    border: 0;
+    border-radius: 1.6rem 1.6rem 1rem 1rem;
+    box-shadow: inset 0 2px 0 var(--maker-light), inset 0 -3px 0 var(--shade-25), var(--ui-shadow);
   }
-  .label-panel__card h2 {
-    margin: 0;
+  .label-panel__card .ui-panel__header h2 { font-family: var(--ui-font-display); font-size: var(--fs-t1); letter-spacing: 0.06em; opacity: 0.9; }
+  /* The maker's name, moulded into the plastic. */
+  .label-panel__brand {
+    margin: calc(-1 * var(--sp-2)) 0 0;
     font-family: var(--ui-font-display);
-    font-weight: 400;
-    font-size: var(--fs-t2);
+    font-size: var(--fs-3);
+    letter-spacing: 0.3em;
+    color: var(--maker-shade);
+    text-shadow: 0 1px 0 var(--maker-light);
   }
-  .label-panel__note,
-  .label-panel__error {
-    margin: 0;
-    font-size: var(--fs-4);
-    color: var(--ui-text-dim);
+  .label-panel__brand span { color: var(--maker-letter); opacity: 0.7; }
+  .label-panel__note { margin: 0; font-size: var(--fs-4); opacity: 0.85; }
+  /* The letters left: always a line high, so typing never moves the card. */
+  .label-panel__left { margin: calc(-1 * var(--sp-2)) 0 0; min-height: 1.2em; font-size: var(--fs-3); opacity: 0.8; text-align: right; }
+  /* The recessed window the letters show in. */
+  .label-panel__window {
+    padding: 0.35rem;
+    border-radius: var(--ui-radius-md);
+    background: var(--maker-shade);
+    box-shadow: inset 0 2px 4px var(--shade-55);
   }
-  .label-panel__error { color: var(--ui-danger); }
   .label-panel__text {
-    font: inherit;
-    font-size: var(--fs-8);
-    letter-spacing: 0.08em;
+    width: 100%;
+    box-sizing: border-box;
+    font-family: var(--ui-font-mono);
+    font-size: var(--fs-t1);
+    letter-spacing: 0.14em;
     text-transform: uppercase;
-    color: var(--ui-text);
-    background: var(--ui-fill);
-    border: 1px solid var(--ui-border);
+    color: var(--maker-letter);
+    background: var(--maker-window);
+    border: 0;
     border-radius: var(--ui-radius-sm);
     padding: 0.5em 0.7em;
   }
-  .label-panel__tapes {
-    display: flex;
-    gap: var(--sp-2);
-  }
+  .label-panel__text::placeholder { color: var(--maker-letter); opacity: 0.35; }
+  .label-panel__text:focus-visible { outline: 2px solid var(--maker-letter); outline-offset: 2px; }
+  /* The tape reels: the colour picks, each a round cassette. */
+  .label-panel__tapes { display: flex; gap: var(--sp-2); }
   .label-panel__tape {
-    width: 2rem;
-    height: 1.3rem;
-    border-radius: 3px;
-    border: 2px solid transparent;
-    background: var(--tape);
+    width: 2.2rem;
+    height: 2.2rem;
+    border-radius: 50%;
+    border: 3px solid var(--maker-shade);
+    background: radial-gradient(circle, var(--maker-window) 0 22%, var(--tape) 24%);
+    box-shadow: 0 2px 0 var(--shade-25);
     cursor: pointer;
+    transition: transform var(--dur-hover) var(--ui-ease);
   }
-  .label-panel__tape[aria-pressed='true'] { border-color: var(--ui-accent); }
+  .label-panel__tape:hover { transform: rotate(40deg); }
+  .label-panel__tape[aria-pressed='true'] { border-color: var(--maker-letter); transform: rotate(90deg); }
+  /* The slot the tape comes out of, above the veneer. */
+  .label-panel__slot {
+    height: 0.45rem;
+    margin: 0 18% calc(-1 * var(--sp-3));
+    border-radius: var(--ui-radius-pill);
+    background: var(--maker-window);
+    box-shadow: inset 0 1px 2px var(--shade-90);
+  }
   .label-panel__preview {
     display: grid;
     place-items: center;
@@ -54,18 +91,15 @@
     border-radius: var(--ui-radius-sm);
     background: linear-gradient(var(--label-veneer), var(--label-veneer-shade));
   }
-  .label-panel__preview canvas {
-    max-width: 100%;
-    height: 2.2rem;
-    image-rendering: auto;
-  }
-  .label-panel__card footer {
-    display: flex;
-    align-items: center;
-    gap: var(--sp-2);
-  }
-  .label-panel__gap { flex: 1; }
+  .label-panel__preview canvas { max-width: 100%; height: 2.2rem; image-rendering: auto; }
+  .label-panel__card .ui-panel__footer .ui-btn { color: var(--maker-letter); background: var(--maker-shade); border-color: transparent; box-shadow: 0 2px 0 var(--shade-45); }
+  .label-panel__card .ui-panel__footer .ui-btn:hover { filter: brightness(1.12); }
+  .label-panel__card .ui-panel__footer .ui-btn--primary { color: var(--maker-shade); background: var(--maker-letter); }
+  .label-panel__card .ui-panel__status--error { color: var(--maker-letter); font-weight: 700; }
   @media (pointer: coarse) {
     .label-panel__tape { width: 44px; height: 44px; }
   }
+  /* Reduced motion: the game's setting (`.reduce-motion` on <html>, settings/motion), never the media query alone. */
+  .reduce-motion .label-panel__tape:hover,
+  .reduce-motion .label-panel__tape[aria-pressed='true'] { transform: none; }
 }

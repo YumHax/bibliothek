@@ -1,0 +1,131 @@
+/*
+ * THE LOCAL's darts (`DartsPanel`): the pub's wall, Sean behind the bar in a balloon, the board on its wooden cabinet
+ * and the chalkboard beside it with tonight's checkout and a line per dart. Fixed heights throughout: a dart called or
+ * a go ended changes words, never the layout.
+ */
+@layer tokens, base, components, panels;
+@layer panels {
+  .pub-darts {
+    --dt-wall: #2a1d16;
+    --dt-wall-deep: #1a120d;
+    --dt-cabinet: #5a3a22;
+    --dt-cabinet-dark: #3a2414;
+    --dt-chalk-board: #23302a;
+    --dt-chalk-frame: #7a5634;
+    --dt-chalk: #efe9da;
+    --dt-chalk-dim: rgba(239, 233, 218, 0.6);
+    --dt-chalk-faint: rgba(239, 233, 218, 0.25);
+    --dt-chalk-hot: #f3d27a;
+    --dt-chalk-bust: #f08a7a;
+  }
+  .pub-darts .dt__card {
+    --card-w: var(--card-w-lg);
+    color: var(--dt-chalk);
+    background: radial-gradient(120% 70% at 50% 0%, var(--dt-wall) 0%, var(--dt-wall-deep) 100%);
+    border: 1px solid var(--shade-45);
+  }
+  .pub-darts .ui-panel__status { color: var(--dt-chalk-dim); }
+  .dt { display: flex; flex-direction: column; gap: var(--sp-3); }
+
+  /* Sean behind the bar: his face, his name over a comic balloon whose tail points at him. */
+  .dt__host { display: flex; align-items: flex-end; gap: var(--sp-3); }
+  .dt__face { flex: none; width: 60px; height: 60px; }
+  .dt__face .bar-face { display: block; width: var(--size); height: var(--size); border-radius: 50%; box-shadow: 0 0 0 3px var(--dt-cabinet-dark), 0 2px 6px var(--shade-55); }
+  .dt__balloon {
+    position: relative;
+    flex: 1;
+    min-width: 0;
+    padding: var(--sp-2) var(--sp-3);
+    border: 2.5px solid var(--ink-speech);
+    border-radius: 1.3rem;
+    background: var(--paper-speech);
+    color: var(--ink-speech);
+    box-shadow: 4px 5px 0 var(--shade-45);
+    font-family: var(--ui-font-comic);
+  }
+  .dt__balloon::before { content: ''; position: absolute; left: -14px; bottom: 14px; border: 8px solid transparent; border-right: 12px solid var(--ink-speech); border-left: 0; }
+  .dt__balloon::after { content: ''; position: absolute; left: -9px; bottom: 16px; border: 6px solid transparent; border-right: 9px solid var(--paper-speech); border-left: 0; }
+  .dt__name { display: block; font-size: var(--fs-2); letter-spacing: 0.06em; text-transform: uppercase; opacity: 0.6; }
+  .dt__says { min-height: 2.5em; margin: var(--sp-1) 0 0; font-size: var(--fs-8); line-height: 1.25; }
+
+  /* The wall: the board on its cabinet, the chalkboard beside it. */
+  .dt__wall { display: grid; grid-template-columns: minmax(0, 1fr) 10.5rem; gap: var(--sp-3); align-items: stretch; }
+  .dt__board {
+    display: grid;
+    place-items: center;
+    padding: var(--sp-2);
+    border-radius: var(--ui-radius-sm);
+    background:
+      repeating-linear-gradient(90deg, transparent 0 18px, var(--shade-10) 18px 20px, transparent 20px 47px),
+      linear-gradient(180deg, var(--dt-cabinet), var(--dt-cabinet-dark));
+    box-shadow: inset 0 0 0 4px var(--dt-cabinet-dark), inset 0 4px 14px var(--shade-55);
+  }
+  .dt__canvas { display: block; width: 100%; max-width: 22.5rem; height: auto; aspect-ratio: 9 / 8; cursor: crosshair; touch-action: none; border-radius: var(--ui-radius-sm); }
+  .dt__canvas:focus-visible { outline: 2px dashed var(--dt-chalk-dim); outline-offset: 2px; }
+
+  /* The chalkboard: the checkout big, a ruled line per dart, what is left; GAME SHOT or BUST chalked across at the end. */
+  .dt__chalk {
+    display: flex;
+    flex-direction: column;
+    padding: var(--sp-3);
+    border: 6px solid var(--dt-chalk-frame);
+    border-radius: var(--ui-radius-xs);
+    background: radial-gradient(90% 120% at 30% 20%, var(--tint-08), transparent 70%), var(--dt-chalk-board);
+    box-shadow: inset 0 0 18px var(--shade-55), 0 3px 8px var(--shade-45);
+    font-family: var(--ui-font-hand);
+    overflow: hidden;
+  }
+  .dt__chalk-head { margin: 0; color: var(--dt-chalk-dim); font-size: var(--fs-t1); }
+  .dt__checkout { margin: 0 0 var(--sp-2); font-family: var(--ui-font-marker); font-size: var(--fs-t6); line-height: 1; color: var(--dt-chalk-hot); }
+  .dt__throws { list-style: none; margin: 0; padding: 0; flex: 1; }
+  .dt__throw { display: grid; grid-template-columns: auto 1fr auto; align-items: baseline; gap: var(--sp-1); height: 2.6rem; border-bottom: 1px dashed var(--dt-chalk-faint); }
+  .dt__dart-no { color: var(--dt-chalk-dim); font-size: var(--fs-6); }
+  .dt__call { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; font-size: var(--fs-t1); text-align: right; }
+  .dt__points { min-width: 1.6em; font-family: var(--ui-font-marker); font-size: var(--fs-t2); text-align: right; }
+  .dt__throw.is-thrown.is-last .dt__call,
+  .dt__throw.is-thrown.is-last .dt__points { animation: dt-chalk var(--dur-long) var(--ui-ease) both; }
+  .dt__left { display: flex; justify-content: space-between; align-items: baseline; margin: var(--sp-2) 0 0; font-size: var(--fs-t1); }
+  .dt__left-n { font-family: var(--ui-font-marker); font-size: var(--fs-t4); }
+  .dt__left { height: 2.4rem; }
+  .dt__stamp {
+    margin: 0 auto;
+    padding: 0 var(--sp-2);
+    border: 3px solid currentColor;
+    border-radius: var(--ui-radius-sm);
+    color: var(--dt-chalk-hot);
+    font-family: var(--ui-font-marker);
+    font-size: var(--fs-t2);
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    white-space: nowrap;
+    transform: rotate(-6deg);
+    animation: dt-stamp var(--dur-long) var(--ui-ease-pop) both;
+  }
+  .dt--bust .dt__stamp { color: var(--dt-chalk-bust); }
+
+  /* How to throw, dim under the board; the touch words on a touchscreen. */
+  .dt__how { margin: 0; color: var(--dt-chalk-dim); font-size: var(--fs-3); text-align: center; }
+  .dt__how kbd { color: var(--dt-chalk); }
+  .dt__how-touch { display: none; }
+  @media (pointer: coarse) {
+    .dt__how-keys { display: none; }
+    .dt__how-touch { display: inline; }
+  }
+  /* What happens at the bar: one line kept. */
+  .dt__aside { min-height: 1.4em; margin: 0; color: var(--dt-chalk-dim); font-style: italic; font-size: var(--fs-5); text-align: center; }
+
+  @keyframes dt-chalk { from { opacity: 0; filter: blur(2px); } to { opacity: 1; filter: none; } }
+  @keyframes dt-stamp { from { opacity: 0; transform: rotate(-6deg) scale(1.7); } to { opacity: 1; transform: rotate(-6deg) scale(1); } }
+  .reduce-motion .dt__throw .dt__call,
+  .reduce-motion .dt__throw .dt__points,
+  .reduce-motion .dt__stamp { animation: none; }
+
+  /* A phone: the chalkboard goes under the board, its lines in a row. */
+  @media (max-width: 30rem) {
+    .dt__wall { grid-template-columns: 1fr; }
+    .dt__throws { display: grid; grid-template-columns: repeat(3, 1fr); gap: var(--sp-2); }
+    .dt__throw { grid-template-columns: 1fr; height: auto; min-height: 3.6rem; }
+    .dt__call, .dt__points { text-align: left; }
+    .dt__face, .dt__face .bar-face { width: 48px; height: 48px; }
+  }
+}

@@ -8,7 +8,8 @@ are pointed at, one hook each, written here so every later feature tells the sam
 
 **The premise.** The player inherits the flat of their uncle, Félix Aubry, who collected video games for forty years.
 They arrive a day late: the family has had the contents sold at the saleroom, and the removal lift is still at the
-window. One game survived, fallen behind the bookcase (the starter game). The bare flat (docs/economy.md "The bare
+window. One game survived, fallen behind the bookcase (the starter game, `STARTER_GAMES`: Félix's own worn Super
+Mario Bros., his "FOR THE KID. START HERE." on tape inside the lid). The bare flat (docs/economy.md "The bare
 flat") is not a starting rule any more but a loss, and every purchase is putting the place back. The rooms remember
 him: the pale ghosts of his frames on the walls, each with its nail, and on the living room's parquet the glossier
 rectangles where his sofa, his reading chair and a low chest stood (`DEFAULT_ROOM.finish.footprints`).
@@ -18,12 +19,15 @@ rival collector, the stalls) and no villain the cosy building has to live with.
 
 **The goal.** Three layers, the sandbox never ends:
 
-- **The dream room.** The flat as Félix had it, seen in the opening, is the finish line the player can picture. Planned:
-  the dream comes back at night (the bed's dreams, `household/dreams`) with what the player has put back lit up.
-- **The open house.** Planned: once the room is full enough, the collectors' club visits (docs/visitors.md), the
-  friends and the neighbours come: the credits scene, on the gatherings already built.
-- **The prototype.** The lost cart's trail (below) becomes Félix's unfinished hunt: the clipping on the mat is
-  addressed to him. Its demo rolling its credits on his TV is the true ending.
+- **The dream room.** The flat as Félix had it, seen in the opening, is the finish line the player can picture, and
+  measured (`grandma/dreamRoom` `dreamRoomShare`: his living room's pieces bought back, then its shelves' fill; the
+  album's last memory and Mémé's "room full" news read it). The dream comes back some nights (`household/dreams`
+  `roomDreamOf`, once the notebook is found, three dreaming nights in ten): the dream card says one piece of his room
+  back and lit, and one still a pale shape on the parquet (`DreamCard.showRoom`).
+- **The end** (built: "The end" below). Mémé's photo on her album's last page, the closing reel plays at home.
+- **The prototype.** The lost cart's trail (below) is Félix's unfinished hunt: the clipping on the mat is addressed to
+  him, the demo's credits thank F.A., and Hana's letter in the box is to him. Its credits rolling on his TV is the true
+  ending.
 
 **The acts**, each on systems that exist (planned unless said):
 
@@ -31,8 +35,9 @@ rival collector, the stalls) and no villain the cosy building has to live with.
 2. **The street.** The rival collector (`economy/rivalCollector`, docs/economy.md) bought most of the lot at the sale:
    his gloating is the first line he says. A copy with Félix's sticker turns up now and then on a stall, at the
    saleroom or in the trader's suitcase: buying it back is a keepsake (like the prototype, the WE BUY desk refuses it).
-3. **The building.** Mrs Roux kept a box of his for safekeeping (her move, docs/building.md), the cellar holds his
-   crate, the sixth floor's treasure hunt is his old game with the neighbours' children.
+3. **The building** (built). Mrs Roux kept a shoebox of his (`world/annex/FelixShoebox`, on her hearth once her rooms
+   are the flat's: her note, and one of his copies set out); our cellar box was his (`cellarPlan.felixBox`: his carton,
+   one of his F.A. copies and his note in its lid). The sixth floor's treasure hunt stays Albert Vasseur's (docs/building.md).
 4. **The trail and the open house.** The prototype, then the club's visit.
 
 Running under all four, **Mémé's album** (below, "Mémé"; its first memory built): the player's childhood with Félix,
@@ -138,7 +143,9 @@ photo) is docs/grandma.md "The end of the story".
   (`Travel`'s `interlude`, wired in `bootstrap/player.ts`) while the far zone builds: about ten seconds on a seat by
   the window, the town going past in three depths in the light of the hour, the display, the STOP bell, the doors, and
   the line's regulars of the hour (`busRiders`; Mémé herself some mornings, docs/grandma.md "Around her flat").
-  Esc, E, Space, Enter or a click skips it; with reduced motion there is only the curtain.
+  Esc, E, Space, Enter or a click skips it; with reduced motion there is only the curtain. The town past the window
+  is drawn from the game day (a ride there and back never the same street); after nine it is the night bus, N38 on
+  the display, the nurse asleep against the glass (`busRiders`: the man behind his paper rides at midday).
 - **Her flat** (`world/grandma/furnishGrandmaDecor.ts`, spots in `GRANDMA_FLAT_PLAN.dressing`): the window shows
   Linden Avenue (`LindenView`, painted in `lindenPainters`: a side street to the town, parked cars and a car each way,
   stone facades lit at night, the plane trees by season, the weather; heard far below, `DistantAvenue`); the family's
@@ -151,7 +158,8 @@ photo) is docs/grandma.md "The end of the story".
 - **The memories** (`MEMORIES` in `memories.ts`), each unlocked by something done in the game and played from the
   photo album on her table (`world/grandma/albumWiring`, `PhotoAlbum`, its cover swinging open): the very first plays
   at once; after that the album opens (`ui/memories/AlbumPanel`): a print per memory seen (a frame of its first play,
-  `MemoryProjector.still`, else a drawn sepia print, `albumPhotos`) with its title in her hand, the one ready slipping
+  `MemoryProjector.still`, kept across reloads by `memories/memoryStills` under `KEYS.memoryStills`, else a drawn sepia
+  print, `albumPhotos`) with its title in her hand, the one ready slipping
   out of the pages (clicked, it plays), empty photo corners with its name pencilled in for the rest (nothing says how
   they fill); a print seen opens close, "Watch it again" plays it; her other photos among them (docs/grandma.md). Only a
   memory with a reel is ever ready (`GrandmaVisits.setFilmed`, from `REELS`). A memory is a film like the opening
@@ -174,8 +182,8 @@ The memories, from the childhood to the arrival:
 | 3 | **Three letters** (`arcadeMemory`): Félix takes the teenager on a Saturday, the record on the spaceships cabinet beaten, the initials typed in | the arcade (LexiPunk, the tournament's board and the medals put aside) | the first arcade medal |
 | 4 | **Money asleep** (`rowMemory`): a Sunday supper in 1999 gone cold, Gaspard: "your cartridges are money asleep"; Félix stands up, "they're for the kid"; the child of ten in the armchair hears it all | Mémé's flat | Félix's notebook found |
 | 5 | **The last Wednesday** (`leavingMemory`): the player at eighteen, suitcase by the door; "when you're settled, half of these are yours"; then Félix alone at the window in the rain | Félix's flat (as for 2) | 50 games, or a club set |
-| 6 | **Lot 1 to 412** (`saleMemory`): the sale as Mémé saw it from the back row, Gaspard checking his watch, Crane in the front row bidding on everything: arranged between them | the saleroom, Félix's boxes by the rostrum | a game of Félix's notebook bought back, or one of his copies (his F.A. sticker, docs/grandma.md "What the memories leave behind") |
-| 7 | **A day late** (`keysMemory`): this year, Mémé holds Félix's keys out to the player (the camera); then our landing, the push in to the door, ending on the opening's own line "By the time you got the keys…" | Mémé's flat, then our landing | the six before it seen, and the prototype found or 120 games |
+| 6 | **Lot 1 to 412** (`saleMemory`): the sale as Mémé saw it from the back row, Gaspard checking his watch, Crane in the front row bidding on everything: arranged between them | the saleroom, Félix's boxes by the rostrum | memory 4 seen (Gaspard is met there first), and a game of Félix's notebook bought back or one of his copies (his F.A. sticker, docs/grandma.md "What the memories leave behind") |
+| 7 | **A day late** (`keysMemory`): this year, Mémé holds Félix's keys out to the player (the camera); then our landing, the push in to the door, ending on the opening's own line "By the time you got the keys…" | Mémé's flat, then our landing | the six before it seen, and the prototype found or the dream room near (`DREAM_NEAR`, 0.75 of `dreamRoomShare`) |
 
 ### Adding a memory
 
@@ -204,6 +212,17 @@ The memories, from the childhood to the arrival:
 7. A moment for the player to do (tear the paper, take the keys) is a scene's `cues` entry, inside a shot, its beat in
    `done`; `returned` goes through `memoryStage.backInTheRoom` (with `'hard'` / `'soft'` when it moves her): docs/grandma.md "In the films".
 
+## The end (`world/grandma/closingReel.ts`, `closingWiring.ts`)
+
+Once Mémé's photo is on her album's last page (`FamilyStory.endingDue`), the first quiet moment at home (in the flat,
+nobody round, no panel up, a few seconds of it: `watchForTheEnd`, an `Updatable` on the engine) plays the closing reel
+through `MemoryFilm` like her memories: the collection room as the player has made it (the opening's dolly in and its
+glide along the shelves), the dream of it as Félix had it (`stageFelixFlat`), then the room again, wide and still,
+under the credits in the player's own voice, dedicated by how things went (`ClosingFacts`: the Game Boy back by her
+bed, Hana's music, Gaspard's sorry). Its title "Félix's flat · The end. The shelves go on.", "Carry on" back in the room.
+Played through or skipped, it never plays again (`FamilyStory.storyEnded`, `ended`) and the journal says so in a
+headline. The sandbox goes on.
+
 ## The lost prototype (`src/story/`)
 
 A trail followed over many game days through the channels the player meets anyway, ending with a game nobody ever
@@ -214,13 +233,16 @@ place visited, and a channel the player misses gives up after a few days, the po
 
 | Stage reached | Clue from | Gate | Fallback (`STORY_RULES.fallbackAfter`, game days) |
 | --- | --- | --- | --- |
-| `clipping` | the doormat on coming home: THE GAMING WEEKLY's clipping | `start.day` (3) and `start.games` (3) owned | |
-| `stall` | the NES stallholder (`atStall`), any stallholder `anyStallAfter` days on | the clipping | |
+| `clipping` | the doormat on coming home: THE GAMING WEEKLY's clipping, sent on to M. F. Aubry (the readers' desk's answer to Félix, his STILL LOOKING in the margin) | `start.day` (3) and `start.games` (3) owned | |
+| `stall` | the NES stallholder (`atStall`), any stallholder `anyStallAfter` days on | the clipping | 5: the NES stall's flyer (`stallFlyer`) |
 | `radio` | Radio Brocante's morning chronicle in the kitchen (`onRadio`), a caller's line | the day after the stall | 3: the producer's note on the mat |
 | `arcade` | the arcade's attendant (`atArcadeCounter`): who HAB is | | 4: the attendant's note |
 | `trader` | the collector outside RETRO GAMES (`atTrader`, his days only), or Hana's landlady's small ad (`LANDLADY_AD`, in the paper from the day after the arcade's clue, `linkAds`): going round reaches it (`Classifieds.onVisit`), her sideboard holds the collector's letter | | 3: his card |
-| `found` | Marco (`KEEPER`) on a visit, chatted to (`atFriend`); another friend says he has it | | 4: Marco's postcard, the cart posted |
-| `ended` | the demo played to its credits on the TV (`demoFinished`): Hana's letter (a `read` card), a big reward | | |
+| `found` | Marco (`KEEPER`) on a visit, chatted to, or rung from the bedroom (`atFriend`, `onPhone`); another friend says he has it | | 4: Marco's postcard, the cart posted |
+| `ended` | the demo's credits rolled to their end on the TV (`demoFinished`): Hana's letter to Félix (a `read` card, December 1993, never posted), a big reward | | |
+
+Marco has a word more after handing it over, once each (`Saved.keeper`): the cart not run yet ("I want to be there
+the first time it runs. Ring me"), then once it has ("You ran it without me?!").
 
 A line returned is the clue told: the stage moves on as it is said (a journal line `story`, a `react` "A new lead").
 The journal's notebook shows the file (`PrototypeStory.file()`: the clues in the player's words, the next lead,
@@ -243,8 +265,9 @@ Hooks (each optional, asked first, the usual lines otherwise): `BuildContext.sto
   `moonpost/MoonpostProgram` over `MoonpostDemo` (lunar-lander rules at 256 x 240: gravity, a jet pack on A / B / up
   that burns fuel, left / right steer, a soft level landing on a yellow pad delivers, the blue one refuels, too hard is
   a puff and a walk back; stranded with an empty tank, the same walk) and `moonpostSound` (the tune on a pulse wave and
-  a triangle bass, the jet pack's hiss, the jingles, into the set's output). Three letters, then the credits ("levels
-  4-8: TO DO"): `finished` fires `demoFinished` once.
+  a triangle bass, the jet pack's hiss, the jingles, into the set's output). Three letters, then the credits (SPECIAL
+  THANKS: F.A., WHO KEPT ASKING; "levels 4-8: TO DO"): `finished` once they have rolled to their end or Start skipped
+  them (the set switched off while they roll counts too), so the letter never pops up over the names; `demoFinished` once.
 
 ### Checking without a browser
 

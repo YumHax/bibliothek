@@ -33,7 +33,9 @@ export const HALLWAY_ROOM: RoomOptions = {
     { wall: 'left', along: 0, ...DOOR_LEAF, hinge: 'right', to: 'kitchen' },
     // The flat's front door at the right end, onto our landing (the stairwell): the builder hangs
     // it (`FrontDoor`, locked without the keys) and adds its portal, so no `door` and no `to` here.
-    { wall: 'right', along: 0, ...DOOR_LEAF, door: false },
+    // The landing's strip is as narrow as the corridor: pushed right back, the leaf would go through
+    // its side wall into the bedroom, so it stops square, along that wall.
+    { wall: 'right', along: 0, ...DOOR_LEAF, swing: 90, door: false },
   ],
 };
 

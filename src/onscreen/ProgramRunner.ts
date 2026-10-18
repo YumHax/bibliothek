@@ -7,6 +7,10 @@ import { ACTIONS } from '@/input/actions';
 import { createCanvas, toTexture } from '@/graphics/canvas';
 import type { ScreenFeed, VideoScreen } from '@/world/screen';
 import { NO_PAD, type Pad, type ScreenProgram } from './ScreenProgram';
+import { paintPaused, paintStarting } from './programOsd';
+
+/** Repaints a second of the warm-up's on-screen display. */
+const OSD_FPS = 12;
 
 /** The pad's keys: the arcade stick's for the d-pad, then A, B, Start, Select (`input/actions`, context `arcade`). */
 const PAD_KEYS = {
@@ -35,6 +39,8 @@ const MAX_DT = 0.1;
 interface ProgramListener {
   started?(program: ScreenProgram, game: Game, screen: VideoScreen): void;
   stopped?(program: ScreenProgram): void;
+  /** It would not start (a ROM that did not load, the emulator refusing it): switched off, the set showing no signal. */
+  failed?(program: ScreenProgram, game: Game): void;
 }
 
 /**
@@ -61,6 +67,9 @@ export class ProgramRunner implements Updatable {
   private heldStill = false;
   private offState: (() => void) | null = null;
   private readonly listeners = new Set<ProgramListener>();
+  /** The on-screen display's clock (s) and the last phase painted (the warm-up's frame, the pause's blink). */
+  private osdClock = 0;
+  private osdPhase = -1;
 
   constructor(private readonly input: Input) {}
 
@@ -116,13 +125,19 @@ export class ProgramRunner implements Updatable {
     const audio = this.audioOut();
     this.ready = false;
     this.heldStill = false;
+    this.osdClock = 0;
+    this.osdPhase = -1;
     void Promise.resolve(program.start({ audio })).then(
       () => {
         if (this.program === program) this.ready = true;
       },
       (err: unknown) => {
         console.warn(`[program] ${program.title} would not start`, err);
-        if (this.program === program) this.stop();
+        if (this.program !== program) return;
+        this.stop();
+        // Snow on the glass rather than a black set, and a word for the player (`Screens`).
+        screen.fail(`${program.title} would not start`);
+        for (const l of this.listeners) l.failed?.(program, game);
       },
     );
     for (const l of this.listeners) l.started?.(program, game, screen);
@@ -178,9 +193,16 @@ export class ProgramRunner implements Updatable {
     if (still !== this.heldStill) {
       this.heldStill = still;
       program.setPaused?.(still);
+      this.osdPhase = -1;
       if (still && this.ready) this.paint(program, ctx, texture);
     }
-    if (still) return;
+    // Loading (the emulator's chunk, the ROM): the set warms up and says so, never a dead black glass.
+    if (!this.ready) return this.paintStarting(program, ctx, texture, dt);
+    // Held still by the pointer let go: PAUSED blinks over the frozen frame, like the cabinets.
+    if (still) {
+      if (this.paused && feed.zoneActive) this.paintPaused(program, ctx, texture, dt);
+      return;
+    }
     const pads: [Pad, Pad] = [this.holding ? this.readPad(0) : NO_PAD, program.players === 2 && this.holding ? this.readPad(1) : NO_PAD];
     program.update(Math.min(dt, MAX_DT), pads);
     this.paint(program, ctx, texture);
@@ -188,6 +210,27 @@ export class ProgramRunner implements Updatable {
 
   private paint(program: ScreenProgram, ctx: CanvasRenderingContext2D, texture: THREE.CanvasTexture): void {
     program.draw(ctx);
+    texture.needsUpdate = true;
+  }
+
+  /** The warm-up while the program loads, repainted at a tuner's pace. */
+  private paintStarting(program: ScreenProgram, ctx: CanvasRenderingContext2D, texture: THREE.CanvasTexture, dt: number): void {
+    this.osdClock += dt;
+    const phase = Math.floor(this.osdClock * OSD_FPS);
+    if (phase === this.osdPhase) return;
+    this.osdPhase = phase;
+    paintStarting(ctx, program.width, program.height, program.title, this.osdClock);
+    texture.needsUpdate = true;
+  }
+
+  /** PAUSED over the frozen frame, blinking twice a second (the frame drawn again under it each blink). */
+  private paintPaused(program: ScreenProgram, ctx: CanvasRenderingContext2D, texture: THREE.CanvasTexture, dt: number): void {
+    this.osdClock += dt;
+    const phase = Math.floor(this.osdClock * 2);
+    if (phase === this.osdPhase) return;
+    this.osdPhase = phase;
+    program.draw(ctx);
+    paintPaused(ctx, program.width, program.height, phase);
     texture.needsUpdate = true;
   }
 

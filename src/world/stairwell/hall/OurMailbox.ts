@@ -50,10 +50,9 @@ export class OurMailbox extends Prop implements Interactable {
       session.react('Nothing but dust and a rubber band.');
       return;
     }
-    // One card a piece, "2 of 3" stamped on each; the last says where they go.
+    // One card a piece, "2 of 3" stamped on each, and what a piece changed under it (a plain flyer: nothing).
     pieces.forEach((piece, i) => {
-      const last = i === pieces.length - 1;
-      session.read(mailCard(piece, { of: { index: i + 1, count: pieces.length }, ...(last ? { effect: 'Read on the way past, and into the recycling bin by the door.' } : {}) }));
+      session.read(mailCard(piece, { of: { index: i + 1, count: pieces.length }, ...(piece.effect ? { effect: piece.effect } : {}) }));
     });
   }
 }

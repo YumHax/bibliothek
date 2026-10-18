@@ -26,13 +26,16 @@ export const FAVOURS = {
   amendsTo: -10,
   /** A lent game comes back after this many game days. */
   lendDays: 3,
+  /** The player asks "Anything I can do for you?": they find something, `gapDays` after their last favour ended, this often at most. */
+  askEveryDays: 3,
 } as const;
 
 /** What each kind gives the player to do, by game days to do it in. */
 export const FAVOUR_DAYS: Record<FavourKind, number> = { fetch: 2, findGame: 7, lend: 1, checkIn: 3, parcel: 2 };
 
-/** What a fetch asks for, by what the asker likes (else one of these). */
-export const FETCHABLE: readonly GiftKind[] = ['croissant', 'flowers', 'treats'];
+/** What a fetch asks for, by what the asker likes (else one of `FETCH_ANY`; cat treats only from someone with a cat). */
+export const FETCHABLE: readonly GiftKind[] = ['croissant', 'flowers', 'treats', 'coffee', 'cake'];
+export const FETCH_ANY: readonly GiftKind[] = ['croissant', 'flowers', 'coffee'];
 
 /**
  * What they say asking (the panel's line after "What can I do for you?"), the To-do's words, their thanks; and in
@@ -66,7 +69,7 @@ export const FAVOUR_LINES: Record<FavourKind, { ask: string; todo: string; thank
     note: 'Knock on my door one of these days.',
     ask: 'I’m expecting a delivery and I may not hear the bell. Would you knock on my door in the next couple of days?',
     todo: 'Knock on {name}’s door in the next few days.',
-    thanks: 'Ah, it’s you! Thanks for knocking. That’s neighbourly.',
+    thanks: 'Ah, it’s you! The delivery came this morning: I’d never have heard the bell. Thanks for knocking.',
   },
   parcel: {
     need: 'Mme Pereira has a parcel of mine I can never collect.',
@@ -81,7 +84,7 @@ export const FAVOUR_LINES: Record<FavourKind, { ask: string; todo: string; thank
  * Who asks a favour, for the words they ask it in (`favours.voiceOf`): someone old, a kid, someone at work behind a
  * counter or a stall, an old friend; anyone else says `FAVOUR_LINES` as they are. No line assumes more than its band.
  */
-export type FavourVoice = 'elder' | 'kid' | 'trade' | 'friend';
+export type FavourVoice = 'elder' | 'kid' | 'trade' | 'friend' | 'gruff';
 
 /** The words a voice changes (the To-do's `todo` stays the player's own). */
 export const FAVOUR_VOICES: Record<FavourVoice, Partial<Record<FavourKind, Partial<Record<'ask' | 'need' | 'note' | 'thanks', string>>>>> = {
@@ -95,7 +98,7 @@ export const FAVOUR_VOICES: Record<FavourVoice, Partial<Record<FavourKind, Parti
       need: 'Would you look in on me one of these days?',
       note: 'Knock on my door, check on me.',
       ask: 'I’m expecting a delivery and I don’t always hear the bell any more. Would you knock in the next couple of days, check on me?',
-      thanks: 'Ah, it’s you! Thank you for checking on me. That’s neighbourly.',
+      thanks: 'Ah, it’s you! The delivery came, and here you are too. Thank you for checking on me. That’s neighbourly.',
     },
     lend: { ask: 'Could I borrow {game} for a few days? I’ll be careful, I don’t know how to break things any more.' },
   },
@@ -136,7 +139,41 @@ export const FAVOUR_VOICES: Record<FavourVoice, Partial<Record<FavourKind, Parti
     },
     lend: { ask: 'Lend me {game} for a few days? I’ll guard it with my life.' },
   },
+  // Someone grumpy or proud asks without quite asking.
+  gruff: {
+    fetch: {
+      need: 'I don’t suppose you’re passing the shops…',
+      ask: 'I don’t suppose you’re passing Front Street. I could do with {thing}. If it’s no trouble. It probably is.',
+      thanks: 'Hm. Thank you. That was… decent of you.',
+    },
+    checkIn: {
+      need: 'There’s a delivery I mustn’t miss. Not that I need help.',
+      ask: 'There’s a delivery coming and that bell is useless. Knock on my door in the next day or two. If you remember.',
+      thanks: 'You knocked. Good. The parcel came. I’d have heard it myself, probably. Thank you.',
+    },
+    parcel: {
+      ask: 'Mme Pereira has a parcel of mine, and her hours are a mystery. You could bring it up. If you’re going that way.',
+      thanks: 'My parcel. Hm. Thank you.',
+    },
+    findGame: { ask: 'There’s a game I’ve looked for. {game}. Not that it matters. If you see it, you see it.', thanks: '{game}. You found it. I… thank you. Truly.' },
+  },
 };
+
+/** How they take a yes and a no, by voice (`anyone` for the rest): a lend's yes is a borrowing's thanks. */
+export const FAVOUR_ANSWERS: Record<FavourVoice | 'anyone', { yes: string; lendYes: string; no: string; back: string }> = {
+  anyone: { yes: 'Thank you! I knew I could count on you.', lendYes: 'Oh, thank you! Whenever suits.', no: 'Never mind. Another time.', back: 'Thank you, I loved it.' },
+  elder: { yes: 'Bless you. You’re a good soul.', lendYes: 'Thank you, dear. I’ll be so careful.', no: 'Oh, don’t worry, dear. I’ll manage. I always do.', back: 'Thank you, dear. I played it every evening. Badly, but every evening.' },
+  kid: { yes: 'YES! Thank you!', lendYes: 'Really? Thank you thank you thank you!', no: 'Oh. Okay. Maybe another time?', back: 'I nearly finished it! Nearly. Thank you SO much.' },
+  trade: { yes: 'Lifesaver. I owe you one.', lendYes: 'Cheers! I’ll look after it.', no: 'No worries. I’ll manage.', back: 'Played it on my breaks. Cheers for that.' },
+  friend: { yes: 'You’re the best. Seriously.', lendYes: 'Legend. You won’t regret it.', no: 'No stress. Another time.', back: 'Back, as promised. Loved every minute.' },
+  gruff: { yes: 'Hm. Good. Thank you.', lendYes: 'Hm. I’ll bring it back. Of course I will.', no: 'Fine. I didn’t expect you to.', back: 'It’s back. It was… good. Thank you.' },
+};
+
+/** The player offering a hand, and their answer when there is truly nothing (a favour of theirs just done). */
+export const OFFER_LINES = {
+  label: 'Anything I can do for you?',
+  nothing: 'That’s kind of you to ask. Nothing just now. Ask me again some time.',
+} as const;
 
 /** The make-amends offer's lines (said by someone cross with the player). */
 export const AMENDS_LINES = {

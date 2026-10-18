@@ -1,5 +1,16 @@
 import type { ButtonKey, EmulatorData, NES } from 'jsnes';
 import type { Pad, ProgramContext, ScreenProgram } from '@/onscreen';
+import { paintSavedMark } from '@/onscreen/programOsd';
+import { batteryOf, keepBattery } from './nesBattery';
+
+/** What the emulator's insides give for the battery saves (not in jsnes's types): the cart's header, the CPU's memory. */
+interface NesInsides {
+  rom?: { batteryRam?: unknown };
+  cpu?: { mem?: number[] };
+}
+/** The cart's save RAM in the CPU's memory map. */
+const SRAM_FROM = 0x6000;
+const SRAM_TO = 0x8000;
 
 /** The NES's picture (pixels). */
 const NES_W = 256;
@@ -14,11 +25,18 @@ const RING_SECONDS = 0.08;
 const BLOCK = 1024;
 /** The APU is loud next to the room's other sounds. */
 const LEVEL = 0.7;
+/** Frames without a battery write after a burst before the save counts as done (a quarter second). */
+const SAVE_SETTLE_FRAMES = 15;
+/** Frames a cart runs before its battery writes count as a save (three seconds: its boot checks the RAM). */
+const BOOT_FRAMES = 180;
+/** How long the "SAVED" mark stays in the corner (s). */
+const SAVED_MARK_S = 1.6;
 
 /**
  * Where each cart was when its pad went down, by ROM: picked up again, it carries on from there (a platformer's level
  * is not lost to a walk to the kitchen). Kept for the page's life only: a whole machine state (64 KB of memory and the
- * picture buffers as JSON) is too big for the save.
+ * picture buffers as JSON) is too big for the save. A cart with a battery keeps its save RAM in the save file
+ * (`nesBattery`): its saved games outlive the page.
  */
 const resumeAt = new Map<string, EmulatorData>();
 
@@ -70,6 +88,15 @@ export class NesProgram implements ScreenProgram {
   private disposed = false;
   /** The cart's key in `resumeAt` (its ROM's address), none for bytes handed in. */
   private readonly resumeKey: string | null;
+  /** The cart wrote to its battery-backed RAM since it was put in: kept when it comes out. */
+  private batteryDirty = false;
+  /** Frames since the battery was last written (a game writes its save in a burst), and the "SAVED" mark's time left (s). */
+  private sinceWrite = Infinity;
+  private savedMark = 0;
+  /** The cart's header says it has a battery (only then is its RAM a save, and the mark shown). */
+  private hasBattery = false;
+  /** Frames run since the cart went in, counted up to `BOOT_FRAMES`. */
+  private ran = 0;
 
   constructor(private readonly options: NesProgramOptions) {
     this.title = options.title;
@@ -95,8 +122,17 @@ export class NesProgram implements ScreenProgram {
         for (let i = 0; i < frame.length; i++) this.pixels[i] = 0xff000000 | frame[i]!;
       },
       onAudioSample: (left) => this.push(left),
+      onBatteryRamWrite: () => {
+        this.batteryDirty = true;
+        this.sinceWrite = 0;
+      },
     });
     nes.loadROM(bytes);
+    // A cart with a battery: its saved games back in its RAM, as they were when it last came out.
+    const insides = nes as unknown as NesInsides;
+    this.hasBattery = !!insides.rom?.batteryRam;
+    const sram = this.resumeKey && this.hasBattery ? batteryOf(this.resumeKey) : null;
+    if (sram && insides.cpu?.mem) for (let i = 0; i < sram.length; i++) insides.cpu.mem[SRAM_FROM + i] = sram[i]!;
     const saved = this.resumeKey ? resumeAt.get(this.resumeKey) : undefined;
     if (saved) {
       try {
@@ -129,12 +165,19 @@ export class NesProgram implements ScreenProgram {
       nes.frame();
       this.clock -= 1 / NES_FPS;
       frames++;
+      // A burst of writes to the battery, then quiet for a moment: the save is done, the mark shows.
+      // (Not the cart checking its RAM as it boots: only once it has run a few seconds.)
+      if (this.ran < BOOT_FRAMES) this.ran++;
+      if (++this.sinceWrite === SAVE_SETTLE_FRAMES && this.hasBattery && this.ran >= BOOT_FRAMES) this.savedMark = SAVED_MARK_S;
     }
     if (frames === MAX_FRAMES_PER_TICK) this.clock = 0;
+    this.savedMark = Math.max(0, this.savedMark - dt);
   }
 
   draw(ctx: CanvasRenderingContext2D): void {
     ctx.putImageData(this.image, 0, 0);
+    // In the last half second the mark fades out.
+    paintSavedMark(ctx, this.savedMark / 0.5);
   }
 
   setPaused(paused: boolean): void {
@@ -144,6 +187,11 @@ export class NesProgram implements ScreenProgram {
   }
 
   dispose(): void {
+    // A battery cart's RAM written: into the save file.
+    // (A cart without one writes its work RAM there too: not kept, it would never be loaded back.)
+    const insides = this.nes as unknown as NesInsides | null;
+    const mem = insides?.cpu?.mem;
+    if (this.batteryDirty && this.resumeKey && insides?.rom?.batteryRam && mem) keepBattery(this.resumeKey, mem.slice(SRAM_FROM, SRAM_TO));
     // The pad goes down: where the cart was, to carry on from next time.
     if (this.nes && this.resumeKey) {
       try {

@@ -1,6 +1,7 @@
 import './IntroScreen.css';
 import { html, paint } from '@/ui/panel/html';
-import { actionKeyLabel } from '@/ui/keys';
+import { actionCap } from '@/ui/verb';
+import { lastDevice, onDeviceChange } from '@/input/lastDevice';
 
 /** What the screen's buttons do: the director's (`intro/IntroCutscene`). */
 interface IntroScreenHandlers {
@@ -65,7 +66,15 @@ export class IntroScreen {
     this.cueKey = q('cue-key');
     this.cueText = q('cue-text');
     this.cueLetters = q('cue-letters');
-    q('skip-key').textContent = actionKeyLabel('close');
+    // The cap names what skips with the hands in use (Esc, the pad's B); a finger taps the button, so no cap then.
+    const skipKey = q('skip-key');
+    const writeSkipKey = (): void => {
+      skipKey.hidden = lastDevice() === 'touch';
+      // `close` has no pad button of its own (Start pauses through PointerLockFlow): the film takes B, as the director reads it.
+      skipKey.textContent = lastDevice() === 'gamepad' ? 'B' : actionCap('close');
+    };
+    writeSkipKey();
+    onDeviceChange(writeSkipKey);
     this.skip.addEventListener('click', () => handlers.onSkip());
     this.getUp.addEventListener('click', () => handlers.onGetUp());
     container.appendChild(this.root);

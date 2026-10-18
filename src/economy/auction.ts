@@ -95,6 +95,19 @@ function increment(amount: number): number {
   return 50;
 }
 
+/**
+ * How a lot goes when nobody of the player's sees it called (a consigned copy whose sale they missed): the keenest
+ * bidder takes it a step over the next keenest's ceiling (at most their own), at the reserve when alone; passed
+ * when nobody wants it. The same interest as in the room, so the story is the one the room would have told.
+ */
+export function unseenHammer(interest: readonly LotInterest[], reserve: number): { to: string; price: number } | null {
+  const sorted = [...interest].sort((a, b) => b.ceiling - a.ceiling);
+  const [top, second] = sorted;
+  if (!top) return null;
+  if (!second) return { to: top.bidder, price: reserve };
+  return { to: top.bidder, price: Math.min(top.ceiling, second.ceiling + increment(second.ceiling)) };
+}
+
 /** Where a lot stands: asked for, bid on, going once, twice, sold, passed (nobody opened it). */
 type LotPhase = 'opening' | 'bidding' | 'once' | 'twice' | 'sold' | 'passed';
 
@@ -187,6 +200,22 @@ export class LotRun {
     return (this.ceilings.get(id) ?? 0) >= this.ask;
   }
 
+  /** Whether `id` is near their limit: they would take the next ask, but not the one after (their face shows it). */
+  near(id: string): boolean {
+    const ceiling = this.ceilings.get(id) ?? 0;
+    const ask = this.ask;
+    return ceiling >= ask && ceiling < ask + increment(ask);
+  }
+
+  /**
+   * The leader `by` raises their own bid a step (a jump bid: "make it seventy"): the ask after next, said at once, so
+   * whoever it prices out lets it go. No events when they do not lead or the lot is shut.
+   */
+  jump(by: string): LotEvent[] {
+    if (!this.open || this.leading !== by) return [];
+    return this.raise(by, this.ask);
+  }
+
   start(): LotEvent[] {
     this.plan();
     return [{ kind: 'open', ask: this.ask }];
@@ -195,8 +224,12 @@ export class LotRun {
   /** A bid at the current ask by `by` (the player: `YOU`); refused (no events) when the lot is shut or they lead already. */
   bid(by: string): LotEvent[] {
     if (!this.open || this.leading === by) return [];
-    const amount = this.ask;
     if (this.leading) this.under = { by: this.leading, amount: this.high };
+    return this.raise(by, this.ask);
+  }
+
+  /** `by` leads at `amount`: the bid said, and those it prices out let it go. */
+  private raise(by: string, amount: number): LotEvent[] {
     this.high = amount;
     this.leading = by;
     this.quiet = 0;

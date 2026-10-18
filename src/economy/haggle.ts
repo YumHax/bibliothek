@@ -2,6 +2,16 @@ import { GRAIL, NEGOTIATION, STICKER } from './pricing';
 import type { StockItem } from './StockItem';
 import { unit01 } from '@/random';
 import { formatCoins } from '@/text/money';
+import { capitalise } from '@/text/strings';
+import { HAGGLE_LINES, type HaggleLineSet, type HaggleVoice } from './haggleLines';
+
+export type { HaggleVoice };
+
+/**
+ * What the player can say besides an offer, once each per haggle: point out a flaw of the copy (`manual`: it has none;
+ * `worn`: a worn box), or threaten to come back another day (`later`). See `NEGOTIATION.argument`.
+ */
+export type ArgumentKind = 'manual' | 'worn' | 'later';
 
 /** The three offers the player can make, as shares of the tag (see `NEGOTIATION.offers`). */
 export type OfferKind = keyof typeof NEGOTIATION.offers;
@@ -29,29 +39,6 @@ export type Reply =
   /** Out of patience: their last counter-offer (the tag if none was made) stands for the rest of the day. */
   | { kind: 'walk'; price: number; line: string; insulted: boolean };
 
-const ACCEPT = [
-  'Go on then, {price}. You drive a hard bargain.',
-  "{price}? Done. Don't tell the others.",
-  'Fair enough. {price} it is.',
-  'You know your stuff. {price}, shake on it.',
-];
-const COUNTER = [
-  'Not a chance. {price}, and I’m being generous.',
-  "I can't go that low. {price}?",
-  'Meet me at {price}.',
-  'Hmm. {price}, final offer. Well, nearly.',
-];
-const INSULT = [
-  'Are you having a laugh? {price}.',
-  "That's an insult to the cartridge. {price}.",
-  'I paid more than that for it myself! {price}.',
-];
-const WALK = [
-  "Enough. It's {price}, take it or leave it.",
-  "We're done haggling. {price}, my last word.",
-  "You've worn me out. {price}, not a coin less.",
-];
-
 /**
  * A haggle over one copy, as a short exchange: the player makes offers (cheeky, fair, polite:
  * shares of the tag); the stallholder, who has a lowest price in mind (drawn per copy and day, so
@@ -73,17 +60,35 @@ export class Negotiation {
   private counterPrice: number;
   private finished: { price: number } | null = null;
   private turn = 0;
+  /** What the player's arguments took off the lowest share (`argue`). */
+  private argued = 0;
+  private readonly used = new Set<ArgumentKind>();
+  /** Set on their price: a showpiece's seller, or a lowest share drawn in the top half (they bristle at "till Sunday"). */
+  private readonly stubborn: boolean;
+  private lines: HaggleLineSet = HAGGLE_LINES.plain;
 
   constructor(private readonly item: StockItem, private readonly mood: NegotiationMood) {
     this.tag = item.tagPrice;
     const kind = item.source === 'showpiece' || item.source === 'estate' || item.source === 'grail' ? 'showpiece' : item.condition === 'worn' ? 'worn' : 'ordinary';
     const [lo, hi] = NEGOTIATION.floor[kind];
-    this.drawn = lo + unit01(`${mood.day}:floor:${item.game.id}`) * (hi - lo) + mood.soured * NEGOTIATION.moodPenalty;
+    const u = unit01(`${mood.day}:floor:${item.game.id}`);
+    this.drawn = lo + u * (hi - lo) + mood.soured * NEGOTIATION.moodPenalty;
+    this.stubborn = kind === 'showpiece' || u > 0.5;
     this.sway = mood.loyalty * NEGOTIATION.loyalty + (mood.coffee ? NEGOTIATION.coffee.floor : 0) + (mood.rain ? NEGOTIATION.rain : 0);
     this.share = this.swayed();
     this.floor = this.floorFor(this.share);
     this.patience = Negotiation.patienceFor(mood.soured, mood.coffee);
     this.counterPrice = this.tag;
+  }
+
+  /** Who is talking: the seller's voice (`haggleLines`), set before the first line is said. */
+  useVoice(voice: HaggleVoice): void {
+    this.lines = HAGGLE_LINES[voice];
+  }
+
+  /** The seller's first words, the tag in their voice. */
+  get opening(): string {
+    return this.say(this.lines.open, this.tag);
   }
 
   /** The offers a stallholder hears before losing patience, soured `soured` times today, with or without the player's coffee. */
@@ -110,7 +115,7 @@ export class Negotiation {
    * knows what they have: moved a little, never under `GRAIL.floor`.
    */
   private swayed(): number {
-    const share = this.drawn + Math.max(-NEGOTIATION.maxSway, this.sway);
+    const share = this.drawn - this.argued + Math.max(-NEGOTIATION.maxSway, this.sway);
     return this.item.source === 'grail' ? Math.max(GRAIL.floor, share) : share;
   }
 
@@ -162,25 +167,63 @@ export class Negotiation {
     if (this.finished) return { kind: 'accept', price: this.finished.price, line: `We already shook on ${formatCoins(this.finished.price)}.` };
     const offered = this.offerPrice(kind);
     this.turn++;
-    if (offered >= this.counterPrice) return this.close(this.counterPrice, ACCEPT);
-    if (offered >= this.floor) return this.close(offered, ACCEPT);
+    if (offered >= this.counterPrice) return this.close(this.counterPrice, this.lines.accept);
+    if (offered >= this.floor) return this.close(offered, this.lines.accept);
     const insulted = offered < this.floor - this.tag * NEGOTIATION.insult;
     this.patience -= insulted ? 2 : 1;
     if (this.patience <= 0) {
       // Take it or leave it: the last counter-offer stands, as when the player walks off (so walking off never beats this).
       this.finished = { price: this.counterPrice };
-      return { kind: 'walk', price: this.counterPrice, line: this.say(WALK, this.counterPrice), insulted };
+      return { kind: 'walk', price: this.counterPrice, line: this.say(this.lines.walk, this.counterPrice), insulted };
     }
     // Each counter halves the way down to the lowest price (never under it, never over the last one).
     const next = Math.max(this.floor, Math.round(this.floor + (this.counterPrice - this.floor) * (insulted ? 0.8 : 0.5)));
     this.counterPrice = Math.min(this.counterPrice, next);
-    return { kind: 'counter', price: this.counterPrice, line: this.say(insulted ? INSULT : COUNTER, this.counterPrice), insulted };
+    return { kind: 'counter', price: this.counterPrice, line: this.say(insulted ? this.lines.insult : this.lines.counter, this.counterPrice), insulted };
+  }
+
+  /** The arguments the player may still make: the copy's flaw (once), and "till Sunday" (once). None once the deal is done. */
+  get arguments(): ArgumentKind[] {
+    if (this.finished) return [];
+    const flaw: ArgumentKind | null = this.item.condition === 'noManual' ? 'manual' : this.item.condition === 'worn' ? 'worn' : null;
+    return ([flaw, 'later'] as (ArgumentKind | null)[]).filter((a): a is ArgumentKind => a !== null && !this.used.has(a));
+  }
+
+  /**
+   * The player argues `kind` (`NEGOTIATION.argument`): a flaw lowers the lowest price and brings the asking one down a
+   * little; "till Sunday" brings the asking price halfway down, or, to a seller set on their price, costs a point of
+   * patience (out of patience, their price stands as after an offer).
+   */
+  argue(kind: ArgumentKind): Reply {
+    if (this.finished || this.used.has(kind)) return { kind: 'counter', price: this.counterPrice, line: this.say(this.lines.counter, this.counterPrice), insulted: false };
+    this.used.add(kind);
+    this.turn++;
+    if (kind === 'later' && this.stubborn) {
+      this.patience--;
+      if (this.patience <= 0) {
+        this.finished = { price: this.counterPrice };
+        return { kind: 'walk', price: this.counterPrice, line: this.say(this.lines.walk, this.counterPrice), insulted: false };
+      }
+      return { kind: 'counter', price: this.counterPrice, line: this.say(this.lines.laterNo, this.counterPrice), insulted: false };
+    }
+    if (kind !== 'later') {
+      this.argued += NEGOTIATION.argument.flaw;
+      this.share = this.swayed();
+      this.floor = this.floorFor(this.share);
+    }
+    const way = kind === 'later' ? NEGOTIATION.argument.later : 0.3;
+    this.counterPrice = Math.min(this.counterPrice, Math.max(this.floor, Math.round(this.counterPrice - (this.counterPrice - this.floor) * way)));
+    const flaw = kind === 'manual' ? 'the missing manual' : 'the worn box';
+    const lines = kind === 'later' ? this.lines.laterYes : this.lines.flaw;
+    // The flaw opens a sentence in some lines: capitalised there.
+    const line = this.say(lines, this.counterPrice).replace(/(^|[.!?…]\s+)\{flaw\}/g, (_, lead: string) => `${lead}${capitalise(flaw)}`).replace('{flaw}', flaw);
+    return { kind: 'counter', price: this.counterPrice, line, insulted: false };
   }
 
   /** The player takes the standing counter-offer. */
   acceptCounter(): Reply {
     if (this.finished) return { kind: 'accept', price: this.finished.price, line: `We already shook on ${formatCoins(this.finished.price)}.` };
-    return this.close(this.counterPrice, ACCEPT);
+    return this.close(this.counterPrice, this.lines.accept);
   }
 
   /** The player walks off mid-haggle: the last counter-offer stands for the day (the tag if none was made). */
@@ -196,6 +239,6 @@ export class Negotiation {
 
   private say(lines: readonly string[], price: number): string {
     const i = Math.floor(unit01(`${this.mood.day}:line:${this.item.game.id}:${this.turn}`) * lines.length);
-    return lines[i]!.replace('{price}', `${formatCoins(price)}`);
+    return lines[i]!.replace('{price}', `${formatCoins(price)}`).replace('{game}', this.item.game.title);
   }
 }

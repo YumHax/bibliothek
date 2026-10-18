@@ -45,6 +45,10 @@ export const KEYS = {
   market: save('market.v1'),
   standing: save('standing.v1'),
   notices: save('notices.v1'),
+  /** How many times each tip told a limited number of times was shown (`TipOptions.times`). */
+  tipsSeen: save('tipsSeen.v1'),
+  /** The last lines said to the player and cards read, for "What was said" (`notices/speechLog`). */
+  saidLog: save('saidLog.v1'),
   calendar: save('calendar.v1'),
   arcadeScores: save('arcade.v2'),
   arcadeScoresLegacy: save('arcade.v1'),
@@ -75,6 +79,8 @@ export const KEYS = {
   streetShops: save('streetShops.v1'),
   /** What the player carries from Front Street's shops (`errands/`): the scrap, the treats, the bunch, the croissant; and today's buys. */
   pocket: save('pocket.v1'),
+  /** The florist's flowers in the kitchen's vase, and the game day they went in (`errands/vase`). */
+  vase: save('vase.v1'),
   /** The stray cat: how far he trusts the player, the last real day he was fed and brought a find (`street/life/StrayCat`). */
   strayCat: save('strayCat.v1'),
   /** Front Street's moments for the collector's book and the story: the stray come home, a secret found, a find (`social/street/streetMarks`). */
@@ -93,6 +99,8 @@ export const KEYS = {
   rival: save('rival.v1'),
   /** The saleroom's results, lot by lot, for the sale day (`economy/AuctionHouse`). */
   auction: save('auction.v1'),
+  /** The player's copies entered for a coming sale, waiting for its hammer (`economy/AuctionHouse` consignments). */
+  consignments: save('consignments.v1'),
   /** Sealed box lots bought, waiting at home to be unpacked, and the flea market's carton of the day (`economy/SealedLots`). */
   sealedLots: save('sealedLots.v1'),
   scratch: save('scratch.v1'),
@@ -163,6 +171,8 @@ export const KEYS = {
   albumFinds: save('albumFinds.v1'),
   /** The player's photos glued in Mémé's album after Félix's pages, small JPEGs (`grandma/albumPrints`). */
   albumPrints: save('albumPrints.v1'),
+  /** Each memory's still for Mémé's album, taken the first time it played, small JPEGs (`memories/memoryStills`). */
+  memoryStills: save('memoryStills.v1'),
   /** The photo mode's last shots kept small, to give Mémé (`photo/photoRoll`). */
   photoRoll: save('photoRoll.v1'),
   /** What the player did with Mémé: the day of the last quiz, crossword and wool, the wool's sessions, the cards' tally (`grandma/pastimes`). */
@@ -187,6 +197,10 @@ export const KEYS = {
   rouxMove: save('rouxMove.v1'),
   /** The attic up the lift: whether its code was found, the collector's cabinet beaten, his chest opened (`world/attic/atticState`). */
   attic: save('attic.v1'),
+  /** Whether the endless stairs' nameless door answered once, past the fifth wrap (`world/stairwell/endless/StrangeDoor`). */
+  endlessDoor: save('endlessDoor.v1'),
+  /** Félix's shoebox on Mrs Roux's hearth: opened, its game taken (`world/annex/FelixShoebox`). */
+  felixShoebox: save('felixShoebox.v1'),
   /** The roof's aerial: where it points, the old channels it brought in for the flat's TV (`world/roof/channels`). */
   aerial: save('aerial.v1'),
   /** The building's treasure hunt, the sixth floor: the clues found and when (`building/hunt`). */
@@ -241,6 +255,12 @@ export const KEYS = {
   /** The LaunchBox scans found per game (backs, spines, cartridges, discs), and the art addresses answered 404 lately. */
   scanCache: `${CACHE_PREFIX}scans.v1`,
   artMisses: `${CACHE_PREFIX}artMisses.v1`,
+  /** Where each game's longplay was left off: the video and the second, to go on from there next time (`game/longplayPlaces`). */
+  longplayPlaces: save('longplayPlaces.v1'),
+  /** The homebrew carts' battery saves: each NES cart's 8 KB of save RAM, base64 (`emulator/nesBattery`). */
+  nesBattery: save('nesBattery.v1'),
+  /** The boxes the player set down on a table or the TV stand for the day, by spot: the game and the day (`world/strays/StrayGames`). */
+  strayLaid: save('strayLaid.v1'),
   /** The press's scores and a quoted line per game, from its Wikipedia article (`reviews/Reviews`). */
   reviewsCache: `${CACHE_PREFIX}reviews.v1`,
   /** How long each step of the page's start took on this browser, for the loading bar's pace (`ui/loading`). */

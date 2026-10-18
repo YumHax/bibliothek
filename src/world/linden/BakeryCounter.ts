@@ -83,6 +83,7 @@ export class BakeryCounter extends THREE.Group implements Furniture, Interactabl
     }
     session.pay({
       price: BREAD.price,
+      title: 'A baguette',
       paid: () => {
         bread.buy();
         return pick(random, BREAD_WORDS.sold);

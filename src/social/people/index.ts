@@ -1,17 +1,31 @@
 import type { PersonCard, PersonId } from '../types';
 import { BUILDING_PEOPLE } from './building';
 import { FAMILY_PEOPLE } from './family';
+import { DEEPER } from './deeper';
 import { FRIEND_PEOPLE } from './friends';
+import { GUEST_PEOPLE } from './guests';
 import { KID_PEOPLE } from './kids';
+import { LIGHT_TOPICS } from './lightTopics';
 import { MARKET_STALL_PEOPLE } from './market';
 import { ARCADE_PEOPLE, MARKET_PEOPLE, RIVAL_PEOPLE, STREET_PEOPLE } from './town';
 
 /*
- * Everyone the player can know, by id (docs/social.md "People"). The fixed cast comes from the group files; a
- * person met only once (a small ad's seller, a stallholder of the day) is added at run time with `addPerson`.
+ * Everyone the player can know, by id (docs/social.md "People"). The fixed cast comes from the group files, with
+ * their friends-only answers (`deeper`) and the light people's second topics (`lightTopics`) laid on; a person met
+ * only once (a small ad's seller, a stallholder of the day) is added at run time with `addPerson`.
  */
 
-const CAST: readonly PersonCard[] = [...FAMILY_PEOPLE, ...FRIEND_PEOPLE, ...BUILDING_PEOPLE, ...STREET_PEOPLE, ...MARKET_PEOPLE, ...MARKET_STALL_PEOPLE, ...ARCADE_PEOPLE, ...RIVAL_PEOPLE, ...KID_PEOPLE];
+/** `card` with its deeper answers and extra topics. */
+function dressed(card: PersonCard): PersonCard {
+  const extra = LIGHT_TOPICS[card.id] ?? [];
+  const topics = [...(card.topics ?? []), ...extra].map((t) => {
+    const deeper = DEEPER[`${card.id}:${t.id}`];
+    return deeper && !t.deeper ? { ...t, deeper } : t;
+  });
+  return topics.length ? { ...card, topics } : card;
+}
+
+const CAST: readonly PersonCard[] = [...FAMILY_PEOPLE, ...FRIEND_PEOPLE, ...BUILDING_PEOPLE, ...STREET_PEOPLE, ...MARKET_PEOPLE, ...MARKET_STALL_PEOPLE, ...ARCADE_PEOPLE, ...RIVAL_PEOPLE, ...KID_PEOPLE, ...GUEST_PEOPLE].map(dressed);
 
 const byId = new Map<PersonId, PersonCard>(CAST.map((p) => [p.id, p]));
 const byDoor = new Map<string, PersonId>(CAST.filter((p) => p.door).map((p) => [p.door!, p.id]));

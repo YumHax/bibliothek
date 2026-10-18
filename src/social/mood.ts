@@ -1,5 +1,6 @@
 import { KEYS, PersistedStore } from '@/persistence';
 import { gameDayRandom } from '@/time/daily';
+import { TRADE_MOODS } from './moodLines';
 import { findPerson } from './people';
 import { BIRTHDAY_CYCLE, MOOD_DAYS, MOODS, type MoodId } from './socialPlan';
 import type { PersonId } from './types';
@@ -75,11 +76,11 @@ export function moodOf(id: PersonId, day: number, hour: number): { mood: MoodId;
   const r = gameDayRandom(`mood:${id}`, day);
   const draw = r();
   if (draw < MOOD_DAYS.good) {
-    const causes = card?.moods?.good ?? GOOD_CAUSES;
+    const causes = card?.moods?.good ?? (card?.trade ? TRADE_MOODS[card.trade]?.good : undefined) ?? GOOD_CAUSES;
     at = 3;
     why = causes[Math.floor(r() * causes.length)] ?? null;
   } else if (draw < MOOD_DAYS.good + MOOD_DAYS.low) {
-    const causes = card?.moods?.low ?? LOW_CAUSES;
+    const causes = card?.moods?.low ?? (card?.trade ? TRADE_MOODS[card.trade]?.low : undefined) ?? LOW_CAUSES;
     at = 1;
     why = causes[Math.floor(r() * causes.length)] ?? null;
   }

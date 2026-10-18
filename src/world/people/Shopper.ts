@@ -135,10 +135,11 @@ export class Shopper extends THREE.Group implements Furniture, Updatable {
     return this.present && this.state.kind === 'browse' ? this.state.spot : null;
   }
 
-  /** They make up their mind and buy something: a cheer, and they move on a little later. */
+  /** They make up their mind and buy something: a cheer, and they move on a little later, the game in a carrier bag. */
   buy(): void {
     if (this.state.kind !== 'browse') return;
     this.model.react('great');
+    this.model.hold('gamebag');
     this.state.left = Math.min(this.state.left, 1.8);
   }
 
@@ -157,6 +158,7 @@ export class Shopper extends THREE.Group implements Furniture, Updatable {
       }
       if (!present) {
         this.release();
+        this.model.hold(null);
         this.state = { kind: 'linger', left: 1 + random() * 3 };
       }
       return;
@@ -174,6 +176,8 @@ export class Shopper extends THREE.Group implements Furniture, Updatable {
       this.walkDoor(dt, this.state.path, () => {
         this.fadeTo = 0;
         this.state = { kind: 'gone' };
+        // Out of the door: what they bought went home with them.
+        this.model.hold(null);
       });
       this.model.update(dt);
       return;

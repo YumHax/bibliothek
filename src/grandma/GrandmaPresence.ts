@@ -2,6 +2,7 @@ import { KEYS, PersistedStore, safeStorage } from '@/persistence';
 import { gameDayOf, type JournalDay, type JournalEntry } from '@/journal/Journal';
 import { SUNDAY_WEEKDAY, weekdayOf } from '@/time/wakefulness';
 import { GRANDMA_STORIES, type GrandmaStory } from './storyLines';
+import { streetMarked } from '@/social/street/streetMarks';
 import type { HeardKind } from './presenceLines';
 
 /*
@@ -75,11 +76,16 @@ export class GrandmaPresence {
 
   /** The next story to tell: the first not told that the memories seen allow, else one told before (`again`). */
   nextStory(seen: (memory: string) => boolean, pick: (count: number) => number): { story: GrandmaStory; again: boolean } | null {
-    const open = GRANDMA_STORIES.filter((s) => !s.after || seen(s.after));
+    const open = GRANDMA_STORIES.filter((s) => (!s.after || seen(s.after)) && (!s.found || streetMarked(s.found)));
     const fresh = open.find((s) => !this.state.stories.includes(s.id));
     if (fresh) return { story: fresh, again: false };
     const story = open[pick(open.length)];
     return story ? { story, again: true } : null;
+  }
+
+  /** Whether story `id` has been told to the end. */
+  hasTold(id: string): boolean {
+    return this.state.stories.includes(id);
   }
 
   /** `id` told to the end. */

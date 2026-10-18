@@ -95,7 +95,8 @@
 .storage-panel__card,
 .borrow-panel__card,
 .scratch-panel__card,
-.people-book__book {
+.people-book__book,
+.ui-card.ui-panel__card {
   width: min(var(--card-w, var(--card-w-md)), 100%);
   max-height: 100%;
   overflow-y: auto;
@@ -105,7 +106,8 @@
 /* The buttons along a card's foot: to the right, the primary one last. */
 .ui-actions,
 .household-panel__card footer,
-.people-book__book footer {
+.people-book__book footer,
+.ui-card.ui-panel__card > .ui-panel__footer {
   display: flex;
   flex-wrap: wrap;
   justify-content: flex-end;
@@ -271,17 +273,21 @@ select option { background: var(--ui-panel-solid); }
 .notice-chip__icon--ticket { display: inline-block; border-radius: var(--ui-radius-2xs); background: var(--ui-ticket); }
 /* A line that says how it went: dim until it matters, red when it went wrong. */
 .ui-status,
+.ui-card.ui-panel__card > .ui-panel__status,
 .catalogue__status,
 .collection-editor__status { min-height: 1.2em; font-size: var(--fs-4); opacity: 0.8; }
 /* A sheet's line keeps room for two lines above its list: an armed press's longer line never pushes the list down. */
 .catalogue__status { min-height: 2.5em; }
 .ui-status--error,
+.ui-panel__status--error,
 .catalogue__status--error,
 .collection-editor__status--error { color: var(--ui-danger); opacity: 1; }
 /* Muted running text: a hint, a detail, what a thing is for. */
 .ui-note { margin: 0; font-size: var(--fs-4); color: var(--ui-text-dim); }
 /* A panel's title in the display face, a section's small-capitals head. */
-.ui-title { margin: 0; font-family: var(--ui-font-display); font-weight: 400; font-size: var(--fs-t2); letter-spacing: 0.04em; }
+.ui-title,
+.ui-card.ui-panel__card > .ui-panel__header h2 { margin: 0; font-family: var(--ui-font-display); font-weight: 400; font-size: var(--fs-t2); letter-spacing: 0.04em; }
+.ui-card.ui-panel__card > .ui-panel__header { margin-bottom: var(--sp-2); }
 .ui-eyebrow,
 .household-panel__card h3 { font-size: var(--fs-3); letter-spacing: 0.08em; text-transform: uppercase; color: var(--ui-text-dim); }
 /* The pictogram sprite a paper panel paints once (`panel/pictograms`): its symbols are referred to, never shown. */
@@ -291,3 +297,33 @@ select option { background: var(--ui-panel-solid); }
   height: 0;
   overflow: hidden;
 }
+/* The letters on screen for a controller (`panel/letterPad`): a grid of keys, Space and Delete wide on a row of their own. */
+.ui-letter-pad {
+  display: grid;
+  grid-template-columns: repeat(var(--pad-columns, 7), 1fr);
+  gap: var(--sp-1);
+  margin-top: var(--sp-2);
+}
+.ui-letter-pad__key { padding: 0.35em 0; font-size: var(--fs-6); font-weight: 600; text-align: center; }
+.ui-letter-pad__key--wide { grid-column: span var(--pad-span, 3); font-weight: 400; font-size: var(--fs-4); }
+/* A designed empty list (`widgets.emptyState` with options): a pictogram in a soft disc, a head, the why, the next step. */
+.ui-empty-block {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--sp-1);
+  padding: var(--sp-4) var(--sp-3);
+  text-align: center;
+}
+.ui-empty-block__picture {
+  width: 2.6rem;
+  height: 2.6rem;
+  padding: 0.55rem;
+  margin-bottom: var(--sp-1);
+  border: 1.5px dashed currentColor;
+  border-radius: 50%;
+  opacity: 0.55;
+}
+.ui-empty-block__title { margin: 0; font-family: var(--ui-font-hand); font-size: var(--fs-7); }
+.ui-empty-block__text { margin: 0; max-width: 28rem; font-size: var(--fs-4); opacity: var(--ui-faint); }
+.ui-empty-block__action { margin-top: var(--sp-2); }

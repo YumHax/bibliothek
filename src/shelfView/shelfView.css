@@ -1,0 +1,59 @@
+/*
+ * Facing a bookcase (`ShelfView.ts`, docs/furnishing.md "The bookcase view"): the crosshair is freed and goes where the
+ * mouse takes it (`--shelf-cursor-x` / `-y` on <body>, set every move), its caption and the click's reaction under it;
+ * and the strip of masking tape the player writes what they look for on (`ShelfFilter.ts`).
+ */
+@layer tokens, base, components, panels;
+@layer panels {
+  body.shelf-viewing .crosshair {
+    left: var(--shelf-cursor-x, 50%);
+    top: var(--shelf-cursor-y, 50%);
+  }
+  body.shelf-viewing .hud-slot--crosshair {
+    left: var(--shelf-cursor-x, 50%);
+    right: auto;
+    top: calc(var(--shelf-cursor-y, 50%) + 1.5rem);
+    translate: -50% 0;
+    width: max-content;
+    max-width: 60vw;
+  }
+
+  .shelf-filter {
+    position: fixed;
+    top: var(--sp-6);
+    left: 50%;
+    translate: -50% 0;
+    z-index: var(--z-hud);
+    animation: shelf-filter-in var(--dur-enter) var(--ui-ease);
+  }
+  .shelf-filter__tape {
+    display: flex;
+    align-items: baseline;
+    gap: 0.6rem;
+    padding: 0.55rem 1.2rem 0.6rem;
+    background: var(--paper-note);
+    color: var(--ink-note);
+    box-shadow: var(--ui-shadow-raised);
+    rotate: -1.2deg;
+    /* Torn ends: the tape was ripped off the roll, not cut. */
+    clip-path: polygon(0 6%, 2% 0, 98% 4%, 100% 0, 99% 50%, 100% 100%, 97% 94%, 3% 100%, 0 96%, 1% 50%);
+  }
+  .shelf-filter__head {
+    font-family: var(--ui-font-hand);
+    font-size: 1.05rem;
+    opacity: 0.75;
+  }
+  .shelf-filter__field {
+    width: 15rem;
+    border: 0;
+    border-bottom: 1px solid var(--paper-note-line);
+    background: transparent;
+    color: inherit;
+    font-family: var(--ui-font-hand);
+    font-size: 1.5rem;
+    line-height: 1.1;
+    outline: none;
+    caret-color: var(--ink-note);
+  }
+  @keyframes shelf-filter-in { from { opacity: 0; translate: -50% -0.6rem; } }
+}

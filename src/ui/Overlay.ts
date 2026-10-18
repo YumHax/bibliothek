@@ -1,7 +1,7 @@
 import type { Input } from '@/core/Input';
 import { playUiSound } from '@/audio/uiSounds';
 import { CONTROLS, type ControlDevice, type ControlGroup } from './controls';
-import { escapeHtml } from './html';
+import { html, paint, raw, type Html } from './panel/html';
 import { onKeyLabelsChange, renderKeys } from './keys';
 import { ControlsScreen } from './menu/ControlsScreen';
 import { isField, moveFocus, navItems, panelOpen } from './menu/MenuNav';
@@ -54,6 +54,8 @@ export interface ConfirmOptions {
   onYes(): void;
   /** A third button that runs and leaves the question up (a copy of the save before a wipe). */
   also?: { label: string; run(): void };
+  /** Only something to read (a file that was not a save): no Cancel, the one button closes it. */
+  info?: boolean;
 }
 
 interface OverlayOptions {
@@ -84,10 +86,20 @@ const TEXT_SIZES = [
   { id: 'large', label: 'Large' },
 ] as const;
 
-const START_FOOT = 'Click, press <kbd>Enter</kbd> or a controller button to start';
-const RESUME_FOOT = '<kbd>Enter</kbd> or click outside to resume · <kbd>Start</kbd> on a controller';
+const START_FOOT = html`Click, press <kbd>Enter</kbd> or a controller button to start`;
+const RESUME_FOOT = html`<kbd>Enter</kbd> or click outside to resume · <kbd>Start</kbd> on a controller`;
 const TOUCH_FOOT = 'Tap a button';
-const BACK = '<button type="button" class="ui-btn menu__back" data-nav data-action="back">‹ Back</button>';
+const BACK = html`<button type="button" class="ui-btn menu__back" data-nav data-action="back">‹ Back</button>`;
+/** The busy button's ticking ellipsis. */
+const DOTS = html`<span class="menu__dots" aria-hidden="true"></span>`;
+
+/** The pause menu's groups, in order: what the player has, going out, the room they are in. */
+type PauseGroup = 'yours' | 'out' | 'room';
+const PAUSE_GROUPS: readonly { id: PauseGroup; label: string }[] = [
+  { id: 'yours', label: 'Your things' },
+  { id: 'out', label: 'Going out' },
+  { id: 'room', label: 'This room' },
+];
 
 /**
  * The menus shown while the player is out of the room, plus the in-room crosshair and hover label (what the game tells
@@ -149,33 +161,39 @@ export class Overlay {
     const resuming = options.hasProgress === true;
     this.root = document.createElement('div');
     this.root.className = 'overlay menu';
-    this.root.innerHTML = `
-      <div class="menu__card ui-card" role="dialog" aria-modal="true" aria-label="Menu">
+    paint(
+      this.root,
+      html`<div class="menu__card ui-card" role="dialog" aria-modal="true" aria-label="Menu">
         <section class="menu__screen" data-screen="main">
           <p class="menu__return" data-role="return" role="button" tabindex="0" hidden>Click or press Enter to return to the room</p>
           <p class="menu__kicker" data-role="kicker" hidden>Paused</p>
           <h1>Bibliothek</h1>
           <p class="menu__tagline" data-role="tagline">A video game collection, one box at a time</p>
-          <dl class="menu__status" data-role="status" hidden></dl>
+          <dl class="menu__status" data-role="summary" hidden></dl>
           <nav class="menu__buttons">
             <button type="button" class="ui-btn ui-btn--primary" data-nav data-action="start">${resuming ? 'Continue' : 'Enter the room'}</button>
-            ${resuming && options.onNewGame ? '<button type="button" class="ui-btn" data-nav data-action="new-game">New game</button>' : ''}
-            ${options.goHome ? '<button type="button" class="ui-btn" data-nav data-action="home" hidden>Go home</button>' : ''}
-            ${options.onCollection ? '<button type="button" class="ui-btn" data-nav data-action="collection" hidden>Collection <kbd data-key="Tab"></kbd></button>' : ''}
+            ${resuming && options.onNewGame ? html`<button type="button" class="ui-btn" data-nav data-action="new-game">New game</button>` : ''}
+            ${options.goHome ? html`<button type="button" class="ui-btn" data-nav data-action="home" hidden>Go home</button>` : ''}
+            ${PAUSE_GROUPS.map(
+              (g) => html`<div class="menu__group" data-group="${g.id}" role="group" aria-label="${g.label}" hidden>
+                <p class="menu__group-head">${g.label}</p>
+                <div class="menu__group-buttons">${g.id === 'yours' && options.onCollection ? html`<button type="button" class="ui-btn" data-nav data-action="collection" hidden><span>Collection</span><kbd data-key="Tab"></kbd></button>` : ''}</div>
+              </div>`,
+            )}
             <button type="button" class="ui-btn" data-nav data-action="settings">Settings</button>
             <button type="button" class="ui-btn" data-nav data-action="controls">Controls</button>
           </nav>
           <ul class="menu__essentials" data-role="essentials"></ul>
-          ${options.textSize ? `<div class="menu__text-size" data-role="text-size" role="radiogroup" aria-label="Text size" hidden><span>Text size</span>${TEXT_SIZES.map((t) => `<button type="button" class="ui-btn" role="radio" data-nav data-text-size="${t.id}">${t.label}</button>`).join('')}</div>` : ''}
+          ${options.textSize ? html`<div class="menu__text-size" data-role="text-size" role="radiogroup" aria-label="Text size" hidden><span>Text size</span>${TEXT_SIZES.map((t) => html`<button type="button" class="ui-btn" role="radio" data-nav data-text-size="${t.id}">${t.label}</button>`)}</div>` : ''}
           <p class="menu__foot" data-role="foot"></p>
-          ${options.version ? `<p class="menu__version" data-role="version">v${escapeHtml(options.version)} · progress saves automatically</p>` : ''}
+          ${options.version ? html`<p class="menu__version" data-role="version">v${options.version}</p>` : ''}
         </section>
         <section class="menu__screen" data-screen="settings" hidden>
           <header class="menu__header">${BACK}<h2>Settings</h2></header>
           <div class="menu__tabs" role="tablist" aria-label="Settings">
-            ${SETTINGS_TABS.map((t) => `<button type="button" class="ui-btn" role="tab" id="settings-tab-${t.id}" aria-controls="settings-${t.id}" data-nav data-tab="${t.id}">${t.label}</button>`).join('')}
+            ${SETTINGS_TABS.map((t) => html`<button type="button" class="ui-btn" role="tab" id="settings-tab-${t.id}" aria-controls="settings-${t.id}" data-nav data-tab="${t.id}">${t.label}</button>`)}
           </div>
-          ${SETTINGS_TABS.map((t) => `<div class="menu__body" role="tabpanel" id="settings-${t.id}" aria-labelledby="settings-tab-${t.id}" data-body="${t.id}" hidden></div>`).join('')}
+          ${SETTINGS_TABS.map((t) => html`<div class="menu__body" role="tabpanel" id="settings-${t.id}" aria-labelledby="settings-tab-${t.id}" data-body="${t.id}" hidden></div>`)}
         </section>
         <section class="menu__screen" data-screen="controls" hidden>
           <header class="menu__header">${BACK}<h2>Controls</h2></header>
@@ -189,7 +207,8 @@ export class Overlay {
             <button type="button" class="ui-btn ui-btn--primary" data-nav data-action="confirm-yes"></button>
           </div>
         </section>
-      </div>`;
+      </div>`,
+    );
     this.card = this.root.querySelector('.menu__card')!;
     const screen = (name: Screen) => this.root.querySelector<HTMLElement>(`[data-screen="${name}"]`)!;
     this.screens = { main: screen('main'), settings: screen('settings'), controls: screen('controls'), confirm: screen('confirm') };
@@ -267,11 +286,11 @@ export class Overlay {
     window.clearTimeout(this.loadingSlow);
     if (loading) {
       // The ellipsis ticks (`menu__dots`); a slow connection is told the door is still being opened.
-      primary.innerHTML = 'Opening the door<span class="menu__dots" aria-hidden="true"></span>';
+      paint(primary, html`Opening the door${DOTS}`);
       primary.setAttribute('aria-label', 'Opening the door');
       this.loadingSlow = window.setTimeout(() => {
         if (!this.loading) return;
-        primary.innerHTML = 'Opening the door, still loading<span class="menu__dots" aria-hidden="true"></span>';
+        paint(primary, html`Opening the door, still loading${DOTS}`);
         primary.setAttribute('aria-label', 'Opening the door, still loading');
       }, STILL_LOADING_MS);
     } else {
@@ -293,8 +312,8 @@ export class Overlay {
     primary.toggleAttribute('disabled', resuming || this.loading);
     primary.setAttribute('aria-busy', String(resuming || this.loading));
     if (resuming) {
-      primary.innerHTML = 'Resuming<span class="menu__dots" aria-hidden="true"></span>';
-      line.innerHTML = 'Resuming<span class="menu__dots" aria-hidden="true"></span>';
+      paint(primary, html`Resuming${DOTS}`);
+      paint(line, html`Resuming${DOTS}`);
     } else {
       line.textContent = 'Click or press Enter to return to the room';
       this.renderPrimary();
@@ -337,7 +356,7 @@ export class Overlay {
    * only once the game has started, and while `shown` says so. `id` names it (unique); `run` is called on a click or Enter.
    * A `label` given as a function is asked again each time the menu shows (a count on it).
    */
-  addPauseButton(id: string, label: string | (() => string), run: () => void, shown?: () => boolean): void {
+  addPauseButton(id: string, label: string | (() => string), run: () => void, shown?: () => boolean, place: { group?: PauseGroup; key?: string } = {}): void {
     const action = `pause-${id}`;
     this.pauseActions.set(action, run);
     if (shown) this.pauseShown.set(action, shown);
@@ -348,10 +367,11 @@ export class Overlay {
     button.dataset.nav = '';
     button.dataset.action = action;
     button.dataset.pause = '';
-    button.textContent = typeof label === 'function' ? label() : label;
+    paint(button, html`<span data-role="label">${typeof label === 'function' ? label() : label}</span>${place.key ? html`<kbd data-key="${place.key}"></kbd>` : ''}`);
     button.hidden = !this.started;
-    const settings = this.screens.main.querySelector('[data-action="settings"]');
-    settings?.parentElement?.insertBefore(button, settings);
+    const group = this.screens.main.querySelector(`[data-group="${place.group ?? 'room'}"] .menu__group-buttons`);
+    group?.appendChild(button);
+    this.renderKeys();
   }
 
   /** Adds a section to a tab of the Settings screen (the graphics level, the cat...). */
@@ -384,6 +404,7 @@ export class Overlay {
     const also = this.screens.confirm.querySelector<HTMLElement>('[data-action="confirm-also"]')!;
     also.hidden = !options.also;
     also.textContent = options.also?.label ?? '';
+    this.screens.confirm.querySelector<HTMLElement>('[data-action="confirm-no"]')!.hidden = options.info === true;
     this.show('confirm');
   }
 
@@ -466,7 +487,10 @@ export class Overlay {
   private setDevice(device: ControlDevice): void {
     if (device === this.device) return;
     this.device = device;
-    if (this.visible) this.renderFoot();
+    if (this.visible) {
+      this.renderFoot();
+      this.renderKeys();
+    }
     // The caption up now gets the new device's key cap.
     if (this.hoverText && !this.label.hidden) this.renderCaption(this.hoverText);
   }
@@ -485,17 +509,23 @@ export class Overlay {
     if (newGame) newGame.hidden = paused;
     const collection = button('collection');
     if (collection) collection.hidden = !paused;
+    for (const group of this.screens.main.querySelectorAll<HTMLElement>('[data-group]')) group.hidden = !paused;
     const home = button('home');
     if (home) home.hidden = !paused || !this.options.goHome?.available();
     for (const extra of this.screens.main.querySelectorAll<HTMLElement>('[data-pause]')) {
       extra.hidden = !paused || !(this.pauseShown.get(extra.dataset.action ?? '')?.() ?? true);
       const label = this.pauseLabels.get(extra.dataset.action ?? '');
-      if (paused && label) extra.textContent = label();
+      const words = extra.querySelector('[data-role="label"]');
+      if (paused && label && words) words.textContent = label();
     }
-    const status = q('status');
+    // A group with nothing to offer here (no way out from the street, nothing moved) goes, its heading with it.
+    for (const group of this.screens.main.querySelectorAll<HTMLElement>('[data-group]')) {
+      if (paused) group.hidden = ![...group.querySelectorAll<HTMLElement>('button')].some((b) => !b.hidden);
+    }
+    const status = q('summary');
     const rows = paused ? (this.options.status?.() ?? []) : [];
     status.hidden = rows.length === 0;
-    status.innerHTML = rows.map(([k, v]) => `<div><dt>${escapeHtml(k)}</dt><dd>${escapeHtml(v)}</dd></div>`).join('');
+    paint(status, html`${rows.map(([k, v]) => html`<div><dt>${k}</dt><dd>${v}</dd></div>`)}`);
     this.renderKeys();
     this.renderFoot();
   }
@@ -511,20 +541,25 @@ export class Overlay {
 
   private renderFoot(): void {
     const foot = this.screens.main.querySelector<HTMLElement>('[data-role="foot"]')!;
-    foot.innerHTML = this.device === 'touch' ? TOUCH_FOOT : this.started ? RESUME_FOOT : START_FOOT;
+    paint(foot, this.device === 'touch' ? TOUCH_FOOT : this.started ? RESUME_FOOT : START_FOOT);
     this.renderTextSize();
   }
 
   /** Everything showing a key name, re-rendered when the bindings or the layout change. */
   private renderKeys(): void {
     const essentials = CONTROLS.filter((c) => c.essential);
-    this.screens.main.querySelector<HTMLElement>('[data-role="essentials"]')!.innerHTML = essentials
-      .map((c) => {
+    paint(
+      this.screens.main.querySelector<HTMLElement>('[data-role="essentials"]')!,
+      html`${essentials.map((c) => {
         const keys = this.device === 'gamepad' ? c.pad : this.device === 'touch' ? c.touch : c.keys;
-        return keys === undefined ? '' : `<li>${renderKeys(keys)} <span>${escapeHtml(c.action.toLowerCase())}</span></li>`;
-      })
-      .join('');
-    for (const kbd of this.card.querySelectorAll<HTMLElement>('kbd[data-key]')) kbd.innerHTML = renderKeys(`{${kbd.dataset.key}}`).replace(/<\/?kbd>/g, '');
+        return keys === undefined ? '' : html`<li>${raw(renderKeys(keys))} <span>${c.action.toLowerCase()}</span></li>`;
+      })}`,
+    );
+    // A pause button's key cap: on a keyboard only (a controller or a finger has no Tab or J).
+    for (const kbd of this.card.querySelectorAll<HTMLElement>('kbd[data-key]')) {
+      paint(kbd, raw(renderKeys(`{${kbd.dataset.key}}`).replace(/<\/?kbd>/g, '')));
+      kbd.hidden = this.device !== 'keyboard';
+    }
   }
 
   private selectSettingsTab(tab: SettingsTab): void {
@@ -755,9 +790,7 @@ export class Overlay {
       return;
     }
     const { name, verb } = parseCaption(text);
-    const nameHtml = name ? `<span class="hover-label__name">${escapeHtml(name)}</span>` : '';
-    const verbHtml = verb ? `<span class="hover-label__verb">${this.capHtml()}${escapeHtml(verb)}</span>` : '';
-    this.label.innerHTML = nameHtml + verbHtml;
+    paint(this.label, html`${name ? html`<span class="hover-label__name">${name}</span>` : ''}${verb ? html`<span class="hover-label__verb">${this.capHtml()}${verb}</span>` : ''}`);
   }
 
   /**
@@ -770,18 +803,19 @@ export class Overlay {
     const place = text.slice(0, who.start).replace(/ · $/, '');
     const { name: rest, verb } = parseCaption(text.slice(who.end + 3));
     const state = [person.state, rest].filter(Boolean).join(' · ');
-    const placeHtml = place ? `<span class="hover-label__place">${escapeHtml(place)} ·</span>` : '';
-    const verbHtml = verb ? `<span class="hover-label__verb">${this.capHtml()}${escapeHtml(verb)}</span>` : '';
-    this.label.innerHTML =
-      `<span class="hover-label__line">${placeHtml}<span class="hover-label__face" style="--tier:${escapeHtml(person.colour)}"></span><span class="hover-label__who">${escapeHtml(person.name)}</span>${String(tierBadge(person.tier, person.id, { small: true }))}</span>` +
-      `<span class="hover-label__line hover-label__line--state">${state ? `<span class="hover-label__state">${escapeHtml(state)}</span>` : ''}${verbHtml}</span>`;
+    const placeHtml = place ? html`<span class="hover-label__place">${place} ·</span>` : '';
+    const verbHtml = verb ? html`<span class="hover-label__verb">${this.capHtml()}${verb}</span>` : '';
+    paint(
+      this.label,
+      html`<span class="hover-label__line">${placeHtml}<span class="hover-label__face" style="--tier:${person.colour}"></span><span class="hover-label__who">${person.name}</span>${tierBadge(person.tier, person.id, { small: true })}</span><span class="hover-label__line hover-label__line--state">${state ? html`<span class="hover-label__state">${state}</span>` : ''}${verbHtml}</span>`,
+    );
     this.label.querySelector('.hover-label__face')?.appendChild(portrait(person.id, 30, person.colour));
   }
 
   /** The key cap for the device last used (`input/lastDevice`, not how the room was entered): the mouse (default), the controller's A, a finger. */
-  private capHtml(): string {
-    if (this.device === 'gamepad') return '<span class="hover-label__cap hover-label__cap--pad" aria-label="A">A</span>';
-    if (this.device === 'touch') return '<span class="hover-label__cap hover-label__cap--touch" aria-label="Tap"></span>';
-    return '<span class="hover-label__cap hover-label__cap--mouse" aria-label="Click"></span>';
+  private capHtml(): Html {
+    if (this.device === 'gamepad') return html`<span class="hover-label__cap hover-label__cap--pad" aria-label="A">A</span>`;
+    if (this.device === 'touch') return html`<span class="hover-label__cap hover-label__cap--touch" aria-label="Tap"></span>`;
+    return html`<span class="hover-label__cap hover-label__cap--mouse" aria-label="Click"></span>`;
   }
 }

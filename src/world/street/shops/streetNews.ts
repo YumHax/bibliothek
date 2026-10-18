@@ -1,4 +1,6 @@
 import { RIVAL_COLLECTOR } from '@/economy/rivalCollector';
+import { WORKS_LIFT } from '@/world/measures/street';
+import { callTalk } from '../traffic/callLog';
 import { keptAway } from '@/time/schedule';
 import { weekdayOf } from '@/time/wakefulness';
 import { ARCADE_GAMES, type ArcadeGameId } from '../../arcade/games';
@@ -6,18 +8,19 @@ import { BUSKER, GARAGE_SALE, GIVEAWAY, TRADER } from '../events/streetSchedules
 import { ANCHOR_GIG, LOCAL_QUIZ } from '@/streetShops/bars';
 import { STREET_PLAN } from '../streetPlan';
 import { clockShort } from '@/text/clock';
-import { formatNumber } from '@/text/count';
 import { formatTickets } from '@/text/money';
 import { capitalise } from '@/text/strings';
 
 /** Above this rain or snow the stallholders haggle easier (`economy/haggle`'s weather): the street says so. */
 const WET = 0.3;
+/** How many game days the street goes on about the works having moved on. */
+const WORKS_TALKED = 4;
 
 interface StreetNewsSources {
   /** Rain and snow now (0..1). */
   weather: () => { rain: number; snow: number };
   /** The arcade's challenge of the day, if the arcade keeps one. */
-  challenge?: () => { gameId: string; target: number; reward: number; done: boolean };
+  challenge?: () => { gameId: string; reward: number; done: boolean; ask: string };
   /** Whether today is the arcade's tournament day (a Saturday). */
   tournamentOn?: () => boolean;
   /** The arcade wheel's jackpot, when it is big enough to be talked about (null otherwise). */
@@ -37,6 +40,11 @@ export function streetNews({ weather, challenge, tournamentOn, jackpot, gameDay 
   const day = gameDay();
   const w = weather();
   const lines: string[] = [];
+  // The works moving on (`WORKS_LIFT`): the talk of the street for the first days after.
+  if (day >= WORKS_LIFT.afterGameDay && day < WORKS_LIFT.afterGameDay + WORKS_TALKED) lines.push('The roadworks have moved on at last: Front Street is open past the butcher’s, right down to Mill Lane. New shops to look in.');
+  // Today's ambulance, police or fire engine at a door, if there was one (`traffic/callLog`).
+  const call = callTalk(day);
+  if (call) lines.push(call);
   const traderToday = TRADER.isDay(day);
   const [from, to] = STREET_PLAN.trader.hours;
   if (traderToday && !keptAway(TRADER, w)) lines.push(`${RIVAL_COLLECTOR.name} has his suitcase out by RETRO GAMES today, ${clockShort(from)} to ${clockShort(to)}. Sells, swaps, haggles.`);
@@ -45,7 +53,7 @@ export function streetNews({ weather, challenge, tournamentOn, jackpot, gameDay 
   const c = challenge?.();
   if (c && !c.done) {
     const title = ARCADE_GAMES[c.gameId as ArcadeGameId]?.({}).title ?? c.gameId.toUpperCase();
-    lines.push(`The arcade’s challenge today: ${title}, score ${formatNumber(c.target)} for ${c.reward} extra tickets.`);
+    lines.push(`The arcade’s challenge today: ${title}, ${c.ask} for ${c.reward} extra tickets.`);
   }
   const pot = jackpot?.();
   if (pot) lines.push(`The wheel at the arcade is sitting on over ${formatTickets(Math.floor(pot / 100) * 100)}. People go in just to look at it.`);

@@ -14,6 +14,7 @@ const REAL_TIME = [
   // DOM transitions and reading times are paced in real milliseconds (a fade, a card the player reads).
   'game/Sleep.ts',
   'game/Seating.ts',
+  'game/ScreenRemote.ts',
   // Input windows (a double tap, a press twice, a hover relabel) are the player's time, not the room's.
   'game/Session.ts',
   'game/Browse.ts',

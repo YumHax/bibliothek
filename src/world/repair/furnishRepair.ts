@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { getPlatform } from '@/catalog/platforms';
-import { FAULTS, REPAIR, brokenOf } from '@/repair/consoles';
+import { REPAIR, brokenOf, faultOf } from '@/repair/consoles';
 import { PLATFORM_LIST } from '@/catalog/platforms';
 import type { BuildContext, ClassifiedsContext } from '../buildContext';
 import type { Zone } from '../zone/Zone';
@@ -85,7 +85,7 @@ export function furnishRepairCorner(zone: Zone, ctx: Pick<BuildContext, 'classif
       session.buyUpgrade({
         title: `A broken ${name}`,
         price: offer.price,
-        detail: `“${FAULTS[offer.fault].symptom}” It waits on a kitchen chair at home: open it up at the kitchen table, then bring it back working.`,
+        detail: `“${faultOf({ platform, fault: offer.fault, paid: offer.price }).symptom}” It waits on a kitchen chair at home: open it up at the kitchen table, then bring it back working.`,
         bought: () => {
           workshop.add({ platform, fault: offer.fault, paid: offer.price, from: 'TV REPAIR’s crate' });
           workshop.markCrate(day);

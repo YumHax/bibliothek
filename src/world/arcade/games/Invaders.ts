@@ -9,6 +9,8 @@ const ROUND_SECONDS = 15;
 const WAVE_TIME_BONUS = 5;
 const WAVE_BONUS = 200;
 const COLS = 8;
+/** The first wave's rows (a careful hand can clear it on the opening clock: the PERFECT WAVE is reachable), a row more each wave to `ROWS`, then one every three waves to `MAX_ROWS`. */
+const FIRST_ROWS = 2;
 const ROWS = 4;
 const MAX_ROWS = 5;
 const ALIEN_W = 16;
@@ -196,7 +198,8 @@ export class Invaders extends BaseGame {
   /** Fire held; under a diver first, then the saucer, else the nearest column of the fleet. */
   autopilot(skill: number): ArcadeControls {
     const alive = this.aliens.filter((a) => a.alive);
-    const divers = alive.filter((a) => a.dive).sort((a, b) => b.dive!.y - a.dive!.y);
+    // A diver is chased once it is low enough to get past (a steady hand keeps clearing the fleet till then; a poor one chases every one).
+    const divers = alive.filter((a) => a.dive && (skill < 0.5 || this.alienPos(a).y > SCREEN_H * 0.45)).sort((a, b) => b.dive!.y - a.dive!.y);
     let target: number;
     if (divers[0] && random() < skill + 0.2) target = this.alienPos(divers[0]).x + ALIEN_W / 2;
     else if (this.saucer && this.saucer.x > 0 && this.saucer.x < SCREEN_W && skill > 0.5) target = this.saucer.x + this.saucer.dir * 30;
@@ -379,9 +382,10 @@ export class Invaders extends BaseGame {
     });
   }
 
-  /** Wave `n`: a row more every three waves (to five). */
+  /** Wave `n`: `FIRST_ROWS` rows, a row more each wave to `ROWS`, then a row more every three waves (to five). */
   private spawnWave(): void {
-    const rows = Math.min(MAX_ROWS, ROWS + Math.floor((this.wave - 1) / 3));
+    const growing = FIRST_ROWS + this.wave - 1;
+    const rows = Math.min(MAX_ROWS, growing < ROWS ? growing : ROWS + Math.floor((this.wave - 1) / 3));
     this.aliens = [];
     for (let r = 0; r < rows; r++) for (let c = 0; c < COLS; c++) this.aliens.push({ col: c, row: r, alive: true, dive: null });
     this.fleetX = (SCREEN_W - (COLS * (ALIEN_W + ALIEN_GAP_X) - ALIEN_GAP_X)) / 2;

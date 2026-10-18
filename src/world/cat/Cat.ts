@@ -1,3 +1,4 @@
+import type { CatBoxLike } from './CatBrain';
 import * as THREE from 'three';
 import type { Updatable } from '@/core/Engine';
 import type { Collisions } from '@/core/Collider';
@@ -45,6 +46,8 @@ interface CatOptions {
   visits?: THREE.Vector3[];
   /** Places to nap elsewhere in the flat (the bedroom's bed, the empty bath, a radiator's cradle). */
   perches?: CatPerch[];
+  /** The boxes on its room's shelves, one pawed out of its row now and then. */
+  boxes?: () => Iterable<CatBoxLike>;
   /** The ears (the camera): its heading places the voice left or right. Without it the voice is centred. */
   listener?: THREE.Object3D;
   /** Walls between the listener and the cat muffle its voice (`SoundOcclusion` fits). */
@@ -164,6 +167,7 @@ export class Cat extends THREE.Group implements Furniture, Interactable, Updatab
       voice: this.voice,
       visits: options.visits,
       perches: options.perches,
+      boxes: options.boxes,
     });
     if (options.toy) this.hearBounces(options.toy);
   }
@@ -196,19 +200,19 @@ export class Cat extends THREE.Group implements Furniture, Interactable, Updatab
   activate(session: SessionActions): void {
     const name = this.settings.name;
     if (this.outing?.isOut) {
-      if (this.outing.takeHome()) session.react(`${name} trots back up the stairs, tail high`);
+      if (this.outing.takeHome()) session.react(`${name} trots back up the stairs, tail high.`);
       return;
     }
     switch (this.brain.pet()) {
       case 'purr':
-        session.react(`${name} purrs`);
+        session.react(`${name} purrs.`);
         break;
       case 'woke':
-        session.react(`${name} wakes up and stretches`);
+        session.react(`${name} wakes up and stretches.`);
         break;
       case 'annoyed':
         // Not a buzzer: the cat says it itself (ears back, a grumble), the line only names it.
-        session.react(`${name} has had enough`);
+        session.react(`${name} has had enough.`);
         break;
       case 'busy':
         break;
@@ -226,6 +230,11 @@ export class Cat extends THREE.Group implements Furniture, Interactable, Updatab
   // --- out of the flat (`CatOuting`, `escapes`) -----------------------------------------------
 
   /** Whether it would slip out of a door left open now: adopted, up and about on the floor, not out already. */
+  /** `?debug` (the panel's "The cat hungry now"). */
+  makeHungry(): void {
+    this.brain.makeHungry();
+  }
+
   get mayGoOut(): boolean {
     return this.adopted && !this.outing && this.brain.roaming;
   }

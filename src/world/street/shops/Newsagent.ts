@@ -8,7 +8,12 @@ import { streetShops } from '@/streetShops/store';
 import { SET_PRIZE, cardIn, keepIssue, setComplete } from '@/streetShops/newsagent';
 import { formatCoins } from '@/text/money';
 import type { CounterDeal, CounterRow, CounterSection } from '@/ui/streetShops/CounterPanel';
-import { NEWSAGENT_AT } from '../Newsstand';
+import { KIOSK_LEDGE_TOP, NEWSAGENT_AT } from '../Newsstand';
+import type { BoxArtLoader } from '@/covers/BoxArtLoader';
+import type { StockItem } from '@/economy/StockItem';
+import { raffle } from '@/fair/raffle';
+import type { Furniture } from '../../Furniture';
+import { ForSaleBox } from '../../market/ForSaleBox';
 
 interface NewsagentOptions {
   viewer: THREE.Object3D;
@@ -55,29 +60,31 @@ function kioskDeal(options: NewsagentOptions, session: SessionActions): CounterD
   const { paper } = STREET_SHOPS;
   return {
     title: 'THE KIOSK',
-    says: () => (setComplete() ? '“The whole set? Twelve cards? Let me see that.”' : '“The Weekly’s a coin. Every other one has a card in it, they all want those.”'),
+    paper: 'kiosk',
+    keeper: { name: 'The newsagent', seed: 1301 },
+    says: () => (setComplete() ? 'The whole set? Twelve cards? Let me see that.' : 'The Weekly’s a coin. Every other one has a card in it, they all want those.'),
     coins: () => purse.coins,
     sections: () => sections(day()),
     take: (id) => {
       const today = day();
       if (id === 'issue') {
-        if (!purse.spend(paper.price)) return { ok: false, line: `A coin, love, and you have ${purse.coins}.` };
+        if (!purse.spend(paper.price)) return { ok: false, line: `A coin, love, and you have ${formatCoins(purse.coins)}.` };
         const { card, fresh } = keepIssue(today);
-        if (!card) return { ok: true, coins: true, line: '“There you go. No card in this one, sorry: the next issue.”' };
+        if (!card) return { ok: true, coins: true, line: 'There you go. No card in this one, sorry: the next issue.' };
         return { ok: true, coins: true, line: fresh ? `A cover card falls out: ${card.title}. “${card.line}” A new one for your set.` : `A cover card falls out: ${card.title}. You have that one already.` };
       }
       if (id === 'subscribe') {
-        if (!purse.spend(paper.subscription.price)) return { ok: false, line: `That is ${formatCoins(paper.subscription.price)} and you have ${purse.coins}.` };
+        if (!purse.spend(paper.subscription.price)) return { ok: false, line: `That is ${formatCoins(paper.subscription.price)} and you have ${formatCoins(purse.coins)}.` };
         streetShops.subscribeUntil(Math.max(today, streetShops.subscribedUntil) + paper.subscription.days);
-        return { ok: true, coins: true, line: `“Done. The boy brings it round every morning, on your mat by the time you’re up.”` };
+        return { ok: true, coins: true, line: `Done. The boy brings it round every morning, on your mat by the time you’re up.` };
       }
       if (id === 'set' && setComplete()) {
         streetShops.markSetDone();
         purse.earnCoins(SET_PRIZE);
         session.reward({ title: 'The full set of cover cards', detail: 'The newsagent pins them up round the hatch, and pays out from the till.', coins: SET_PRIZE, big: true });
-        return { ok: true, line: '“Twelve! In twenty years, you’re the second. The first was a dentist.”' };
+        return { ok: true, line: 'Twelve! In twenty years, you’re the second. The first was a dentist.' };
       }
-      return { ok: false, line: '“Sorry, love?”' };
+      return { ok: false, line: 'Sorry, love?' };
     },
   };
 }
@@ -112,4 +119,46 @@ function sections(day: number): CounterSection[] {
     { title: 'Delivered', rows: [subscription], empty: '' },
     cards,
   ];
+}
+
+interface KioskPrizeOptions {
+  kiosk: { at: THREE.Vector3; yaw: number };
+  /** The game day now. */
+  day: number;
+  /** The Fair's prize, as its drum drew it (`events/RaffleDrum`'s `prize` for that Fair's day). */
+  prize: (fairDay: number) => Promise<StockItem | null>;
+  host: { place<F extends Furniture>(item: F, position: THREE.Vector3, rotationY?: number): F; remove(item: Furniture): void };
+  covers: BoxArtLoader;
+  wallet: { readonly coins: number; subscribe(cb: () => void): () => void };
+  /** The newsagent, who hands it over. */
+  keeper: Walker;
+}
+
+/**
+ * A raffle prize won and never taken off the Fair's stall (`fair/raffle` `unclaimed`): left with the newsagent, it lies
+ * on the kiosk's ledge till the player takes it (a free `ForSaleBox`), and she says so as it goes.
+ */
+export function placeKioskPrize(options: KioskPrizeOptions): void {
+  const fair = raffle.unclaimed(options.day);
+  if (fair === null) return;
+  void options.prize(fair).then((item) => {
+    if (!item) return;
+    const { kiosk, host, covers, wallet, keeper } = options;
+    const box = new ForSaleBox(item, covers, {
+      pose: { kind: 'flat' },
+      tag: false,
+      wallet,
+      where: 'the Grand Flea Fair’s raffle, left at the kiosk',
+      free: true,
+      thanks: () => 'The raffle people left it with me. Lucky you!',
+      speak: (line) => keeper.speak(line),
+    });
+    box.onSold = () => {
+      host.remove(box);
+      box.dispose();
+      raffle.takePrize(fair);
+    };
+    const spot = kiosk.at.clone().add(new THREE.Vector3(0.55, KIOSK_LEDGE_TOP.y, KIOSK_LEDGE_TOP.z).applyAxisAngle(new THREE.Vector3(0, 1, 0), kiosk.yaw));
+    host.place(box, spot, kiosk.yaw + 0.25);
+  });
 }

@@ -3,6 +3,8 @@ import { getPlatform } from '@/catalog/platforms';
 import type { StockItem, StockSource } from '@/economy/StockItem';
 import { HOUSEHOLD } from './rules';
 import { unit01 } from '@/random';
+import type { HomeUpgrade } from '@/economy/HomeUpgrades';
+import { HIS_PIECES } from '@/grandma/dreamRoom';
 
 /** A night's dream: one of the morning's copies, half remembered. */
 export interface Dream {
@@ -64,4 +66,36 @@ export function dreamOf(day: number, items: readonly StockItem[]): Dream | null 
   // The kind's lines in turn, day after day from a start of its own: never the same line two mornings running.
   const line = lines[(((day + Math.floor(unit01(`dream-line:${item.source}`) * lines.length)) % lines.length) + lines.length) % lines.length]!;
   return { game: item.game, where, line };
+}
+
+/** Félix's room as he had it, dreamt some nights (docs/story.md "The goal"): what is back lit up, what is not yet a ghost. */
+export interface RoomDream {
+  /** One piece put back (lit in the dream), or null with nothing back yet. */
+  back: string | null;
+  /** One piece still missing (a pale shape), or null with everything back. */
+  missing: string | null;
+  line: string;
+}
+
+/** Of the nights that bring a dream, the share that are of his room (the rest: the morning's stock). */
+const ROOM_SHARE = 0.3;
+
+/** How the dream of his room ends, by how far the room has come. */
+const ROOM_LINES = {
+  bare: ['The room was dark but for the window. Somewhere a cartridge was being blown on.', 'You knew the room by its smell: dust, warm plastic, his pipe.'],
+  some: ['The lamps came on one by one, and stopped halfway, as if waiting for you.', 'Félix was not there, but his armchair was still warm.'],
+  full: ['Every lamp lit. Félix was in the doorway, nodding, the way he did when a shelf was straight.', 'You woke up before he could say anything. You knew what he would have said.'],
+} as const;
+
+/**
+ * Whether the night before market day `day` dreams of Félix's room instead (seeded, so a reload tells the same), once his
+ * notebook is found: one piece of it back, lit, and one still a ghost (`count` how many of a piece are bought).
+ */
+export function roomDreamOf(day: number, notebookFound: boolean, count: (piece: HomeUpgrade) => number): RoomDream | null {
+  if (!notebookFound || unit01(`dream-room:${day}`) >= ROOM_SHARE) return null;
+  const pick = <T>(list: readonly T[], salt: string): T | null => (list.length ? list[Math.floor(unit01(`dream-room:${salt}:${day}`) * list.length)]! : null);
+  const back = HIS_PIECES.filter((p) => count(p.id) > 0);
+  const missing = HIS_PIECES.filter((p) => count(p.id) === 0);
+  const lines = !back.length ? ROOM_LINES.bare : missing.length ? ROOM_LINES.some : ROOM_LINES.full;
+  return { back: pick(back, 'back')?.name ?? null, missing: pick(missing, 'missing')?.name ?? null, line: pick(lines, 'line')! };
 }

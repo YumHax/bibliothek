@@ -1,5 +1,7 @@
 import * as THREE from 'three';
 import { createCanvas, toTexture } from '@/graphics/canvas';
+import { repaintWhenFontLoads } from '@/graphics/fontReady';
+import { mulberry32 } from '@/random';
 import type { Furniture } from '../../Furniture';
 import { snowPaint } from '../snowCover';
 
@@ -38,21 +40,115 @@ export class PopUpBoard extends THREE.Group implements Furniture {
   }
 }
 
-/** The chalked face: the name, what it sells, the hours. */
+/** The board's canvas (px) and the chalk's two hands: the marker for the name, the scrawl for the rest. */
+const PAGE = { w: 512, h: 768 } as const;
+const MARKER = '"Permanent Marker", "Comic Sans MS", cursive';
+const SCRAWL = '"Caveat", "Segoe Print", cursive';
+const CHALK = '#f2ead6';
+const CHALK_YELLOW = '#f6d25a';
+const CHALK_PINK = '#f48aa8';
+
+/**
+ * The chalked face: CONTINUE? in big marker letters, what it sells in a looser hand on lines that wander a little, the
+ * hours in yellow, a cartridge and an arrow doodled towards the door, the smudges of chalk rubbed out before. Painted
+ * again once the shipped faces land (a canvas never re-lays its text out).
+ */
 function paintBoard(hours: string): THREE.CanvasTexture {
-  const [canvas, ctx] = createCanvas(256, 384);
-  ctx.fillStyle = '#23302a';
-  ctx.fillRect(0, 0, 256, 384);
-  ctx.fillStyle = '#f2ead6';
-  ctx.textAlign = 'center';
-  ctx.font = 'bold 44px Georgia, serif';
-  ctx.fillText('CONTINUE?', 128, 80);
-  ctx.font = '26px Georgia, serif';
-  ctx.fillText('collector-grade', 128, 150);
-  ctx.fillText('copies', 128, 182);
-  ctx.fillText('complete in box', 128, 230);
-  ctx.fillStyle = '#f0c040';
-  ctx.fillText(hours, 128, 300);
-  ctx.fillText('not Mondays', 128, 334);
-  return toTexture(canvas, 'facing');
+  const [canvas, ctx] = createCanvas(PAGE.w, PAGE.h);
+  const texture = toTexture(canvas, 'facing');
+  const paint = (): void => {
+    const rng = mulberry32(4407);
+    // The slate: green-black, the ghost of old chalk wiped across it.
+    ctx.fillStyle = '#1f2b26';
+    ctx.fillRect(0, 0, PAGE.w, PAGE.h);
+    for (let i = 0; i < 9; i++) {
+      ctx.fillStyle = `rgba(242,234,214,${0.025 + rng() * 0.03})`;
+      ctx.beginPath();
+      ctx.ellipse(rng() * PAGE.w, rng() * PAGE.h, 60 + rng() * 140, 14 + rng() * 30, rng() * 0.6 - 0.3, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    const line = (text: string, font: string, size: number, y: number, colour: string, tilt: number): void => {
+      ctx.save();
+      ctx.translate(PAGE.w / 2, y);
+      ctx.rotate(tilt);
+      ctx.font = `${font === SCRAWL ? '700 ' : ''}${size}px ${font}`;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'alphabetic';
+      ctx.fillStyle = colour;
+      ctx.globalAlpha = 0.92;
+      ctx.fillText(text, 0, 0);
+      ctx.restore();
+    };
+    line('CONTINUE?', MARKER, 82, 128, CHALK, -0.035);
+    // A chalk underline, drawn twice for its rough edge.
+    ctx.strokeStyle = CHALK_PINK;
+    ctx.lineCap = 'round';
+    for (const dy of [0, 5]) {
+      ctx.lineWidth = 6 - dy * 0.6;
+      ctx.beginPath();
+      ctx.moveTo(70, 158 + dy);
+      ctx.quadraticCurveTo(PAGE.w / 2, 146 + dy, PAGE.w - 64, 162 + dy);
+      ctx.stroke();
+    }
+    line('collector-grade copies', SCRAWL, 58, 252, CHALK, 0.02);
+    line('complete in box', SCRAWL, 58, 322, CHALK, -0.025);
+    line('some first prints!', SCRAWL, 50, 388, CHALK_PINK, 0.03);
+    line(hours, MARKER, 52, 520, CHALK_YELLOW, -0.02);
+    line('not Mondays', SCRAWL, 50, 580, CHALK_YELLOW, 0.025);
+    // The doodles: a cartridge with a heart on its label, and an arrow round to the door.
+    ctx.save();
+    ctx.translate(112, 676);
+    ctx.rotate(-0.12);
+    ctx.strokeStyle = CHALK;
+    ctx.lineWidth = 5;
+    ctx.lineJoin = 'round';
+    ctx.strokeRect(-40, -46, 80, 74);
+    ctx.strokeRect(-26, -34, 52, 30);
+    ctx.fillStyle = CHALK_PINK;
+    ctx.beginPath();
+    ctx.moveTo(0, -12);
+    ctx.bezierCurveTo(-12, -24, -16, -32, -6, -30);
+    ctx.bezierCurveTo(-2, -29, 0, -26, 0, -24);
+    ctx.bezierCurveTo(0, -26, 2, -29, 6, -30);
+    ctx.bezierCurveTo(16, -32, 12, -24, 0, -12);
+    ctx.fill();
+    for (let x = -30; x <= 30; x += 12) {
+      ctx.beginPath();
+      ctx.moveTo(x, 28);
+      ctx.lineTo(x, 40);
+      ctx.stroke();
+    }
+    ctx.restore();
+    ctx.strokeStyle = CHALK_YELLOW;
+    ctx.lineWidth = 6;
+    ctx.beginPath();
+    ctx.moveTo(220, 690);
+    ctx.quadraticCurveTo(330, 735, 430, 660);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(398, 655);
+    ctx.lineTo(434, 656);
+    ctx.lineTo(424, 690);
+    ctx.stroke();
+    // The chalk's grain: specks of slate showing through every stroke, and dust settled along the bottom.
+    ctx.globalCompositeOperation = 'destination-out';
+    for (let i = 0; i < 2600; i++) {
+      ctx.fillStyle = `rgba(0,0,0,${0.25 + rng() * 0.45})`;
+      ctx.fillRect(rng() * PAGE.w, rng() * PAGE.h, 1 + rng() * 2.2, 1 + rng() * 1.4);
+    }
+    ctx.globalCompositeOperation = 'destination-over';
+    ctx.fillStyle = '#1f2b26';
+    ctx.fillRect(0, 0, PAGE.w, PAGE.h);
+    ctx.globalCompositeOperation = 'source-over';
+    const dust = ctx.createLinearGradient(0, PAGE.h - 60, 0, PAGE.h);
+    dust.addColorStop(0, 'rgba(242,234,214,0)');
+    dust.addColorStop(1, 'rgba(242,234,214,0.16)');
+    ctx.fillStyle = dust;
+    ctx.fillRect(0, PAGE.h - 60, PAGE.w, 60);
+    texture.needsUpdate = true;
+  };
+  paint();
+  repaintWhenFontLoads(`82px ${MARKER}`, paint);
+  repaintWhenFontLoads(`700 58px ${SCRAWL}`, paint);
+  return texture;
 }

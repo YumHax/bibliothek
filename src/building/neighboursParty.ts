@@ -73,6 +73,9 @@ interface PartyBuyer {
   bonus: number;
   sell: (game: Game, offer: number) => { ok: boolean };
   soldLine: (game: Game, offer: number) => string;
+  /** Who keeps the party's tin at the table (their face at the top of the sheet), and their opening word. */
+  who: { name: string; person: string };
+  greeting: string;
 }
 
 /**
@@ -86,6 +89,8 @@ export function partyBuyer(tx: Pick<Transactions, 'sellToNeighbour'>, today: { r
     bonus: PARTY.saleBonus,
     sell: (game, offer) => tx.sellToNeighbour(game, offer),
     soldLine: (game, offer) => partySold(game, offer, today.gameDay),
+    who: { name: 'Mrs Moreau', person: 'moreau' },
+    greeting: '“I’m keeping the tin tonight. Anything you can spare? Hugo’s been asking all week.”',
   };
 }
 

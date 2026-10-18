@@ -29,6 +29,11 @@ export class SlipLine {
   show(notice: SlipNotice): void {
     const el = this.el;
     el.replaceChildren();
+    if (notice.picture) {
+      notice.picture.classList.add('slip__picture');
+      notice.picture.setAttribute('aria-hidden', 'true');
+      el.appendChild(notice.picture);
+    }
     const title = document.createElement('div');
     title.className = 'slip__title';
     title.textContent = notice.title;
@@ -41,7 +46,7 @@ export class SlipLine {
     }
     const chips = moneyChips(notice.coins, notice.tickets, 'slip__chips');
     if (chips) el.appendChild(chips);
-    el.className = 'slip';
+    el.className = notice.picture ? 'slip slip--pictured' : 'slip';
     el.hidden = false;
     el.style.animation = 'none';
     void el.offsetWidth;

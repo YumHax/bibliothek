@@ -37,6 +37,8 @@ interface PlanInput<T> {
   dimensions(item: T): BoxDimensions;
   /** Items with different keys never share a row. */
   groupKey(item: T): string;
+  /** The air between two neighbours on a row (two boxes spine out stand closer); `spec.gap` without it. */
+  gapBetween?(left: T, right: T): number;
   spec: BookcaseSpec;
   maxBookcases: number;
   /** Bookcases to stand even with nothing to put in them (an empty collection still gets its shelves). Default 0. */
@@ -48,7 +50,7 @@ interface PlanInput<T> {
  * Each row is at least as tall as its tallest box; the spare height of a bookcase is
  * shared equally between its rows so every bookcase ends up the same height.
  */
-export function planShelving<T>({ items, dimensions, groupKey, spec, maxBookcases, minBookcases = 0 }: PlanInput<T>): ShelvingPlan<T> {
+export function planShelving<T>({ items, dimensions, groupKey, gapBetween, spec, maxBookcases, minBookcases = 0 }: PlanInput<T>): ShelvingPlan<T> {
   const innerWidth = spec.width - 2 * spec.boardThickness;
   const rows: PlannedRow<T>[] = [];
 
@@ -58,16 +60,18 @@ export function planShelving<T>({ items, dimensions, groupKey, spec, maxBookcase
   for (const item of items) {
     const { width, height } = dimensions(item);
     const key = groupKey(item);
-    const overflow = cursor + width > innerWidth + 1e-6;
+    const last = current?.items.at(-1);
+    const air = last === undefined ? 0 : (gapBetween?.(last, item) ?? spec.gap);
+    const overflow = cursor + air + width > innerWidth + 1e-6;
     if (!current || overflow || key !== currentKey) {
       current = { items: [], minHeight: 0 };
       rows.push(current);
       cursor = 0;
       currentKey = key;
-    }
+    } else cursor += air;
     current.items.push(item);
     current.minHeight = Math.max(current.minHeight, height + spec.headroom);
-    cursor += width + spec.gap;
+    cursor += width;
   }
 
   const usable = spec.height - (spec.rows + 1) * spec.boardThickness;
@@ -108,6 +112,8 @@ interface ArrangedInput<T> {
   arranged: readonly (readonly (readonly string[])[])[];
   /** Arranged on another shelving: left over here (for that one), never put in a gap. */
   elsewhere(id: string): boolean;
+  /** As `planShelving`'s. */
+  gapBetween?(left: T, right: T): number;
   spec: BookcaseSpec;
   maxBookcases: number;
   minBookcases?: number;
@@ -119,7 +125,7 @@ interface ArrangedInput<T> {
  * room (below it first), else like every box not arranged yet into the first gap wide enough, bookcase by bookcase,
  * top row first. Rows are all the same height, so any box can go on any row. What fits nowhere is left over.
  */
-export function planArranged<T>({ items, id, dimensions, arranged, elsewhere, spec, maxBookcases, minBookcases = 0 }: ArrangedInput<T>): ShelvingPlan<T> {
+export function planArranged<T>({ items, id, dimensions, arranged, elsewhere, gapBetween, spec, maxBookcases, minBookcases = 0 }: ArrangedInput<T>): ShelvingPlan<T> {
   const innerWidth = spec.width - 2 * spec.boardThickness;
   const byId = new Map(items.map((item) => [id(item), item]));
   const used = new Set<T>();
@@ -132,14 +138,18 @@ export function planArranged<T>({ items, id, dimensions, arranged, elsewhere, sp
     }
     return rows[b]![r]!;
   };
+  const air = (row: readonly T[], item: T): number => {
+    const last = row.at(-1);
+    return last === undefined ? 0 : (gapBetween?.(last, item) ?? spec.gap);
+  };
   const fits = (b: number, r: number, item: T): boolean => {
     const row = rowAt(b, r);
-    const width = widths[b]![r]! + (row.length ? spec.gap : 0) + dimensions(item).width;
+    const width = widths[b]![r]! + air(row, item) + dimensions(item).width;
     return width <= innerWidth + 1e-6;
   };
   const put = (b: number, r: number, item: T): void => {
     const row = rowAt(b, r);
-    widths[b]![r]! += (row.length ? spec.gap : 0) + dimensions(item).width;
+    widths[b]![r]! += air(row, item) + dimensions(item).width;
     row.push(item);
     used.add(item);
   };

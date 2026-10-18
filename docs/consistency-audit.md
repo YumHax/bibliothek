@@ -1018,7 +1018,7 @@ No `KeyboardEvent.key` use was found: the project rule holds.
 - Fix: a shared virtual stick, and an explicit consumer registry for pointer deltas.
 
 **13. Actions with no pad or touch path. (M)**
-- Where: `holdCopy`, `swap`, `handBack`, `readStalls`, `gridSnap`, `turnPieceBack`, `labelShelf`, `randomPick`, `sortShelves`, `nightMode`, `undoMove`, `tipBox`, `pickUpFound`, arcade fire, TV programs on touch, the repair mini-game.
+- Where (2026-10-17: `holdCopy`, `swap`, `handBack`, `readStalls` and `tipBox` have pad paths now): `gridSnap`, `turnPieceBack`, `labelShelf`, `randomPick`, `sortShelves`, `nightMode`, `undoMove`, `tipBox`, `pickUpFound`, arcade fire, TV programs on touch, the repair mini-game.
 - Fix: a per-context coverage check in the convention script.
 
 **14. Several owners write the same enabled flags; "frozen" is one boolean. (M)**

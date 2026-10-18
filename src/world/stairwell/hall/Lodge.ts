@@ -9,6 +9,7 @@ import { GLASS } from '../../materials/glass';
 import { invisibleHitbox } from '../../meshUtils';
 import { RENDER_ORDER } from '../../surface/layers';
 import { STAIRWELL_PLAN as plan } from '../stairwellPlan';
+import { formatCoins } from '@/text/money';
 
 /** What the sign hung on the lodge's door says (none: she is in). */
 export type LodgeSign = keyof typeof plan.concierge.closed;
@@ -172,11 +173,11 @@ export class TipBox extends Prop implements Interactable {
   }
 
   label(): string {
-    return `The concierge's Christmas box · tip ${plan.lodge.tipBox.price}`;
+    return `The concierge's Christmas box · tip ${formatCoins(plan.lodge.tipBox.price)}`;
   }
 
   activate(session: SessionActions): void {
-    session.pay({ price: plan.lodge.tipBox.price, paid: () => this.onTip(session) });
+    session.pay({ price: plan.lodge.tipBox.price, title: 'A tip in the box', paid: () => this.onTip(session) });
   }
 }
 

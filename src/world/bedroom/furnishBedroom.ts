@@ -34,7 +34,8 @@ import { Television } from '../Television';
 import { FrostedWindow } from '../props/FrostedWindow';
 import { BookcaseKit } from './BookcaseKit';
 import { ANNEX_OVERFLOW } from '../annex/annexShelves';
-import { onRouxPhase } from '@/building/rouxMove';
+import { annexJoined, onRouxPhase } from '@/building/rouxMove';
+import { BoxPile } from '../shelving/BoxPile';
 import { Shelving } from '../shelving/Shelving';
 import { tellOutcome } from '@/household/tellOutcome';
 import { playAlarmButton, playHangers } from '@/audio/householdSounds';
@@ -189,6 +190,8 @@ export function furnishBedroom(zone: Zone, ctx: Pick<BuildContext, 'sky' | 'cssL
   // What the arcade paid out, on the bare right wall: the trophy row, the lava lamp lighting it, the yo-yo and the keyring under it.
   if (prizes) {
     const shelf = zone.placeAt(new PrizeShelf({ prizes, width: plan.prizeShelf.width }), plan.prizeShelf.at);
+    // The globe, the tape and the mini cabinet answer a click where they stand on the row.
+    for (const toy of shelf.toys()) placeWith(zone, shelf, toy, new THREE.Vector3());
     const lamp = new LavaLampPrize({ prizes, wallBehind: shelf.lavaSpot.z });
     lamp.position.copy(shelf.lavaSpot);
     placeWith(zone, shelf, lamp);
@@ -275,7 +278,10 @@ function furnishBookcases(
   zone.onUnload(() => shelving.dispose());
   // The kit leans there once the next bookcase bought would stand in here.
   const kit = zone.placeAt(new BookcaseKit({ price: BOOKCASE_PRICE, onBought: () => upgrades.add('bookcase') }), plan.bookcaseKit);
+  // What it has no room for while Mrs Roux's rooms are not the flat's: a pile of boxes on the floor in front of it.
+  const pile = zone.placeAt(new BoxPile(ANNEX_OVERFLOW, () => !annexJoined()), plan.boxPile);
   const refresh = (): void => {
+    pile.refresh();
     shelving.setCapacity(here());
     kit.setAvailable(here() < 1 && here(upgrades.count('bookcase') + 1) > 0);
   };

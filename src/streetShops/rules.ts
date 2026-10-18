@@ -33,8 +33,17 @@ export const STREET_SHOPS = {
   gig: { weekday: 3, from: 20.5, to: 23.5, cover: 3, minutes: 75, warmth: 6 },
   /** THE LOCAL's quiz: Tuesdays from `from` to `to`, `fee` a head; `questions` a round; the prizes by how many were right. */
   quiz: { weekday: 1, from: 19.5, to: 22.5, fee: 2, questions: 6, prizes: { 6: 20, 5: 12, 4: 6 } as Readonly<Record<number, number>> },
-  /** THE LOCAL's dartboard: three darts for `fee`, every evening; beating the night's best on the chalkboard pays `prize`; `perDay` goes. */
-  darts: { from: 17, fee: 1, prize: 6, perDay: 3 },
+  /**
+   * THE LOCAL's dartboard: three darts for `fee`, every evening, `perDay` goes. The chalkboard sets the night's checkout
+   * (one of `checkouts`): taken to nought, the last dart in a double, it pays the first of `prizes` it is `upTo`, once a night.
+   */
+  darts: {
+    from: 17,
+    fee: 1,
+    perDay: 3,
+    checkouts: [50, 56, 60, 61, 64, 70, 76, 81, 90, 100] as readonly number[],
+    prizes: [{ upTo: 60, coins: 6 }, { upTo: 70, coins: 9 }, { upTo: 100, coins: 14 }] as readonly { upTo: number; coins: number }[],
+  },
   /** TV REPAIR's bench: Karim mends a console left with him for `feeShare` of what he would pay for it working, back after `days`. */
   repair: { feeShare: 0.45, days: 1 },
   /** Karim's box of doubles (his NES, Mega Drive and SNES spares): `count` in it a game week, one swap a week. */

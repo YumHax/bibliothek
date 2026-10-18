@@ -11,8 +11,8 @@
  *   red, with a shake and a buzz.
  * - `reward`: something gained (coins, tickets, a game, a prize, a milestone): a banner that pops up in
  *   the middle of the screen with a fanfare; rewards queue, none is lost.
- * - `tip`: how to do something (keys, the first day's next step): a card pinned top left that stays
- *   until it is done (`until`) or replaced.
+ * - `tip`: how to do something (keys, the first day's next step): a card under the crosshair that folds into
+ *   the hint tray, bottom left (a "To do" is a handwritten slip top left), until it is done (`until`) or replaced.
  * - `prompt`: the keys that matter in a state the player is in (seated, carrying): a quiet line at the
  *   bottom, no sound, gone with the state.
  * - `slip`: something that changed hands without a fanfare (bought, held, a parcel): a slip under the
@@ -35,7 +35,7 @@ export interface NoticeActions {
    * a quiet line at the bottom of the view, no sound, gone when `until` says the state ended. Returns the function
    * that takes it down.
    */
-  prompt(text: string, options?: PromptOptions): () => void;
+  prompt(text: PromptText, options?: PromptOptions): () => void;
   /**
    * Something that changed hands with no fanfare (a game bought, a parcel come, a copy held, a debt settled): a slip
    * under the crosshair with its coin / ticket chip. A gain with a number, a prize or a milestone is a `reward`.
@@ -43,6 +43,9 @@ export interface NoticeActions {
   slip(notice: SlipNotice): void;
   read(card: ReadingNotice): void;
 }
+
+/** A prompt's line: words, or a function that writes them (with `actionCap` / `useCap`: the caps follow the device in hand). */
+export type PromptText = string | (() => string);
 
 export interface PromptOptions {
   /** A prompt with the same id replaces it (the same state, new keys). */
@@ -59,11 +62,13 @@ export interface SlipNotice {
   /** Coins spent (negative) or had back (positive), as a chip. */
   coins?: number;
   tickets?: number;
+  /** The thing itself, small beside the words (a keepsake handed over, as it looks on the fridge). */
+  picture?: HTMLCanvasElement;
 }
 
 /**
- * What the player can put away by hand (the `dismissNotice` key, X): the card being read at once (`all`: every waiting
- * card too), else the reward banner, else the tips (newest first; `all`: every one); the subtitles go with any press.
+ * What the player can put away by hand (the `dismissNotice` key, X): the card being read (a page or the card, one a
+ * press), else the reward banner, else the tips (newest first; `all`: every banner, every tip); the subtitles go with any press.
  * Never the alerts (they have their own button). False when there was nothing to put away.
  */
 export interface NoticeDismissing {
@@ -85,12 +90,14 @@ export interface RewardNotice {
   /** A picture over the title (a person's portrait when they become a friend), and the colour it is ringed in. */
   picture?: HTMLCanvasElement;
   pictureRing?: string;
+  /** The picture is a game's box front (`covers/coverPicture`): framed upright like a box, not in a round portrait. */
+  pictureBox?: boolean;
 }
 
 export interface TipOptions {
   /** A tip with the same id replaces it (a new one for the same step). */
   id?: string;
-  /** The card's heading. Default "Tip"; the first day's are "To do". */
+  /** The card's heading: what the tip is about ("Talking", "Where is Pickle?"). Default "How to"; the first day's are "To do". */
   head?: string;
   /** `note`: a handwritten slip like the to-do list (default for a "To do" head); `card`: the blue tip card. */
   look?: 'card' | 'note';
@@ -98,6 +105,10 @@ export interface TipOptions {
   until?: () => boolean;
   /** Takes it down after this long, counted while playing. Default: twice its reading time, at least 12 s. */
   ms?: number;
+  /** Told this many times in all, kept in the save by `id` (a reminder that would nag once learned). Default: every time. */
+  times?: number;
+  /** About the conversation open now (how to talk): it comes over it. Any other tip waits for the conversation's end. */
+  overConversation?: boolean;
 }
 
 /**

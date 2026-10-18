@@ -37,6 +37,8 @@ export interface MachineRunOptions {
   strip?: TicketStrip;
   /** Whether it is out of order today, and the note taped on it then. */
   outOfOrder?: () => boolean;
+  /** Tried while out of order: the attendant's answer (he rings the repair man); none: the note's line. */
+  brokenClick?: () => string;
   note?: THREE.Object3D;
   /** The play went on the table under `initials` (a cabinet keeps a new best's run then). */
   onSign?: (initials: string, result: ArcadeResult) => void;
@@ -292,11 +294,11 @@ export class MachineRun {
    * no fault of the player's): the table's initials first when it makes it, else the end card. A best
    * is only a best when there was one to beat; the first score on a machine is just `first`.
    */
-  finish(score: number, prize?: string, refund = false): ArcadeResult {
+  finish(score: number, prize?: string, refund = false, feats: readonly string[] = []): ArcadeResult {
     const { scores, game } = this.options;
     const before = scores?.bestOf(game.id) ?? 0;
     const scored = !!scores && score > 0;
-    this.result = { score, best: scored && before > 0 && score > before, ...(scored && before <= 0 ? { first: true } : {}), ...(prize ? { prize } : {}), ...(refund ? { refund: true } : {}) };
+    this.result = { score, best: scored && before > 0 && score > before, ...(scored && before <= 0 ? { first: true } : {}), ...(prize ? { prize } : {}), ...(refund ? { refund: true } : {}), ...(feats.length ? { feats } : {}) };
     this.rank = null;
     this.counted = 0;
     this.bonusLines = [];
@@ -358,7 +360,11 @@ export class MachineRun {
   /** A click on the machine: taken or broken, it says so; mid-play `clickWhilePlaying` may use it (true: it did), else the Session plays or walks away. */
   activate(session: SessionActions, machine: ArcadeMachineLike, clickWhilePlaying?: () => boolean): void {
     if (this.who === 'regular') session.refuse(TAKEN_LINE);
-    else if (this.outOfOrder) session.refuse(OUT_OF_ORDER_LINE);
+    else if (this.outOfOrder) {
+      const said = this.options.brokenClick?.();
+      if (said) session.say(said, 'Gus');
+      else session.refuse(OUT_OF_ORDER_LINE);
+    }
     else if (this.current === 'playing' && clickWhilePlaying?.()) return;
     // A click on the end card while it counts: the count jumps to its end (the next click plays again).
     else if (this.current === 'over' && !this.countDone && this.who === 'player') this.skipCount();

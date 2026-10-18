@@ -19,6 +19,8 @@ import { ANNEX_PLAN } from './annexPlan';
  */
 export const ANNEX_OVERFLOW = new GameList();
 export const STUDY_OVERFLOW = new GameList();
+/** What the study's bookcases have no room for: the last of the flat's shelves, so these wait in a pile on its floor. */
+export const STUDY_LEFTOVER = new GameList();
 
 /** How many of the annex's bookcases (`bookcasesIn`'s `annex`) stand in the new room, and how many in the study. */
 export function annexSplit(bought: number): { room: number; study: number } {

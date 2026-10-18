@@ -21,6 +21,7 @@ import { ForSaleBox } from '../market/ForSaleBox';
 import { pocket } from '@/errands/pocket';
 import { MANSION_RESIDENTS, findOnStep, flatName, mansionDay, ringFlat, takeFromStep } from '@/social/street/mansionDoors';
 import { markStreet } from '@/social/street/streetMarks';
+import type { StepAnswerer } from './life/StepAnswerer';
 import { groundHeight } from './relief/ground';
 
 /** What the bells need besides the small ads: the zone the step's games are placed in, the day, the coins. */
@@ -38,6 +39,8 @@ interface MansionBellOptions {
   day: () => number;
   /** Where a favour's thanks goes. */
   purse?: { earnCoins(coins: number): void };
+  /** The resident who comes down in slippers for a favour done (`life/StepAnswerer`). */
+  answerer?: StepAnswerer;
 }
 
 /** Where the step's games lie: out from the plate's foot and to its side (plate frame, m). */
@@ -153,6 +156,7 @@ export class MansionBell extends Prop implements Interactable, Updatable {
     if (answer.kind === 'thanks') {
       pocket.take(answer.item);
       this.options.purse?.earnCoins(answer.coins);
+      this.options.answerer?.answer('You didn’t have to. But you did! Thank you, love.');
       markStreet('mansionFavour');
       session.reward({ title: 'A good turn', detail: answer.text, coins: answer.coins });
     } else {

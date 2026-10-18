@@ -1,4 +1,4 @@
-/* The flat's panels (the phone, the wardrobe): a small card over the view (`.ui-modal--centre`); the card shell, the eyebrow heads and the foot row are the kit's. */
+/* The flat's panels (the wardrobe; the phone draws its handset in phone.css): a small card over the view (`.ui-modal--centre`); the card shell, the eyebrow heads and the foot row are the kit's. */
 @layer tokens, base, components, panels;
 @layer panels {
   .household-panel__card { --card-w: var(--card-w-md); }
@@ -16,56 +16,6 @@
     font-size: var(--fs-5);
     color: var(--ui-text-dim);
   }
-  .household-panel__message {
-    margin: 0 0 0.6rem;
-    padding: 0.5rem 0.7rem;
-    border-radius: var(--ui-radius-sm);
-    border: 1px solid var(--ui-border);
-    font-size: var(--fs-5);
-    white-space: pre-line;
-  }
-  .household-panel__list {
-    display: flex;
-    flex-direction: column;
-    gap: 0.4rem;
-  }
-  .household-panel__list .ui-btn {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    gap: 0.6rem;
-    text-align: left;
-  }
-  .household-panel__tag {
-    font-size: var(--fs-2);
-    color: var(--ui-text-dim);
-    white-space: nowrap;
-  }
-  .household-panel__rows {
-    list-style: none;
-    margin: 0;
-    padding: 0;
-    display: flex;
-    flex-direction: column;
-    gap: 0.55rem;
-  }
-  .household-panel__rows li {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    gap: 0.8rem;
-  }
-  .household-panel__rows li > span {
-    display: flex;
-    flex-direction: column;
-    gap: 0.1rem;
-    min-width: 0;
-  }
-  .household-panel__rows small {
-    font-size: var(--fs-3);
-    color: var(--ui-text-dim);
-  }
-
   /* The wardrobe: the outfits drawn on a rail in the closet's dark wood, the one worn lifted forward, the one pointed
      at below the rail. Each garment's colours are its slot variables; the closet's are the card's. */
   .wardrobe-panel__card {
@@ -258,7 +208,28 @@
     box-sizing: border-box;
     cursor: pointer;
     animation: dream-in var(--dur-pulse) ease-out;
+    /* A night-blue haze with soft edges and a few faint stars, not the kit's card. */
+    --dream-night: rgba(18, 24, 52, 0.88);
+    --dream-night-2: rgba(40, 34, 78, 0.82);
+    --dream-star: rgba(255, 248, 220, 0.5);
+    --dream-drift-ms: 5s;
+    border: 0;
+    border-radius: 2rem;
+    background:
+      radial-gradient(1px 1px at 18% 30%, var(--dream-star), transparent 60%),
+      radial-gradient(1px 1px at 72% 18%, var(--dream-star), transparent 60%),
+      radial-gradient(1.5px 1.5px at 88% 70%, var(--dream-star), transparent 60%),
+      linear-gradient(120deg, var(--dream-night), var(--dream-night-2));
+    box-shadow: 0 0 40px 10px var(--dream-night);
   }
+  /* The cover floats, drifting slowly as things do in a dream. */
+  .dream-card__float { flex: none; animation: dream-drift var(--dream-drift-ms) ease-in-out infinite alternate; }
+  @keyframes dream-drift {
+    from { transform: translateY(-2px) rotate(-2deg); }
+    to { transform: translateY(3px) rotate(2deg); }
+  }
+  /* Reduced motion: the game's setting (`.reduce-motion` on <html>, settings/motion), never the media query alone. */
+  .reduce-motion .dream-card__float { animation: none; }
   .dream-card__cover {
     width: 3.8rem;
     border-radius: var(--ui-radius-sm);
@@ -275,8 +246,9 @@
     font-style: italic;
   }
   .dream-card__title {
-    font-family: var(--ui-font-display);
-    font-size: var(--fs-9);
+    font-family: var(--ui-font-hand);
+    font-size: var(--fs-t3);
+    line-height: 1.1;
     margin: 0.15rem 0;
   }
   .dream-card__where {
@@ -285,6 +257,26 @@
   @keyframes dream-in {
     from { opacity: 0; filter: blur(6px); }
     to   { opacity: 1; filter: none; }
+  }
+  /* Fading back into waking: the way it came, slower. */
+  .dream-card--out {
+    animation: dream-out var(--dur-drift) ease-in forwards;
+    pointer-events: none;
+  }
+  @keyframes dream-out {
+    from { opacity: 1; filter: none; }
+    to   { opacity: 0; filter: blur(6px); }
+  }
+  /* The dream of Félix's room: no cover, a faint lamp in its place. */
+  .dream-card__lamp {
+    flex: none;
+    width: 3.2rem;
+    height: 3.2rem;
+    border-radius: 50%;
+    --dream-lamp: rgb(255 214 150 / 0.85);
+    --dream-lamp-halo: rgb(255 190 110 / 0.25);
+    background: radial-gradient(circle, var(--dream-lamp) 0%, var(--dream-lamp-halo) 45%, transparent 70%);
+    filter: blur(1.5px);
   }
   /* The shared thumbnail class (for the placeholder swap) must not shrink the dream's cover; a made-up box is blurred too. */
   .dream-card .dream-card__cover.catalogue__cover {

@@ -44,18 +44,18 @@ export const GRANDMA_TALK = {
       'Oh, company! I was only counting stitches.',
     ],
     late: [
-      'It’s late, you know. The last bus is at nine.',
+      'It’s late, you know. The last bus is at nine. After that it’s the night bus, and it smells of chips.',
       'You’ll miss your bus, love. I’m half asleep anyway.',
     ],
   },
   /** A Sunday: lunch, and the envelope. */
-  sunday: 'Sunday lunch! There’s blanquette. And this is for you, don’t argue.',
+  sunday: 'Sunday lunch! It’s on the stove. And this is for you, don’t argue.',
   /** The first visit falls on a Sunday: the envelope after the first hello. */
   firstSunday: 'And it’s Sunday, so this is for you. Don’t argue.',
   /** The album has a memory the player has not seen yet. */
   albumReady: 'I found more photos. Come and look, on the table.',
   /** The time: past `GRANDMA_DAY.late`, clicked, before her chat. */
-  lastBus: 'Don’t let me keep you. The last bus is at nine, and the driver won’t wait for you like he waits for me.',
+  lastBus: 'Don’t let me keep you. The last bus is at nine; after that it’s the night bus, all nurses and drunks, and that driver waits for nobody.',
   /** Clicked, a line at a time: always, then once the memory named has been seen (what she can bring herself to say). */
   chat: {
     always: [
@@ -66,7 +66,7 @@ export const GRANDMA_TALK = {
       'I don’t understand the games. I understood that he loved them.',
       'Your mother rings on Thursdays. She sends her love, she says. She could send a postcard.',
       'The woman downstairs has a new dog. It barks at the radiator.',
-      'I made jam in September. Take a jar, I can’t eat it all.',
+      'I made jam in September. Forty jars. Who eats forty jars? Félix used to take six and bring the empties back.',
       'He used to explain the games to me. Something about a plumber. I nodded.',
     ],
     /** Once the row at her table has been seen (memory `row`): Gaspard's pressure. */

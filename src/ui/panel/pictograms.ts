@@ -27,11 +27,17 @@ const SYMBOLS: readonly (readonly [string, string])[] = [
   ['tv', '<rect x="2" y="3.5" width="12" height="8.5" rx="1"/><path d="M5.5 14.5h5M6 1.5l2 2 2-2"/>'],
   ['check', '<path d="M3 8.5l3.2 3L13 4.5"/>'],
   ['dot', '<circle cx="8" cy="8" r="1.6" fill="currentColor"/>'],
+  ['sofa', '<path d="M3.5 7V5a1.5 1.5 0 0 1 1.5-1.5h6A1.5 1.5 0 0 1 12.5 5v2"/><path d="M2 8a1.3 1.3 0 0 1 2.6 0v1.5h6.8V8A1.3 1.3 0 0 1 14 8v4H2z"/><path d="M3.5 12v1.5M12.5 12v1.5"/>'],
+  ['film', '<rect x="2" y="3" width="12" height="10" rx="1"/><path d="M5 3v10M11 3v10M2 6h3M2 10h3M11 6h3M11 10h3"/>'],
+  ['letter', '<rect x="2" y="3.5" width="12" height="9" rx="1"/><path d="M2.5 4.5L8 9l5.5-4.5"/>'],
+  ['shelf', '<path d="M2.5 2v12M13.5 2v12M2.5 6.5h11M2.5 11h11"/><path d="M4.5 6.5V3.5M6.2 6.5V4M9 11V8M10.6 11V8.6"/>'],
 ];
 
-const SPRITE = SYMBOLS.map(([id, body]) => `<symbol id="pg-${id}" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round" stroke-linecap="round">${body}</symbol>`).join('');
+const ATTRS = 'viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round" stroke-linecap="round"';
 
-const NAMES = new Set(SYMBOLS.map(([id]) => id));
+const SPRITE = SYMBOLS.map(([id, body]) => `<symbol id="pg-${id}" ${ATTRS}>${body}</symbol>`).join('');
+
+const BODIES = new Map(SYMBOLS);
 
 /** The hidden sprite every pictogram on the page refers to: painted once at the top of a panel's body. */
 export function pictogramSprite(): Html {
@@ -40,5 +46,10 @@ export function pictogramSprite(): Html {
 
 /** The pictogram `name` (one nobody drew gets the dot), sized and inked by `className`. */
 export function pictogram(name: string, className: string): Html {
-  return raw(`<svg class="${className}" aria-hidden="true"><use href="#pg-${NAMES.has(name) ? name : 'dot'}"/></svg>`);
+  return raw(`<svg class="${className}" aria-hidden="true"><use href="#pg-${BODIES.has(name) ? name : 'dot'}"/></svg>`);
+}
+
+/** The pictogram `name` drawn whole, for a place with no sprite on the page (the kit's empty state). */
+export function inlinePictogram(name: string, className: string): Html {
+  return raw(`<svg class="${className}" aria-hidden="true" ${ATTRS}>${BODIES.get(name) ?? BODIES.get('dot')!}</svg>`);
 }

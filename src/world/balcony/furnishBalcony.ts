@@ -9,7 +9,8 @@ import { BALCONY_PLAN as plan } from './balconyPlan';
 import { BalconySlab } from './BalconySlab';
 import { BalconyDoor } from './BalconyDoor';
 import { BuildingFront } from './BuildingFront';
-import { BistroSet } from './BistroSet';
+import { BISTRO, BistroSet } from './BistroSet';
+import { BenchSeat } from '../street/details/BenchSeats';
 import { OpenAir } from './OpenAir';
 import { Precipitation } from '../street/Precipitation';
 
@@ -25,7 +26,7 @@ const PORTAL_HALF_DEPTH = 0.15;
  * painted view on a surround, the sun, the sky's ambient while the player is out). No `Room`: the
  * handle says how lit it is instead.
  */
-export function furnishBalcony(zone: Zone, { sky, home: { upgrades, furnishings } }: BuildContext): ZoneHandle {
+export function furnishBalcony(zone: Zone, { sky, listener, notices, home: { upgrades, furnishings, household } }: BuildContext): ZoneHandle {
   const { width, depth } = plan.room;
   const doorway = plan.room.doorways?.[0];
   if (!doorway) throw new Error('[balcony] the plan has no doorway (the glazed door back into the flat)');
@@ -55,6 +56,29 @@ export function furnishBalcony(zone: Zone, { sky, home: { upgrades, furnishings 
 
   const bistro = placerFor(zone, upgrades, plan.bistro.upgrade).place(new BistroSet(), new THREE.Vector3(plan.bistro.floor[0], 0, plan.bistro.floor[1]));
   furnishings?.register(zone, bistro, { key: 'bistroSet', owned: plan.bistro.upgrade });
+  // Its two chairs to sit on, riding the set wherever it is carried: half an hour watching the street, something seen.
+  const { sit } = plan;
+  let seen = 0;
+  const hours = (): number => sky.dayNight.state.hours;
+  for (const side of [-1, 1]) {
+    const seat = new BenchSeat({
+      at: [0, 0],
+      yaw: 0,
+      seat: sit.seat,
+      length: 0.42,
+      name: sit.name,
+      viewer: listener,
+      ...(household?.pastimes ? { pastimes: household.pastimes, wait: () => sit.wait } : {}),
+      overhear: () => {
+        const h = hours();
+        const lines = h < 12 ? sit.seen.morning : h < 18 ? sit.seen.day : sit.seen.evening;
+        return lines[seen++ % lines.length] ?? null;
+      },
+      tell: (line) => notices.react(line),
+    });
+    seat.rotation.y = side * -0.25;
+    placerFor(zone, upgrades, plan.bistro.upgrade).placeWith(bistro, seat, new THREE.Vector3(side * BISTRO.chairX, 0, 0.05));
+  }
   placeDecor(zone, plan.decor, upgrades, furnishings);
   // The florist's potted plants, as many as have been bought (they stand clear of the way: no colliders).
   if (upgrades) {

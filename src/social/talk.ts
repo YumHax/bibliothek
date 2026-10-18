@@ -2,7 +2,7 @@ import type * as THREE from 'three';
 import type { ModalLike } from '@/game/SessionParts';
 import type { SessionActions } from '@/game/SessionActions';
 import type { Reaction } from './conversation';
-import type { Fit, InteractionGroup, PersonId, SocialPlace } from './types';
+import type { Fit, InteractionGroup, Manner, PersonId, SocialPlace } from './types';
 
 /** The point over someone's head their words come from (their `SpeechBubble`): what the panel sits beside and frames. */
 export type SocialAnchor = THREE.Object3D;
@@ -20,8 +20,8 @@ export type SocialAnchor = THREE.Object3D;
  */
 export interface SocialBody {
   speak(line: string): void;
-  /** Acts what was said to them; `strength` 0..1 scales it (a little warmth, a big moment), their temperament too. */
-  react?(reaction: Reaction, strength?: number): void;
+  /** Acts what was said to them; `strength` 0..1 scales it (a little warmth, a big moment), their temperament and `manner` too. */
+  react?(reaction: Reaction, strength?: number, manner?: Manner | null): void;
   /**
    * The player is about to say something they would take this way (a row of the menu hovered or focused): a small
    * sign of it before the click (leaning in, brows up, a half smile, a look away, a wince); null: back to listening.

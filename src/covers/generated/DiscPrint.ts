@@ -1,10 +1,13 @@
 import type * as THREE from 'three';
 import type { Game } from '@/catalog/types';
 import { getPlatform } from '@/catalog/platforms';
-import { createCanvas, drawImageCover, fitFontSize, toTexture, FONT } from './canvasUtils';
+import { drawImageCover, fitFontSize, layoutCanvas, toTexture, FONT } from './canvasUtils';
 import { contrastText, css } from './palette';
 
+/** Layout side: every size below is in these units. */
 const SIZE_PX = 512;
+/** The canvas's side (px): the print read with the disc lifted up to the eye. */
+const LONG_PX = 1024;
 /** Radii as shares of the disc's: the clear hub with its stacking ring, and where the print starts. */
 const HUB = 0.28;
 const HOLE = 0.125;
@@ -17,7 +20,7 @@ const HOLE = 0.125;
 export function createDiscPrintTexture(game: Game, accent: THREE.Color, art: CanvasImageSource | null, anisotropy: number): THREE.CanvasTexture {
   const s = SIZE_PX;
   const c = s / 2;
-  const [canvas, ctx] = createCanvas(s, s);
+  const [canvas, ctx] = layoutCanvas(s, s, LONG_PX);
 
   ctx.save();
   circle(ctx, c, c, c);

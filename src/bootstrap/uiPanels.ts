@@ -3,6 +3,7 @@ import { WrapPanel } from '@/ui/street/WrapPanel';
 import { SEED_GAMES } from '@/catalog';
 import { MarketNotices } from '@/economy';
 import { COLLECTOR_SETS } from '@/economy/collectorSets';
+import { mostValuable } from '@/economy/collectionValue';
 import { shopPrice } from '@/economy/pricing';
 import { milestoneReward } from '@/economy/milestoneList';
 import type { ModalLike } from '@/game/SessionParts';
@@ -20,6 +21,8 @@ import { createPastimePanels } from '@/ui/grandma/pastimePanels';
 import { KidSwapPanel } from '@/ui/yard/KidSwapPanel';
 import { HandheldPanel } from '@/ui/yard/HandheldPanel';
 import { partyBuyer } from '@/building/neighboursParty';
+import { consignBuyer } from '@/economy/consignments';
+import { AUCTION } from '@/economy/pricing';
 import { HagglePanel } from '@/ui/market/HagglePanel';
 import { TradePanel } from '@/ui/market/TradePanel';
 import { NoticeBoardPanel } from '@/ui/market/NoticeBoardPanel';
@@ -50,7 +53,6 @@ import { clockShort } from '@/text/clock';
 import { gameDateLabel } from '@/time/gameDateLabel';
 import { onWorldLoad } from '@/ui/worldLoad';
 import { Fader } from '@/ui/Fader';
-import { stallLoyalty } from '@/social/market';
 import { repairHint } from '@/social/building/student';
 import { priced, spendTalkedDown, tillFactor } from '@/social/street/streetPerks';
 import { installMoneyCheat } from '@/cheats/moneyCheat';
@@ -81,10 +83,18 @@ export function createCollectionPanels(services: Services, notices: Notices) {
   const panel = new GamePanel(container);
   // The press at the time (Wikipedia), under the details of the game in hand; the lost prototype's trail tells the player its finds.
   panel.setReviews(services.reviews);
+  panel.setToday(() => services.today.gameDay);
   services.story.setNotices(notices);
-  const search = new SearchBar(container);
+  const search = new SearchBar(container, { coverUrl });
   // "Show on shelf" finds the box as the quick search does (`Browse`: the glow, the player turned towards it).
-  const editor = new CollectionEditor(container, collection, index, { canAdd: debug, coverUrl, onShow: (game) => search.pick(game) });
+  const editor = new CollectionEditor(container, collection, index, {
+    canAdd: debug,
+    coverUrl,
+    onShow: (game) => search.pick(game),
+    worth: (game) => mostValuable([game], (g) => fame.peek(g), 1)[0]?.value ?? 0,
+    today: () => services.today.gameDay,
+    market,
+  });
   const catalogue = new CataloguePanel(container, collection, index, wallet, fame, tx, { market, coverUrl });
   const sellDesk = new SellPanel(container, collection, wallet, fame, tx, { coverUrl, standing });
   return { panel, search, editor, catalogue, sellDesk };
@@ -99,12 +109,12 @@ export function createMarketPanels(services: Services, notices: Notices) {
   const { container, debug, wallet, collection, fame, tx, market, ledger, standing, prizes, coverUrl } = services;
   const haggle = new HagglePanel(container, wallet);
   const trade = new TradePanel(container, wallet, collection, fame, coverUrl);
-  const noticeBoard = new NoticeBoardPanel(container, { wallet, collection, market, ledger, standing, notices: new MarketNotices({ fame, ledger }), tx });
+  const noticeBoard = new NoticeBoardPanel(container, { wallet, collection, market, ledger, standing, notices: new MarketNotices({ fame, ledger }), tx, coverUrl });
   const jobLot = new JobLotPanel(container, { wallet, collection, market, tx }, coverUrl);
   const marketHall: MarketHallServices = { standing, notices: noticeBoard, lot: jobLot };
   // The back room: this week's offers by the game day, a plate for any of the hall's cabinets with the last initials signed.
   const backRoom = { today: () => services.today.gameDay, cabinets: hallCabinets, initials: () => services.scores.initials };
-  const prizeCounter = new PrizePanel(container, wallet, prizes, tx, { collection, games: SEED_GAMES, worth: (game) => shopPrice(game, fame.peek(game)) }, debug ? null : { has: (what) => services.upgrades.has(what) }, notices, backRoom, services.prizeGoal);
+  const prizeCounter = new PrizePanel(container, wallet, prizes, tx, { collection, games: SEED_GAMES, more: () => market.randomGames(`mystery:${services.today.gameDay}`, 30), worth: (game) => shopPrice(game, fame.peek(game)) }, debug ? null : { has: (what) => services.upgrades.has(what) }, notices, backRoom, services.prizeGoal);
   return { haggle, trade, marketHall, prizeCounter };
 }
 
@@ -159,7 +169,7 @@ export function createBookPanels(services: Services, late: UiLate, peopleBook: L
 export function createHomePanels(services: Services, notices: Notices, late: UiLate, player: FirstPersonController) {
   const { container, wallet, collection, fame, tx, market, standing, coverUrl, neighbourTrades, household, homeLife, perks } = services;
   const { social, peopleBook, contacts, voicemail } = createSocial(services, container, notices, () => late.session.get(), player);
-  const neighbourTradePanel = new NeighbourTradePanel(container, wallet, { trades: neighbourTrades, tx, collection }, coverUrl);
+  const neighbourTradePanel = new NeighbourTradePanel(container, { trades: neighbourTrades, tx, collection }, coverUrl);
   // The co-owners' postal vote, opened by the ballot box in the stairwell's hall (`building/coproMeeting`).
   const coproPanel = new CoproPanel(container);
   // What the street's shops and the hall console open: made once here, handed to their builders (`BuildContext.panels`).
@@ -172,10 +182,14 @@ export function createHomePanels(services: Services, notices: Notices, late: UiL
       upgrades: services.upgrades,
       price: (shop, base) => priced(base, tillFactor(shop, services.today.gameDay)),
       onBought: (shop) => spendTalkedDown(shop, services.today.gameDay),
+      // Adopted at the pet shop: the counter asks what she will be called; her coat is the one she came with.
+      cat: { name: () => services.catSettings.settings.name, coat: () => services.catSettings.settings.coat, rename: (name) => services.catSettings.update({ name }) },
     }),
     toDo: services.firstDay ? new ToDoNotePanel(container, services.firstDay) : undefined,
     // The residents' table at the neighbours' party (`building/neighboursParty`): the WE BUY desk's panel with their buyer.
     partySale: new SellPanel(container, collection, wallet, fame, tx, { coverUrl, buyer: partyBuyer(tx, services.today) }),
+    // The saleroom's consignment sheet: a copy of the player's entered for the next sale (`economy/consignments`).
+    consign: new SellPanel(container, collection, wallet, fame, tx, { coverUrl, buyer: consignBuyer(services.lots.auction, tx, services.today, AUCTION.consign.min) }),
     // The film night's pick on the courtyard's sheet (`building/yardCinema`).
     screening: new ScreeningPanel(container, collection, services.today, coverUrl),
     // The courtyard's kids (`building/kids`): a swap of carts, a go on their handheld, a cart they are bored of.
@@ -199,14 +213,16 @@ export function createHomePanels(services: Services, notices: Notices, late: UiL
   // What the bedroom opens (docs/household.md): the phone on the nightstand, the wardrobe's rail; and the dream on waking.
   const retro = SHOP_HOURS.retro!;
   const phone = new PhonePanel(container, {
+    hours: () => services.sky.dayNight.state.hours,
     marketOpen: () => homeLife.marketOpen,
     closedLine: () => `Nobody picks up: the market keeps RETRO GAMES’ hours, ${clockShort(retro.open)} to ${clockShort(retro.close)}.`,
     // A stallholder who likes the player counts as a regular's stall too (`social/market`).
-    loyalty: (platform) => stallLoyalty(platform, standing.loyalty(platform)),
+    loyalty: (platform) => standing.loyalty(platform),
     loyaltyName: (platform) => standing.loyaltyName(platform),
     regularFrom: HOUSEHOLD.phone.regularFrom,
     todays: () => market.todays(),
     deposit: (item) => market.holdDeposit(item),
+    coverUrl,
     hold: (item) => {
       const result = tx.holdCopy(item);
       if (result.ok) return null;

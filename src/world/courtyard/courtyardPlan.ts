@@ -79,8 +79,21 @@ export interface BulbString {
 export const COURTYARD_PLAN = {
   /** Our back door: on our back wall, east of the stairwell's shaft; the way back into the entrance hall. */
   backDoor: { at: [-4.0, COURTYARD.back] as Vec2, width: 0.9, height: 2.1 },
-  /** The lantern over it (`YardLantern`): how far over the door's head its glass starts (m). */
-  lantern: { overDoor: 0.28 },
+  /**
+   * The lanterns on the yard's walls (`YardLantern`), lit from dusk until it is light, so the yard can be crossed at
+   * night: over our back door, over the rear building's (BÂT. C), and over the bins' lean-to between the rear building's
+   * windows. `wall` the one it hangs on (`groundFloors.walls`: back or rear), `along` where (x), `y` its glass's foot (m).
+   */
+  lanterns: [
+    { wall: 'back', along: -4.0, y: 2.38 },
+    { wall: 'rear', along: -0.82, y: 2.48 },
+    { wall: 'rear', along: -8.05, y: 2.25 },
+  ] as { wall: 'back' | 'rear'; along: number; y: number }[],
+  /**
+   * The sky's ambient at night (`StreetLighting`'s `nightAmbient`): more than the open street's moonlit trace, the city's
+   * glow and the lit windows of four walls of facades thrown back into the yard (it has no lamp posts).
+   */
+  nightAmbient: 0.26,
   /** Where the player comes out (yaw 0 looks down -z, away from the door). */
   arrival: { at: [-4.0, COURTYARD.back - 1.1] as Vec2, yaw: 0 },
   /** The chestnut's trunk (it is planted with the street's trees): a collider. */
@@ -157,6 +170,10 @@ export const COURTYARD_PLAN = {
     /** A bucket and spade in the sandpit, a ball left on the lawn. */
     bucket: [-11.55, -26.4] as Vec2,
     ball: [-7.6, -31.1] as Vec2,
+    /** The lawn's top (the ball rolls on it), the bench's seat height, and what is seen sat on the bench a while, in turn. */
+    lawnY: 0.03,
+    benchSeat: 0.46,
+    benchSeen: ['Washing flaps on the airer. A sock escapes and is not pursued.', 'A window opens on the 2nd: the radio from inside, then a shout, then the window shuts.', 'The cat from the 3rd crosses the yard as if it owned it. It does, really.', 'Pigeons on the lean-to roof, arguing over nothing. Someone up there laughs.'],
     /** Weeds along the walls' foot (street frame), clear of the door, the bench and the pots. */
     weeds: [
       { from: [-12.9, -24.02] as Vec2, to: [-11.95, -24.02] as Vec2 },

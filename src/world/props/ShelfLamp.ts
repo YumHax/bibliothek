@@ -131,10 +131,15 @@ export class ShelfLamp extends SwitchableLamp implements Updatable, OccupancyAwa
 
   /** Hover glints the can and its stem (the base class: they are the lamp's small metal parts). */
   protected render(level: number): void {
-    const lit = this.parked ? 0 : level;
+    const lit = this.glowLevel(level);
     this.light.intensity = lit * this.options.intensity;
     this.lens.emissiveIntensity = lit * LENS_GLOW;
     this.syncShadow();
+  }
+
+  /** Parked, dark whatever its switch says: its halo too (`low`), or it hangs lit where no fixture shows. */
+  protected override glowLevel(level: number): number {
+    return this.parked ? 0 : level;
   }
 
   /** Per-frame shadow updates only while lit and in the player's room; a switched-off (or parked, or culled) spot renders no map at all. */

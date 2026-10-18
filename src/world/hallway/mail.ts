@@ -1,5 +1,6 @@
 import { themeOf } from '@/economy/marketDays';
 import { subscriptionMail } from '@/streetShops/newsagent';
+import { streetLetters } from '@/post/replies';
 import type { MarketNews } from '@/economy/marketEvents';
 import { flyerRumour } from '@/economy/rumours';
 import { ESTATE, estatePhase, estateStart } from '@/building/estateSale';
@@ -7,12 +8,12 @@ import { ARCADE_GAMES, type ArcadeGameId } from '../arcade/games';
 import type { MailPiece } from '../props/MailDrop';
 import { shuffled } from '@/random';
 import { dayLcg } from '@/time/daily';
-import { formatNumber } from '@/text/count';
+import { capitalise } from '@/text/strings';
 import { formatCoins, formatTickets } from '@/text/money';
 
 /** What the flyers can advertise, read-only: today's arcade challenge, today's market stock (if drawn yet); tomorrow's market theme comes from the calendar. */
 interface MailSources {
-  arcadeDaily?: { challenge(): { gameId: string; target: number; reward: number; done: boolean } };
+  arcadeDaily?: { challenge(): { gameId: string; reward: number; done: boolean; ask: string } };
   market?: {
     peekToday(): readonly { readonly game: { readonly title: string }; readonly price: number; readonly priced: boolean; readonly source: string }[] | null;
   };
@@ -54,10 +55,12 @@ export function mailFor(day: number, sources: MailSources): MailPiece[] {
   const estate = estateFlyer(day);
   // THE GAMING WEEKLY, for a subscriber (`streetShops/newsagent`): every morning, its cover card inside.
   const paper = subscriptionMail(day);
+  // What Front Street's post brings back: a friend's answer to a card from the pillar box, the Fair's unclaimed prize.
+  const street = streetLetters(day);
   // Talk of the market (a grail, the Flea Fair, a sale) always finds its way through the door.
-  const count = Math.max((letter ? 1 : 0) + (meme ? 1 : 0) + (estate ? 1 : 0) + (paper ? 1 : 0), rumour ? 1 : 0, roll < NONE ? 0 : roll < ONE ? 1 : 2);
+  const count = Math.max((letter ? 1 : 0) + (meme ? 1 : 0) + (estate ? 1 : 0) + (paper ? 1 : 0) + street.length, rumour ? 1 : 0, roll < NONE ? 0 : roll < ONE ? 1 : 2);
   if (!count) return [];
-  const topical = [letter, meme, paper, estate, rumour, challengeFlyer(sources), tomorrowFlyer(day), dealFlyer(sources, random)].filter((p): p is MailPiece => p !== null);
+  const topical = [letter, meme, ...street, paper, estate, rumour, challengeFlyer(sources), tomorrowFlyer(day), dealFlyer(sources, random)].filter((p): p is MailPiece => p !== null);
   const everyday = shuffled(random, EVERYDAY);
   return [...topical, ...everyday].slice(0, count).map((piece, i) => ({ ...piece, seed: day * 3 + i }));
 }
@@ -75,7 +78,7 @@ function challengeFlyer({ arcadeDaily }: MailSources): MailPiece | null {
   const challenge = arcadeDaily?.challenge();
   if (!challenge || challenge.done) return null;
   const game = ARCADE_GAMES[challenge.gameId as ArcadeGameId]?.({}).title ?? challenge.gameId.toUpperCase();
-  return { title: 'DAILY CHALLENGE', lines: [game, `Score ${formatNumber(challenge.target)}`, `+${formatTickets(challenge.reward)} at the arcade`], accent: 0x7a2e8f };
+  return { title: 'DAILY CHALLENGE', lines: [game, capitalise(challenge.ask), `+${formatTickets(challenge.reward)} at the arcade`], accent: 0x7a2e8f };
 }
 
 /**

@@ -27,6 +27,8 @@ export class HouseKeys extends Prop implements Interactable {
   readonly contactShadow = false;
   private readonly bunch = new THREE.Group();
   private readonly fob: THREE.MeshStandardMaterial;
+  /** Félix's brass ring and its tag, once Mémé gave it (`setFelixRing`): the keys hang on it from then on. */
+  private readonly felixRing = new THREE.Group();
   private pocketed = false;
 
   constructor(private readonly options: HouseKeysOptions = {}) {
@@ -52,6 +54,14 @@ export class HouseKeys extends Prop implements Interactable {
     // The fob, a leather tab on the other side of the ring.
     this.fob = new THREE.MeshStandardMaterial({ color: LEATHER, roughness: 0.7, emissive: 0xc9a75b, emissiveIntensity: 0 });
     part(this.bunch, 0.05, 0.004, 0.018, this.fob, { x: -0.035, y: 0.002 }).rotation.y = -0.4;
+    // Félix's ring (docs/grandma.md, the key ring keepsake): a worn brass ring through the bunch's, a card tag on it.
+    const brass = new THREE.Mesh(new THREE.TorusGeometry(0.016, 0.0022, 6, 22), METAL.agedBrass());
+    brass.rotation.x = Math.PI / 2;
+    brass.position.set(-0.008, 0.0035, 0.006); // convention-ok: lies over the bunch's own split ring, a hair above it
+    this.felixRing.add(brass);
+    part(this.felixRing, 0.03, 0.0012, 0.02, standard({ color: 0xd9c9a3, roughness: 0.9 }), { x: -0.02, y: 0.004, z: 0.03 }).rotation.y = 0.5; // convention-ok: the tag lies on the bowl beside the fob, clear of it
+    this.felixRing.visible = false;
+    this.bunch.add(this.felixRing);
     this.bunch.traverse((o) => (o.castShadow = false));
     this.add(this.bunch);
 
@@ -72,6 +82,11 @@ export class HouseKeys extends Prop implements Interactable {
     this.options.onChange?.(inPocket);
   }
 
+  /** The keys on Félix's brass ring (Mémé gave it) or not. */
+  setFelixRing(on: boolean): void {
+    this.felixRing.visible = on;
+  }
+
   // --- Interactable -------------------------------------------------------------------------
 
   setHovered(hovered: boolean): void {
@@ -79,7 +94,8 @@ export class HouseKeys extends Prop implements Interactable {
   }
 
   label(): string {
-    return this.pocketed ? 'Key bowl · leave your keys' : 'Your keys · take';
+    if (this.pocketed) return 'Key bowl · leave your keys';
+    return this.felixRing.visible ? 'Your keys, on Félix’s ring · take' : 'Your keys · take';
   }
 
   /** The bunch clinking into the bowl or out of it. */
@@ -90,6 +106,7 @@ export class HouseKeys extends Prop implements Interactable {
   activate(session: SessionActions): void {
     this.setInPocket(!this.pocketed);
     this.jingle();
-    session.react(this.pocketed ? 'Keys in pocket' : 'Keys left in the bowl');
+    if (this.pocketed && this.felixRing.visible) session.react('Keys in pocket, on his ring. The tag still says 5th FLOOR, LEFT. MIND THE STEP.');
+    else session.react(this.pocketed ? 'Keys in pocket' : 'Keys left in the bowl');
   }
 }

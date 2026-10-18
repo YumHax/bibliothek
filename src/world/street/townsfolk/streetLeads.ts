@@ -47,6 +47,6 @@ export function withLeads<R>(talk: (role?: R) => string, day: () => number, owns
   return (role) => {
     const today = day();
     const lead = passerLead(today, leadsOn(today, owns), random());
-    return lead ? `“${lead.says}”` : talk(role);
+    return lead ? lead.says : talk(role);
   };
 }

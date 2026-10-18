@@ -5,8 +5,9 @@ import { escapeHtml } from './html';
 /**
  * A cover that does not load (no box art for that game, the art server down) becomes a small made-up
  * box instead of an empty frame: the platform's colour, its short name on a band, the title. One
- * listener for every panel's thumbnails (`.catalogue__cover` images, `installCoverPlaceholders`); a
- * thumbnail made with `coverAttrs` says its title and platform, others borrow the row's title.
+ * listener for every panel's thumbnails (`.catalogue__cover` images, and any made with `coverAttrs` whatever its
+ * class: the search's, the collector's snaps; `installCoverPlaceholders`); a thumbnail made with `coverAttrs` says its
+ * title and platform, others borrow the row's title. The made-up box keeps the image's own classes (its size there).
  */
 export function coverAttrs(game: Game): string {
   const platform = getPlatform(game.platform);
@@ -18,7 +19,7 @@ export function coverAttrs(game: Game): string {
 export function installCoverPlaceholders(root: HTMLElement): () => void {
   const onError = (e: Event): void => {
     const img = e.target;
-    if (!(img instanceof HTMLImageElement) || !img.classList.contains('catalogue__cover')) return;
+    if (!(img instanceof HTMLImageElement) || !(img.classList.contains('catalogue__cover') || img.dataset.coverTitle !== undefined)) return;
     img.replaceWith(placeholder(img));
   };
   root.addEventListener('error', onError, true);
@@ -29,7 +30,8 @@ function placeholder(img: HTMLImageElement): HTMLElement {
   const row = img.closest('[data-result], .catalogue__row, li, tr, article');
   const title = img.dataset.coverTitle ?? row?.querySelector('.catalogue__title, h3, h4, strong')?.textContent?.trim() ?? '';
   const box = document.createElement('span');
-  box.className = 'catalogue__cover catalogue__cover--placeholder';
+  const own = [...img.classList].filter((c) => c !== 'catalogue__cover');
+  box.className = ['catalogue__cover', 'catalogue__cover--placeholder', ...own].join(' ');
   box.setAttribute('aria-hidden', 'true');
   if (img.dataset.coverColour) box.style.setProperty('--cover-colour', img.dataset.coverColour);
   const band = document.createElement('span');

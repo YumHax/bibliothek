@@ -289,6 +289,7 @@ export class Showcases implements GameSource {
     if (!placed || !slot) return;
     restInSlot(slot, box.dimensions, box.restPosition, box.restQuaternion);
     box.slideOut = SLIDE_OUT;
+    box.spineOut = false; // on show, face out (its place on the shelves keeps how it stood there)
     box.home = slot.holder;
     box.restless = (b) => placed.motion.track(b);
     if (!inHand) {

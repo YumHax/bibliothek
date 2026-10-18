@@ -6,6 +6,10 @@
     --repair-hot: #f0d070;
     --repair-metal: #3a3a40;
     --repair-led: #ff3a2a;
+    /* The job ticket's card and the stamp on it once it works. */
+    --repair-ticket: #f1e8cf;
+    --repair-ticket-ink: #2a2622;
+    --repair-stamp: #b8322a;
     padding: 1.2rem;
   }
   .repair {
@@ -15,19 +19,105 @@
     padding: var(--sp-4) 1.2rem 0.9rem;
     box-sizing: border-box;
   }
-  .repair h2 {
-    margin: 0 0 var(--sp-1);
+
+  /* --- the bench ---------------------------------------------------------------------------------------- */
+
+  .repair__head {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-end;
+    justify-content: space-between;
+    gap: var(--sp-3);
+    margin-bottom: var(--sp-3);
+  }
+  /* The job ticket tied to the console: a card with a punched hole, what the seller said in pen, the stamp once mended. */
+  .repair__ticket {
+    position: relative;
+    flex: 1 1 16rem;
+    max-width: 26rem;
+    padding: var(--sp-2) var(--sp-3) var(--sp-2) 2.2rem;
+    border-radius: var(--ui-radius-xs);
+    background: var(--repair-ticket);
+    color: var(--repair-ticket-ink);
+    box-shadow: 2px 3px 0 var(--shade-45);
+    rotate: -1deg;
+    color-scheme: light;
+  }
+  .repair__ticket::before {
+    content: '';
+    position: absolute;
+    left: 0.75rem;
+    top: 50%;
+    width: 0.6rem;
+    height: 0.6rem;
+    translate: 0 -50%;
+    border-radius: 50%;
+    background: var(--ui-panel);
+    box-shadow: inset 0 1px 2px var(--shade-45);
+  }
+  .repair__ticket h2 {
+    margin: 0;
     font-family: var(--ui-font-display);
     font-weight: 400;
-    font-size: 1.2rem;
+    font-size: var(--fs-t1);
   }
   .repair__job {
-    margin: 0 0 0.6rem;
-    font-size: var(--fs-4);
-    font-style: italic;
-    color: var(--ui-text-dim);
+    margin: 0.15rem 0 0;
+    font-family: var(--ui-font-hand);
+    font-size: var(--fs-t1);
+    line-height: 1.15;
   }
+  .repair__stamp {
+    position: absolute;
+    right: var(--sp-3);
+    top: 50%;
+    padding: 0.1rem 0.5rem;
+    border: 3px solid var(--repair-stamp);
+    border-radius: var(--ui-radius-xs);
+    color: var(--repair-stamp);
+    font-family: var(--ui-font-display);
+    font-size: var(--fs-t2);
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    translate: 0 -50%;
+    rotate: -12deg;
+    opacity: 0;
+    visibility: hidden;
+  }
+  .repair__ticket--done .repair__stamp {
+    visibility: visible;
+    opacity: 0.85;
+    animation: repair-stamp var(--dur-long) var(--ui-ease-pop);
+  }
+  @keyframes repair-stamp {
+    from { opacity: 0; scale: 1.8; }
+    to { opacity: 0.85; scale: 1; }
+  }
+
+  /* Where the job is: five words in a row, the one under way lit, those done ticked. */
+  .repair__stages {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.3rem;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+  .repair__stage {
+    padding: 0.2rem 0.55rem;
+    border: 1px solid var(--ui-border);
+    border-radius: var(--ui-radius-pill);
+    color: var(--ui-text-dim);
+    font-size: var(--fs-2);
+    white-space: nowrap;
+    transition: background var(--dur-settle) ease, color var(--dur-settle) ease;
+  }
+  .repair__stage--done { color: var(--ui-text); border-color: var(--ui-success); }
+  .repair__stage--done::before { content: '✓ '; color: var(--ui-success); }
+  .repair__stage--now { color: var(--ui-black); background: var(--repair-hot); border-color: var(--repair-hot); font-weight: 600; }
+
   .repair__bench {
+    position: relative;
     border-radius: var(--ui-radius-sm);
     overflow: hidden;
     touch-action: none;
@@ -37,12 +127,7 @@
     display: block;
     width: 100%;
     height: auto;
-  }
-  .repair__svg [data-hit] {
-    cursor: pointer;
-  }
-  .repair__svg--finding .repair__part:hover {
-    filter: drop-shadow(0 0 6px var(--repair-hot));
+    pointer-events: none;
   }
   .repair__shell {
     transition: opacity var(--dur-settle) ease;
@@ -50,26 +135,73 @@
   .repair__shell--ghost {
     opacity: 0.35;
   }
-  .repair__shell--ghost:hover {
-    opacity: var(--ui-faint);
-  }
-  .repair__screw:hover circle {
-    stroke: var(--repair-hot);
-  }
-  .repair__screw--out {
-    cursor: default;
-  }
-  .repair__power:hover rect {
-    fill: var(--repair-metal);
-  }
   .repair__led--on {
     filter: drop-shadow(0 0 8px var(--repair-led));
   }
-  .repair__step {
-    min-height: 2.6em;
-    margin: 0.6rem 0 0.5rem;
-    font-size: var(--fs-5);
+
+  /* What can be touched at this step: a button over each, unseen until pointed at or walked to. */
+  .repair__hits { position: absolute; inset: 0; }
+  .repair__hit {
+    position: absolute;
+    left: var(--x);
+    top: var(--y);
+    width: var(--w);
+    height: var(--h);
+    padding: 0;
+    border: 2px dashed transparent;
+    border-radius: var(--ui-radius-sm);
+    background: transparent;
+    cursor: pointer;
+    transition: border-color var(--dur-hover) ease, box-shadow var(--dur-hover) ease, background var(--dur-hover) ease;
   }
+  .repair__hit--round { border-radius: 50%; }
+  .repair__hit:hover,
+  .repair__hit:focus-visible {
+    border-color: var(--repair-hot);
+    border-style: solid;
+    background: var(--tint-08);
+    box-shadow: 0 0 12px var(--repair-hot);
+    outline: none;
+  }
+  /* Looking the board over: every part shows it can be looked at, faintly. */
+  .repair__hit--look { border-color: var(--tint-20); }
+  .repair__hit--nope { animation: repair-nope var(--dur-long) ease; }
+  @keyframes repair-nope {
+    0%, 100% { translate: 0 0; }
+    20% { translate: -5px 0; }
+    40% { translate: 5px 0; }
+    60% { translate: -3px 0; }
+    80% { translate: 3px 0; }
+  }
+
+  /* The tool in hand, drawn by the part it works on: it rubs, dabs or touches at each stroke. */
+  .repair__in-hand {
+    position: absolute;
+    left: var(--x);
+    top: var(--y);
+    width: 11%;
+    pointer-events: none;
+    filter: drop-shadow(2px 4px 2px var(--shade-45));
+  }
+  .repair__in-hand svg { display: block; width: 100%; height: auto; }
+  .repair__in-hand--work { animation: repair-work var(--dur-slow) ease; }
+  @keyframes repair-work {
+    0%, 100% { translate: 0 0; rotate: 0deg; }
+    30% { translate: -8px 4px; rotate: -8deg; }
+    65% { translate: 8px 2px; rotate: 6deg; }
+  }
+
+  /* The repair manual's note: what was found, what to do next, in pencil; three lines kept so the tray never moves. */
+  .repair__note {
+    min-height: calc(3 * 1.2em);
+    margin: var(--sp-3) 0 var(--sp-2);
+    padding-left: var(--sp-3);
+    border-left: 3px solid var(--repair-hot);
+    font-family: var(--ui-font-hand);
+    font-size: var(--fs-t1);
+    line-height: 1.2;
+  }
+
   .repair__tools {
     display: flex;
     flex-wrap: wrap;
@@ -78,55 +210,134 @@
   .repair__tool {
     display: flex;
     align-items: center;
-    gap: 0.35rem;
-    padding: 0.35rem 0.6rem;
+    gap: 0.4rem;
+    padding: 0.25rem 0.6rem 0.25rem 0.3rem;
     border: 1px solid var(--ui-border);
     border-radius: var(--ui-radius-sm);
-    background: transparent;
+    background: var(--ui-fill);
     color: inherit;
     font: inherit;
     font-size: var(--fs-3);
     cursor: pointer;
+    transition: border-color var(--dur-hover) ease, translate var(--dur-hover) ease;
   }
+  .repair__tool-art { width: 2.2rem; height: 2.2rem; flex: none; }
   .repair__tool:disabled {
     opacity: var(--ui-faint);
     cursor: default;
   }
-  .repair__tool:not(:disabled):hover {
+  .repair__tool:not(:disabled):hover,
+  .repair__tool:not(:disabled):focus-visible {
     border-color: var(--repair-hot);
+    translate: 0 -2px;
   }
   /* The tool in hand stays lit, even once it has nothing left to do. */
   .repair__tool--in-hand,
   .repair__tool--in-hand:disabled {
     opacity: 1;
     border-color: var(--repair-hot);
+    box-shadow: 0 0 0 1px var(--repair-hot);
   }
-  .repair footer {
+  .repair__tool--nope { animation: repair-nope var(--dur-long) ease; }
+
+  .repair__empty { display: grid; justify-items: center; gap: var(--sp-3); padding: var(--sp-3) 0; text-align: center; color: var(--ui-text-dim); }
+  .repair__empty-art { width: min(100%, 20rem); height: auto; }
+  .repair__empty p { margin: 0; max-width: 26rem; font-family: var(--ui-font-hand); font-size: var(--fs-t1); }
+
+  .repair .ui-panel__footer {
     display: flex;
     justify-content: flex-end;
     margin-top: 0.8rem;
   }
-  .console-desk__rows {
-    list-style: none;
-    margin: 0.4rem 0 0;
-    padding: 0;
-    display: flex;
-    flex-direction: column;
-    gap: var(--sp-2);
+
+  /* --- TV REPAIR's counter --------------------------------------------------------------------------------- */
+
+  /* The shop's paper (its tent card's cream and blue), the counter's rubber mat, the repairer's price tags. */
+  .console-desk {
+    --desk-paper: #f2ede0;
+    --desk-ink: #1f2a3a;
+    --desk-ink-soft: #55607a;
+    --desk-blue: #2e5a8a;
+    --desk-rule: rgba(31, 42, 58, 0.2);
+    --desk-mat: #2f4a3c;
+    --desk-mat-line: rgba(255, 255, 255, 0.06);
+    --desk-tag: #fbf6e6;
   }
-  .console-desk__rows li {
-    display: flex;
-    justify-content: space-between;
+  .console-desk__card.ui-card {
+    width: min(var(--card-w-lg), 100%);
+    color: var(--desk-ink);
+    background: var(--desk-paper);
+    border: 3px solid var(--desk-blue);
+    --ui-text-dim: var(--desk-ink-soft);
+    --ui-border: var(--desk-rule);
+    --focus: var(--desk-ink);
+    color-scheme: light;
+  }
+  .console-desk__card > .ui-panel__header h2 { color: var(--desk-blue); letter-spacing: 0.1em; }
+  .console-desk__counter {
+    padding: var(--sp-3);
+    border-radius: var(--ui-radius-sm);
+    background:
+      repeating-linear-gradient(0deg, transparent 0, transparent 15px, var(--desk-mat-line) 15px, var(--desk-mat-line) 16px),
+      repeating-linear-gradient(90deg, transparent 0, transparent 15px, var(--desk-mat-line) 15px, var(--desk-mat-line) 16px),
+      var(--desk-mat);
+    box-shadow: inset 0 2px 6px var(--shade-45);
+  }
+  .console-desk__wares { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: var(--sp-2); }
+  .console-desk__ware {
+    display: grid;
+    grid-template-columns: 6.5rem 1fr auto auto;
     align-items: center;
-    gap: 0.8rem;
+    gap: var(--sp-3);
+    padding: var(--sp-1) var(--sp-2);
+    border-radius: var(--ui-radius-sm);
+    color: var(--paper-speech);
   }
-  .console-desk__rows small {
-    display: block;
-    font-size: var(--fs-3);
-    color: var(--ui-text-dim);
+  .console-desk__ware .console-art { width: 6.5rem; }
+  .console-desk__what strong { display: block; font-size: var(--fs-6); }
+  .console-desk__what small { display: block; font-size: var(--fs-3); opacity: 0.75; }
+  /* The repairer's tag on string: what he pays, in his pen. */
+  .console-desk__tag {
+    position: relative;
+    padding: 0.15rem 0.6rem 0.15rem 1.1rem;
+    border-radius: var(--ui-radius-xs) 0.9rem 0.9rem var(--ui-radius-xs);
+    background: var(--desk-tag);
+    color: var(--desk-ink);
+    font-family: var(--ui-font-hand);
+    font-size: var(--fs-t2);
+    line-height: 1.1;
+    white-space: nowrap;
+    rotate: -4deg;
+    box-shadow: 1px 2px 0 var(--shade-45);
   }
-  .console-desk__dim {
-    font-size: var(--fs-5);
-    color: var(--ui-text-dim);
+  .console-desk__tag::before { content: ''; position: absolute; left: 0.35rem; top: 50%; width: 0.35rem; height: 0.35rem; translate: 0 -50%; border-radius: 50%; background: var(--desk-mat); }
+  .console-desk__ware .ui-btn { min-width: 9.5rem; }
+  .console-desk__bare { display: flex; align-items: center; gap: var(--sp-3); color: var(--paper-speech); }
+  .console-desk__bare .console-art { width: 6.5rem; opacity: 0.35; }
+  .console-desk__bare p { margin: 0; font-family: var(--ui-font-hand); font-size: var(--fs-t1); }
+
+  /* The broken ones at home, as a note pinned beside the till. */
+  .console-desk__home {
+    position: relative;
+    margin-top: var(--sp-3);
+    padding: var(--sp-3) var(--sp-3) var(--sp-2);
+    border-radius: var(--ui-radius-xs);
+    rotate: 0.6deg;
+  }
+  .console-desk__home::before { content: ''; position: absolute; top: 0.35rem; left: 50%; width: 0.7rem; height: 0.7rem; translate: -50% 0; border-radius: 50%; background: var(--repair-stamp); box-shadow: 0 1px 2px var(--shade-45); }
+  .console-desk__home h3 { margin: 0.3rem 0 var(--sp-2); font-family: var(--ui-font-hand); font-size: var(--fs-t2); font-weight: 400; }
+  .console-desk__home ul { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: var(--sp-1); }
+  .console-desk__home li { display: flex; align-items: center; gap: var(--sp-3); }
+  .console-desk__home .console-art { width: 4rem; flex: none; }
+  .console-desk__home strong { display: block; font-size: var(--fs-4); }
+  .console-desk__home small { display: block; font-family: var(--ui-font-hand); font-size: var(--fs-7); line-height: 1.1; }
+
+  .console-art { display: block; height: auto; }
+  .console-art--broken { filter: grayscale(0.85); opacity: 0.8; }
+
+  @media (max-width: 34rem) {
+    .console-desk__ware { grid-template-columns: 4.5rem 1fr; }
+    .console-desk__ware .console-art { width: 4.5rem; }
+    .console-desk__tag { justify-self: start; }
   }
 }

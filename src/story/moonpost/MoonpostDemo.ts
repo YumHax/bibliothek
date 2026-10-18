@@ -56,10 +56,15 @@ type Mode = 'title' | 'play' | 'delivered' | 'credits' | 'end';
 
 export class MoonpostDemo {
   over = false;
-  /** True from the moment the credits start (the demo was played to its end). */
+  /** True once the credits have rolled (to their end, or skipped by Start): the demo was played to its end. */
   finished = false;
   private mode: Mode = 'title';
   private clock = 0;
+
+  /** The last letter delivered: the credits are rolling or done (switched off now, it still counts as played through). */
+  get rolled(): boolean {
+    return this.mode === 'credits' || this.mode === 'end';
+  }
   private modeTime = 0;
   private readonly fx = new Fx();
   private readonly keys = new KeyEdges();
@@ -118,13 +123,14 @@ export class MoonpostDemo {
         this.fly(dt, c);
         return;
       case 'delivered':
-        if (this.modeTime > 2.6 || startPressed) {
-          this.finished = true;
-          this.go('credits', 'end');
-        }
+        if (this.modeTime > 2.6 || startPressed) this.go('credits', 'end');
         return;
       case 'credits':
-        if (this.modeTime > CREDITS_SECONDS || startPressed) this.go('end');
+        // The letter and the reward wait for the credits' end (`finished`): nothing pops up over the names.
+        if (this.modeTime > CREDITS_SECONDS || startPressed) {
+          this.finished = true;
+          this.go('end');
+        }
         return;
       case 'end':
         if (this.modeTime > END_HOLD || (startPressed && this.modeTime > 0.5)) this.over = true;
@@ -382,15 +388,20 @@ export class MoonpostDemo {
   private drawHud(ctx: CanvasRenderingContext2D): void {
     ctx.fillStyle = 'rgba(0,0,0,0.5)';
     ctx.fillRect(0, 0, DEMO_W, 16);
-    drawText(ctx, `LETTERS ${this.pads.filter((p) => p.kind === 'house' && p.waiting).length}`, 4, 8, 6, '#ffe066', 'left');
-    drawText(ctx, 'FUEL', 118, 8, 6, '#c9c4ff', 'right');
+    drawText(ctx, `LETTERS ${this.pads.filter((p) => p.kind === 'house' && p.waiting).length}`, 4, 8, 7, '#ffe066', 'left');
+    drawText(ctx, 'FUEL', 118, 8, 7, '#c9c4ff', 'right');
     ctx.fillStyle = '#222233';
     ctx.fillRect(122, 5, 60, 6);
     ctx.fillStyle = this.fuel < 25 ? '#ff5f5f' : '#63b3ff';
     ctx.fillRect(122, 5, 60 * (this.fuel / FUEL_MAX), 6);
     const speed = Math.hypot(this.vx, this.vy);
-    drawText(ctx, `${Math.round(speed)}`, DEMO_W - 4, 8, 6, this.vy > LAND.vy ? '#ff8a80' : '#7ee787', 'right');
-    if (this.modeTime < 4 && this.delivered === 0) drawText(ctx, 'A: JET PACK   LEFT/RIGHT: STEER', DEMO_W / 2, 26, 5, '#ffffff');
+    drawText(ctx, `${Math.round(speed)}`, DEMO_W - 4, 8, 7, this.vy > LAND.vy ? '#ff8a80' : '#7ee787', 'right');
+    // The help, read from the sofa: 7 px at least, on a band of its own.
+    if (this.modeTime < 4 && this.delivered === 0) {
+      ctx.fillStyle = 'rgba(0,0,0,0.55)';
+      ctx.fillRect(0, 19, DEMO_W, 14);
+      drawText(ctx, 'A: JET PACK  LEFT/RIGHT: STEER', DEMO_W / 2, 26, 7, '#ffffff');
+    }
   }
 
   private drawTitle(ctx: CanvasRenderingContext2D): void {
@@ -398,9 +409,9 @@ export class MoonpostDemo {
     ctx.fillRect(0, 54, DEMO_W, 92);
     const bob = Math.sin(this.clock * 2) * 2;
     drawText(ctx, 'MOONPOST', DEMO_W / 2, 80 + bob, 20, '#ffe066');
-    drawText(ctx, 'PROTOTYPE 0.9  NOT FOR SALE', DEMO_W / 2, 106, 6, '#ff8a80');
+    drawText(ctx, 'PROTOTYPE 0.9  NOT FOR SALE', DEMO_W / 2, 106, 7, '#ff8a80');
     if (Math.floor(this.clock * 2) % 2 === 0) drawText(ctx, 'PRESS START', DEMO_W / 2, 130, 8, '#ffffff');
-    drawText(ctx, '(C) 1993 HALCYON BYTE', DEMO_W / 2, 226, 6, '#c9c4ff');
+    drawText(ctx, '(C) 1993 HALCYON BYTE', DEMO_W / 2, 226, 7, '#c9c4ff');
   }
 
   private drawCredits(ctx: CanvasRenderingContext2D): void {
@@ -410,7 +421,7 @@ export class MoonpostDemo {
     }
     if (this.mode === 'end') {
       drawText(ctx, 'THE END?', DEMO_W / 2, DEMO_H / 2 - 8, 14, '#ffe066');
-      drawText(ctx, 'LEVELS 4-8: TO DO', DEMO_W / 2, DEMO_H / 2 + 14, 6, '#ff8a80');
+      drawText(ctx, 'LEVELS 4-8: TO DO', DEMO_W / 2, DEMO_H / 2 + 14, 7, '#ff8a80');
       return;
     }
     const lines: [string, string][] = [
@@ -432,6 +443,8 @@ export class MoonpostDemo {
       ['SPECIAL THANKS', '#c9c4ff'],
       ['THE LAUNDERETTE', '#ffffff'],
       ['FOR THE HEATING', '#ffffff'],
+      ['', ''],
+      ['F.A., WHO KEPT ASKING', '#ffffff'],
       ['', ''],
       ['HALCYON BYTE 1993', '#7ee787'],
     ];

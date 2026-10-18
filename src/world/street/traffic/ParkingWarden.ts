@@ -24,7 +24,19 @@ interface ParkingWardenOptions {
 /** How long she writes a ticket (s), how often a car looked at gets one, how far ahead she looks for the next car (m). */
 const ROUND = { writing: 6, ticketed: 0.35, look: 22, pause: [3, 8] as [number, number] };
 /** What she says, clicked, and now and then to herself as she writes. */
-const LINES = ['Two hours, it says. Two hours.', 'I don’t make the rules, love.', 'Lovely day for it.', 'Paid and displayed? Didn’t think so.'] as const;
+const LINES = [
+  'Two hours, it says. Two hours.',
+  'I don’t make the rules, love.',
+  'Lovely day for it.',
+  'Paid and displayed? Didn’t think so.',
+  'That white van by the market? Sunday mornings only. I let him off, he’s got all those boxes.',
+  'There’s a tabby who sleeps on the bonnets. Warm engines. I write round her.',
+  'Nobody tickets a taxi on the rank. More than my job’s worth.',
+  'The bus driver waves every morning. Twelve years, never once missed.',
+  'Number 31 again? I know that car. Grandson visits Thursdays.',
+] as const;
+/** The first lines are hers to mutter writing a ticket; the rest is what she knows of the street, said when asked. */
+const MUTTERED = 4;
 
 /**
  * The traffic warden's round (Monday to Saturday, in her hours): she walks the kerbside of one pavement along her
@@ -42,6 +54,8 @@ export class ParkingWarden extends THREE.Group implements Furniture, Updatable {
   private task: 'off' | 'walking' | 'writing' | 'pausing' = 'off';
   private clock = 0;
   private looking: ParkedSpot | null = null;
+  /** Whether the car she is looking at gets a ticket: rolled once, as she reaches it, so the pose and the ticket agree. */
+  private writesUp = false;
   private readonly seen = new Set<object>();
 
   constructor(private readonly options: ParkingWardenOptions) {
@@ -109,19 +123,21 @@ export class ParkingWarden extends THREE.Group implements Furniture, Updatable {
 
   /** By the car: she looks it over, and may write it up. */
   private inspect(spot: ParkedSpot): void {
-    // Facing the car (Walker's yaw: 0 looks down +z): towards the road from her pavement.
-    this.walker.stand(this.side < 0 ? 0 : Math.PI, this.random() < ROUND.ticketed ? 'think' : 'hips');
+    // Facing the car (Walker's yaw: 0 looks down +z): towards the road from her pavement. Writing it up, pad held in
+    // front of her ('read'); letting it off, a look over it, hands on hips, and on sooner.
+    this.writesUp = this.random() < ROUND.ticketed && !spot.car.active;
+    this.walker.stand(this.side < 0 ? 0 : Math.PI, this.writesUp ? 'read' : 'hips');
     this.task = 'writing';
-    this.clock = ROUND.writing;
+    this.clock = this.writesUp ? ROUND.writing : ROUND.writing * 0.4;
     this.looking = spot;
   }
 
   private finishWriting(): void {
     const spot = this.looking;
     this.looking = null;
-    if (spot && this.random() < ROUND.ticketed && !spot.car.active) {
+    if (spot && this.writesUp && !spot.car.active) {
       this.options.cars.ticket(spot.car);
-      if (this.random() < 0.4) this.walker.say(LINES[Math.floor(this.random() * LINES.length)]!);
+      if (this.random() < 0.4) this.walker.say(LINES[Math.floor(this.random() * MUTTERED)]!);
     }
     this.task = 'pausing';
     const [a, b] = ROUND.pause;

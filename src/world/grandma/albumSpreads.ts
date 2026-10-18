@@ -23,7 +23,7 @@ interface SpreadSources {
   visits: GrandmaVisits;
   finds: AlbumFinds | null;
   prints: AlbumPrints | null;
-  /** The still a memory left this session (`MemoryProjector.still`), or null. */
+  /** The still a memory left (`MemoryProjector.still`: this session's, else the one kept from an earlier one), or null. */
   still(id: string): string | null;
 }
 

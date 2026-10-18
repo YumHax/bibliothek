@@ -52,11 +52,11 @@ const KEEPSAKES: Readonly<Record<PersonId, Partial<Record<KeepsakeTier, Keepsake
   },
   ines: {
     friend: { kind: 'postcard', name: 'postcard', words: 'Wish you were here! The museum had a whole room of old consoles, I thought of you the whole time. Back Sunday. Love, Inès.', giving: 'I brought you a postcard back. I know, I could have just posted it.', colour: 0xfdf8ec, place: 'Greetings from Lisbon' },
-    close: { kind: 'photo', name: 'photo of the two of you', words: 'You and Inès at your door, both laughing at something. On the back: “Same time next level.”', giving: 'Wait, wait, a photo. For the fridge. Smile!', colour: 0xffffff },
+    close: { kind: 'ticket', name: 'boarding pass', words: 'An old boarding pass, Osaka to Paris, and on the back: “Next trip, you’re coming. I’ve chosen the game shops already. Inès.”', giving: 'My boarding pass from Osaka. Read the back. I mean it.', mark: 'OSA → CDG', colour: 0xe8eef6 },
   },
   marco: {
     friend: { kind: 'ticket', name: 'arcade ticket', words: 'An orange ticket from the hall, signed in marker: MAR. “Rematch any time. You’ll still lose.”', giving: 'Here. The ticket from our first game. Signed, like a pro.', mark: 'MAR', colour: 0xf2a541 },
-    close: { kind: 'photo', name: 'photo of the two of you', words: 'Marco doing bunny ears behind you at your door. On the back: “Champions, 1998 and today.”', giving: 'Come here, a photo! For your fridge. Don’t blink.', colour: 0xffffff },
+    close: { kind: 'card', name: 'tournament badge', words: 'A laminated badge from a 1998 fighting-game tournament: MARCO, PLAYER. On the back, in marker: “Tag team next year. You and me. Champions.”', giving: 'My badge from ’98. Best day of my life, until we met. Don’t tell Sam I said that.', mark: 'PLAYER', colour: 0xf5d24a },
   },
   roux: {
     friend: { kind: 'note', name: 'list of the building', words: 'Who lived where in 1971, in her careful hand: the Lamberts on the 6th, the Brunos on the 3rd, “and on the 5th, opposite, a young man with a guitar who played far too late. That was your flat.”', giving: 'I wrote down who lived where, the year I came. You should know your building.', colour: 0xf6efdc },
@@ -100,7 +100,7 @@ const KEEPSAKES: Readonly<Record<PersonId, Partial<Record<KeepsakeTier, Keepsake
     close: { kind: 'card', name: 'lodge key tag', words: 'A blank key tag from the lodge’s board, with your floor written on it in her hand: “5th. One of mine.”', giving: 'Every family in this building has a tag on my board. Now you too.', mark: '5th', colour: 0xd9b36a },
   },
   bertin: {
-    friend: { kind: 'card', name: 'syndic’s card', words: 'Gérard Bertin, building syndic. On the back: “For the agenda, my private number. Use it wisely.”', giving: 'My card. The private number is on the back. For emergencies only.', mark: 'SYNDIC', colour: 0xf0f0f0 },
+    friend: { kind: 'card', name: 'syndic’s card', words: 'Hubert Bertin, building syndic. On the back: “For the agenda, my private number. Use it wisely.”', giving: 'My card. The private number is on the back. For emergencies only.', mark: 'SYNDIC', colour: 0xf0f0f0 },
     close: { kind: 'note', name: 'minutes', words: 'An extract of the co-owners’ minutes, signed: “The meeting thanks the 5th floor for their good sense.” In his hand, beside it: “Unanimous. G.B.”', giving: 'The minutes. You’re in them, in a good way.', colour: 0xf7f5ee },
   },
   student: {

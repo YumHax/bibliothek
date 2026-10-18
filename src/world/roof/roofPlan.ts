@@ -58,6 +58,20 @@ export const ROOF_PLAN = {
     { at: [1.2, -2.8], size: [0.9, 0.5], pots: 3, height: 1.1 },
     { at: [6.8, 2.2], size: [1.4, 0.5], pots: 5, height: 1.4 },
   ] as { at: [number, number]; size: [number, number]; pots: number; height: number }[],
+  /**
+   * A place to sit, back to the middle chimney stack and facing Front Street (`BenchSeat`): a click seated lets an hour
+   * go by, and after a little while something is seen, by day or by night (the roof key's promise: the night is yours).
+   */
+  sit: {
+    chimney: 1,
+    seat: 0.2,
+    name: 'The foot of the chimney stack',
+    wait: { day: { minutes: 45, until: 'a while, the city below', after: 'The whole of Front Street, the size of a toy. Pigeons, wind, a long breath.' }, night: { minutes: 60, until: 'an hour, the stars', after: 'An hour of stars and chimney pots. The city hums. Nobody knows you are up here.' } },
+    seen: {
+      day: ['The bus 38 crawls up Front Street like a beetle.', 'Washing on a line two roofs over, waving at nobody.', 'A pigeon lands a foot away and decides you are furniture.'],
+      night: ['The Plough, low over the arcade’s sign. The sign wins.', 'Lit windows all down the street: a TV blue in one, a party in another.', 'A shooting star, or a plane. You decide it was a star.'],
+    },
+  },
   /** The duckboards from the hatch along the roof, a plank walk (local x span, z, width). */
   walk: { x0: -7.5, x1: 7.5, z: HATCH[1] + 0.8, width: 0.7 },
   /** The old TV aerial on its tripod by the hatch, its signal meter's box at its foot. */

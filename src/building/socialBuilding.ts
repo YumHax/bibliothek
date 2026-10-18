@@ -38,8 +38,13 @@ export function setBuildingPost(mail: PostLike | undefined): void {
   post = mail ?? null;
 }
 
-/** How the concierge's goodwill moves the post (`MailPost.delayHours`): a day late when she is cold, a round sooner when she signs for the player. */
+/**
+ * How the building's goodwill moves the post (`MailPost.delayHours`): a round sooner when the postman brings it up
+ * himself (`carriesUp`, whatever the lodge thinks), a day late when the concierge is cold, a round sooner when she
+ * signs for the player.
+ */
 export function parcelDelayHours(): number {
+  if (has('postman', 'carriesUp')) return PARCELS.sooner;
   if (has('pereira', 'lateParcels')) return PARCELS.late;
   if (has('pereira', 'holdsParcels')) return PARCELS.sooner;
   return 0;
@@ -77,13 +82,18 @@ export function startBuildingSocial(options: { today: Today; notices: Pick<Notic
       }
     }),
   );
-  // Mme Pereira at Close hands over the roof key, once.
+  // Mme Pereira at Friend hands over the lodge's spare key, at Close the roof key (the lift's keyhole marked TOIT), once each.
+  const pereiraKeys = (): void => {
+    if (has('pereira', 'holdsParcels') && giveKey('lodge')) notices.reward({ title: plan.pereira.lodgeKey.title, detail: plan.pereira.lodgeKey.detail });
+    if (has('pereira', 'roofKey') && giveKey('roof')) notices.reward({ title: plan.pereira.roofKey.title, detail: plan.pereira.roofKey.detail });
+  };
   stops.push(
     onSocial((change) => {
-      if (change.id !== 'pereira' || !has('pereira', 'roofKey')) return;
-      if (giveKey('roof')) notices.reward({ title: plan.pereira.roofKey.title, detail: plan.pereira.roofKey.detail });
+      if (change.id === 'pereira') pereiraKeys();
     }),
   );
+  // A save from before the keys were given at their tier: handed over at boot if already earned.
+  pereiraKeys();
   stops.push(pinSource('feuds', feudNotes));
   stops.push(addExtras((ctx) => extrasFor(ctx.person, ctx.day)));
   return () => stops.forEach((stop) => stop());

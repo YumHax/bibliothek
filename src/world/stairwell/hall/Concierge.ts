@@ -18,6 +18,7 @@ import { rememberLook } from '@/social/lookBook';
 import { nudge } from '@/social/standing';
 import type { SocialServices, TalkExtra, TalkSession } from '@/social/talk';
 import { bodyOf, talkHook } from '../../people/socialHook';
+import { formatCoins } from '@/text/money';
 
 /** The errand's to-do, pinned while it is on. */
 const ERRAND_TIP = 'Press the timer button on landings 1 to 4, then tell the concierge which one sticks.';
@@ -260,9 +261,16 @@ export class Concierge extends Prop implements Updatable, OccupancyAware {
     w.speak(lines[this.nextLine++ % lines.length]!);
   }
 
+  /** Behind her glass right now. */
+  get inLodge(): boolean {
+    return this.where.at === 'lodge';
+  }
+
   /** Hands the cellar key over with `line` (said by her unless `quiet`: the conversation says it itself). */
   private handOverKey(session: SessionActions, line: string, quiet = false): void {
     const state = conciergeState();
+    // Told which button sticks: the electrician fits a new one the next day.
+    if (state.errand === 'tried') state.mended = this.options.day() + 1;
     state.errand = 'done';
     saveConcierge();
     if (!quiet) this.walker.speak(line);
@@ -336,8 +344,8 @@ export class Concierge extends Prop implements Updatable, OccupancyAware {
     extras.push({
       id: 'tip',
       group: 'give',
-      label: `Coins in the Christmas box (${plan.lodge.tipBox.price})`,
-      run: () => session.pay({ price: plan.lodge.tipBox.price, paid: () => this.tipped(session) }),
+      label: `Coins in the Christmas box (${formatCoins(plan.lodge.tipBox.price)})`,
+      run: () => session.pay({ price: plan.lodge.tipBox.price, title: 'A tip in the box', paid: () => this.tipped(session) }),
     });
     return { person: PERSON, place: 'stairs', body: bodyOf(this.walker), extras };
   }
@@ -346,8 +354,16 @@ export class Concierge extends Prop implements Updatable, OccupancyAware {
    * A landing's timer button was pressed (`TimerButton`): counted for her errand. Returns what the button does under
    * the finger: the sticky one stays in a moment.
    */
-  buttonPressed(k: number): 'sticks' | 'fine' {
+  /** Whether landing `k`'s button is the new one put in after the errand (its white knob, before any press). */
+  buttonIsNew(k: number): boolean {
+    const { mended } = conciergeState();
+    return k === who.sticky && mended !== null && this.options.day() >= mended;
+  }
+
+  buttonPressed(k: number): 'sticks' | 'fine' | 'new' {
     const state = conciergeState();
+    const mended = k === who.sticky && state.mended !== null && this.options.day() >= state.mended;
+    if (mended) return 'new';
     const sticks = k === who.sticky;
     if (state.errand !== 'asked' || !who.errandFloors.includes(k) || state.pressed.includes(k)) return sticks ? 'sticks' : 'fine';
     state.pressed.push(k);

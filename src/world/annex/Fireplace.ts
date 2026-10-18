@@ -7,12 +7,15 @@ import { invisibleHitbox } from '../meshUtils';
 import { paint, standard } from '../materials/palette';
 import { INSET, PROUD } from '../props/joinery';
 import { HoverGlint } from '../props/hoverGlint';
+import type { ShowcaseStand, StandSlot } from '../showcase/stand';
 
 /** The chimneypiece's size: the mantel shelf's width and height, the jambs, the firebox's opening. */
 const MANTEL = { width: 1.36, depth: 0.3, thickness: 0.05, y: 1.06 };
 const JAMB = { width: 0.2, depth: 0.24 };
 const OPENING = { width: 0.76, height: 0.78 };
 const HEARTH = { width: 1.5, depth: 0.5, thickness: 0.025 };
+/** The hearth's marble top (fireplace-local y): where something set on it stands. */
+export const HEARTH_TOP = HEARTH.thickness + 2 * PROUD;
 
 const MARBLE = standard({ color: 0xe9e4dc, roughness: 0.22, metalness: 0 });
 const VEIN = standard({ color: 0xcfc8bd, roughness: 0.3, metalness: 0 });
@@ -21,6 +24,9 @@ const SOOT = paint(0x0e0d0c, 1);
 const PHOTO = paint(0x6e5a44, 0.5);
 const FRAME = standard({ color: 0xb08d4a, roughness: 0.35, metalness: 0.8 });
 const CARD = paint(0xf3eee2, 0.8);
+/** The mantel's two places for a box (fireplace-local x), clear of the photo and the note; how far a box leans back on the wall. */
+const MANTEL_SLOTS = [-0.08, 0.47];
+const MANTEL_LEAN = THREE.MathUtils.degToRad(9);
 
 /** One mesh of `geometries` merged, in `material`. */
 function merged(geometries: THREE.BufferGeometry[], material: THREE.Material): THREE.Mesh {
@@ -36,9 +42,11 @@ function box(w: number, h: number, d: number, x: number, y: number, z: number): 
 }
 
 /** What the fireplace says when read: Mrs Roux's note on the mantel, by the photo she left. */
-interface FireplaceNote {
+export interface FireplaceNote {
   title: string;
   text: string;
+  /** The hover caption. Default: her note's. */
+  caption?: string;
 }
 
 /**
@@ -47,8 +55,12 @@ interface FireplaceNote {
  * flue was closed long ago). On the mantel, a framed photo and her folded note, read with a click. Wall-hung: origin on
  * the floor at the wall, +z into the room. Collides as a box (its hearth and jambs).
  */
-export class Fireplace extends Prop implements Interactable {
+export class Fireplace extends Prop implements Interactable, ShowcaseStand {
   readonly hitboxes: THREE.Object3D[];
+  readonly standName = 'mantelpiece';
+  /** Two boxes stood face out against the wall on the shelf, once the rooms are the player's (`Showcases`). */
+  readonly slots: readonly StandSlot[];
+  readonly viewpoint = new THREE.Vector3(0, 0, 1.0);
   private readonly glint: HoverGlint;
 
   constructor(private readonly note: FireplaceNote, mantel: { photo: number; note: number }) {
@@ -108,9 +120,20 @@ export class Fireplace extends Prop implements Interactable {
     this.add(card);
     this.glint = HoverGlint.of(gilt);
 
-    const hitbox = invisibleHitbox(MANTEL.width, 0.3, MANTEL.depth + 0.04, { y: shelf + 0.12, z: MANTEL.depth / 2 });
-    this.add(hitbox);
-    this.hitboxes = [hitbox];
+    // Her photo and note are read with a click; the rest of the shelf is left to the boxes on show there.
+    const hitboxes = [
+      invisibleHitbox(0.2, 0.24, 0.16, { x: mantel.photo, y: shelf + 0.11, z: 0.12 }),
+      invisibleHitbox(0.16, 0.12, 0.12, { x: mantel.note, y: shelf + 0.05, z: 0.15 }),
+    ];
+    this.add(...hitboxes);
+    this.hitboxes = hitboxes;
+    this.slots = MANTEL_SLOTS.map((x, i) => {
+      const holder = new THREE.Group();
+      holder.name = `MantelSlot${i}`;
+      holder.position.set(x, shelf, 0);
+      this.add(holder);
+      return { holder, maxWidth: 0.21, maxHeight: 0.34, lean: MANTEL_LEAN, support: 'wall' as const };
+    });
   }
 
   override get footprint(): THREE.Box3 {
@@ -122,7 +145,7 @@ export class Fireplace extends Prop implements Interactable {
   }
 
   label(): string {
-    return 'A note on the mantelpiece · read';
+    return this.note.caption ?? 'A note on the mantelpiece · read';
   }
 
   activate(session: SessionActions): void {

@@ -313,12 +313,15 @@ export class FirstPersonController implements Updatable {
     this.moveSeat(eyePosition, yaw, pitch, instant);
   }
 
-  /** Returns to the spot the player stood on before sitting, so they never stand inside the chair. */
-  stand(instant = false): void {
+  /**
+   * Returns to the spot the player stood on before sitting, so they never stand inside the chair; `look`, when given,
+   * is the way the view turns back to (where it looked before: facing a bookcase, `shelfView/ShelfView`).
+   */
+  stand(instant = false, look?: { yaw: number; pitch: number }): void {
     if (!this.seated) return;
     this.seated = false;
     this.standingPosition.y = this.feet + this.height;
-    const { yaw, pitch } = this.seatMove ? { yaw: this.seatMove.toYaw, pitch: this.seatMove.toPitch } : this.getLook();
+    const { yaw, pitch } = look ?? (this.seatMove ? { yaw: this.seatMove.toYaw, pitch: this.seatMove.toPitch } : this.getLook());
     this.moveSeat(this.standingPosition, yaw, pitch, instant);
   }
 
@@ -435,6 +438,18 @@ export class FirstPersonController implements Updatable {
   /** World position of the eye (the camera). */
   getEyePosition(out = new THREE.Vector3()): THREE.Vector3 {
     return this.camera.getWorldPosition(out);
+  }
+
+  /**
+   * Whether a body standing at `at` (world x and z; its feet where the player's are now) would be inside the furniture
+   * or a wall, tested as the walk tests it (the knees, the waist); `radius` narrower than the body's for a passing
+   * glance (the bookcase view looking past a sofa, `shelfView/framing`).
+   */
+  bodyBlockedAt(at: THREE.Vector3, radius = this.bodyRadius): boolean {
+    this.probe.set(at.x, this.feet + KNEE_HEIGHT, at.z);
+    if (this.collisions.intersectsSphere(this.probe, radius)) return true;
+    this.probe.y = this.feet + this.eyeHeight * 0.6;
+    return this.collisions.intersectsSphere(this.probe, radius);
   }
 
   /** Points the camera at a world position (roll stays zero). */

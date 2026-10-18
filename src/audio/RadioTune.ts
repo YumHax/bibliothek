@@ -44,6 +44,13 @@ const NOTE_CHANCE = 0.42;
 /** The vibraphone's tremolo: its rate (Hz) and depth (share of the level). */
 const TREMOLO = { hz: 5.2, depth: 0.28 };
 
+/**
+ * The stations on the dial: the easy-listening lounge combo, and the 8-bit hour (square waves, a straight beat, an
+ * arpeggio running up the chord: a games console's soundtrack through a transistor radio).
+ */
+export type RadioStation = 'lounge' | 'chip';
+const CHIP = { bpm: { min: 118, max: 140 }, root: 57, level: { lead: 0.05, arp: 0.028, bass: 0.2 } };
+
 /** One eighth of the tune: a scale degree held short or long, or a rest (null). */
 type TuneNote = { degree: number; long: boolean } | null;
 
@@ -87,6 +94,7 @@ export class RadioTune {
   private hiss: AudioBufferSourceNode | null = null;
   private noise: AudioBuffer | null = null;
   private on = false;
+  private station: RadioStation = 'lounge';
   private volume = 0;
   private next = 0;
   private step = 0;
@@ -98,6 +106,20 @@ export class RadioTune {
 
   get isOn(): boolean {
     return this.on;
+  }
+
+  /** The station the dial is on. */
+  get tunedTo(): RadioStation {
+    return this.station;
+  }
+
+  /** Turns the dial: the next song is the new station's, at once. */
+  tune(station: RadioStation): void {
+    if (station === this.station) return;
+    this.station = station;
+    this.newSong();
+    this.gap = 0;
+    if (this.ctx) this.next = this.ctx.currentTime + 0.05;
   }
 
   setOn(on: boolean): void {
@@ -215,9 +237,11 @@ export class RadioTune {
   }
 
   private newSong(): void {
+    const chip = this.station === 'chip';
+    const bpm = chip ? CHIP.bpm : BPM;
     this.song = {
-      root: 50 + Math.floor(random() * 8),
-      step: 60 / (BPM.min + random() * (BPM.max - BPM.min)) / 2,
+      root: (chip ? CHIP.root : 50) + Math.floor(random() * 8),
+      step: 60 / (bpm.min + random() * (bpm.max - bpm.min)) / 2,
       progression: PROGRESSIONS[Math.floor(random() * PROGRESSIONS.length)]!,
       bars: 0,
       motif: makeMotif(),
@@ -232,6 +256,10 @@ export class RadioTune {
    */
   private playStep(ctx: AudioContext, out: AudioNode, t0: number): void {
     const beat = this.beatOf(t0);
+    if (this.station === 'chip') {
+      this.chipStep(ctx, out, beat);
+      return;
+    }
     this.brushes(ctx, out, beat);
     this.walkingBass(ctx, out, beat);
     this.pianoChord(ctx, out, beat);
@@ -247,8 +275,27 @@ export class RadioTune {
       inBar,
       chord: progression[bar % progression.length]!,
       nextChord: progression[(bar + 1) % progression.length]!,
-      t: inBar % 2 ? t0 + step * SWING : t0,
+      t: inBar % 2 && this.station === 'lounge' ? t0 + step * SWING : t0,
     };
+  }
+
+  /**
+   * The 8-bit hour's eighth: a noise-channel hat on the offbeats and a snare on the backbeat, a kick on one and three,
+   * the square bass pumping the chord's root, a thin arpeggio running up the chord and the hook on a square lead.
+   */
+  private chipStep(ctx: AudioContext, out: AudioNode, { inBar, chord, t }: Beat): void {
+    const { root, step } = this.song;
+    if (inBar % 2) this.noiseHit(ctx, out, t, 7000, 0.03, 0.04, 0);
+    if (inBar === 2 || inBar === 6) this.noiseHit(ctx, out, t, 2400, 0.09, 0.08, 0);
+    if (inBar === 0 || inBar === 4) this.kick(ctx, out, t, 0.28);
+    this.pluck(ctx, out, 'square', midi(root - 12 + chord.bass + (inBar % 2 ? 12 : 0)), t, step * 0.8, CHIP.level.bass);
+    this.pluck(ctx, out, 'square', midi(root + 12 + chord.notes[inBar % chord.notes.length]!), t, step * 0.6, CHIP.level.arp);
+    if (this.song.bars % 4 >= 2) return;
+    const note = this.song.motif[(this.song.bars % 2) * 8 + inBar] ?? null;
+    if (!note) return;
+    let pitch = SCALE[note.degree]! + 12;
+    if (inBar % 2 === 0) pitch = nearestChordTone(pitch, chord);
+    this.tone(ctx, out, 'square', midi(root + pitch), t, step * (note.long ? 3 : 1.6), CHIP.level.lead);
   }
 
   /** Brushes: a swish on each eighth, leaned on the backbeat; a soft kick and a rim click. */

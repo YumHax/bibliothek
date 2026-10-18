@@ -8,7 +8,7 @@ import { facingGain, loudness, type HearingProfile } from '@/audio/hearing';
 import type { SoundOcclusion } from '../acoustics/SoundOcclusion';
 import { stereoPan } from '@/audio/spatial';
 import { RENDER_ORDER } from '../surface/layers';
-import type { ScreenFeed, ScreenState, ScreenStateListener } from './VideoScreen';
+import type { LongplayRemote, ScreenFeed, ScreenState, ScreenStateListener } from './VideoScreen';
 import { SignalCanvas, type SignalLook } from './SignalCanvas';
 import { nowPlaying } from './nowPlaying';
 import { additiveOne } from '@/world/materials/blend';
@@ -84,6 +84,8 @@ export class VideoSurface extends THREE.Object3D {
   private _loudness = 0;
   /** The video `play()` put on and when, kept while the zone is dormant to reload it where it would be. */
   private showing: { video: VideoInfo; startSeconds: number; since: number; onRejected?: (videoId: string) => void } | null = null;
+  /** Held by the remote: how far into the video it stopped (s); null while it runs. */
+  private pausedAt: number | null = null;
   /** When the loaded video is shown even without a word from the player (ms, `performance.now`); 0 once shown. */
   private revealBy = 0;
   /** When a loaded embed that never answered is given up (ms, `performance.now`); 0 once it answered or shown. */
@@ -206,6 +208,7 @@ export class VideoSurface extends THREE.Object3D {
   play(video: VideoInfo, startSeconds: number, onRejected?: (videoId: string) => void): void {
     this.cancelPicture();
     this.feed = null;
+    this.pausedAt = null;
     this.setState('playing');
     this.showing = { video, startSeconds, since: performance.now(), onRejected };
     this.showSignal(); // static until the first frame
@@ -297,11 +300,75 @@ export class VideoSurface extends THREE.Object3D {
     this.cssLayer.scene.remove(this.cssObject);
   }
 
+  /** How far into the video showing it has got (s), held while paused, wrapped by its length. */
+  private videoTime(): number {
+    const showing = this.showing;
+    if (!showing) return 0;
+    if (this.pausedAt !== null) return this.pausedAt;
+    const elapsed = showing.startSeconds + (performance.now() - showing.since) / 1000;
+    return showing.video.durationSeconds > 0 ? elapsed % showing.video.durationSeconds : elapsed;
+  }
+
+  /** The remote (`LongplayRemote`): reads and drives the video showing; a no-op while none is. */
+  readonly remote: LongplayRemote = this.makeRemote();
+
+  private makeRemote(): LongplayRemote {
+    const surface = this; // the remote's getters read it live
+    return {
+      get active() {
+        return surface.longplayOn;
+      },
+      get paused() {
+        return surface.pausedAt !== null;
+      },
+      get place() {
+        return surface.showing && surface.longplayOn ? { videoId: surface.showing.video.videoId, seconds: surface.videoTime() } : null;
+      },
+      pause: () => {
+        if (!this.longplayOn || this.pausedAt !== null) return;
+        this.pausedAt = this.videoTime();
+        this.player.pause();
+      },
+      resume: () => {
+        const showing = this.showing;
+        if (!showing || this.pausedAt === null) return;
+        showing.startSeconds = this.pausedAt;
+        showing.since = performance.now();
+        this.pausedAt = null;
+        this.player.resume();
+      },
+      seekBy: (seconds) => {
+        const showing = this.showing;
+        if (!showing || !this.longplayOn) return;
+        const length = showing.video.durationSeconds;
+        const to = Math.max(0, Math.min(length > 0 ? length - 5 : Infinity, this.videoTime() + seconds));
+        showing.startSeconds = to;
+        showing.since = performance.now();
+        if (this.pausedAt !== null) this.pausedAt = to;
+        this.player.seekTo(to);
+      },
+      another: () => {
+        if (this.longplayOn) this.rejected(-1, true);
+      },
+    };
+  }
+
+  /** A longplay is showing (not searching, no signal, a program's feed). */
+  private get longplayOn(): boolean {
+    return this._state === 'playing' && this.showing !== null && this.feed === null;
+  }
+
   /** Loads the video showing into the iframe, where it has got to since `play()`; the static stays until it runs. */
   private load(): void {
     if (!this.showing) return;
     const { video, startSeconds, since } = this.showing;
-    const elapsed = startSeconds + (performance.now() - since) / 1000;
+    // Held when the zone went dormant: it comes back running, from where it was held.
+    const elapsed = this.pausedAt ?? startSeconds + (performance.now() - since) / 1000;
+    if (this.pausedAt !== null) {
+      this.showing.startSeconds = this.pausedAt;
+      this.showing.since = performance.now();
+      this.pausedAt = null;
+    }
     this.generation++;
     this.player.load(video.videoId, video.durationSeconds > 0 ? elapsed % video.durationSeconds : elapsed);
     this.cssObject.visible = true; // behind the lit glass until revealed: the iframe loads, nobody sees it
@@ -327,11 +394,12 @@ export class VideoSurface extends THREE.Object3D {
     this.stop();
   }
 
-  /** The embed refused the video: the next hit of the search, or "no signal". */
-  private rejected(code: number): void {
+  /** The embed refused the video (or the player asked for another, `asked`): the next hit of the search, or "no signal". */
+  private rejected(code: number, asked = false): void {
     const showing = this.showing;
     if (this._state !== 'playing' || !showing) return;
-    console.warn(`[video] embed refused ${showing.video.videoId} (error ${code})`);
+    if (asked) console.info(`[video] another video than ${showing.video.videoId}, asked`);
+    else console.warn(`[video] embed refused ${showing.video.videoId} (error ${code})`);
     showing.onRejected?.(showing.video.videoId);
     const [next, ...rest] = showing.video.fallbacks ?? [];
     if (next) this.play({ ...next, fallbacks: rest }, randomStartSeconds(next.durationSeconds), showing.onRejected);

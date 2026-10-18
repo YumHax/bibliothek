@@ -12,20 +12,22 @@ import { SCRATCH } from '@/economy/pricing';
 /** How many cards the tabac sells one player in a game day (`SCRATCH` in pricing.ts; the price is the tabac's offer). */
 export const SCRATCH_PER_DAY = SCRATCH.perDay;
 
-/** A symbol and the coins three of them pay. */
+/** A symbol and the coins three of them pay; `id` is the picture printed under the silver (`ui/ScratchCardPanel`). */
 export interface ScratchSymbol {
-  glyph: string;
+  id: 'cherries' | 'pad' | 'cartridge' | 'star' | 'seven';
   name: string;
   prize: number;
 }
 
-const SYMBOLS: readonly ScratchSymbol[] = [
-  { glyph: '🍒', name: 'cherries', prize: SCRATCH.prizes[0] },
-  { glyph: '🎮', name: 'pads', prize: SCRATCH.prizes[1] },
-  { glyph: '💾', name: 'cartridges', prize: SCRATCH.prizes[2] },
-  { glyph: '⭐', name: 'stars', prize: SCRATCH.prizes[3] },
-  { glyph: '7', name: 'sevens', prize: SCRATCH.prizes[4] },
+/** Every symbol, cheapest first: the card's prize table prints them in this order. */
+export const SCRATCH_SYMBOLS: readonly ScratchSymbol[] = [
+  { id: 'cherries', name: 'cherries', prize: SCRATCH.prizes[0] },
+  { id: 'pad', name: 'pads', prize: SCRATCH.prizes[1] },
+  { id: 'cartridge', name: 'cartridges', prize: SCRATCH.prizes[2] },
+  { id: 'star', name: 'stars', prize: SCRATCH.prizes[3] },
+  { id: 'seven', name: 'sevens', prize: SCRATCH.prizes[4] },
 ];
+const SYMBOLS = SCRATCH_SYMBOLS;
 
 /** Chance of each outcome: a loss, then three of `SYMBOLS[i]` (expected payout 1.35 coins a card). */
 const ODDS = SCRATCH.odds;

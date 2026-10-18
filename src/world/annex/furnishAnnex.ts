@@ -17,7 +17,12 @@ import { resolvePlacement } from '../Placement';
 import { ANNEX_OPENING, ANNEX_PLAN } from './annexPlan';
 import { ANNEX_PASSAGE } from './annexPassage';
 import { ANNEX_OVERFLOW, STUDY_OVERFLOW, annexSplit, placeAnnexShelving } from './annexShelves';
-import { Fireplace } from './Fireplace';
+import { Fireplace, HEARTH_TOP } from './Fireplace';
+import { FelixShoebox, markShoeboxTaken } from './FelixShoebox';
+import { StockItem } from '@/economy/StockItem';
+import { FELIX_LOTS, felixCopy, felixLotGame } from '@/economy/felixLots';
+import { canonicalGameId } from '@/catalog';
+import { ForSaleBox } from '../market/ForSaleBox';
 
 /** What the new room built that the rest of the game needs: its room, its bookcases, where the cat comes to look. */
 interface AnnexHandle extends ZoneHandle {
@@ -52,7 +57,7 @@ export function placeAnnexOpening(zone: Zone, ctx: Pick<BuildContext, 'sky'>): A
  * collection room's (`AnnexOpening`). Part of the flat from the start (its lights compiled with it); until it is
  * joined nobody can see or reach it, and the street sees her windows lit of an evening.
  */
-export function furnishAnnex(zone: Zone, ctx: Pick<BuildContext, 'sky' | 'home' | 'covers' | 'collection' | 'listener' | 'acoustics'>): AnnexHandle {
+export function furnishAnnex(zone: Zone, ctx: Pick<BuildContext, 'sky' | 'home' | 'covers' | 'collection' | 'listener' | 'acoustics' | 'money'>): AnnexHandle {
   const { sky, home } = ctx;
   const plan = ANNEX_PLAN;
   const room = furnishShell(zone, sky, plan.room);
@@ -64,16 +69,23 @@ export function furnishAnnex(zone: Zone, ctx: Pick<BuildContext, 'sky' | 'home' 
   const onCurtainsChange = curtainsToSkylight(room, windows);
   for (const x of along) windows.push(zone.placeAt(new RoomWindow(sky.outdoors, { ...size, onCurtainsChange, outlook: homeOutlook(sky.outdoors) }), { wall: 'front', along: x, y: RoomWindow.mountY(size.height) }));
 
-  zone.placeAt(
+  const fireplace = zone.placeAt(
     new Fireplace(
       {
         title: 'On the mantelpiece',
-        text: 'For the young man next door. These two rooms and yours were one flat when we came, in 1985: the door in the wall was ours to the dining room. Fill them with your little boxes, and keep the parquet waxed. — Hélène Roux',
+        text: 'For my neighbour next door. These two rooms and yours were one flat when we came, in 1985: the door in the wall was ours to the dining room. Fill them with your little boxes, and keep the parquet waxed. — Hélène Roux',
       },
       plan.mantel,
     ),
     plan.fireplace,
   );
+  placeShoebox(zone, ctx, fireplace);
+  // Her mantel holds two boxes face out, like the display case (docs/furnishing.md "Displays"), once the rooms are ours.
+  const { showcases, boxes } = ctx.collection;
+  if (showcases && boxes) {
+    zone.onUnload(showcases.register(zone, 'mantel', fireplace, boxes, annexJoined));
+    zone.onUnload(onRouxPhase(() => showcases.refresh()));
+  }
   furnishDecor(zone, ctx, plan.decor);
   const shelving = placeAnnexShelving(zone, ctx, {
     id: 'annex',
@@ -113,4 +125,30 @@ function openingBounds(zone: Zone): THREE.Box3 {
   const { position } = resolvePlacement(ANNEX_PLAN.room, { wall: ANNEX_OPENING.wall, along: ANNEX_OPENING.along, y: 0 });
   const half = new THREE.Vector3(PORTAL_HALF_DEPTH, 0, ANNEX_OPENING.width / 2);
   return new THREE.Box3(position.clone().sub(half), position.clone().add(half).setY(ANNEX_OPENING.height)).applyMatrix4(zone.group.matrixWorld);
+}
+
+/**
+ * Félix's shoebox on her hearth (`ANNEX_PLAN.shoebox`, docs/story.md Act 3): her note read with a click, and the first
+ * time on each visit until it is taken, one of his own copies (`economy/felixLots`, one the player lacks) set out on the
+ * marble beside it, free (a `ForSaleBox`), gone once taken.
+ */
+function placeShoebox(zone: Zone, { covers, collection, money }: Pick<BuildContext, 'covers' | 'collection' | 'money'>, fireplace: THREE.Object3D): void {
+  const { shoebox } = ANNEX_PLAN;
+  const onHearth = (x: number, z: number): THREE.Vector3 => zone.toLocal(fireplace.localToWorld(new THREE.Vector3(x, HEARTH_TOP, z)));
+  const box = zone.place(new FelixShoebox(shoebox.note), onHearth(...shoebox.at), fireplace.rotation.y + shoebox.yaw);
+  box.onOpen = () => {
+    // From the catalogue's end (the cellar's carton takes his from its start): never the same game in both.
+    // The first one the player lacks is the cellar carton's (`furnishCellar`): never that one, even when it is the last.
+    const missing = FELIX_LOTS.filter((l) => !collection.owns(canonicalGameId(l.id)) && felixLotGame(l));
+    const lot = [...missing.slice(1)].reverse()[0];
+    const game = lot && felixCopy(lot);
+    if (!game) return;
+    const item = new StockItem(game, 'complete', 'bin', { list: 0, final: true });
+    const forSale = new ForSaleBox(item, covers, { pose: { kind: 'flat' }, tag: false, wallet: money.wallet, where: shoebox.where, free: true, isWanted: () => collection.isWanted(game.id), thanks: () => shoebox.said });
+    forSale.onSold = () => {
+      zone.remove(forSale);
+      markShoeboxTaken();
+    };
+    zone.place(forSale, onHearth(...shoebox.gameAt), fireplace.rotation.y + 0.15);
+  };
 }

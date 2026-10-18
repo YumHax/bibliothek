@@ -1,16 +1,17 @@
 import type { Game } from '@/catalog/types';
 import { playUiSound } from '@/audio/uiSounds';
 import { lastDevice, onDeviceChange } from '@/input/lastDevice';
-import { conversing, muteSpeech, type NoticeActions } from '@/notices';
+import { conversing, muteSpeech, overHead, type NoticeActions } from '@/notices';
 import { beginConversation, choicesFor, endConversation, farewell, leavingLine, opening, playerLine, say, type Choice, type Conversation, type InteractionExtra, type OpeningKind, type Outcome, type Reaction, type TalkContext } from '@/social/conversation';
 import type { LabState } from '@/cheats/socialLab';
-import { BIRTHDAY_LINES, CALLBACK_LINES, COLD_LINES, HELD_LINES, HELLO_LINES, HOSTILE_LINES, MOOD_OPENINGS, SOCIAL_LINES } from '@/social/socialLines';
+import { BIRTHDAY_LINES, CALLBACK_LINES, COLD_LINES, HELD_LINES, HELLO_LINES, HOSTILE_LINES, MOOD_OPENINGS, SOCIAL_LINES, TWICE_LINES } from '@/social/socialLines';
 import { TALK, TIERS } from '@/social/socialPlan';
 import { extrasFor } from '@/social/extras';
 import { gameFit, giftName, tasteOf } from '@/social/gifts';
 import { firstConversation, noteOffered, offeredBefore } from '@/social/noticed';
 import { findPerson, shortName } from '@/social/people';
 import { openTopics } from '@/social/conversation';
+import { mannerOf } from '@/social/voices';
 import { COIN_GIFT, INTERACTIONS, TRAITS } from '@/social/socialPlan';
 import { isMet, standing, tier } from '@/social/standing';
 import type { ConversationPanelLike, SocialAnchor, TalkExtra, TalkSession } from '@/social/talk';
@@ -20,7 +21,7 @@ import type { Fit, GiftKind, InteractionId, PersonId, Trait } from '@/social/typ
 import { unit01 } from '@/random';
 import { reduceMotion } from '@/settings/motion';
 import { formatCoins } from '@/text/money';
-import { capitalise } from '@/text/strings';
+import { capitalise, compareTitles } from '@/text/strings';
 import { frameSubject, releaseFrame } from '@/graphics/framing';
 import { isActionKey } from '../keys';
 import { isNavClick, panelOpen } from '../menu/MenuNav';
@@ -61,7 +62,7 @@ interface ConversationDeps {
   findGame?(id: string): Game | undefined;
   /** What is in the pocket to give. */
   pocket(): readonly PocketGift[];
-  notices: Pick<NoticeActions, 'refuse' | 'tip'>;
+  notices: Pick<NoticeActions, 'refuse' | 'tip' | 'say'>;
   /** A game's box art (the list of games to give shows it, and a piece of news about a game). */
   coverUrl(game: Game): string | undefined;
   /** Where `anchor` is on the screen, `lift` metres above it (negative: below); null when it is behind the view. */
@@ -90,8 +91,8 @@ const VIEW_TITLES: Record<Exclude<View, 'main'>, string> = {
 
 /** At most this many balloons of things to say at once (the rest under More…). */
 const SAY_ROWS = 4;
-/** How many of the player's games the game list shows (the best fits first). */
-const GAME_LIST = 8;
+/** How many of the player's games the game list shows at once (wrapped first, then by title; "Others…" turns the page). */
+const GAME_LIST = 7;
 
 /** The groups of the place's entries that live behind a chip, not among the balloons. */
 const BEHIND: readonly string[] = ['give', 'ask', 'promise', 'mean'];
@@ -122,6 +123,8 @@ export class ConversationPanel extends ModalPanel implements ConversationPanelLi
   /** The place's entries already said or done in this conversation: each is offered once (nobody says the same thing twice running). */
   private usedExtras = new Set<string>();
   private view: View = 'main';
+  /** The page of the game list on show (`GAME_LIST` games a page). */
+  private gamePage = 0;
   /** The lists opened, each with the balloon or chip that opened it (Back returns there). */
   private trail: { view: View; from: string }[] = [];
   /** Their line in their balloon now. */
@@ -283,7 +286,7 @@ export class ConversationPanel extends ModalPanel implements ConversationPanelLi
     this.place();
     this.focusFirst();
     if (this.wish && !resumed) window.setTimeout(() => this.think(), anchor ? FRAMING_MS : 150);
-    if (!resumed && firstConversation()) this.deps.notices.tip('Watch their face as you point at what to say.', { id: 'talking', head: 'Talking', until: () => !this.isOpen });
+    if (!resumed && firstConversation()) this.deps.notices.tip('Watch their face as you point at what to say.', { id: 'talking', head: 'Talking', until: () => !this.isOpen, overConversation: true });
     this.follow = requestAnimationFrame(this.track);
   }
 
@@ -467,8 +470,11 @@ export class ConversationPanel extends ModalPanel implements ConversationPanelLi
     this.suspended = false;
     if (!talk) return;
     if (sayBye && this.farewell && talk.body && talk.place !== 'phone') {
-      talk.body.speak(farewell(talk.person));
-      talk.body.react?.('bye', 0.6);
+      talk.body.speak(farewell(talk.person, talk.place));
+      talk.body.react?.('bye', 0.6, mannerOf(talk.person));
+    } else if (sayBye && this.farewell && talk.place === 'phone') {
+      // On a call, their goodbye as they hang up, heard down the line once the panel is gone.
+      this.deps.notices.say(farewell(talk.person, 'phone'), shortName(talk.person));
     }
     talk.body?.anticipate?.(null);
     talk.body?.hold?.(false);
@@ -547,7 +553,7 @@ export class ConversationPanel extends ModalPanel implements ConversationPanelLi
   private landed(before: Snapshot, landing: Landing): void {
     const talk = this.talk;
     if (!talk || !this.isOpen) return;
-    talk.body?.react?.(landing.reaction, landing.strength);
+    talk.body?.react?.(landing.reaction, landing.strength, mannerOf(talk.person));
     if (!this.inRoom()) this.expression = expressionOf(landing.reaction);
     const now = standing(talk.person);
     hearts(this.burst, now.warmth - before.warmth);
@@ -571,11 +577,11 @@ export class ConversationPanel extends ModalPanel implements ConversationPanelLi
   private leaving(): void {
     const talk = this.talk;
     if (!talk) return;
-    const line = leavingLine(talk.person);
+    const line = leavingLine(talk.person, talk.place);
     this.speak(line);
     this.root.classList.add('social-talk--leaving');
     this.paintStage();
-    this.later(line, () => this.talk?.body?.react?.('restless' satisfies Reaction, 0.6));
+    this.later(line, () => this.talk?.body?.react?.('restless' satisfies Reaction, 0.6, this.talk ? mannerOf(this.talk.person) : null));
   }
 
   /** A place's entry: said or done, their answer if any, what it moved shown the same way. */
@@ -612,6 +618,7 @@ export class ConversationPanel extends ModalPanel implements ConversationPanelLi
   private openList(view: View, from: string): void {
     this.trail.push({ view: this.view, from });
     this.view = view;
+    if (view === 'game') this.gamePage = 0;
     this.hold.cancel();
     this.anticipateRow(null);
     this.paintStage();
@@ -635,10 +642,9 @@ export class ConversationPanel extends ModalPanel implements ConversationPanelLi
     const anchor = this.anchor();
     const vw = window.innerWidth;
     const vh = window.innerHeight;
-    const head = anchor && this.deps.whereOnScreen ? this.deps.whereOnScreen(anchor, 0) : null;
+    const head = anchor && this.deps.whereOnScreen ? this.deps.whereOnScreen(anchor, overHead(anchor)) : null;
     if (head) {
-      this.tailAt = placeSay(this.say, this.tail, head, vw, vh);
-      this.burst.style.left = this.tail.style.left;
+      this.tailAt = placeSay(this.say, this.tail, this.burst, head, vw, vh);
     }
     else if (!anchor) {
       this.say.style.translate = '';
@@ -700,6 +706,8 @@ export class ConversationPanel extends ModalPanel implements ConversationPanelLi
       held: first(HELD_LINES),
       memory: first(CALLBACK_LINES).replace('{memory}', 'you lent me Zelda'),
       mood: first(MOOD_OPENINGS.low),
+      twice: first(TWICE_LINES),
+      outfit: 'Very smart today! Somewhere special?',
       hello: first(HELLO_LINES),
     };
     this.labOpening = lines[kind];
@@ -717,7 +725,7 @@ export class ConversationPanel extends ModalPanel implements ConversationPanelLi
       const line = SOCIAL_LINES.chat[state][0] ?? '…';
       this.speak(line);
       this.later(line, () => {
-        talk.body?.react?.(fits[state], state === 'loves' ? 1 : 0.6);
+        talk.body?.react?.(fits[state], state === 'loves' ? 1 : 0.6, mannerOf(talk.person));
         if (!this.inRoom()) {
           this.expression = expressionOf(fits[state]);
           this.paintTag();
@@ -937,7 +945,7 @@ export class ConversationPanel extends ModalPanel implements ConversationPanelLi
         });
       }
     }
-    if (this.offers(id, 'giveGame') && this.deps.givable().length) rows.push({ key: 'list:game', label: 'A game…', icon: 'cart', run: () => this.openList('game', 'list:game'), more: true, tone: 'say', fit: 'likes' });
+    if (this.offers(id, 'giveGame') && this.deps.givable().length) rows.push({ key: 'list:game', label: 'A game…', icon: 'cart', run: () => this.openList('game', 'list:game'), more: true, tone: 'say' });
     if (this.offers(id, 'giveCoins')) {
       rows.push({
         key: 'give:coins',
@@ -945,7 +953,7 @@ export class ConversationPanel extends ModalPanel implements ConversationPanelLi
         icon: 'coin',
         run: () => {
           if (this.deps.wallet.coins < COIN_GIFT) {
-            this.deps.notices.refuse(`${formatCoins(COIN_GIFT)} to give, you have ${formatCoins(this.deps.wallet.coins)}`);
+            this.deps.notices.refuse('Your pocket’s a bit light for that');
             return;
           }
           if (this.deps.wallet.spend(COIN_GIFT)) this.give('giveCoins', {}, 'give:coins');
@@ -974,13 +982,14 @@ export class ConversationPanel extends ModalPanel implements ConversationPanelLi
       const says = [...place, ...choices.filter((c) => c.group === 'talk').map((c) => this.choiceRow(c))];
       rows = [...says.slice(SAY_ROWS), ...choices.filter((c) => c.group === 'mean').map((c) => this.choiceRow(c)), ...extras.filter((x) => x.group === 'mean').map((x) => this.extraRow(x))];
     } else if (this.view === 'game') {
-      const games = [...this.deps.givable()]
+      // Every game that can be given, a page at a time: what was wrapped for giving first (`holidays/giftWrap`), then
+      // by title. Never by fit: their face, as a balloon is pointed at, is the only hint of how they would take it.
+      const all = [...this.deps.givable()]
         .map((g) => ({ game: g, gift: gameGift(g) }))
-        .map((g) => ({ ...g, fit: gameFit(id, g.gift) }))
-        // What was wrapped for giving comes first (`holidays/giftWrap`).
-        .sort((a, b) => Number(!!b.gift.wrapped) - Number(!!a.gift.wrapped) || b.fit - a.fit)
-        .slice(0, GAME_LIST);
-      for (const { game, gift, fit } of games) {
+        .sort((a, b) => Number(!!b.gift.wrapped) - Number(!!a.gift.wrapped) || compareTitles(a.game.title, b.game.title));
+      const pages = Math.max(1, Math.ceil(all.length / GAME_LIST));
+      const page = this.gamePage % pages;
+      for (const { game, gift } of all.slice(page * GAME_LIST, (page + 1) * GAME_LIST)) {
         rows.push({
           key: `game:${game.id}`,
           label: gift.wrapped ? `${game.title} (wrapped)` : game.title,
@@ -991,7 +1000,20 @@ export class ConversationPanel extends ModalPanel implements ConversationPanelLi
           },
           tone: 'say',
           once: true,
-          fit: fitOfGame(fit),
+          fit: fitOfGame(gameFit(id, gift)),
+        });
+      }
+      if (pages > 1) {
+        const last = page === pages - 1;
+        rows.push({
+          key: 'games:page',
+          label: last ? 'Back to the first ones' : 'Others on your shelves…',
+          icon: last ? 'arrowLeft' : 'more',
+          run: () => {
+            this.gamePage = page + 1;
+            this.paintStage('games:page');
+          },
+          tone: 'quiet',
         });
       }
     }

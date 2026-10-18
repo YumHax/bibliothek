@@ -105,6 +105,22 @@ export const ANNEX_PLAN = {
   fireplace: { wall: 'left', along: -0.55, y: 0 } as Placement,
   /** On the mantel (fireplace-local x, from its middle): the framed photo, her note. */
   mantel: { photo: -0.38, note: 0.2 },
+  /**
+   * Félix's shoebox (docs/story.md Act 3), left on the hearth for the player when she moved: where it stands
+   * (fireplace-local x, z off the wall; it sits on the hearth's marble), her note in it, where his game is set out.
+   */
+  shoebox: {
+    at: [0.48, 0.3] as [number, number],
+    yaw: -0.25,
+    gameAt: [0.15, 0.36] as [number, number],
+    note: {
+      title: 'In the shoebox, on top',
+      text: 'Your uncle gave me this to keep the winter before he went into hospital. “For whoever comes after me, Hélène. Not Gaspard.” I never opened it. It was not mine to open.\n\nHe was a good neighbour for thirty years. He carried my shopping up five floors and never let me thank him. I am glad it is you.',
+      from: 'Hélène Roux',
+    },
+    where: 'Félix’s shoebox, on Mrs Roux’s hearth',
+    said: 'His round F.A. sticker on the back. Kept for you.',
+  },
   /** Where the cat comes to look round. */
   catVisits: [
     [0.6, 0.6],
@@ -126,6 +142,8 @@ export const STUDY_PLAN = {
   ceilingLight: { ceiling: [0, 0] } as Placement,
   lightSwitch: { wall: 'front', along: STUDY_DOOR_X - STUDY_ORIGIN[0] - 0.6, y: 1.1 } as Placement,
   shelving: { width: BOOKCASE_WIDTH, here: STUDY_SHELVING },
+  /** What even the study's bookcases have no room for, stacked flat in front of the second. */
+  boxPile: { wall: 'back', along: -0.62, y: 0, offset: 0.75 } as Placement,
   /** Her old front door onto our landing (world x 6.9, `STAIRWELL_PLAN.ourNeighbourX`), seen from inside: it stays locked. */
   oldDoor: { wall: 'back', along: 6.9 - STUDY_ORIGIN[0], y: 0 } as Placement,
   /** Its paint, the colour the landing knows it by (`STAIRWELL_PLAN.doors[0][0]`). */

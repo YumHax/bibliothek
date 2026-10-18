@@ -18,6 +18,8 @@ interface Place {
 /** What is on the table, table-local [x, z]: the places, the pot, the bread, the bowl of fruit, the pot's lid once off, her birthday cake. */
 export interface TableLayout {
   places: readonly Place[];
+  /** A third place at the door end, laid only when Gaspard sits down to lunch with them (`setGuest`). */
+  guest?: Place;
   pot: readonly [number, number];
   bread: readonly [number, number];
   fruit: readonly [number, number];
@@ -49,8 +51,9 @@ const FRUIT: readonly [number, number, number, number][] = [
 
 /**
  * What is on Mémé's dining table (`furnishGrandmaDecor`): on a Sunday, lunch for two (the plates and their cutlery
- * and glasses, the bread, the blanquette steaming in its enamel pot); any other day the bowl of fruit alone.
- * `setSunday` lays it or clears it. Origin on the cloth's top under the table's middle. Never collides.
+ * and glasses, the bread, the blanquette steaming in its enamel pot), three with Gaspard's at the door end
+ * (`setGuest`); any other day the bowl of fruit alone. `setSunday` lays it or clears it. Origin on the cloth's top
+ * under the table's middle. Never collides.
  */
 export class SundayTable extends Prop implements Updatable {
   readonly contactShadow = false;
@@ -62,6 +65,8 @@ export class SundayTable extends Prop implements Updatable {
   private readonly food = new THREE.Group();
   private readonly dessert = new THREE.Group();
   private readonly cake = new THREE.Group();
+  /** Gaspard's place: its plate and cutlery, its serving, its slice of tart. */
+  private readonly guest = { laid: new THREE.Group(), food: new THREE.Group(), dessert: new THREE.Group() };
   private readonly flames: THREE.Mesh[] = [];
   private flicker = 0;
   private readonly steam = new Steam({ count: 18, life: 2.4, rise: 0.12, endSize: 0.16, opacity: 0.2 });
@@ -73,25 +78,10 @@ export class SundayTable extends Prop implements Updatable {
     this.add(this.lunch, this.fruit, this.cake);
     this.lunch.add(this.pot, this.lidOff, this.food, this.dessert);
     this.pot.add(this.lid);
-    const china = paint(0xf6f3ec, 0.35);
-    const steel = METAL.satinSteel();
-    for (const place of layout.places) {
-      const [x, z] = place.at;
-      this.lunch.add(cylinderMesh(PLATE.r, PLATE.h, china, { x, y: PLATE.h / 2, z }, { radiusBottom: PLATE.r * 0.7, segments: 32 }));
-      // Fork to the diner's left, knife to the right (across the axis to their chair), the glass beyond the knife.
-      const ax = place.toward === 'x' ? 0 : 1;
-      const az = place.toward === 'x' ? 1 : 0;
-      const fork: [number, number] = [x - ax * CUTLERY.off * place.side, z + az * CUTLERY.off * place.side];
-      const knife: [number, number] = [x + ax * CUTLERY.off * place.side, z - az * CUTLERY.off * place.side];
-      for (const [cx, cz] of [fork, knife]) {
-        const piece = part(this.lunch, CUTLERY.w, CUTLERY.h, CUTLERY.l, steel, { x: cx, y: CUTLERY.h / 2, z: cz });
-        piece.rotation.y = place.toward === 'x' ? Math.PI / 2 : 0;
-        piece.castShadow = false;
-      }
-      const away = -place.side * GLASS_SIZE.beyond;
-      const glass = cylinderMesh(GLASS_SIZE.r, GLASS_SIZE.h, GLASS.ware, { x: knife[0] + (place.toward === 'x' ? away : 0), y: GLASS_SIZE.h / 2, z: knife[1] + (place.toward === 'z' ? away : 0) }, { radiusBottom: GLASS_SIZE.r * 0.85, segments: 18 });
-      glass.castShadow = false;
-      this.lunch.add(glass);
+    for (const place of layout.places) this.lay(place, this.lunch);
+    if (layout.guest) {
+      this.lunch.add(this.guest.laid);
+      this.lay(layout.guest, this.guest.laid);
     }
     // The pot: an orange enamel cocotte on its trivet, the lid on, steam from under the lid's knob.
     const [px, pz] = layout.pot;
@@ -126,8 +116,46 @@ export class SundayTable extends Prop implements Updatable {
     }
     this.buildCourses(layout);
     this.buildCake(layout.cake);
+    this.setGuest(false);
     this.setSunday(false);
     this.setBirthday(false);
+  }
+
+  /** A place laid for one into `into`: the plate, fork to the diner's left, knife to the right (across the axis to their chair), the glass beyond the knife. */
+  private lay(place: Place, into: THREE.Group): void {
+    const [x, z] = place.at;
+    into.add(cylinderMesh(PLATE.r, PLATE.h, paint(0xf6f3ec, 0.35), { x, y: PLATE.h / 2, z }, { radiusBottom: PLATE.r * 0.7, segments: 32 }));
+    const ax = place.toward === 'x' ? 0 : 1;
+    const az = place.toward === 'x' ? 1 : 0;
+    const fork: [number, number] = [x - ax * CUTLERY.off * place.side, z + az * CUTLERY.off * place.side];
+    const knife: [number, number] = [x + ax * CUTLERY.off * place.side, z - az * CUTLERY.off * place.side];
+    for (const [cx, cz] of [fork, knife]) {
+      const piece = part(into, CUTLERY.w, CUTLERY.h, CUTLERY.l, METAL.satinSteel(), { x: cx, y: CUTLERY.h / 2, z: cz });
+      piece.rotation.y = place.toward === 'x' ? Math.PI / 2 : 0;
+      piece.castShadow = false;
+    }
+    const away = -place.side * GLASS_SIZE.beyond;
+    const glass = cylinderMesh(GLASS_SIZE.r, GLASS_SIZE.h, GLASS.ware, { x: knife[0] + (place.toward === 'x' ? away : 0), y: GLASS_SIZE.h / 2, z: knife[1] + (place.toward === 'z' ? away : 0) }, { radiusBottom: GLASS_SIZE.r * 0.85, segments: 18 });
+    glass.castShadow = false;
+    into.add(glass);
+  }
+
+  /** Gaspard's place laid at the door end (he sits down to lunch with them), or not: never over her birthday cake. */
+  setGuest(on: boolean): void {
+    const laid = on && !this.cake.visible;
+    this.guest.laid.visible = laid;
+    this.guest.food.visible = laid;
+    this.guest.dessert.visible = laid;
+  }
+
+  /** Her candles blown out (the flames gone), or lit again. */
+  setCandles(lit: boolean): void {
+    for (const flame of this.flames) flame.visible = lit;
+  }
+
+  /** The candles burn on her cake now. */
+  get candlesLit(): boolean {
+    return this.cake.visible && (this.flames[0]?.visible ?? false);
   }
 
   /** Sunday: lunch laid; any other day: the fruit alone. */
@@ -150,6 +178,8 @@ export class SundayTable extends Prop implements Updatable {
   /** Her birthday cake on the cloth, the candles lit. */
   setBirthday(on: boolean): void {
     this.cake.visible = on;
+    this.setCandles(true);
+    if (on) this.setGuest(false);
   }
 
   update(dt: number): void {
@@ -168,16 +198,22 @@ export class SundayTable extends Prop implements Updatable {
     const crust = paint(0xc89a5a, 0.75);
     const plums = paint(0x5a2a4a, 0.4);
     const onPlate = PLATE.h + SEAM;
-    for (const place of layout.places) {
+    const serve = (place: Place, food: THREE.Group, dessert: THREE.Group): void => {
       const [x, z] = place.at;
-      this.food.add(cylinderMesh(SERVING.rice, SERVING.riceH, rice, { x: x - 0.03, y: onPlate + SERVING.riceH / 2, z: z - 0.01 }, { radiusBottom: SERVING.rice * 1.1, segments: 16 }));
-      this.food.add(cylinderMesh(SERVING.sauce, SERVING.sauceH, sauce, { x: x + 0.035, y: onPlate + SERVING.sauceH / 2, z: z + 0.02 }, { segments: 16 }));
+      food.add(cylinderMesh(SERVING.rice, SERVING.riceH, rice, { x: x - 0.03, y: onPlate + SERVING.riceH / 2, z: z - 0.01 }, { radiusBottom: SERVING.rice * 1.1, segments: 16 }));
+      food.add(cylinderMesh(SERVING.sauce, SERVING.sauceH, sauce, { x: x + 0.035, y: onPlate + SERVING.sauceH / 2, z: z + 0.02 }, { segments: 16 }));
       for (const [dx, dz] of [[0.02, 0.0], [0.055, 0.035], [0.04, -0.01]] as const) {
-        this.food.add(cylinderMesh(SERVING.carrot, SERVING.carrotH, carrot, { x: x + dx, y: onPlate + SERVING.sauceH + SEAM + SERVING.carrotH / 2, z: z + dz }, { segments: 8 }));
+        food.add(cylinderMesh(SERVING.carrot, SERVING.carrotH, carrot, { x: x + dx, y: onPlate + SERVING.sauceH + SEAM + SERVING.carrotH / 2, z: z + dz }, { segments: 8 }));
       }
-      const slice = part(this.dessert, SERVING.slice, TART.h, SERVING.slice * 0.6, crust, { x, y: onPlate + TART.h / 2, z });
+      const slice = part(dessert, SERVING.slice, TART.h, SERVING.slice * 0.6, crust, { x, y: onPlate + TART.h / 2, z });
       slice.rotation.y = 0.5;
-      part(this.dessert, SERVING.slice * 0.9, SERVING.plumsH, SERVING.slice * 0.5, plums, { x, y: onPlate + TART.h + SEAM + SERVING.plumsH / 2, z }).rotation.y = 0.5;
+      part(dessert, SERVING.slice * 0.9, SERVING.plumsH, SERVING.slice * 0.5, plums, { x, y: onPlate + TART.h + SEAM + SERVING.plumsH / 2, z }).rotation.y = 0.5;
+    };
+    for (const place of layout.places) serve(place, this.food, this.dessert);
+    if (layout.guest) {
+      this.food.add(this.guest.food);
+      this.dessert.add(this.guest.dessert);
+      serve(layout.guest, this.guest.food, this.guest.dessert);
     }
     // The tart where the pot stood (the pot gone back to the kitchenette: `serve` hides it).
     const [px, pz] = layout.pot;

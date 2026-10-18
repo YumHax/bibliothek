@@ -73,7 +73,12 @@ export abstract class SwitchableLamp extends Prop implements Interactable, Updat
 
   private show(level: number): void {
     this.render(level, this.hovered);
-    if (this.halos) for (const halo of this.halos) halo.set(level);
+    if (this.halos) for (const halo of this.halos) halo.set(this.glowLevel(level));
+  }
+
+  /** How bright the halos are at `level`: the level, unless the lamp is dark for a reason of its own (a parked spot). */
+  protected glowLevel(level: number): number {
+    return level;
   }
 
   /** A halo at each light the subclass built (point and spot: the bulbs), in the light's colour. */

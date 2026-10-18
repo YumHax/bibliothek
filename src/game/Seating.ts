@@ -2,9 +2,9 @@ import type { Seat } from '@/world/Seat';
 import type { SeatLike } from './SessionActions';
 import type { CatLike, CoreParts, SleepLike } from './SessionParts';
 import { isAction } from '@/input/actions';
-import { actionKeyLabel } from '@/ui/keys';
+import { actionCap } from '@/ui/verb';
+import { inTurn, random } from '@/random';
 import type { KeyRoute, SessionHost } from './SessionHost';
-
 
 export interface SeatingParts extends Pick<CoreParts, 'player'> {
   /** Told which armchair the player sits in (it comes to the lap there). */
@@ -17,6 +17,21 @@ export interface SeatingParts extends Pick<CoreParts, 'player'> {
 
 /** A dream's card stays up this long (ms, `DreamCard`): the tip to get up waits for it, one thing at a time. */
 const DREAM_CARD_MS = 8000;
+
+/** Asked for sleep before bedtime: said in turn, no rule (the bed's caption offers sleep only once it is late). */
+const NOT_SLEEPY = inTurn(random, [
+  'Wide awake. Too early for bed.',
+  'You lie there and count the ceiling’s cracks. Not tired yet.',
+  'Not sleepy yet: the evening is still young.',
+]);
+/** Waking up in bed after a night with no dream to tell. */
+const GOOD_MORNING = inTurn(random, [
+  'Good morning!',
+  'Morning. The flat smells of yesterday’s coffee.',
+  'Up with the pigeons on the sill.',
+  'A good night’s sleep. Morning!',
+  'Morning already. The street is waking too.',
+]);
 
 /** Armchairs and the bed: sitting down, standing up (a movement key or E), and sleeping until morning. */
 export class Seating implements KeyRoute {
@@ -36,13 +51,14 @@ export class Seating implements KeyRoute {
   }
 
   sit(seat: SeatLike): void {
-    const { position, yaw } = seat.eyePose();
-    this.parts.player.sit(position, yaw);
+    const { position, yaw, pitch } = seat.eyePose();
+    this.parts.player.sit(position, yaw, false, pitch);
     this.seat = seat;
     // The cat only knows the armchairs (it comes to the lap there); in bed the player is simply not in one.
     this.parts.cat?.setPlayerSeat?.(isArmchair(seat) ? seat : null);
     const player = this.parts.player;
-    this.host.prompt(`[${actionKeyLabel('standUp')}] stand up · or move`, { id: 'seated', until: () => !player.isSeated });
+    const leave = seat.leaveVerb ?? 'stand up';
+    this.host.prompt(() => `[${actionCap('standUp')}] ${leave} · or move`, { id: 'seated', until: () => !player.isSeated });
   }
 
   stand(): void {
@@ -55,13 +71,13 @@ export class Seating implements KeyRoute {
   sleep(): void {
     const { sleep } = this.parts;
     if (!sleep) {
-      this.host.refuse('Not sleepy');
+      this.host.refuse(NOT_SLEEPY());
       return;
     }
     if (sleep.isAsleep) return;
     // Asked before anything else: by day the hands keep what they hold and nothing freezes.
     if (!sleep.sleepy) {
-      this.host.refuse('Not sleepy yet: bedtime is after 8 pm');
+      this.host.refuse(NOT_SLEEPY());
       return;
     }
     this.host.putBack();
@@ -70,10 +86,10 @@ export class Seating implements KeyRoute {
       this.host.setFrozen(false);
       const player = this.parts.player;
       const getUp = (): void => {
-        if (player.isSeated) this.host.prompt(`[${actionKeyLabel('standUp')}] get up · or move`, { id: 'seated', until: () => !player.isSeated });
+        if (player.isSeated) this.host.prompt(() => `[${actionCap('standUp')}] get up · or move`, { id: 'seated', until: () => !player.isSeated });
       };
       if (!slept) {
-        this.host.refuse('Not sleepy: bedtime is after 8 pm');
+        this.host.refuse(NOT_SLEEPY());
         getUp();
         return;
       }
@@ -83,7 +99,7 @@ export class Seating implements KeyRoute {
         window.setTimeout(getUp, DREAM_CARD_MS);
         return;
       }
-      this.host.react('Good morning!');
+      this.host.react(GOOD_MORNING());
       getUp();
     });
   }

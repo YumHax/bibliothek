@@ -10,7 +10,7 @@ export const GASPARD_TALK = {
     'Ah. The heir. Maman said you might drop by.',
     'Sit down, you’re making the room look untidy.',
     'Still taking the bus? I could find you a little runabout. Mates’ rates.',
-    'Maman, your blanquette has too much nutmeg. As always. Hello, you.',
+    'Maman, there’s too much nutmeg in this. As always. Hello, you.',
   ],
   /** Clicked without the social layer, or as his chat. */
   chat: [
@@ -51,6 +51,11 @@ export const GASPARD_TALK = {
     label: 'Show him the sale’s catalogue',
     his: 'That’s Maman’s copy. Her pencil… she ticked every lot he bought. Every one.',
   },
+  /** His own letter to Félix shown (once Mémé gave it, `grandma/Keepsakes` 'gaspardLetter'): then as "she saw". */
+  letter: {
+    label: 'Show him the letter he wrote Félix',
+    his: 'That’s… my writing. “The kid will grow out of it.” God. I wrote that, and here you are.',
+  },
   /** "You sold Félix's things to Crane": he hardens, and she shows him the door. */
   crane: {
     ask: 'You sold Félix’s things to Crane.',
@@ -64,6 +69,37 @@ export const GASPARD_TALK = {
     his: ['…', 'Well. Traffic.'],
     meme: ['You didn’t have to say a word. I saw your face. So did he.', 'He won’t be back for a while. It’s quieter. I don’t mind quiet.'],
   },
+  /**
+   * His one Sunday back, a week or more after the apology (`FamilyStory.returning`): sorry to the player this time, and
+   * the one thing of Félix's he kept back from the sale, handed over (`family/gaspardReturn` puts it in the parcel).
+   */
+  back: {
+    opening: 'You. Good, I hoped you’d come. I owe you a word, and Maman says I owe it standing up.',
+    sorry: [
+      'I sold your uncle’s things to pay my debts. That’s the long and the short of it. I’m sorry.',
+      'I kept one back. I couldn’t put it in the sale, I don’t know why. It was on my desk all this time. It’s yours.',
+    ],
+    meme: 'There. That wasn’t so hard, was it? Sit, Gaspard. You’ll stay for lunch for once.',
+    chat: [
+      'The garage is sold. I sell Peugeots for someone else now. Humbling, Maman says. Good for me, she means.',
+      'Maman has me peeling the carrots now. Penance, she calls it.',
+      'Félix would have laughed at me. Then lent me the money. That was always the trouble with him.',
+      'You’ve got his look, you know. When you’re cross. Don’t be cross.',
+    ],
+    afterHim: ['He’ll come next month. I’ll have him peel the potatoes too.', 'He stayed for the tart. First time in twenty years.'],
+    /** What he kept, its past (inside the box) and where it came from on its receipt. */
+    past: 'A slip of paper in the box, in Gaspard’s hand: “Lot withdrawn. Not for sale. G.”',
+    where: 'kept back from the sale by Gaspard',
+    note: 'Gaspard came back to Mémé’s and said sorry to you too',
+  },
+  /** At her Sunday table with him there (`LunchAtHers`): her words over the blanquette, his plate laid at the door end. */
+  lunch: [
+    'Gaspard, the bread. No, to your left. Your other left.',
+    'You two used to fight over the end of the loaf. Félix always let you have it. Remember that, Gaspard.',
+    'Eat, Gaspard, you look grey. Selling cars is no life.',
+    'Gaspard always counted the mushrooms in his plate. Didn’t you, love? Don’t pretend.',
+  ],
+
   /** The day's journal, by how it ended. */
   journal: {
     apologised: 'Gaspard said sorry, at Mémé’s table',

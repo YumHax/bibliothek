@@ -311,7 +311,7 @@ function manifestFor(lookup: Lookup, region: ScanRegion): Manifest {
   for (const kind of SCAN_KINDS) {
     const printed = kind === 'back' || kind === 'spine';
     const order = [...REGION_PREFERENCE[region], ...western];
-    const pick = choose(lookup.images.filter((i) => i.kind === kind), order, !printed);
+    const pick = choose(lookup.images.filter((i) => i.kind === kind), order, !printed, ENOUGH_PX[kind]);
     if (!pick) continue;
     manifest[kind] = `/api/scan/${kind}/${pick.uuid}.${pick.ext}`;
     manifest[`${kind}Region`] = pick.region;
@@ -319,7 +319,7 @@ function manifestFor(lookup: Lookup, region: ScanRegion): Manifest {
   return manifest;
 }
 
-function choose(images: readonly ScanImage[], order: readonly string[], anyLast: boolean): ScanImage | null {
+function choose(images: readonly ScanImage[], order: readonly string[], anyLast: boolean, enough: number): ScanImage | null {
   const rank = (i: ScanImage) => {
     const at = order.indexOf(i.region);
     return at >= 0 ? at : anyLast ? order.length : -1;
@@ -328,17 +328,20 @@ function choose(images: readonly ScanImage[], order: readonly string[], anyLast:
   for (const image of images) {
     const r = rank(image);
     if (r < 0) continue;
-    if (!best || r < rank(best) || (r === rank(best) && handier(image, best))) best = image;
+    if (!best || r < rank(best) || (r === rank(best) && handier(image, best, enough))) best = image;
   }
   return best;
 }
 
-/** Scans are served at 1024 px at most: past this, a bigger file is only a slower download (some are 4 MB). */
-const ENOUGH_PX = 1100;
+/**
+ * Past what is served (`server/scanCache`: 1024 px, a back 2048 for the box in hand to read), a bigger file is only a
+ * slower download (some are 4 MB).
+ */
+const ENOUGH_PX: Record<ScanKind, number> = { back: 2100, spine: 1100, cart: 1100, disc: 1100 };
 
 /** The smallest scan big enough, else the biggest there is. */
-function handier(a: ScanImage, b: ScanImage): boolean {
-  const big = (i: ScanImage) => Math.max(i.width, i.height) >= ENOUGH_PX;
+function handier(a: ScanImage, b: ScanImage, enough: number): boolean {
+  const big = (i: ScanImage) => Math.max(i.width, i.height) >= enough;
   if (big(a) !== big(b)) return big(a);
   return big(a) ? a.width * a.height < b.width * b.height : a.width * a.height > b.width * b.height;
 }

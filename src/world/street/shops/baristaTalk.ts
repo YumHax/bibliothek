@@ -44,14 +44,13 @@ function tipsGiven(id: PersonId, day: number): number {
   return g && g.day === day ? g.count : 0;
 }
 
-/** Pins `id`'s next tip of the day (top left: the market tip card); false when there is none left. */
-function giveTip(session: SessionActions, id: PersonId, day: number, tips: readonly string[]): boolean {
+/** `id`'s next piece of market gossip today, as they say it (the bubble marks it as speech: no quotes); null when there is none left. */
+function nextTip(id: PersonId, day: number, tips: readonly string[]): string | null {
   const n = tipsGiven(id, day);
   const tip = tips[n];
-  if (!tip) return false;
+  if (!tip) return null;
   given.set(id, { day, count: n + 1 });
-  session.tip(tip, { id: `barista-${n}`, head: 'Market tip' });
-  return true;
+  return tip.replace(/^[“"]|[”"]$/g, '');
 }
 
 /** Where Victor is today, as the barista heard it. */
@@ -79,7 +78,7 @@ export function baristaTalk(options: BaristaTalkOptions, session: SessionActions
     if (onVictor) payEspresso();
     else if (onTheHouse) onceToday(id, 'freeCoffee', day());
     else if (!purse.spend(price)) {
-      session.refuse(`A coffee is ${formatCoins(price)} and you have ${purse.coins}.`);
+      session.refuse(`A coffee is ${formatCoins(price)} and you have ${formatCoins(purse.coins)}.`);
       return { line: 'Pay me next time? No. Sorry, love, rules.' };
     }
     market.drinkCoffee();
@@ -87,9 +86,14 @@ export function baristaTalk(options: BaristaTalkOptions, session: SessionActions
     // A cold barista keeps the market to themself; a friendly one has two things to say.
     const tips = options.tips();
     const count = effect(id, 'noTip') ? 0 : effect(id, 'twoTips') ? 2 : 1;
-    for (let i = 0; i < count; i++) giveTip(session, id, day(), tips);
-    if (onVictor) return { line: 'Mr Crane left this for you. He said, and I quote, “Don’t make a song of it.” And listen…' };
-    return { line: count === 0 ? 'There. Anything else?' : onTheHouse ? 'On the house. And listen…' : 'There you go. And listen…' };
+    const heard: string[] = [];
+    for (let i = 0; i < count; i++) {
+      const tip = nextTip(id, day(), tips);
+      if (tip) heard.push(tip);
+    }
+    const gossip = heard.length ? ` And listen… ${heard.join(' ')}` : '';
+    if (onVictor) return { line: `Mr Crane left this for you. He said, and I quote, “Don’t make a song of it.”${gossip}` };
+    return { line: !heard.length ? 'There. Anything else?' : `${onTheHouse ? 'On the house.' : 'There you go.'}${gossip}` };
   };
   // To take away, for somebody else (a gift, a favour at the Mansions): into the pocket.
   const toGo = (item: Extract<ErrandId, 'coffee' | 'cake'>): { line: string } => {
@@ -97,7 +101,7 @@ export function baristaTalk(options: BaristaTalkOptions, session: SessionActions
     if (pocket.boughtToday(item) >= errand.perDay) return { line: item === 'cake' ? 'That was the last slice, sorry.' : 'I’m out of cups to go. Drink it here?' };
     if (pocket.count(item) >= errand.max) return { line: 'Your hands are full already, love.' };
     if (!services.purse.spend(errand.price)) {
-      session.refuse(`That is ${formatCoins(errand.price)} and you have ${services.purse.coins}.`);
+      session.refuse(`That is ${formatCoins(errand.price)} and you have ${formatCoins(services.purse.coins)}.`);
       return { line: 'Next time, then.' };
     }
     pocket.recordBuy(item);
@@ -134,7 +138,10 @@ export function baristaTalk(options: BaristaTalkOptions, session: SessionActions
         group: 'ask',
         label: 'Heard anything else?',
         disabled: () => (!services.market.hadCoffee ? 'Have a coffee first' : !has(id, 'twoTips') ? 'Only for a friendly face' : tipsGiven(id, day()) >= options.tips().length ? 'Nothing more today' : null),
-        run: () => (giveTip(session, id, day(), options.tips()) ? { line: 'Since you ask…' } : { line: 'That’s all I know today, honest.' }),
+        run: () => {
+          const tip = nextTip(id, day(), options.tips());
+          return { line: tip ? `Since you ask… ${tip}` : 'That’s all I know today, honest.' };
+        },
       },
       ...(findPerson(id)?.effects?.some((e) => e.key === 'victorWhere')
         ? [

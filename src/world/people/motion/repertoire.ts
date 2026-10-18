@@ -65,6 +65,18 @@ interface Response {
  */
 export type SocialAct = 'delighted' | 'pleased' | 'laugh' | 'thanks' | 'nod' | 'bored' | 'shrug' | 'annoyed' | 'hurt' | 'restless' | 'bye';
 
+/**
+ * Their manner, from who they are (the social layer's `voices.mannerOf`, named here likewise): the gruff keep it to a
+ * nod, the shy cover a laugh with a hand, the proud straighten up where others wince, the lively throw their arms
+ * about, the warm join their hands.
+ */
+export type Manner = 'gruff' | 'shy' | 'proud' | 'lively' | 'warm';
+
+/** How much more (or less) the body joins in, by manner. */
+const MANNER_BODY: Record<Manner, number> = { gruff: -0.25, shy: -0.15, proud: -0.1, lively: 0.25, warm: 0.05 };
+/** How big the face goes, by manner. */
+const MANNER_FACE: Record<Manner, number> = { gruff: 0.7, shy: 0.85, proud: 0.85, lively: 1.15, warm: 1.05 };
+
 /** A social reaction's response: the gesture, the face (scaled), how long it holds and fades, a lean in or back (radians, held as long). */
 interface SocialResponse extends Response {
   fade: number;
@@ -76,12 +88,13 @@ interface SocialResponse extends Response {
  * measure: an expressive person laughs, claps, shakes their head where a reserved one smiles, presses their lips;
  * hands that are busy (holding something, on a machine) leave the arms out of it.
  */
-export function respondSocial(act: SocialAct, strength: number, ctx: Context, random: () => number): SocialResponse {
+export function respondSocial(act: SocialAct, strength: number, ctx: Context, random: () => number, manner?: Manner): SocialResponse {
   const s = Math.max(0, Math.min(1, strength));
-  const e = ctx.expressive;
+  const e = Math.max(0, Math.min(1, ctx.expressive + (manner ? MANNER_BODY[manner] : 0)));
   // The bigger the moment and the more expressive the person, the likelier it shows in the body.
   const body = !ctx.handsBusy && !ctx.holding && !ctx.seated && random() < e * (0.35 + 0.65 * s);
-  const amp = (0.55 + 0.45 * s) * (0.75 + 0.35 * e);
+  const amp = (0.55 + 0.45 * s) * (0.75 + 0.35 * e) * (manner ? MANNER_FACE[manner] : 1);
+  const own = manner ? mannered(act, manner, body, s, random) : undefined;
   const face = (f: FaceKey): FaceKey => {
     const out: FaceKey = {};
     for (const [k, v] of Object.entries(f) as [keyof FaceKey, number][]) out[k] = Math.min(1, v * amp);
@@ -89,29 +102,70 @@ export function respondSocial(act: SocialAct, strength: number, ctx: Context, ra
   };
   switch (act) {
     case 'delighted':
+      if (own !== undefined) return { gesture: own, face: face({ smile: 1, browsUp: 0.7, wide: 0.25 }), seconds: 2.2, fade: 1.4, nod: !own, lean: 0.07 * amp };
       return { gesture: body && s >= 0.8 ? 'clap' : null, face: face({ smile: 1, browsUp: 0.7, wide: 0.25 }), seconds: 2.2, fade: 1.4, nod: !body, lean: 0.07 * amp };
     case 'pleased':
-      return { gesture: null, face: face({ smile: 0.75, browsUp: 0.3 }), seconds: 1.6, fade: 1.2, nod: true, lean: 0.02 };
+      return { gesture: own ?? null, face: face({ smile: 0.75, browsUp: 0.3 }), seconds: 1.6, fade: 1.2, nod: !own, lean: 0.02 };
     case 'laugh':
+      if (own !== undefined) return { gesture: own, face: face({ smile: 0.9, squint: 0.45, jaw: own === 'laugh' ? 0.3 : 0 }), seconds: 1.7, fade: 1, nod: !own, lean: 0 };
       if (body) return { gesture: 'laugh', face: face({ smile: 1, squint: 0.6, jaw: 0.3 }), seconds: 1.8, fade: 1, lean: 0 };
       // The reserved chuckle: a smile, the eyes narrowing, no more.
       return { gesture: null, face: face({ smile: 0.8, smirk: 0.35, squint: 0.35 }), seconds: 1.6, fade: 1, nod: random() < 0.5, lean: 0 };
     case 'thanks':
+      if (own !== undefined) return { gesture: own, face: face({ smile: 0.9, browsUp: 0.45 }), seconds: 1.8, fade: 1.2, nod: !own, lean: 0.03 };
       return { gesture: body && s >= 0.8 ? 'handsJoin' : null, face: face({ smile: 0.9, browsUp: 0.45 }), seconds: 1.8, fade: 1.2, nod: true, lean: 0.03 };
     case 'nod':
-      return { gesture: null, face: face({ smile: 0.3, smirk: 0.25 }), seconds: 1.1, fade: 1, nod: true, lean: 0 };
+      return { gesture: own ?? null, face: face({ smile: 0.3, smirk: 0.25 }), seconds: 1.1, fade: 1, nod: true, lean: 0 };
     case 'bored':
-      return { gesture: 'glanceAway', face: face({ smirk: 0.3, press: 0.15 }), seconds: 1.3, fade: 0.8, lean: -0.01 };
+      return { gesture: own ?? 'glanceAway', face: face({ smirk: 0.3, press: 0.15 }), seconds: 1.3, fade: 0.8, lean: -0.01 };
     case 'shrug':
       return { gesture: body || random() < 0.4 ? 'shrug' : null, face: face({ browsUp: 0.4, smirk: 0.45 }), seconds: 1.3, fade: 0.9, lean: 0 };
     case 'annoyed':
+      if (own !== undefined) return { gesture: own, face: face({ frown: 0.7, press: 0.6 }), seconds: 2, fade: 1.4, lean: -0.04 };
       return { gesture: body ? 'headShake' : random() < 0.5 ? 'wince' : null, face: face({ frown: 0.7, press: 0.6 }), seconds: 2, fade: 1.4, lean: -0.04 };
     case 'hurt':
+      if (own !== undefined) return { gesture: own, face: face({ frown: 0.45, sad: 0.9, squint: 0.3 }), seconds: 3, fade: 2, lean: -0.05 };
       return { gesture: body ? pick(random, ['facepalm', 'headShake']) : 'wince', face: face({ frown: 0.45, sad: 0.9, squint: 0.3 }), seconds: 3, fade: 2, lean: -0.05 };
     case 'restless':
       return { gesture: ctx.holding ? null : 'checkWatch', face: face({ browsUp: 0.3, press: 0.4 }), seconds: 1.5, fade: 1, lean: 0 };
     case 'bye':
       return { gesture: ctx.holding || ctx.handsBusy ? null : 'wave', face: face({ smile: 0.6 }), seconds: 1.4, fade: 1, nod: ctx.holding || ctx.handsBusy, lean: 0 };
+  }
+}
+
+/**
+ * The gesture `manner` puts on `act` (null: none, on purpose; undefined: the shared way). `body`: the moment shows in
+ * the body this time; `s` its strength.
+ */
+function mannered(act: SocialAct, manner: Manner, body: boolean, s: number, random: () => number): GestureName | null | undefined {
+  switch (manner) {
+    case 'gruff':
+      // A nod and a grunt: nothing more, but a shake of the head when it annoys.
+      if (act === 'delighted' || act === 'thanks' || act === 'laugh' || act === 'pleased') return null;
+      if (act === 'annoyed') return 'headShake';
+      if (act === 'bored') return 'sigh';
+      return undefined;
+    case 'shy':
+      if (act === 'laugh') return body ? 'coverMouth' : null;
+      if (act === 'delighted' || act === 'pleased') return body || random() < 0.35 ? 'touchCheek' : null;
+      if (act === 'annoyed' || act === 'hurt') return 'glanceAway';
+      if (act === 'nod') return random() < 0.3 ? 'rubNeck' : null;
+      return undefined;
+    case 'proud':
+      if (act === 'hurt' || act === 'annoyed') return 'straighten';
+      if (act === 'delighted') return body ? 'handsJoin' : null;
+      if (act === 'laugh') return null;
+      return undefined;
+    case 'lively':
+      if (act === 'delighted') return body && s >= 0.6 ? pick(random, ['clap', 'fistPump', 'cheerHop'] as const) : 'clap';
+      if (act === 'laugh') return 'laugh';
+      if (act === 'pleased') return body ? pick(random, ['rubHands', 'point'] as const) : null;
+      if (act === 'bored') return 'sigh';
+      return undefined;
+    case 'warm':
+      if (act === 'thanks' || act === 'delighted') return body ? 'handsJoin' : 'claspHands';
+      if (act === 'pleased') return random() < 0.4 ? 'claspHands' : null;
+      return undefined;
   }
 }
 

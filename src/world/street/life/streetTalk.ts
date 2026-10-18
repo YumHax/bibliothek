@@ -9,6 +9,8 @@ import type { SkyState } from '../../props/DayNight';
 import { HEAVY_RAIN } from '../../weather/Weather';
 import { ARCADE_TITLES } from '../arcadeTitles';
 import { pick, random } from '@/random';
+import { weekdayOf } from '@/time/wakefulness';
+import { LOCAL_QUIZ } from '@/streetShops/bars';
 import { formatNumber } from '@/text/count';
 
 interface StreetTalkOptions {
@@ -26,6 +28,8 @@ interface StreetTalkOptions {
   strayTrust?: () => number;
   /** The Grand Flea Fair is on today. */
   fairDay?: () => boolean;
+  /** The game day (THE LOCAL's quiz night, the weekday a commuter grumbles about). */
+  day?: () => number;
 }
 
 /** The arcade's cabinets as the street calls them, LexiPunk aside (it plays free: nobody talks of its tables). */
@@ -94,12 +98,12 @@ export function streetTalk(options: StreetTalkOptions): (role?: TalkRole) => str
     const lines = !own.length ? candidates(options) : random() < 0.7 ? own : [...own, ...candidates(options)];
     const fresh = lines.filter((line) => line !== last);
     last = pick(random, fresh.length ? fresh : lines);
-    return `“${last}”`;
+    return last;
   };
 }
 
 /** What only someone in `role` would say, now. */
-function roleLines(role: TalkRole, { sky, market, fairDay }: StreetTalkOptions): string[] {
+function roleLines(role: TalkRole, { sky, market, fairDay, day }: StreetTalkOptions): string[] {
   const s = sky();
   const wet = s.rain > 0.05;
   const cold = s.snow > 0.1 || s.snowCover > 0.3;
@@ -135,7 +139,7 @@ function roleLines(role: TalkRole, { sky, market, fairDay }: StreetTalkOptions):
     case 'jogger':
       return ['Can’t stop, I’ll lose my rhythm!', 'Three laps … to go …', cold ? 'Cold’s good for running. Honestly.' : 'Lovely day for a run.'];
     case 'feeder':
-      return ['They know me, the pigeons. Every day, the same time.', 'Old bread. Nothing goes to waste.', 'Don’t frighten them off, there’s a love.', 'The ducks used to come too, before the pond was cleaned.'];
+      return ['They know me, the pigeons. Every day, the same time.', 'Old bread. Nothing goes to waste.', 'Don’t frighten them off, there’s a love.', 'The ducks get the good bread. The pigeons get the crusts. They know.'];
     case 'closing':
       return ['Closing up, sorry. Back tomorrow at opening.', 'That’s me done for the day.', 'Long day. My feet are finished.', 'Come back tomorrow, I’ll have fresh stock.'];
     case 'nightShift':
@@ -146,7 +150,7 @@ function roleLines(role: TalkRole, { sky, market, fairDay }: StreetTalkOptions):
       return ['Late for school! Bye!', 'We have a spelling test. I didn’t revise.', 'School’s finished! Arcade!', 'My mum says no games till my homework’s done.'];
     case 'commuter':
       return s.hours < 12
-        ? ['Sorry, can’t stop, I’m late!', 'Train in four minutes. Bye!', 'Monday again, is it? Feels like it.']
+        ? ['Sorry, can’t stop, I’m late!', 'Train in four minutes. Bye!', day && weekdayOf(day()) === 0 ? 'Monday again. Already.' : day && weekdayOf(day()) === 4 ? 'Friday! Nearly there.' : 'Same train every morning. Same seat.']
         : ['Home at last. Well, nearly.', 'Long day. Mind out!', 'Sorry, in a hurry!'];
     case 'child':
       return ['Have you got a Game Boy? My brother has one.', 'Mum says no arcade till my homework’s done.', 'I can do the whole first level without dying.', 'Are those games in your bag?'];
@@ -174,7 +178,7 @@ function roleLines(role: TalkRole, { sky, market, fairDay }: StreetTalkOptions):
     case 'bakery':
       return ['The croissants go by nine.', 'Two baguettes, always. One never makes it home.', 'Smells good, doesn’t it?'];
     case 'smoker':
-      return ['Just the one, then back in.', 'It’s louder in there than you’d think.', 'Quiz night. We’re losing.', 'Got a light? No? Never mind.'];
+      return ['Just the one, then back in.', 'It’s louder in there than you’d think.', day && LOCAL_QUIZ.isDay(day()) ? 'Quiz night. We’re losing.' : 'The match is on. We’re losing.', 'Got a light? No? Never mind.'];
     case 'chatting':
       return ['Sorry, we were just catching up.', 'Have you heard about the flat on the third floor?', 'We’ve known each other since school.'];
     case 'passer':

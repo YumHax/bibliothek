@@ -23,7 +23,7 @@ export function placeSecrets(site: SecretsSite): void {
   const { dust, dustFind, chalk, carving } = SECRETS_PLAN;
   const findAt = new THREE.Vector3(dustFind.at[0], groundHeight(dustFind.at[0], dustFind.at[1]) + 0.016, dustFind.at[1]);
   zone.place(
-    new DustyPane({ host: zone, covers: site.covers, wallet: site.wallet, randomGames: site.randomGames, owns: site.owns, isWanted: site.isWanted, find: { at: findAt, yaw: dustFind.yaw }, size: dust.size }),
+    new DustyPane({ host: zone, covers: site.covers, wallet: site.wallet, randomGames: site.randomGames, owns: site.owns, isWanted: site.isWanted, find: { at: findAt, yaw: dustFind.yaw }, size: dust.size, glass: dust.glass }),
     new THREE.Vector3(dust.at[0], dust.y, dust.at[1]),
     dust.yaw,
   );

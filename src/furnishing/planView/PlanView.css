@@ -1,53 +1,140 @@
-/* The planning view: the game's HUD out of the way, a strip of keys and a cursor above the canvas. */
+/*
+ * The planning view: the game's HUD out of the way, the view under drafting film (a faint grid, corner marks, a
+ * vignette), the plan's title block at the top (the room's name, the keys as caps, a quieter second row, the grid's
+ * state, what is under the cursor) and a cursor that says what a click would do.
+ */
 @layer tokens, base, components, panels;
 @layer panels {
-  body.plan-view .crosshair,
-  body.plan-view .hover-label,
-  body.plan-view .speech-layer,
-  body.plan-view .reaction,
-  body.plan-view .reading-stage,
-  body.plan-view .reward-stage,
-  body.plan-view .touch-stick,
-  body.plan-view .touch-badge {
+  /* Like photo mode: only the plan, its strip and the refusals (the reaction line) stay. */
+  body.plan-view :is(.crosshair, .hover-label, .game-panel, .wallet-hud, .speech-layer, .subtitles, .reading-stage, .reward-stage,
+    .slip, .tip-card, .tip-board, .hint-tray, .prompt-line, .touch-stick, .touch-bar, .touch-badge) {
     visibility: hidden;
   }
 
+  .plan-view-film,
   .plan-view-hud,
   .plan-view-cursor {
     z-index: var(--z-hud);
   }
 
+  .plan-view-hud,
+  .plan-view-film {
+    --pv-ink: var(--ui-info-text);
+    --pv-line: color-mix(in srgb, var(--ui-info-text) 9%, transparent);
+    --pv-paper: color-mix(in srgb, var(--ui-info) 28%, var(--ui-panel-solid));
+  }
+
+  /* Drafting film: a 4 % grid over the view, the four corners marked, the edges darkened. */
+  .plan-view-film {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    background:
+      radial-gradient(ellipse at center, transparent 55%, var(--shade-45) 100%),
+      repeating-linear-gradient(0deg, var(--pv-line) 0 1px, transparent 1px 48px),
+      repeating-linear-gradient(90deg, var(--pv-line) 0 1px, transparent 1px 48px);
+    animation: plan-view-in var(--dur-enter) var(--ui-ease) both;
+  }
+
+  .plan-view-film__corner {
+    position: absolute;
+    width: 2.2rem;
+    height: 2.2rem;
+    border: 0 solid color-mix(in srgb, var(--pv-ink) 55%, transparent);
+  }
+  .plan-view-film__corner[data-at='tl'] { top: var(--sp-4); left: var(--sp-4); border-top-width: 2px; border-left-width: 2px; }
+  .plan-view-film__corner[data-at='tr'] { top: var(--sp-4); right: var(--sp-4); border-top-width: 2px; border-right-width: 2px; }
+  .plan-view-film__corner[data-at='bl'] { bottom: var(--sp-4); left: var(--sp-4); border-bottom-width: 2px; border-left-width: 2px; }
+  .plan-view-film__corner[data-at='br'] { bottom: var(--sp-4); right: var(--sp-4); border-bottom-width: 2px; border-right-width: 2px; }
+
+  /* The title block: a blueprint plate, the room's name in the display face, the keys under it. */
   .plan-view-hud {
     position: absolute;
     top: var(--sp-4);
     left: 50%;
     transform: translateX(-50%);
-    max-width: calc(100vw - 2rem);
-    padding: 0.55rem 0.9rem;
+    display: grid;
+    justify-items: center;
+    gap: 0.3rem;
+    width: min(36rem, calc(100vw - 2rem));
+    padding: 0.6rem 1rem 0.55rem;
     box-sizing: border-box;
     color: var(--ui-text);
     font-size: var(--fs-3);
     line-height: 1.45;
     text-align: center;
-    background: var(--ui-panel-glass);
-    border-radius: var(--ui-radius-md);
+    background: var(--pv-paper);
+    border: 1px solid color-mix(in srgb, var(--pv-ink) 45%, transparent);
+    outline: 1px solid color-mix(in srgb, var(--pv-ink) 20%, transparent);
+    outline-offset: 3px;
+    border-radius: var(--ui-radius-sm);
+    box-shadow: var(--ui-shadow);
     pointer-events: none;
+    animation: plan-view-in var(--dur-enter) var(--ui-ease) both;
+  }
+  /* An alert at the top: the plate steps down under it. */
+  body.alert-up .plan-view-hud { top: calc(var(--sp-4) + 3.2rem); }
+
+  .plan-view-hud__head {
+    display: flex;
+    align-items: baseline;
+    gap: 0.6rem;
+    padding-bottom: 0.3rem;
+    border-bottom: 1px solid color-mix(in srgb, var(--pv-ink) 35%, transparent);
+  }
+  .plan-view-hud__title {
+    font-family: var(--ui-font-display);
+    font-size: var(--fs-6);
+    font-weight: 400;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--pv-ink);
+  }
+  .plan-view-hud__from {
+    font-family: var(--ui-font-hand);
+    font-size: var(--fs-5);
+    color: var(--ui-text-dim);
   }
 
-  .plan-view-hud strong {
-    font-weight: 600;
+  .plan-view-hud__row {
+    display: flex;
+    align-items: center;
+    gap: 0.7rem;
+    min-height: 1.6em;
+    color: var(--ui-text-dim);
+    font-size: var(--fs-2);
   }
 
+  /* The grid's state, shown while a piece is carried: lit when on, an outline when free. */
+  .plan-view-grid {
+    padding: 0 0.55em;
+    border: 1px solid color-mix(in srgb, var(--pv-ink) 60%, transparent);
+    border-radius: var(--ui-radius-pill);
+    font-weight: 700;
+    font-size: var(--fs-1);
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: var(--pv-ink);
+    transition: background var(--dur-hover) var(--ui-ease), color var(--dur-hover) var(--ui-ease);
+  }
+  .plan-view-grid[data-on='true'] {
+    background: color-mix(in srgb, var(--pv-ink) 80%, transparent);
+    color: var(--ui-panel-solid);
+  }
+
+  /* What is under the cursor or carried: always one line high, green when it fits, red when it does not. */
   .plan-view-status {
     display: block;
-    margin-top: 0.2rem;
-    color: var(--ui-success-faint);
+    min-height: 1.45em;
+    font-weight: 600;
+    color: var(--ui-text);
   }
+  .plan-view-status[data-state='fits'] { color: var(--ui-success-faint); }
+  .plan-view-status[data-state='blocked'] { color: var(--ui-danger-text); }
+  .plan-view-status[data-state='over'] { color: var(--ui-gold-pale); }
+  .plan-view-status[data-state='fixed'] { color: var(--ui-text-dim); font-weight: 400; font-style: italic; }
 
-  .plan-view-status[data-fits='false'] {
-    color: var(--ui-danger-text);
-  }
-
+  /* The cursor: a ring; a filled gold ring over a piece to take, a crosshair-in-ring while carrying, dimmed over a fixed piece. */
   .plan-view-cursor {
     position: absolute;
     left: 0;
@@ -59,10 +146,34 @@
     border-radius: 50%;
     box-shadow: 0 0 0 1px var(--shade-45);
     pointer-events: none;
+    transition: width var(--dur-tap) var(--ui-ease), height var(--dur-tap) var(--ui-ease), margin var(--dur-tap) var(--ui-ease), border-color var(--dur-tap) var(--ui-ease);
   }
-
-  .plan-view-cursor[data-over='true'] {
+  .plan-view-cursor[data-state='over'] {
+    width: 24px;
+    height: 24px;
+    margin: -12px 0 0 -12px;
     border-color: var(--ui-gold-pale);
     background: color-mix(in srgb, var(--ui-gold-pale) 25%, transparent);
   }
+  .plan-view-cursor:is([data-state='carry'], [data-state='blocked'])::before,
+  .plan-view-cursor:is([data-state='carry'], [data-state='blocked'])::after {
+    content: '';
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    background: currentColor;
+    translate: -50% -50%;
+  }
+  .plan-view-cursor:is([data-state='carry'], [data-state='blocked'])::before { width: 2px; height: 8px; }
+  .plan-view-cursor:is([data-state='carry'], [data-state='blocked'])::after { width: 8px; height: 2px; }
+  .plan-view-cursor[data-state='carry'] { color: var(--ui-success-faint); border-color: var(--ui-success-faint); }
+  .plan-view-cursor[data-state='blocked'] { color: var(--ui-danger-text); border-color: var(--ui-danger-text); }
+  .plan-view-cursor[data-state='fixed'] { opacity: 0.45; border-style: dashed; }
+
+  @keyframes plan-view-in {
+    from { opacity: 0; }
+    to   { opacity: 1; }
+  }
+  /* Reduced motion: the game's setting (`.reduce-motion` on <html>, settings/motion), never the media query alone. */
+  .reduce-motion .plan-view-film, .reduce-motion .plan-view-hud { animation: none; }
 }

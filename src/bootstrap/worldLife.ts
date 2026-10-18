@@ -18,6 +18,7 @@ import { furnishVisitors } from '@/world/visitors';
 import type { Visitors } from '@/world/visitors/Visitors';
 import type { DoorLike } from '@/world/visitors/Visit';
 import { furnishGatherings } from '@/world/visitors/gathering';
+import { holdPowerCutsWhile } from '@/building/blackout';
 import { phoneFriends } from '@/world/visitors/phoneInvite';
 import { WORLD_PLAN, inFlat } from '@/world/worldPlan';
 import type { Zone } from '@/world/zone';
@@ -57,6 +58,9 @@ export function makeCat(services: Services, world: GameWorld, parts: { home: Hom
   const cat = furnishCat(start, {
     settings: services.catSettings, player, clock: sky.dayNight, seats: home.armchairs, windows: home.windows, tv: home.tv,
     placers: catPlacers(start, upgrades),
+    // A low box on the living room's shelves gets pawed half out of its row now and then.
+    // (A gap with a card in it, a game wished for or lent out, has no box to paw.)
+    boxes: () => home.shelving.boxes.filter((box) => box.castsShadow),
     furnishings: services.furnishings,
     listener: context.listener,
     acoustics: context.acoustics,
@@ -176,6 +180,9 @@ export function wireVisitors(services: Services, engine: Engine, world: GameWorl
     hosting: {
       cakeOut: () => services.household.cakeOut || services.grandmaRituals.dishOut !== null,
       eatCake: () => (services.household.cakeOut ? services.household.eatCake() : services.grandmaRituals.eatDish()),
+      // The kettle boiled lately: a cup of tea (docs/household.md "The kitchen").
+      teaReady: () => services.household.teaReady,
+      pourTea: () => services.household.pourTea(),
     },
     // A click on a friend opens a conversation (docs/social.md "Friends").
     social: flat.social,
@@ -190,9 +197,9 @@ export function wireVisitors(services: Services, engine: Engine, world: GameWorl
 /**
  * More than one round at once (docs/visitors.md "Gatherings"): games nights, open houses, the collectors' club's
  * visit; the phone's rows and its invitations. The program runner (a games night's match on the TV) is made with the
- * Session: `session.ts` sets `programs`.
+ * Session: `session.ts` sets `programs`. Returns whether one is under way (the closing reel waits for Mémé gone home).
  */
-export function wireGatherings(services: Services, world: GameWorld, parts: { visitors: Visitors; home: HomeRoom; flat: FlatPanels; programs: Late<ProgramRunner> }): void {
+export function wireGatherings(services: Services, world: GameWorld, parts: { visitors: Visitors; home: HomeRoom; flat: FlatPanels; programs: Late<ProgramRunner> }): { readonly underWay: boolean } {
   const { collection, strays, fame, collectorWatch, params, sky } = services;
   const { visitors, home, flat, programs } = parts;
   const living = world.zone(WORLD_PLAN.start);
@@ -223,9 +230,15 @@ export function wireGatherings(services: Services, world: GameWorld, parts: { vi
         services.engine.renderFrame();
         return services.engine.renderer.domElement;
       },
+      kitchenDressed: () => (['kitchenTable', 'kitchenRug', 'appliances'] as const).some((piece) => services.upgrades.has(piece)),
+      bringCake: () => (services.household.bake() ? 'brought' : 'there'),
+      prototypeEnded: () => services.story.stage === 'ended',
     },
   });
+  // Nor in the middle of a games night, an open house, the club's visit or Mémé's.
+  holdPowerCutsWhile(() => gatherings.underWay);
   flat.phone.setEvents({ list: () => gatherings.phoneRows(), call: (id) => gatherings.call(id as 'gamesNight' | 'openHouse') });
   // The bedroom's phone asks a friend round (`visitors/phoneInvite`: once a market day, if nobody came yet).
   flat.phone.setFriends(phoneFriends(visitors, services.household, () => sky.dayNight.state.hours));
+  return gatherings;
 }

@@ -9,8 +9,8 @@ const MAX_GAP_MS = 1500;
 const COINS = 5000;
 
 /**
- * Cheat: typing 5000 anywhere but in a text field adds 5000 coins to the wallet (a reward banner
- * says so). Also `bibliothek.coins(n = 5000)` in the console.
+ * Cheat: typing 5000 anywhere but in a text field adds 5000 coins to the wallet (a slip with the
+ * coin chip says so). Also `bibliothek.coins(n = 5000)` in the console.
  */
 export function installMoneyCheat(input: Input, wallet: Wallet, notices: Pick<NoticeActions, 'slip'>): void {
   const grant = (coins: number): void => {

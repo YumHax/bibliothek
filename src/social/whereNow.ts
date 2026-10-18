@@ -36,6 +36,8 @@ const COUNTERS: Readonly<Record<PersonId, { kind: ShopKind; where: string }>> = 
   'clerk-pets': { kind: 'pets', where: 'At PAWS & CLAWS' },
   'clerk-florist': { kind: 'florist', where: 'At the florist’s' },
   butcher: { kind: 'butcher', where: 'At the butcher’s counter' },
+  baker: { kind: 'bakery', where: 'At the bakery’s counter' },
+  pharmacist: { kind: 'pharmacy', where: 'At the pharmacy’s counter' },
   bookseller: { kind: 'books', where: 'At CORNER BOOKS' },
   attendant: { kind: 'arcade', where: 'At the arcade’s counter' },
 };

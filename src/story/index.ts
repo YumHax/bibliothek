@@ -3,7 +3,7 @@ import { registerProgram } from '@/onscreen/programs';
 import type { ReviewSource } from '@/reviews/Reviews';
 import { MoonpostProgram } from './moonpost/MoonpostProgram';
 import type { PrototypeStory } from './PrototypeStory';
-import { PROTOTYPE_ID, PROTOTYPE_REVIEWS, type StoryMail } from './prototype';
+import { PROTOTYPE_ID, PROTOTYPE_REVIEWS, type StoryMail, type StoryStage } from './prototype';
 
 export { PrototypeStory,  } from './PrototypeStory';
 export {  type StoryMail,  } from './prototype';
@@ -20,6 +20,8 @@ export interface StoryChannels {
   atArcadeCounter(): string | null;
   atTrader(): string | null;
   atFriend(friendId: string): string | null;
+  /** Where the trail stands, read only (the phone box on Front Street overhears its people: `placeStreetEvents`). */
+  readonly stage: StoryStage;
 }
 
 /**

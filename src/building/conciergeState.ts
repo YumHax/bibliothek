@@ -14,13 +14,17 @@ interface ConciergeSaved {
   pressed: number[];
   /** Coins put in her Christmas box, all told. */
   tips: number;
+  /** The game day the sticky timer button is new from (the day after she was told which one), or null. */
+  mended: number | null;
+  /** The game day her geranium was last watered with the lodge's spare key (-1: never). */
+  watered: number;
 }
 
 let store: PersistedStore<ConciergeSaved> | null = null;
 let state: ConciergeSaved | null = null;
 
 function fresh(): ConciergeSaved {
-  return { met: false, errand: 'none', pressed: [], tips: 0 };
+  return { met: false, errand: 'none', pressed: [], tips: 0, mended: null, watered: -1 };
 }
 
 function readSaved(data: unknown): ConciergeSaved | null {
@@ -28,6 +32,8 @@ function readSaved(data: unknown): ConciergeSaved | null {
   const d = { ...fresh(), ...(data as Partial<ConciergeSaved>) };
   if (!['none', 'asked', 'tried', 'done'].includes(d.errand)) d.errand = 'none';
   d.pressed = Array.isArray(d.pressed) ? d.pressed.filter((k) => Number.isInteger(k)) : [];
+  if (typeof d.mended !== 'number') d.mended = null;
+  if (typeof d.watered !== 'number') d.watered = -1;
   return d;
 }
 

@@ -1,7 +1,7 @@
 import type { Game } from '@/catalog/types';
 import type { NoticeActions } from '@/notices';
-import { arcadeDate, borrow, borrowedGames, fixArcadeDate, giveBack, lastPostcard, lastSide, postcardSent, sideTaken } from '@/social/friendsLife';
-import { everyone, shortName } from '@/social/people';
+import { arcadeDate, borrow, borrowedGames, fixArcadeDate, giveBack, lastPostcard, lastSide, postcardPlacesSent, postcardSent, sideTaken } from '@/social/friendsLife';
+import { everyone, findPerson, shortName } from '@/social/people';
 import { has } from '@/social/perks';
 import { isMet, nudge, standing } from '@/social/standing';
 import type { TalkExtra } from '@/social/talk';
@@ -30,7 +30,17 @@ const POSTCARD_PLACES: readonly { place: string; text: string }[] = [
   { place: 'Montréal', text: 'Minus eighteen. I have spent two days in a shop that sells nothing but RPGs. The owner knew Chrono Trigger by heart. I may stay.' },
   { place: 'Berlin', text: 'There is a computer games museum here with a wall of consoles, every one I ever wanted. I stood in front of the Neo Geo for an hour. They asked me to move.' },
   { place: 'Edinburgh', text: 'Rain, castle, rain, a second-hand shop with a Mega Drive in the window, rain. Bought it. Don’t tell anyone. It’s raining.' },
+  { place: 'Seoul', text: 'An arcade in a basement under a fried-chicken shop, open all night. A boy of twelve beat me at a rhythm game nine times. I bought him a Coke out of respect.' },
+  { place: 'Naples', text: 'Marco’s cousins fed me until I couldn’t move. There is a man by the port who repairs Game Boys on a folding table. I watched for an hour. Bliss.' },
+  { place: 'Reykjavík', text: 'It is dark at four and the record shop has a crate of game soundtracks on vinyl. I am never leaving this record shop. Send help. Or don’t.' },
 ];
+
+/** Their note when a game they lent the player went back, picked up from the landing. */
+const PICKED_UP: Readonly<Record<string, string>> = {
+  sam: 'Picked up my {title} from your landing. Thanks for looking after it! Same time next week? S.',
+  ines: 'Collected {title} from your mat. Manual included, I checked. Thank you. I.',
+  marco: '{title} picked up! Hope you practised. Rematch soon. M.',
+};
 
 /** What the friends' side needs of the flat. */
 export interface FriendSocialDeps {
@@ -67,7 +77,8 @@ export function friendExtras(plan: FriendPlan, deps: FriendSocialDeps, say: (lin
       group: 'ask',
       label: 'Give me a hand with the furniture?',
       run: () => {
-        return { line: id === 'marco' ? 'Point me at it. I moved a piano once. Well, I watched someone move a piano.' : 'Sure. You lift, I’ll supervise. Kidding! Which one?' };
+        // A friend's arms (or his van) carry what the furniture shop sells home: no delivery to pay (`streetPerks.shopFactor`).
+        return { line: id === 'marco' ? 'Point me at it. Anything from the furniture shop, the van brings it round. No delivery to pay.' : 'Sure. Anything you buy at the furniture shop, I’ll carry it up. Save yourself the delivery.' };
       },
     });
   }
@@ -106,11 +117,21 @@ export function friendExtras(plan: FriendPlan, deps: FriendSocialDeps, say: (lin
   return out;
 }
 
-/** The coldest person the player has met (cold or worse), not a friend from before, for a word put in. */
+/**
+ * Whether `friend` knows `id` well enough to put in a word: someone they are tied to and like (either card's tie),
+ * or one of the building's people (they come up those stairs often enough). Never someone they can't stand.
+ */
+function knows(friend: string, id: string): boolean {
+  const tie = findPerson(friend)?.ties?.[id] ?? findPerson(id)?.ties?.[friend];
+  if (tie !== undefined) return tie > 0;
+  return findPerson(id)?.group === 'building';
+}
+
+/** The coldest person the player has met (cold or worse) that `friend` knows, not a friend from before, for a word put in. */
 function coldest(friend: string): string | null {
   let worst: { id: string; warmth: number } | null = null;
   for (const p of everyone()) {
-    if (p.id === friend || p.group === 'friends' || !isMet(p.id)) continue;
+    if (p.id === friend || p.group === 'friends' || !isMet(p.id) || !knows(friend, p.id)) continue;
     const s = standing(p.id);
     if (tierRank(tierOf(s.warmth, s.trust)) > tierRank('cold')) continue;
     if (!worst || s.warmth < worst.warmth) worst = { id: p.id, warmth: s.warmth };
@@ -136,7 +157,11 @@ export function returnBorrowed(deps: FriendSocialDeps): void {
   const day = deps.day();
   for (const b of borrowedGames()) {
     if (!deps.collection.find(b.gameId)) {
+      // Their game is gone (it left the collection): they hear of it, and it costs.
       giveBack(b.gameId);
+      const name = FRIENDS.find((f) => f.id === b.from)?.name ?? 'Your friend';
+      nudge(b.from, { warmth: -6, trust: -8, why: `lost the ${b.title} they lent you`, day, memory: `you lost my ${b.title}`, memoryWeight: -10 });
+      deps.notices?.read({ title: `${name} came for ${b.title}`, text: `${name} rang the bell for their ${b.title}. It wasn’t on your shelves any more. “You… lost it? Right. Okay.”`, look: 'note' });
       continue;
     }
     if (day < b.dueDay) continue;
@@ -145,7 +170,8 @@ export function returnBorrowed(deps: FriendSocialDeps): void {
     if (deps.collection.find(b.gameId)?.acquired?.where?.startsWith('borrowed from')) deps.collection.remove?.(b.gameId);
     const name = FRIENDS.find((f) => f.id === b.from)?.name ?? 'Your friend';
     nudge(b.from, { trust: 2, warmth: 1, why: 'got their game back on time', day, reason: 'gaveBack' });
-    deps.notices?.read({ title: `${b.title} went back to ${name}`, text: `${name} picked it up on the landing: “Thanks for looking after it! Same time next week?”`, look: 'note' });
+    const note = (PICKED_UP[b.from] ?? '{name} picked it up on the landing. Thanks for looking after it!').replaceAll('{title}', b.title).replaceAll('{name}', name);
+    deps.notices?.read({ title: `${b.title} went back to ${name}`, text: note, look: 'note', from: name });
     deps.journal?.note('visit', `${b.title} back to ${name}`, { data: { who: b.from } });
   }
 }
@@ -157,8 +183,12 @@ export function maybePostcard(deps: FriendSocialDeps): void {
   if (!ines || !has('ines', 'postcards') || day - lastPostcard() < POSTCARD.gap) return;
   const random = dayStream(`postcard:${day}`);
   if (random() >= POSTCARD.odds) return;
-  postcardSent(day);
-  const card = POSTCARD_PLACES[Math.floor(random() * POSTCARD_PLACES.length)]!;
+  // Somewhere she has not written from lately: every place once before any again.
+  const sent = postcardPlacesSent();
+  const fresh = POSTCARD_PLACES.filter((p) => !sent.includes(p.place));
+  const pool = fresh.length ? fresh : POSTCARD_PLACES;
+  const card = pool[Math.floor(random() * pool.length)]!;
+  postcardSent(day, card.place, fresh.length ? undefined : []);
   const gift = random() < POSTCARD.giftOdds ? tasteGift(ines, deps.giftPool, (id) => deps.collection.owns(id), random) : undefined;
   if (gift) deps.collection.add({ ...gift, status: 'owned', condition: 'noManual', acquired: { price: 0, where: `a gift from ${ines.name}`, day } });
   deps.notices?.read({

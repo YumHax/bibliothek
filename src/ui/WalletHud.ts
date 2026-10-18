@@ -1,4 +1,5 @@
 import './WalletHud.css';
+import { html, paint, raw } from './panel/html';
 import { fadeIn, fadeOut } from './fade';
 import { formatNumber } from '@/text/count';
 import { Roll } from './countUp';
@@ -15,7 +16,7 @@ interface WalletView {
 interface WalletHudOptions {
   /** True where money is the point (the arcade, the market, the shops): the chip stays up there. */
   moneyHere?: () => boolean;
-  /** The game's day and hour as the player reads them ("Day 12 · 18:40"): shown where the chip stays up, since opening hours rule out there. */
+  /** The game's day and hour as the player reads them ("Saturday, 18:40"): shown where the chip stays up, since opening hours rule out there. */
   clock?: () => string;
   /** True where the hour matters though money is not the point (the street, its shops' opening hours): the chip stays up there with the clock. */
   clockHere?: () => boolean;
@@ -32,7 +33,7 @@ const FADE_MS = 300;
 type Kind = 'coins' | 'tickets';
 
 /** A gold coin: dark rim, lit face, an engraved ring and star. */
-const COIN_SVG = `<svg class="wallet-hud__icon wallet-hud__icon--coin" viewBox="0 0 24 24" aria-hidden="true">
+const COIN_SVG = raw(`<svg class="wallet-hud__icon wallet-hud__icon--coin" viewBox="0 0 24 24" aria-hidden="true">
   <defs><radialGradient id="wallet-hud-coin" cx="36%" cy="30%" r="80%">
     <stop offset="0" stop-color="#fff4c8"/><stop offset="0.42" stop-color="#f3c34c"/><stop offset="1" stop-color="#a06b12"/>
   </radialGradient></defs>
@@ -40,17 +41,17 @@ const COIN_SVG = `<svg class="wallet-hud__icon wallet-hud__icon--coin" viewBox="
   <circle cx="12" cy="11.5" r="10.4" fill="url(#wallet-hud-coin)"/>
   <circle cx="12" cy="11.5" r="7.6" fill="none" stroke="#8f600f" stroke-opacity="0.5" stroke-width="1.2"/>
   <path d="M12.00 7.10L13.12 9.96L16.18 10.14L13.81 12.09L14.59 15.06L12.00 13.40L9.41 15.06L10.19 12.09L7.82 10.14L10.88 9.96Z" fill="#9c6a12" fill-opacity="0.75"/>
-</svg>`;
+</svg>`);
 
 /** An arcade ticket: notched ends, a perforated stub, a star on the body. */
-const TICKET_SVG = `<svg class="wallet-hud__icon wallet-hud__icon--ticket" viewBox="0 0 30 20" aria-hidden="true">
+const TICKET_SVG = raw(`<svg class="wallet-hud__icon wallet-hud__icon--ticket" viewBox="0 0 30 20" aria-hidden="true">
   <defs><linearGradient id="wallet-hud-ticket" x1="0" y1="0" x2="0" y2="1">
     <stop offset="0" stop-color="#ff8a98"/><stop offset="1" stop-color="#d6284a"/>
   </linearGradient></defs>
   <path d="M2 2.5H28V7.5A2.5 2.5 0 0 0 28 12.5V17.5H2V12.5A2.5 2.5 0 0 0 2 7.5Z" fill="url(#wallet-hud-ticket)" stroke="#7d1428" stroke-width="1" stroke-linejoin="round"/>
   <path d="M21.5 4.5V15.5" stroke="#fff" stroke-opacity="0.6" stroke-width="1.1" stroke-dasharray="1.4 1.4"/>
   <path d="M11.50 5.90L12.33 8.02L14.60 8.15L12.84 9.60L13.42 11.80L11.50 10.57L9.58 11.80L10.16 9.60L8.40 8.15L10.67 8.02Z" fill="#fff" fill-opacity="0.85"/>
-</svg>`;
+</svg>`);
 
 /**
  * Top-left chip with the coins and tickets in the player's pocket. It is up where money is the point
@@ -80,13 +81,15 @@ export class WalletHud {
     this.root = document.createElement('div');
     this.root.className = 'wallet-hud';
     this.root.hidden = true;
-    this.root.innerHTML = `
-      <span class="wallet-hud__item" data-kind="coins" title="Coins">${COIN_SVG}<span class="wallet-hud__count" data-role="coins"></span></span>
-      <span class="wallet-hud__sep"></span>
-      <span class="wallet-hud__item" data-kind="tickets" title="Arcade tickets">${TICKET_SVG}<span class="wallet-hud__count" data-role="tickets"></span></span>
-      <span class="wallet-hud__sep wallet-hud__sep--clock"></span>
-      <span class="wallet-hud__clock" data-role="clock"></span>
-      <span class="wallet-hud__floats"></span>`;
+    paint(
+      this.root,
+      html`<span class="wallet-hud__item" data-kind="coins">${COIN_SVG}<span class="visually-hidden">Coins</span><span class="wallet-hud__count" data-role="coins"></span></span>
+        <span class="wallet-hud__sep"></span>
+        <span class="wallet-hud__item" data-kind="tickets">${TICKET_SVG}<span class="visually-hidden">Arcade tickets</span><span class="wallet-hud__count" data-role="tickets"></span></span>
+        <span class="wallet-hud__sep wallet-hud__sep--clock"></span>
+        <span class="wallet-hud__clock" data-role="clock"></span>
+        <span class="wallet-hud__floats"></span>`,
+    );
     this.coinsEl = this.root.querySelector('[data-role="coins"]')!;
     this.ticketsEl = this.root.querySelector('[data-role="tickets"]')!;
     this.clockEl = this.root.querySelector('[data-role="clock"]')!;

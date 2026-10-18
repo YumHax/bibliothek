@@ -198,7 +198,8 @@ export const STREET_PLAN = {
   roadPatches: [[-5, -4.8, -2.2, -2.9], [14, 2.5, 17.5, 4.2], [40, -3.5, 44.5, -1.9], [60, 0.4, 62.5, 2.2], [-30.5, -30, -28.6, -26.2], [26, -1.2, 27.6, 0.9]] as [number, number, number, number][],
   /** The bus shelter on the far pavement (centre, faces the road), the benches and bins. */
   shelter: { at: [28, 10] as Vec2, yaw: Math.PI, length: 4 },
-  benches: [{ at: [-10.5, -11.4], yaw: 0 }, { at: [-8, 11.4], yaw: Math.PI }, { at: [68.5, 11.4], yaw: Math.PI }] as { at: Vec2; yaw: number }[],
+  /** The last is in the park's gardens, by the path from the gate (facing it, the concert's lawn beyond, under a lime). */
+  benches: [{ at: [-10.5, -11.4], yaw: 0 }, { at: [-8, 11.4], yaw: Math.PI }, { at: [68.5, 11.4], yaw: Math.PI }, { at: [-54.16, -37.75], yaw: -0.344, park: true }] as { at: Vec2; yaw: number; park?: boolean }[],
   // (Past x 40, the stretch the works open up later: dressed all the same.)
   bins: [[4.6, -8.55], [19.4, -8.55], [8.6, 8.55], [21.2, 8.55], [50.5, -8.55], [96.5, -8.55], [44.2, 8.55], [74.2, 8.55]] as Vec2[],
   /** The park's hedge and railings along x = hedge, from z to z (they stop where the block across Front Street begins). */
@@ -309,6 +310,8 @@ export const STREET_PLAN = {
      */
     rank: { stop: 0, at: [23.3, -8.45] as Vec2, yaw: 0 },
     fare: 6,
+    /** The night's drive the bus never gives: along the river and back to the rank, in these hours, this long (game minutes). */
+    drive: { label: 'A drive along the river', hours: [20, 2] as [number, number], minutes: 35 },
   },
   /** Scooters, motorbikes and couriers (a scooter with a box) in the car lanes: how many at once by quality, seconds between two, shares. */
   twoWheelers: { ridersByQuality: { low: 1, medium: 2, high: 3 }, gap: [12, 34] as [number, number], courier: 0.35, moto: 0.35 },
@@ -329,7 +332,7 @@ export const STREET_PLAN = {
    * door by the pole (`busRide.pole`), its side 0.75 m off the kerb, in the bay between the last parked car
    * (x 15.5) and the works (x 38.4) that its pull-in and pull-out are worked out for (`StreetBus` `PULL`).
    */
-  bus: { stop: { at: [25.6, 6] as Vec2, dwell: 14 }, every: 200, nightEvery: 420, line: '38' },
+  bus: { stop: { at: [25.6, 6] as Vec2, dwell: 14 }, every: 200, nightEvery: 420, line: '38', driverSeed: 7121 },
   /**
    * Riding the bus (`StreetBus`, boarded while its doors stand open at the stop): the fare (coins, the way back
    * included), and where line 38 takes the player, the first that is on (`hours` absent: always; else when, and the

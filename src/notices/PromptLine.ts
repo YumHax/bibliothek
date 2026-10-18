@@ -1,13 +1,17 @@
 import { writeWithCaps } from './keyCaps';
-import type { PromptOptions } from './types';
+import type { PromptOptions, PromptText } from './types';
+import { onDeviceChange } from '@/input/lastDevice';
+import { onKeyLabelsChange } from '@/ui/keys';
 
 const FADE_MS = 150;
 
 interface Prompt {
   id: string;
-  text: string;
+  text: PromptText;
   until?: () => boolean;
 }
+
+const textOf = (prompt: Prompt): string => (typeof prompt.text === 'function' ? prompt.text() : prompt.text);
 
 let serial = 0;
 
@@ -16,12 +20,16 @@ let serial = 0;
  * hand, at an arcade machine): a quiet line at the bottom of the view, above the subtitles, no sound, the keys as
  * caps (`[E]`, `keyCaps`). States stack: the latest one's line shows, and when it ends the one under it comes back
  * (seated with a pad in hand: the pad's keys, then the seat's). Gone when `until` says the state ended or the
- * remover is called; never put away by hand (it is state, not a message), never timed.
+ * remover is called; never put away by hand (it is state, not a message), never timed. A line given as a function
+ * is written again when it would read differently: the device in hand changed (the caps follow it), a key was
+ * rebound, or what it counts moved on (a countdown).
  */
 export class PromptLine {
   private readonly el: HTMLDivElement;
   private readonly prompts: Prompt[] = [];
   private shown: Prompt | null = null;
+  /** The words up now, to write a function's line again only when it changed. */
+  private written = '';
   private hideTimer = 0;
 
   constructor(container: HTMLElement) {
@@ -30,9 +38,12 @@ export class PromptLine {
     this.el.setAttribute('role', 'status');
     this.el.hidden = true;
     container.appendChild(this.el);
+    const rewrite = () => this.refresh();
+    onDeviceChange(rewrite);
+    onKeyLabelsChange(rewrite);
   }
 
-  show(text: string, options: PromptOptions = {}): () => void {
+  show(text: PromptText, options: PromptOptions = {}): () => void {
     const id = options.id ?? `prompt:${serial++}`;
     const i = this.prompts.findIndex((p) => p.id === id);
     if (i >= 0) this.prompts.splice(i, 1);
@@ -51,6 +62,17 @@ export class PromptLine {
       changed = true;
     }
     if (changed) this.render();
+    else this.refresh();
+  }
+
+  /** The line up, written again if its function now says something else. */
+  private refresh(): void {
+    const top = this.shown;
+    if (!top || typeof top.text !== 'function') return;
+    const text = textOf(top);
+    if (text === this.written) return;
+    this.written = text;
+    writeWithCaps(this.el, text);
   }
 
   private remove(prompt: Prompt): void {
@@ -73,7 +95,8 @@ export class PromptLine {
       }, FADE_MS);
       return;
     }
-    writeWithCaps(this.el, top.text);
+    this.written = textOf(top);
+    writeWithCaps(this.el, this.written);
     this.el.hidden = false;
     this.el.classList.remove('prompt-line--out');
   }

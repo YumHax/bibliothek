@@ -14,6 +14,8 @@ export const PROTOTYPE_ID = 'proto:nes:moonpost';
 
 export const STUDIO = 'Halcyon Byte';
 export const COMPOSER = { name: 'Hana B.', initials: 'HAB' };
+/** Uncle Félix, whose hunt the trail was (docs/story.md): how the post addressed him. */
+const FELIX = { addressed: 'M. F. Aubry, 5th floor left' };
 /** The friend the collector swapped the grey cart to (one of `world/visitors/friendsPlan`'s). */
 export const KEEPER = { id: 'marco', name: 'Marco' };
 
@@ -76,22 +78,38 @@ export const NEXT_LEADS: Record<StoryStage, string> = {
   stall: 'Have the kitchen radio on some morning: Radio Brocante’s chronicle.',
   radio: `Ask at the arcade's counter who ${COMPOSER.initials} is.`,
   arcade: 'Find the collector outside RETRO GAMES (he is not there every day), or watch the paper’s small ads: Hana left things behind.',
-  trader: `See ${KEEPER.name}: next time a friend comes round, or ring them from the bedroom.`,
+  trader: `See ${KEEPER.name}: next time a friend comes round, or ring him from the bedroom.`,
   found: 'Put the grey cart in the NES under the TV.',
   ended: '',
 };
 
 export const LINES = {
-  /** THE GAMING WEEKLY's clipping on the mat: the start. */
+  /**
+   * THE GAMING WEEKLY's clipping on the mat: the start. Addressed to Félix: he had asked the paper's readers' desk, and
+   * their answer came after him (docs/story.md "The goal": the prototype is his unfinished hunt).
+   */
   clipping: {
     title: 'LOST & FOUND',
     lines: [
-      'THE GAMING WEEKLY, a clipping:',
-      `“Whatever happened to MOONPOST? ${STUDIO}’s NES game, previewed in October ’93, vanished with the studio.`,
+      `An envelope for ${FELIX.addressed}, sent on late. A compliments slip: “As you asked. Good hunting. — the readers’ desk”`,
+      `THE GAMING WEEKLY, a clipping: “Whatever happened to MOONPOST? ${STUDIO}’s NES game, previewed in October ’93, vanished with the studio.`,
       'Word is a development cart survives, right here in the neighbourhood.',
       'The flea market’s NES stall remembers everything: ask them.”',
+      'Pinned to it, the card he had sent them, in Félix’s capitals: STILL LOOKING. ANY NEWS?',
     ],
     accent: 0x2b4a7a,
+  } satisfies StoryMail,
+  /** The clipping's fallback: the NES stall's flyer through the door, for a player who never asked at a stall. */
+  stallFlyer: {
+    title: 'NES STALL · FLEA MARKET',
+    lines: [
+      'A flyer from the flea market, a line in biro across the bottom:',
+      `“Someone said Félix Aubry’s heir was after MOONPOST. ${STUDIO} were over the launderette, on Front Street.`,
+      'Radio Brocante had the old team on the morning show once. Have the radio on some morning. — the NES stall”',
+    ],
+    accent: 0x2f5d8a,
+    look: 'flyer',
+    from: 'The NES stall',
   } satisfies StoryMail,
   /** The NES stallholder (any stallholder once the player has been slow to ask that one). */
   stall: `${STUDIO}! Their office was over the launderette, right here on Front Street. I sold their games new. MOONPOST? Never came out. Radio Brocante had the old team on one morning; they still talk about them. Listen in.`,
@@ -103,7 +121,7 @@ export const LINES = {
     title: 'RADIO BROCANTE',
     lines: [
       'A note from the morning show:',
-      `“You asked about MOONPOST: ${COMPOSER.name} wrote its music and kept the last build in ’93.`,
+      `“Word reached us you’re after MOONPOST: ${COMPOSER.name} wrote its music and kept the last build in ’93.`,
       `She plays at the arcade, signs ${COMPOSER.initials}. Ask at the counter. Good luck!”`,
     ],
     accent: 0x8a3b2f,
@@ -137,29 +155,38 @@ export const LINES = {
     look: 'note',
     from: 'The collector',
   } satisfies StoryMail,
+  /** The keeper once the cart is the player's: before it has run (on a visit, or rung up), and after. */
+  keeperFound: `Well? Have you put it in yet? You promised: I want to be there the first time it runs. Ring me and I'll come round.`,
+  keeperEnded: `You ran it without me?! Unbelievable. …Fine. Tell me one thing: was the music any good? It was? I knew it.`,
   /** A friend who is not the keeper, asked about it. */
   otherFriend: `${KEEPER.name}? He's been showing everyone a grey cart with a handwritten label. Ring him, he'll bring it.`,
   /** The keeper hands it over. */
   keeper: `The grey cart? I thought it was a bootleg! I've had it in my bag for weeks. Here, it's yours: you'll know what to do with it. Just let me watch the first time it runs.`,
+  /** The keeper hands it over on the phone (it comes in the parcel, `give`). */
+  keeperByPhone: `The grey cart? I thought it was a bootleg! I've had it in my bag for weeks. I'll drop it through your door on my way past: you'll know what to do with it. Just let me watch the first time it runs.`,
   keeperPostcard: {
     title: `A POSTCARD FROM ${KEEPER.name.toUpperCase()}`,
     lines: [
-      '“Got your message about the grey cart!',
+      '“Heard you were asking all over town about a grey cart. I’ve had one in my bag for weeks!',
       'Thought it was a bootleg. It’s in the post: look in the parcel in the hall.',
-      'Let me know if it actually runs.”',
+      'Let me know if it actually runs. Better: ring me and let me watch.”',
     ],
     accent: 0x3b6b4a,
     look: 'postcard',
     place: 'Front Street',
     from: KEEPER.name,
   } satisfies StoryMail,
-  /** Hana's letter, folded in the box, read once the demo has played to its end: one page, in her hand. */
+  /**
+   * Hana's letter, folded in the box, read once the demo has played to its end: one page, in her hand, to Félix (F.A.
+   * in the credits), who wrote to the studio every month of 1993. Never posted: it reaches him thirty years late.
+   */
   letter: [
-    'Whoever you are,',
+    'Dear Félix,',
     '',
-    'If you are reading this, MOONPOST found its way to someone who plugged it in. That is all we ever wanted.',
-    'There were four of us over the launderette, three months of work left and no publisher. I kept this build because the music was finished, and it was the best thing I ever wrote.',
-    'Thank you for the round trip.',
+    'You wrote to us every month this year, asking when MOONPOST would be out. It won’t be. The publisher folded on Friday, with three months of work left that nobody will pay for.',
+    'I meant to post you this build, so that one person outside the office got to play it. You’re in the credits: F.A., who kept asking. Then I couldn’t let it go.',
+    'There were four of us over the launderette. I kept this cart because the music was finished, and it was the best thing I ever wrote. If it ever reaches you, it was meant to.',
+    'Thank you for asking. Thank you for the round trip.',
   ].join('\n'),
   /** The letter's signature and date lines. */
   letterFrom: `Hana, ${STUDIO}`,
@@ -200,6 +227,6 @@ export const STORY_RULES = {
   start: { day: 3, games: 3 },
   /** Days after the clipping before any stallholder answers (not only the NES one). */
   anyStallAfter: 2,
-  /** Days before the post brings what the radio, the arcade, the collector or the friend would have said. */
-  fallbackAfter: { stall: 3, radio: 4, arcade: 3, trader: 4 } satisfies Partial<Record<StoryStage, number>>,
+  /** Days before the post brings what the stalls, the radio, the arcade, the collector or the friend would have said. */
+  fallbackAfter: { clipping: 5, stall: 3, radio: 4, arcade: 3, trader: 4 } satisfies Partial<Record<StoryStage, number>>,
 } as const;

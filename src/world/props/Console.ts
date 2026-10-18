@@ -7,7 +7,7 @@ import type { Interactable } from '@/interaction/Interactable';
 import type { PlayerState, SessionActions } from '@/game/SessionActions';
 import { playPlasticClick } from '@/audio/furnitureSounds';
 import type { GameBox } from '../GameBox';
-import { unplayableWhy } from '../box/unplayable';
+import { mediaWord, unplayableWhy } from '../box/unplayable';
 import type { RegionLock } from '@/economy/regionLock';
 import type { VideoScreen } from '../screen';
 import { nowPlaying } from '../screen/nowPlaying';
@@ -17,7 +17,7 @@ import { Timeline } from '../media/Timeline';
 import { ejectSteps, insertSteps, seatPoses, type SeatPoses } from '../media/insertion';
 import { invisibleHitbox } from '../meshUtils';
 import { Prop, disposeTree } from './Prop';
-import { buildConsole, type MediaSlot } from './consoleStyles';
+import { buildConsole, padOf, type MediaSlot } from './consoleStyles';
 
 export type PlatformSelectHandler = (platformId: PlatformId) => void;
 
@@ -85,6 +85,11 @@ export class Console extends Prop implements Interactable, Updatable, MediaDeck 
     return current?.seated && !current.moving && !current.box.isDisposed ? current.box : null;
   }
 
+  /** Its pad and the cable to it, as built on the stand (null when the slot is empty). */
+  padModel(): { pad: THREE.Object3D; cable: THREE.Object3D | null } | null {
+    return this.visual ? padOf(this.visual) : null;
+  }
+
   get loadedAt(): number {
     return this.seatedAt;
   }
@@ -143,7 +148,7 @@ export class Console extends Prop implements Interactable, Updatable, MediaDeck 
       return `${name} · put ${held.game.title} in`;
     }
     if (this.current) return `${name} · eject ${this.current.box.game.title}`;
-    return this.platform.name;
+    return this.onSelect ? `${this.platform.name} · find its games` : this.platform.name;
   }
 
   activate(session: SessionActions): void {
@@ -294,8 +299,4 @@ export class Console extends Prop implements Interactable, Updatable, MediaDeck 
 
 function shortNameOf(box: GameBox): string {
   return getPlatform(box.game.platform).shortName;
-}
-
-function mediaWord(box: GameBox): string {
-  return box.game.platform === 'ps1' ? 'disc' : 'cartridge';
 }

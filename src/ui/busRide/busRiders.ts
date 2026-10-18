@@ -5,21 +5,24 @@ import { inHours } from '@/time/clock';
  * WHO RIDES THE 38 WITH THE PLAYER (docs/grandma.md "Around her flat"): the line's regulars, drawn on the ride's
  * canvas (`busRideScene`) by the hour and the day: the man with his baguette in the seat in front (early morning, early
  * evening), the schoolgirl with her headphones standing by the pole (school days, the school run), the lady with her
- * tartan trolley (market mornings); and some mornings Mémé herself, turned round in the seat in front to wave
+ * tartan trolley (market mornings), the man behind his newspaper (the quiet middle of the day), the nurse asleep against
+ * the window on the night bus (after nine); and some mornings Mémé herself, turned round in the seat in front to wave
  * (`grandma/sharedRide`). Each drawn in a few flat shapes, the bus's light on them; the seat back hides the rest.
  */
 
 /** A regular of the line, or Mémé. */
-export type Rider = 'baguette' | 'schoolgirl' | 'trolley' | 'meme';
+export type Rider = 'baguette' | 'schoolgirl' | 'trolley' | 'reader' | 'nightOwl' | 'meme';
 
 /** Where each sits or stands: the seat in front, or by the pole at the door. */
-const SPOT: Record<Rider, 'seat' | 'pole'> = { baguette: 'seat', schoolgirl: 'pole', trolley: 'seat', meme: 'seat' };
+const SPOT: Record<Rider, 'seat' | 'pole'> = { baguette: 'seat', schoolgirl: 'pole', trolley: 'seat', reader: 'seat', nightOwl: 'seat', meme: 'seat' };
 
 /** Their hours (game hours, [from, to)), and the weekdays they ride (`weekdayOf`: Monday 0 .. Sunday 6; all when absent). */
 const HABITS: Record<Exclude<Rider, 'meme'>, { hours: readonly (readonly [number, number])[]; days?: readonly number[] }> = {
   baguette: { hours: [[7, 9.5], [17.5, 20]] },
   schoolgirl: { hours: [[7.5, 8.75], [16.25, 18]], days: [0, 1, 3, 4] },
   trolley: { hours: [[9, 12.5]], days: [1, 3, 5] },
+  reader: { hours: [[12.5, 16.5]] },
+  nightOwl: { hours: [[21, 30]] },
 };
 
 /** Who is on the bus on `day` at `hour`: the regulars whose hours these are, one to a spot; Mémé (`meme`) takes the seat in front. */
@@ -29,7 +32,7 @@ export function ridersFor(day: number, hour: number, meme: boolean): Rider[] {
   for (const rider of Object.keys(HABITS) as Exclude<Rider, 'meme'>[]) {
     const { hours, days } = HABITS[rider];
     if (days && !days.includes(weekday)) continue;
-    if (weekday === SUNDAY_WEEKDAY && rider !== 'baguette') continue;
+    if (weekday === SUNDAY_WEEKDAY && rider !== 'baguette' && rider !== 'nightOwl') continue;
     if (!hours.some(([a, b]) => inHours(hour, [a, b]))) continue;
     if (riders.some((other) => SPOT[other] === SPOT[rider])) continue;
     riders.push(rider);
@@ -55,8 +58,18 @@ export function drawSeated(ctx: CanvasRenderingContext2D, w: number, h: number, 
     drawMeme(ctx, w, h, f, lit);
     return;
   }
-  // Shoulders over the seat back, a coat's collar, the back of the head.
-  ctx.fillStyle = lit(rider === 'baguette' ? '#3a4a5a' : '#6a3a4a');
+  if (rider === 'reader') {
+    drawReader(ctx, w, h, f, lit);
+    return;
+  }
+  // Shoulders over the seat back, a coat's collar, the back of the head (the night nurse's leant on the glass).
+  if (rider === 'nightOwl') {
+    ctx.save();
+    ctx.translate(cx, top);
+    ctx.rotate(-0.22 + Math.sin(f.t * 0.8) * 0.02);
+    ctx.translate(-cx, -top);
+  }
+  ctx.fillStyle = lit(rider === 'baguette' ? '#3a4a5a' : rider === 'nightOwl' ? '#3a6a7a' : '#6a3a4a');
   ellipse(ctx, cx, top - h * 0.01, w * 0.11, h * 0.06);
   ctx.fillStyle = lit(rider === 'baguette' ? '#2a3440' : '#c8b8a0');
   ellipse(ctx, cx, top - h * 0.05, w * 0.035, h * 0.025);
@@ -83,6 +96,14 @@ export function drawSeated(ctx: CanvasRenderingContext2D, w: number, h: number, 
       ctx.stroke();
     }
     ctx.restore();
+  } else if (rider === 'nightOwl') {
+    // Her hair pinned up after a shift, a lanyard's strap at the collar; asleep, head on the glass.
+    ctx.fillStyle = lit('#4a2e22');
+    ellipse(ctx, head.x, head.y - h * 0.02, w * 0.033, h * 0.048);
+    ellipse(ctx, head.x + w * 0.012, head.y - h * 0.065, w * 0.014, h * 0.02);
+    ctx.fillStyle = lit('#c84a4a');
+    ctx.fillRect(cx - w * 0.04, top - h * 0.045, w * 0.006, h * 0.05);
+    ctx.restore();
   } else {
     // A headscarf knotted under the chin, and the tartan trolley's top in the aisle.
     ctx.fillStyle = lit('#7a2a3a');
@@ -95,6 +116,25 @@ export function drawSeated(ctx: CanvasRenderingContext2D, w: number, h: number, 
     ctx.fillRect(w * 0.455, top - h * 0.04, w * 0.006, h * 0.07);
     ctx.fillRect(w * 0.445, top - h * 0.045, w * 0.026, h * 0.008);
   }
+}
+
+/** The man behind his newspaper in the seat in front: the paper held up and open, its folds, a hat over the top. */
+function drawReader(ctx: CanvasRenderingContext2D, w: number, h: number, f: RiderFrame, lit: (colour: string) => string): void {
+  const cx = w * 0.24;
+  const top = h * 0.71 + f.bounce;
+  ctx.fillStyle = lit('#4a4038');
+  ellipse(ctx, cx, top - h * 0.01, w * 0.11, h * 0.06);
+  // The paper, a page turned now and then.
+  const turn = Math.max(0, Math.sin(f.t * 0.7) - 0.92) * 6;
+  ctx.fillStyle = lit('#e8e2d0');
+  ctx.fillRect(cx - w * 0.1, top - h * 0.2, w * 0.2 - turn * w * 0.02, h * 0.16);
+  ctx.fillStyle = lit('#a8a290');
+  ctx.fillRect(cx - w * 0.002, top - h * 0.2, w * 0.004, h * 0.16);
+  for (let i = 0; i < 6; i++) ctx.fillRect(cx - w * 0.09 + (i % 2) * w * 0.1, top - h * (0.18 - Math.floor(i / 2) * 0.045), w * 0.07, h * 0.008);
+  // His hat over the top of the paper.
+  ctx.fillStyle = lit('#2a2a2e');
+  ellipse(ctx, cx + w * 0.01, top - h * 0.205, w * 0.04, h * 0.018);
+  ellipse(ctx, cx + w * 0.01, top - h * 0.225, w * 0.026, h * 0.026);
 }
 
 /** Draws whoever stands by the pole (before the pole, which their hand holds). */

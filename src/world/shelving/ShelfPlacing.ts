@@ -5,7 +5,8 @@ import { markShared } from '@/world/materials/sharedResources';
 import { RENDER_ORDER } from '@/world/surface/layers';
 import type { GameBox } from '../GameBox';
 import type { Showcases, ShowcaseTarget } from '../showcase/Showcases';
-import type { ShelfTarget, ShelvingGroup } from './ShelvingGroup';
+import type { ShelfTarget, ShelvesSnapshot, ShelvingGroup, TurnRefusal } from './ShelvingGroup';
+import { mayStandSpineOut } from './Shelving';
 
 /** What the box in hand is aimed at: a spot on a shelf, or a slot of a display (`Showcases`). */
 interface PlacingTarget {
@@ -39,11 +40,16 @@ const UNIT_EDGES = new THREE.EdgesGeometry(UNIT_BOX);
 markShared(UNIT_BOX);
 markShared(UNIT_EDGES);
 
+/** A box on a shelf turned where it stands (`ShelfPlacing.turnAimed`): which, and how it stands now; or why it would not turn. */
+type TurnedBox = { title: string; spineOut: boolean } | { title: string; refusal: TurnRefusal };
+
 /** What `ShelfPlacing` needs of the hand: the box in it, and whether it is in hand (not on its way back). */
 interface HandLike {
   readonly current: GameBox | null;
   /** Non-null while the box is in (or on its way to) the hand. */
   readonly focusDistance: number | null;
+  /** The box held up in the middle of the view to look at (the Inspector's examine): no shelf behind it is aimed at. */
+  readonly examining?: boolean;
 }
 
 /**
@@ -62,9 +68,18 @@ export class ShelfPlacing implements Updatable {
   /** The boxes standing aside for the ghost now. */
   private parted = new Set<GameBox>();
   private readonly raycaster = new THREE.Raycaster();
-  private readonly centre = new THREE.Vector2(0, 0);
+  private readonly hits: THREE.Intersection[] = [];
+  /** The box in hand goes in spine out (G toggles it: the ghost shows it so); taken up again, it goes in cover out. */
+  private spineOut = false;
+  /** The box `spineOut` was chosen for. */
+  private spineOutFor: GameBox | null = null;
 
-  /** `blocked(from, to)`: a wall stands between two world points; `showcases`: the flat's displays, aimed at like the shelves. */
+  /**
+   * `blocked(from, to)`: a wall stands between two world points; `showcases`: the flat's displays, aimed at like the
+   * shelves; `aim`: where on the view the ray goes from (normalised device coordinates, read live: the crosshair, or the
+   * bookcase view's cursor, `Interactor.aim`); `full`: the arms hold more than the box in hand (`Armful`), so nothing
+   * is shelved from them.
+   */
   constructor(
     private readonly camera: THREE.Camera,
     scene: THREE.Object3D,
@@ -72,6 +87,8 @@ export class ShelfPlacing implements Updatable {
     private readonly hand: HandLike,
     private readonly blocked: (from: THREE.Vector3, to: THREE.Vector3) => boolean,
     private readonly showcases: Showcases | null = null,
+    private readonly aim: THREE.Vector2 = new THREE.Vector2(0, 0),
+    private readonly full: () => boolean = () => false,
   ) {
     this.fill = new THREE.Mesh(UNIT_BOX, FILLS.room);
     this.edges = new THREE.LineSegments(UNIT_EDGES, EDGES.room);
@@ -91,7 +108,8 @@ export class ShelfPlacing implements Updatable {
   /** Whether one of the flat's boxes is in hand, from a shelf or a display (not a market copy, not a stray's own box). */
   get active(): boolean {
     const box = this.hand.current;
-    return box !== null && this.hand.focusDistance !== null && (this.shelves.findBox(box.game.id) === box || (this.showcases?.holds(box) ?? false));
+    if (box === null || this.hand.focusDistance === null || this.hand.examining || this.full()) return false;
+    return this.shelves.findBox(box.game.id) === box || (this.showcases?.holds(box) ?? false);
   }
 
   /** The spot aimed at with a shelf box in hand, if any (`spot.fits` says whether its row, or the display's slot, has room). */
@@ -103,6 +121,57 @@ export class ShelfPlacing implements Updatable {
   /** Whether the spot aimed at swaps the box in hand with the one there (rather than putting it in a gap). */
   get swapping(): boolean {
     return (this.slot ? this.slot.swap : this.spot?.spot.swap) !== undefined;
+  }
+
+  /** Whether the box in hand may stand spine out at all (not a landscape box, its spine along its top). */
+  get canTurn(): boolean {
+    const box = this.hand.current;
+    return box !== null && mayStandSpineOut(box.game);
+  }
+
+  /** Whether the box in hand would go in spine out (the ghost stands so). */
+  get turned(): boolean {
+    return this.spineOut && this.spineOutFor === this.hand.current;
+  }
+
+  /**
+   * With a shelf box in hand: it will go in spine out, or cover out again (the ghost turns to show it). Returns how it
+   * will stand, or null when its box cannot stand spine out (a landscape box, its spine along its top).
+   */
+  turnInHand(): boolean | null {
+    const box = this.hand.current;
+    if (!box || !this.active) return null;
+    if (!mayStandSpineOut(box.game)) return null;
+    this.spineOut = !this.turned;
+    this.spineOutFor = box;
+    return this.spineOut;
+  }
+
+  /**
+   * Hands free: the box under the crosshair (or the bookcase view's cursor) on one of the flat's shelves (in reach, no wall between) turned where it
+   * stands, spine out or cover out again. Null when none is aimed at.
+   */
+  turnAimed(): TurnedBox | null {
+    this.raycaster.setFromCamera(this.aim, this.camera);
+    this.raycaster.far = REACH;
+    this.hits.length = 0;
+    this.raycaster.intersectObjects(this.shelves.boxes.filter((box) => box.parent !== null), false, this.hits);
+    const hit = this.hits[0];
+    if (!hit || this.blocked(this.raycaster.ray.origin, hit.point)) return null;
+    const box = hit.object as GameBox;
+    const spineOut = !this.shelves.isSpineOut(box.game.id);
+    const refusal = this.shelves.setSpineOut(box.game.id, spineOut);
+    return refusal ? { title: box.game.title, refusal } : { title: box.game.title, spineOut };
+  }
+
+  /** How the shelves stand before a box is put on them (the undo's way back), or null when a display is aimed at. */
+  snapshot(): ShelvesSnapshot | null {
+    return this.slot ? null : this.shelves.snapshot();
+  }
+
+  /** The shelves back as `snapshot` had them (U, `game/Rearranging`). */
+  restore(snapshot: ShelvesSnapshot): void {
+    this.shelves.restore(snapshot);
   }
 
   /**
@@ -124,21 +193,25 @@ export class ShelfPlacing implements Updatable {
     // Back to their rest poses first: the rebuild slides every box from where it stands now.
     this.part([]);
     const swap = spot.spot.swap;
+    const spineOut = this.turned;
     if (this.showcases?.holds(box)) {
       // Off its display first; the shelves then stand with it, and it goes where it was aimed (the box there, if any, takes its slot).
-      this.showcases.toShelves(box, () => this.shelves.moveBox(box, spot), swap);
-    } else if (swap) this.shelves.swapBoxes(box, swap);
-    else this.shelves.moveBox(box, spot);
+      this.showcases.toShelves(box, () => this.shelves.moveBox(box, spot, spineOut), swap);
+    } else if (swap) this.shelves.swapBoxes(box, swap, spineOut);
+    else this.shelves.moveBox(box, spot, spineOut);
     this.hide();
     return true;
   }
 
   update(): void {
     const box = this.hand.current;
-    if (!box || !this.active) return this.hide();
-    this.raycaster.setFromCamera(this.centre, this.camera);
+    if (!box || !this.active) {
+      this.spineOutFor = null; // put down (or on its way back): taken up again, it goes in cover out
+      return this.hide();
+    }
+    this.raycaster.setFromCamera(this.aim, this.camera);
     const ray = this.raycaster.ray;
-    let hit = this.shelves.spotAt(ray, box, REACH);
+    let hit = this.shelves.spotAt(ray, box, REACH, this.turned);
     if (hit && this.blocked(ray.origin, hit.point)) hit = null;
     let slot = this.showcases?.spotAt(ray, box, REACH) ?? null;
     if (slot && this.blocked(ray.origin, slot.centre)) slot = null;
@@ -148,7 +221,7 @@ export class ShelfPlacing implements Updatable {
     if (!hit) return this.hide();
     if (this.showcases?.holds(box) && hit.spot.swap) {
       // From a display, the box it swaps with takes the display's slot: only the row's room counts.
-      hit.spot.fits = hit.shelf.roomFor(hit.spot.row, hit.spot.swap, box);
+      hit.spot.fits = hit.shelf.roomFor(hit.spot.row, hit.spot.swap, box, this.turned);
     }
     this.spot = hit;
     const { shelf, spot } = hit;

@@ -20,7 +20,7 @@ interface HomebrewCart {
 const HOMEBREW_PUBLISHER = 'Homebrew';
 
 const cart = (id: string, rom: string, players: 1 | 2, hint: string, game: Omit<Game, 'id' | 'platform' | 'publisher'>): HomebrewCart => ({
-  game: { id: `nes-homebrew-${id}`, platform: 'nes', publisher: HOMEBREW_PUBLISHER, ...game },
+  game: { id: `nes-homebrew-${id}`, platform: 'nes', publisher: HOMEBREW_PUBLISHER, players: players === 2 ? '1-2' : '1', ...game },
   rom: `/roms/${rom}`,
   hint,
   players,

@@ -17,19 +17,26 @@ interface InstructionCardOptions {
   height?: number;
 }
 
-const PX_PER_M = 1600;
+/** Fine enough to read with the eye parked square in front of it (`CardReading`). */
+const PX_PER_M = 3200;
 
 /**
  * The printed card every machine has somewhere on its panel: how to play, in a few short lines,
  * so the keys do not have to live in the HUD. A plane (origin at its centre, facing +z) with a
  * yellowed card, a coloured stripe, the title and the lines; worn at the corners. Decoration.
  */
-export class InstructionCard extends THREE.Mesh {
+export class InstructionCard extends THREE.Mesh<THREE.PlaneGeometry, THREE.MeshStandardMaterial> {
+  /** Its size, metres. */
+  readonly width: number;
+  readonly height: number;
+
   constructor(options: InstructionCardOptions) {
     const width = options.width ?? 0.16;
     const height = options.height ?? 0.09;
     const { texture, repaint } = paintCard(options, width, height);
-    super(new THREE.PlaneGeometry(width, height), new THREE.MeshStandardMaterial({ map: texture, roughness: 0.7 }));
+    super(new THREE.PlaneGeometry(width, height), new THREE.MeshStandardMaterial({ map: texture, emissiveMap: texture, emissive: 0xffffff, emissiveIntensity: 0, roughness: 0.7 }));
+    this.width = width;
+    this.height = height;
     this.name = 'InstructionCard';
     this.receiveShadow = true;
     // The keys rebound in the settings: the card is printed again the next time it is drawn (its lines name the keys).
@@ -40,6 +47,11 @@ export class InstructionCard extends THREE.Mesh {
       printed = labelsVersion;
       repaint();
     };
+  }
+
+  /** Under the crosshair: the print lifts a little out of the hall's dark. */
+  setLit(lit: boolean): void {
+    this.material.emissiveIntensity = lit ? 0.18 : 0;
   }
 }
 

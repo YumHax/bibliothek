@@ -1,4 +1,8 @@
-/* The big screen for a cabinet whose game is a web page: the page in a cabinet's bezel, over the room (`.ui-modal--centre`), in the cabinet's own colours. */
+/*
+ * The big screen for a cabinet whose game is a web page: the page on the cabinet's glass inside its bezel, the lit
+ * marquee over it (the name in neon, the score in LED digits, DONE as the cabinet's own push button), the booting or
+ * NO SIGNAL screen over the glass while the page is not playing. In the cabinet's own colours, over the dimmed room.
+ */
 @layer tokens, base, components, panels;
 @layer panels {
   .arcade-screen {
@@ -9,38 +13,96 @@
     --arcade-neon: #ff2fa0;
     --arcade-neon-glow: rgba(255, 47, 160, 0.35);
     --arcade-neon-text-glow: rgba(255, 47, 160, 0.6);
+    --arcade-led: #ffb43a;
+    --arcade-button: #e8242c;
+    --arcade-button-dark: #8a1016;
+    --arcade-phosphor: #7affb0;
+    --arcade-glass: #0c1a12;
     padding: clamp(0.5rem, 3vw, 2rem);
     background: var(--arcade-dark);
     backdrop-filter: blur(4px);
     color: var(--ui-text);
   }
   .arcade-screen__bezel {
+    position: relative;
     display: flex;
     flex-direction: column;
     gap: var(--sp-2);
     width: min(100%, 1100px);
     height: 100%;
     max-height: 860px;
-    padding: 0.8rem;
+    padding: var(--sp-3);
     box-sizing: border-box;
-    border-radius: 18px;
+    border-radius: var(--ui-radius-md);
     background: linear-gradient(160deg, var(--arcade-bezel), var(--arcade-bezel-shade) 60%);
     box-shadow: 0 0 0 3px var(--arcade-rim), 0 0 40px var(--arcade-neon-glow), inset 0 0 20px var(--shade-60);
   }
-  .arcade-screen__header { display: flex; align-items: baseline; gap: var(--sp-4); flex-wrap: wrap; }
-  .arcade-screen__title { margin: 0; font-family: var(--ui-font-display); font-weight: 400; font-size: 1.3rem; letter-spacing: 0.12em; color: var(--arcade-neon); text-shadow: 0 0 8px var(--arcade-neon-text-glow); }
-  .arcade-screen__score { font-variant-numeric: tabular-nums; color: var(--ui-accent); }
-  .arcade-screen__status { color: var(--ui-text-dim); font-size: var(--fs-4); }
-  /* A `.ui-btn`; the bezel keeps its own cabinet look rather than a `.ui-card`. */
-  .arcade-screen__done { margin-left: auto; padding: 0.35rem 0.9rem; }
-  .arcade-screen__frame {
-    flex: 1;
-    min-height: 0;
-    width: 100%;
+  /* The marquee: a lit strip with the name in neon, the LED score, the push button. */
+  .arcade-screen__marquee {
+    display: flex;
+    align-items: center;
+    gap: var(--sp-4);
+    flex-wrap: wrap;
+    padding: var(--sp-2) var(--sp-3);
+    border-radius: var(--ui-radius-sm);
+    background: linear-gradient(var(--ui-black), var(--arcade-bezel-shade));
+    box-shadow: inset 0 0 0 2px var(--tint-08), inset 0 -10px 18px var(--arcade-neon-glow);
+  }
+  .arcade-screen__title { margin: 0; font-family: var(--ui-font-display); font-weight: 400; font-size: var(--fs-t3); letter-spacing: 0.12em; color: var(--arcade-neon); text-shadow: 0 0 8px var(--arcade-neon-text-glow), 0 0 22px var(--arcade-neon-glow); }
+  .arcade-screen__score { display: flex; align-items: baseline; gap: var(--sp-2); margin: 0; font-family: var(--ui-font-led); color: var(--arcade-led); text-shadow: 0 0 8px var(--arcade-led); }
+  .arcade-screen__score-label { font-size: var(--fs-4); letter-spacing: 0.12em; opacity: 0.75; }
+  .arcade-screen__digits { font-size: var(--fs-t3); letter-spacing: 0.08em; font-variant-numeric: tabular-nums; }
+  .arcade-screen__digits.is-up { animation: arcade-score-up var(--dur-quick) ease-out; }
+  @keyframes arcade-score-up { from { color: var(--ui-text); } }
+  /* The cabinet's own push button: red, domed, pressed in on a press. */
+  .arcade-screen__done {
+    margin-left: auto;
+    padding: 0.45rem 1.1rem;
     border: 0;
-    border-radius: 10px;
+    border-radius: var(--ui-radius-pill);
+    background: radial-gradient(circle at 40% 30%, color-mix(in srgb, var(--arcade-button) 70%, white), var(--arcade-button) 55%, var(--arcade-button-dark));
+    box-shadow: 0 4px 0 var(--arcade-button-dark), 0 6px 10px var(--shade-55);
+    color: var(--ui-text);
+    font-family: var(--ui-font-display);
+    font-size: var(--fs-3);
+    letter-spacing: 0.1em;
+    cursor: pointer;
+    transition: translate var(--dur-tap), box-shadow var(--dur-tap);
+  }
+  .arcade-screen__done:hover,
+  .arcade-screen__done:focus-visible { outline: 2px solid var(--ui-text); outline-offset: 3px; }
+  .arcade-screen__done:active { translate: 0 3px; box-shadow: 0 1px 0 var(--arcade-button-dark), 0 2px 4px var(--shade-55); }
+  .arcade-screen__glass { position: relative; flex: 1; min-height: 0; }
+  .arcade-screen__frame {
+    width: 100%;
+    height: 100%;
+    border: 0;
+    border-radius: var(--ui-radius-sm);
     background: var(--ui-black);
     box-shadow: inset 0 0 0 2px var(--ui-black);
   }
+  /* Over the glass while the page is not playing: a self-test, or NO SIGNAL and the way out. */
+  .arcade-screen__boot {
+    position: absolute;
+    inset: 0;
+    display: grid;
+    place-content: center;
+    justify-items: center;
+    gap: var(--sp-2);
+    border-radius: var(--ui-radius-sm);
+    background: radial-gradient(ellipse at center, var(--arcade-glass), var(--ui-black) 75%);
+    color: var(--arcade-phosphor);
+    text-align: center;
+  }
+  .arcade-screen__boot[data-state='dead'] { color: var(--arcade-led); }
+  .arcade-screen__boot-line { margin: 0; font-family: var(--ui-font-led); font-size: var(--fs-t4); letter-spacing: 0.14em; text-shadow: 0 0 10px currentColor; }
+  .arcade-screen__boot-line--blink { animation: arcade-blink var(--dur-drift) steps(2, jump-none) infinite; }
+  @keyframes arcade-blink { 50% { opacity: 0; } }
+  .arcade-screen__boot-say { margin: 0; color: var(--ui-text); font-size: var(--fs-5); }
+  .arcade-screen__boot .arcade-screen__done { margin: var(--sp-3) 0 0; }
   .arcade-screen__foot { margin: 0; font-size: var(--fs-3); color: var(--ui-text-dim); }
+  /* The final score held a moment: the LEDs flash. */
+  .arcade-screen__status { position: absolute; right: var(--sp-4); bottom: var(--sp-3); font-family: var(--ui-font-led); font-size: var(--fs-6); letter-spacing: 0.12em; color: var(--arcade-led); }
+  .arcade-screen--over .arcade-screen__digits { animation: arcade-blink var(--dur-longer) steps(2, jump-none) 3; }
+  .reduce-motion .arcade-screen__boot-line--blink, .reduce-motion .arcade-screen--over .arcade-screen__digits, .reduce-motion .arcade-screen__digits.is-up { animation: none; }
 }

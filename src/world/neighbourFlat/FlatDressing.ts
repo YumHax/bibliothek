@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import type { Game } from '@/catalog/types';
 import type { SessionActions } from '@/game/SessionActions';
-import { befriend } from '@/building/friendship';
+import { befriend, lastCounted } from '@/building/friendship';
 import { drawGames } from '@/building/pricedCopy';
 import type { Zone } from '../zone/Zone';
 import type { BuildContext } from '../buildContext';
@@ -19,10 +19,12 @@ import { castDress } from '../people/castLook';
 import { disposeTree } from '../materials/sharedResources';
 import { GameShelf } from './GameShelf';
 import { FavouriteGame } from './FavouriteGame';
-import { DogBasket, Piano, Vectrex, paintedPoster } from './flatProps';
+import { DogBasket, HostHabit, Piano, Vectrex, paintedPoster, type HabitDeps } from './flatProps';
+import { nudge } from '@/social/standing';
+import { Fireplace } from '../annex/Fireplace';
 import type { Vestibule } from './Vestibule';
 import { FRIENDSHIP_NUDGES, currentHost, hostKey, onHostChange } from './visits';
-import { NEIGHBOUR_FLAT_PLAN as plan, type Dressing, type NeighbourHost } from './neighbourFlatPlan';
+import { NEIGHBOUR_FLAT_PLAN as plan, type Dressing, type NeighbourHost, type TvCornerLayout } from './neighbourFlatPlan';
 import { pick, random } from '@/random';
 import { personAtDoor } from '@/social/people';
 import { rememberLook } from '@/social/lookBook';
@@ -52,6 +54,8 @@ interface FlatDressingParts {
   tvAt: THREE.Vector3;
   /** The host's armchair: theirs while they live here (the player sits in the other). */
   hostSeat: Seat;
+  /** Moves the TV corner (the set, its table, the armchairs) the way `layout` has it, `tvAt` with it. */
+  arrange: (layout: TvCornerLayout) => void;
 }
 
 /**
@@ -69,7 +73,7 @@ export class FlatDressing extends THREE.Group implements Furniture, Updatable {
   private current: Dressed | null = null;
   private watchClock = 0;
 
-  constructor(private readonly zone: Zone, private readonly ctx: Pick<BuildContext, 'building' | 'collection' | 'covers' | 'listener' | 'acoustics' | 'market' | 'social' | 'today'>, private readonly parts: FlatDressingParts) {
+  constructor(private readonly zone: Zone, private readonly ctx: Pick<BuildContext, 'building' | 'collection' | 'covers' | 'listener' | 'acoustics' | 'market' | 'social' | 'today' | 'classifieds'>, private readonly parts: FlatDressingParts) {
     super();
     this.name = 'FlatDressing';
     this.dress(currentHost());
@@ -109,6 +113,7 @@ export class FlatDressing extends THREE.Group implements Furniture, Updatable {
       zone.remove(this.current.walker);
     }
     parts.room.paintWalls(host.walls);
+    parts.arrange(host.layout ?? 'usual');
     // Their armchair while they sit in it; a host who stands leaves both to the player.
     parts.hostSeat.guest = 'seat' in host.rest ? host.who : null;
     parts.vestibule.paint(host.walls);
@@ -129,11 +134,29 @@ export class FlatDressing extends THREE.Group implements Furniture, Updatable {
     if (first) void this.stock(d);
   }
 
+  /** What `host`'s pastime asks: the day, their warmth (the building's and the social layer's), a mended Game Boy to give. */
+  private habitDeps(host: NeighbourHost): HabitDeps {
+    const key = hostKey(host);
+    const person = personAtDoor(key);
+    const day = (): number => this.ctx.today.gameDay;
+    const workshop = this.ctx.classifieds?.workshop;
+    const mended = (): string | null => workshop?.working.find((c) => c.platform === 'gb')?.id ?? null;
+    return {
+      day,
+      // One nudge (`befriend` would nudge the same person again: the warmth counted twice).
+      warm: (amount, reason) => {
+        if (person) nudge(person, { warmth: amount, day: day(), reason: `habit:${reason}`, why: reason === 'gift' ? 'the Game Boy for the twins' : 'time spent at home with you', ...(reason === 'gift' ? { memory: 'you gave the twins a Game Boy of their own', memoryWeight: 14 } : {}) });
+      },
+      // Once for good: a Game Boy given (the social layer's `habit:gift` counted) is not asked for again.
+      ...(workshop ? { gameBoy: { ready: () => mended() !== null && lastCounted(key, 'habit:gift') === null, give: () => workshop.give(mended() ?? '') } } : {}),
+    };
+  }
+
   /** Builds `host`'s things where their plan says, not yet placed (`dress` places them). */
   private build(host: NeighbourHost): Dressed {
     const items: Furniture[] = [];
     for (const entry of host.dressing) {
-      const item = makeDressing(entry);
+      const item = makeDressing(entry, this.habitDeps(host));
       if (!item) continue;
       const { position, rotationY } = resolvePlacement(plan.room, entry.kind === 'decor' ? entry.entry.at : entry.at);
       item.position.copy(position);
@@ -299,7 +322,7 @@ class HostWalker extends Walker {
 }
 
 /** A thing of a host's flat (`Dressing`), not yet placed; null when there is no model for it. */
-function makeDressing(entry: Dressing): Furniture | null {
+function makeDressing(entry: Dressing, habits: HabitDeps): Furniture | null {
   switch (entry.kind) {
     case 'piece': {
       const piece = buildPiece(entry.id, entry.variant ?? 0);
@@ -317,6 +340,10 @@ function makeDressing(entry: Dressing): Furniture | null {
       return new Vectrex();
     case 'piano':
       return new Piano(entry.color);
+    case 'habit':
+      return new HostHabit(entry, habits);
+    case 'fireplace':
+      return new Fireplace(entry.note, entry.mantel);
   }
 }
 

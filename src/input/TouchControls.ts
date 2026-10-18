@@ -4,14 +4,34 @@ import { SPRINT_CODE, type FirstPersonController } from '@/player/FirstPersonCon
 import { TOUCH_ACTIONS, primaryCode, type ActionContext } from './actions';
 import type { SyntheticMouse } from './SyntheticMouse';
 import { isTouchDevice, watchForTouch } from './deviceDetect';
+import { touchIcon } from './touchIcons';
 
-/** One on-screen button: its label, the key code it presses through `Input`, and where it applies (always, without). */
+/** One on-screen button: its action (its pictogram), label, the key code it presses through `Input`, and where it applies (always, without). */
 interface TouchButton {
+  id?: string;
   label: string;
   code: string;
   title?: string;
   context?: ActionContext;
 }
+
+/** The pad's buttons on the glass while a program's pad is held (`padHeld`), and the cabinet's fire button at a machine. */
+const PAD_BUTTONS: readonly { id: string; label: string; code: string; mode: 'pad' | 'cabinet' }[] = [
+  { id: 'b', label: 'B', code: primaryCode('padB'), mode: 'pad' },
+  { id: 'a', label: 'A', code: primaryCode('padA'), mode: 'pad' },
+  { id: 'select', label: 'Select', code: primaryCode('padSelect'), mode: 'pad' },
+  { id: 'start', label: 'Start', code: primaryCode('padStart'), mode: 'pad' },
+  { id: 'fire', label: 'Fire', code: primaryCode('fire'), mode: 'cabinet' },
+];
+
+/** The context's main button, drawn larger and lit: what the hands are there to do (or how to get out). */
+const PRIMARY: Partial<Record<TouchContext, string>> = {
+  held: 'putBack',
+  market: 'buy',
+  furnishing: 'setDown',
+  arcade: 'putBack',
+  seated: 'putBack',
+};
 
 /** What the player's hands are on now, for the bar (`setContext`): the Session's `handsContext`. */
 type TouchContext = 'room' | 'held' | 'market' | 'arcade' | 'seated' | 'furnishing';
@@ -34,9 +54,9 @@ const SHOWN_IN: Record<TouchContext, ReadonlySet<ActionContext>> = {
 };
 /** The put-back key (E) is also walking away and standing up: shown and named for those too. */
 const E_CODE = primaryCode('putBack');
-const E_LABELS: Partial<Record<TouchContext, { label: string; title: string }>> = {
-  arcade: { label: 'Walk away', title: 'Walk away from the machine' },
-  seated: { label: 'Stand up', title: 'Stand up' },
+const E_LABELS: Partial<Record<TouchContext, { id: string; label: string; title: string }>> = {
+  arcade: { id: 'walkAway', label: 'Walk away', title: 'Walk away from the machine' },
+  seated: { id: 'standUp', label: 'Stand up', title: 'Stand up' },
 };
 /** How often the bar re-reads the context while in the room (ms). */
 const CONTEXT_POLL_MS = 200;
@@ -62,7 +82,15 @@ interface TouchControlsOptions {
    * the input layer knows no HUD), last in it, below the caption and the reaction; `container` when absent.
    */
   badgeHome?: HTMLElement;
+  /**
+   * A second finger on the look side, pinched in or spread apart: the box in hand brought closer (positive) or back,
+   * by a share of the way (the Inspector's `zoomBy`, like the mouse wheel). Without it a second finger does nothing.
+   */
+  onPinch?: (amount: number) => void;
 }
+
+/** Pixels of spread between two fingers for the whole way from the hand to close up. */
+const PINCH_FULL_PX = 260;
 
 interface StickPointer {
   id: number;
@@ -99,7 +127,10 @@ export class TouchControls {
   private active = false;
   private stick: StickPointer | null = null;
   private look: LookPointer | null = null;
-  private readonly opts: Required<Omit<TouchControlsOptions, 'badgeHome'>>;
+  /** A second finger on the look side (`onPinch`): its id and the two fingers' last spread. */
+  private pinch: { id: number; x: number; y: number; spread: number } | null = null;
+  private readonly onPinch: TouchControlsOptions['onPinch'];
+  private readonly opts: Required<Omit<TouchControlsOptions, 'badgeHome' | 'onPinch'>>;
   /** Settings > Look: a multiplier of `lookSensitivity`, and pushing up looks down. */
   private lookScale = 1;
   private invertY = false;
@@ -108,9 +139,15 @@ export class TouchControls {
   private readonly knobEl: HTMLDivElement;
   private readonly barEl: HTMLDivElement;
   private readonly badgeEl: HTMLDivElement;
+  /** The pad's buttons on the glass (a program's A, B, Start, Select; a cabinet's fire), bottom right. */
+  private readonly padEl: HTMLDivElement;
   private readonly buttonEls: Array<{ spec: TouchButton; el: HTMLButtonElement }> = [];
   private readContext: (() => TouchContext) | null = null;
+  /** Whether the hands hold a program's pad (`ProgramRunner.isHolding`), not a cabinet's stick. */
+  private readPadHeld: (() => boolean) | null = null;
   private shownContext: TouchContext | null = null;
+  private shownPad: 'pad' | 'cabinet' | null = null;
+  private inRoom = false;
   private contextTimer: number | undefined;
 
   constructor(
@@ -132,6 +169,7 @@ export class TouchControls {
       longPressMs: options.longPressMs ?? 450,
       moveZone: options.moveZone ?? 0.5,
     };
+    this.onPinch = options.onPinch;
 
     this.stickEl = document.createElement('div');
     this.stickEl.className = 'touch-stick';
@@ -143,22 +181,35 @@ export class TouchControls {
     this.knobEl.className = 'touch-stick__knob';
     this.stickEl.appendChild(this.knobEl);
 
+    // One row, one height whatever shows (the HUD along the top never moves): the hands' actions, then the two that
+    // are always there (the collection, the menu) apart at the end.
     this.barEl = document.createElement('div');
     this.barEl.className = 'touch-bar';
     this.barEl.hidden = true;
+    const acts = document.createElement('div');
+    acts.className = 'touch-bar__acts';
+    const always = document.createElement('div');
+    always.className = 'touch-bar__always';
     for (const button of this.opts.buttons) {
       const el = this.createButton(button);
       this.buttonEls.push({ spec: button, el });
-      this.barEl.appendChild(el);
+      (button.context === 'panels' ? always : acts).appendChild(el);
     }
+    this.barEl.append(acts, always);
+
+    this.padEl = document.createElement('div');
+    this.padEl.className = 'touch-pad';
+    this.padEl.hidden = true;
+    for (const button of PAD_BUTTONS) this.padEl.appendChild(this.createPadButton(button));
 
     this.badgeEl = document.createElement('div');
     this.badgeEl.className = 'touch-badge';
-    this.badgeEl.textContent = 'Rotating · lift to stop';
+    this.badgeEl.textContent = 'Turning the box · lift your finger to stop';
     this.badgeEl.hidden = true;
 
-    container.append(this.stickEl, this.barEl);
-    // Where the bar ends (it wraps to two rows on a phone): the HUD along the top sits under it (`--touch-bar-bottom`, styles.css).
+    container.append(this.stickEl, this.barEl, this.padEl);
+    // Where the bar ends: the HUD along the top sits under it (`--touch-bar-bottom`, styles.css). Its height is fixed, so
+    // this changes only with the window.
     if (typeof ResizeObserver === 'function') new ResizeObserver(() => this.publishBarBottom()).observe(this.barEl);
     // Last in the column under the crosshair (`badgeHome`, the wiring's `hudSlot`), below the caption and the reaction.
     (options.badgeHome ?? container).appendChild(this.badgeEl);
@@ -167,24 +218,39 @@ export class TouchControls {
     else watchForTouch(() => this.activate());
   }
 
-  /** Where the player's hands are (the Session): the bar shows only what works there, E named for what it does. */
-  setContext(read: () => TouchContext): void {
+  /**
+   * Where the player's hands are (the Session): the bar shows only what works there, E named for what it does, the
+   * main action lit. `padHeld`: whether the hands hold a program's pad (its A, B, Start, Select come on the glass;
+   * at a cabinet, its fire button).
+   */
+  setContext(read: () => TouchContext, padHeld?: () => boolean): void {
     this.readContext = read;
+    this.readPadHeld = padHeld ?? null;
     this.refreshContext();
   }
 
   private refreshContext(): void {
     const context = this.readContext?.() ?? null;
+    const pad = this.inRoom && context === 'arcade' ? (this.readPadHeld?.() ? 'pad' : 'cabinet') : null;
+    if (pad !== this.shownPad) {
+      this.shownPad = pad;
+      this.padEl.hidden = pad === null;
+      if (pad) this.padEl.dataset.mode = pad;
+      if (!pad) for (const button of PAD_BUTTONS) this.input.holdVirtual(button.code, 0);
+    }
     if (context === this.shownContext) return;
     this.shownContext = context;
+    const primary = context ? PRIMARY[context] : undefined;
     for (const { spec, el } of this.buttonEls) {
-      const relabel = spec.code === E_CODE && context ? E_LABELS[context] : undefined;
+      // (The E button of the box in hand only: the carried piece's put-back shares the key but is not walking away.)
+      const relabel = spec.code === E_CODE && (spec.id ?? 'putBack') === 'putBack' && context ? E_LABELS[context] : undefined;
       const shown = !context || !spec.context || SHOWN_IN[context].has(spec.context) || !!relabel;
       el.hidden = !shown;
-      el.textContent = relabel?.label ?? spec.label;
+      el.classList.toggle('touch-bar__btn--primary', shown && spec.id !== undefined && spec.id === primary);
+      el.innerHTML = `${touchIcon(relabel?.id ?? spec.id ?? '')}<span class="touch-bar__word">${relabel?.label ?? spec.label}</span>`;
       el.title = relabel?.title ?? spec.title ?? '';
+      el.setAttribute('aria-label', relabel?.label ?? spec.label);
     }
-    this.publishBarBottom();
   }
 
   /** Settings > Look: `sensitivity` multiplies the configured `lookSensitivity`. */
@@ -221,8 +287,10 @@ export class TouchControls {
   }
 
   private setInRoom(inRoom: boolean): void {
+    this.inRoom = inRoom;
     this.barEl.hidden = !inRoom;
     this.publishBarBottom();
+    if (!inRoom) this.refreshContext(); // the pad's buttons go with the room
     window.clearInterval(this.contextTimer);
     if (inRoom) {
       this.refreshContext();
@@ -235,11 +303,42 @@ export class TouchControls {
     }
   }
 
+  /** A pad button on the glass: held while the finger is on it (the program reads it held), a press as it lands. */
+  private createPadButton(button: (typeof PAD_BUTTONS)[number]): HTMLButtonElement {
+    const el = document.createElement('button');
+    el.type = 'button';
+    el.className = `touch-pad__btn touch-pad__btn--${button.id}`;
+    el.dataset.mode = button.mode;
+    el.textContent = button.label;
+    el.setAttribute('aria-label', button.label);
+    el.addEventListener('pointerdown', (e) => {
+      e.preventDefault();
+      try {
+        el.setPointerCapture(e.pointerId);
+      } catch {
+        /* a nicety: the finger may slide off and still hold */
+      }
+      el.classList.add('is-pressed');
+      this.input.pressVirtual(button.code);
+      this.input.holdVirtual(button.code, 1);
+    });
+    const release = (): void => {
+      el.classList.remove('is-pressed');
+      this.input.holdVirtual(button.code, 0);
+    };
+    el.addEventListener('pointerup', release);
+    el.addEventListener('pointercancel', release);
+    el.addEventListener('lostpointercapture', release);
+    return el;
+  }
+
   private createButton(button: TouchButton): HTMLButtonElement {
     const el = document.createElement('button');
     el.type = 'button';
     el.className = 'touch-bar__btn';
-    el.textContent = button.label;
+    // Its action, for the narrow screen's CSS (Games folds into Menu, whose pause menu has the collection).
+    if (button.id) el.dataset.action = button.id;
+    el.innerHTML = `${touchIcon(button.id ?? '')}<span class="touch-bar__word">${button.label}</span>`;
     if (button.title) el.title = button.title;
     el.addEventListener('pointerdown', (e) => {
       e.preventDefault(); // no focus ring, no compatibility mouse events reaching the Session
@@ -268,15 +367,44 @@ export class TouchControls {
       if (!this.stick) this.beginStick(e);
     } else if (!this.look) {
       this.beginLook(e);
+    } else if (!this.pinch && this.onPinch) {
+      // A second finger beside the looking one: a pinch, never a tap or a long press of the first.
+      const look = this.look;
+      window.clearTimeout(look.timer);
+      look.moved = true;
+      this.pinch = { id: e.pointerId, x: e.clientX, y: e.clientY, spread: Math.hypot(e.clientX - look.lastX, e.clientY - look.lastY) };
     }
   };
 
   private readonly onPointerMove = (e: PointerEvent): void => {
     if (this.stick?.id === e.pointerId) this.updateStick(e);
+    else if (this.pinch && (this.pinch.id === e.pointerId || this.look?.id === e.pointerId)) this.updatePinch(e);
     else if (this.look?.id === e.pointerId) this.updateLook(e);
   };
 
+  /** Either finger of the pinch moved: the change of spread brings the box closer or back. */
+  private updatePinch(e: PointerEvent): void {
+    const pinch = this.pinch!;
+    const look = this.look;
+    if (!look) return;
+    if (pinch.id === e.pointerId) {
+      pinch.x = e.clientX;
+      pinch.y = e.clientY;
+    } else {
+      look.lastX = e.clientX;
+      look.lastY = e.clientY;
+    }
+    const spread = Math.hypot(pinch.x - look.lastX, pinch.y - look.lastY);
+    this.onPinch?.((spread - pinch.spread) / PINCH_FULL_PX);
+    pinch.spread = spread;
+  }
+
   private readonly onPointerUp = (e: PointerEvent): void => {
+    if (this.pinch?.id === e.pointerId) {
+      this.pinch = null;
+      return;
+    }
+    if (this.look?.id === e.pointerId) this.pinch = null;
     if (this.stick?.id === e.pointerId) this.endStick();
     else if (this.look?.id === e.pointerId) this.endLook(this.look, e.type === 'pointerup');
   };

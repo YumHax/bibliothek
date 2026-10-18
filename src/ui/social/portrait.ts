@@ -22,6 +22,9 @@ function lookOf(id: PersonId): PersonLook {
   return randomLook(card?.look.seed ?? 1, card?.look.role ?? 'shopper');
 }
 
+/** The cream paper a face sits on outside the People book's tier colours (a seller's card, a speaker strip, a polaroid). */
+export const FACE_PAPER = '#efe4c8';
+
 /** A canvas `size` CSS pixels square with `id`'s face on `backdrop` (their tier's colour), with `expression` (a voice's answer). */
 export function portrait(id: PersonId, size: number, backdrop: string, expression: Expression = 'rest'): HTMLCanvasElement {
   const density = Math.min(3, Math.max(1, Math.round((globalThis.devicePixelRatio ?? 1) * 2) / 2));

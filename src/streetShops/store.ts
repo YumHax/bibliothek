@@ -17,8 +17,8 @@ interface StreetShopsState {
   gigs: number[];
   /** The last quiz night played at THE LOCAL, and how many answers were right. */
   quiz: { day: number; right: number } | null;
-  /** Today's darts at THE LOCAL: the game day, the goes thrown, the player's best of the night, whether it paid. */
-  darts: { day: number; goes: number; best: number; paid: boolean };
+  /** Today's darts at THE LOCAL: the game day, the goes thrown, whether a checkout paid. */
+  darts: { day: number; goes: number; paid: boolean };
   /** Game days whose issue of THE GAMING WEEKLY the player bought (or found on the mat), the last month's. */
   issues: number[];
   /** The cover cards collected (`COVER_CARDS` ids), and whether the full set was handed in. */
@@ -30,7 +30,7 @@ interface StreetShopsState {
   karimWeeks: number[];
 }
 
-const defaults = (): StreetShopsState => ({ orders: [], guides: [], gigs: [], quiz: null, darts: { day: -1, goes: 0, best: 0, paid: false }, issues: [], cards: [], setDone: false, subscribed: -1, karimWeeks: [] });
+const defaults = (): StreetShopsState => ({ orders: [], guides: [], gigs: [], quiz: null, darts: { day: -1, goes: 0, paid: false }, issues: [], cards: [], setDone: false, subscribed: -1, karimWeeks: [] });
 
 const isCount = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v);
 const numbers = (v: unknown): number[] => (Array.isArray(v) ? v.filter(isCount) : []);
@@ -46,14 +46,14 @@ const store = new PersistedStore<StreetShopsState>({
     const base = defaults();
     const orders = Array.isArray(o.orders) ? o.orders.filter((x): x is ManualOrder => !!x && typeof x === 'object' && typeof (x as ManualOrder).gameId === 'string' && isCount((x as ManualOrder).ready)).map((x) => ({ gameId: x.gameId, ready: x.ready, ...(isCount(x.paid) ? { paid: x.paid } : {}) })) : [];
     const q = o.quiz as { day?: unknown; right?: unknown } | null | undefined;
-    const d = o.darts as { day?: unknown; goes?: unknown; best?: unknown; paid?: unknown } | undefined;
+    const d = o.darts as { day?: unknown; goes?: unknown; paid?: unknown } | undefined;
     return {
       ...base,
       orders,
       guides: strings(o.guides),
       gigs: numbers(o.gigs),
       quiz: q && isCount(q.day) && isCount(q.right) ? { day: q.day, right: q.right } : null,
-      darts: d && isCount(d.day) && isCount(d.goes) && isCount(d.best) ? { day: d.day, goes: d.goes, best: d.best, paid: d.paid === true } : base.darts,
+      darts: d && isCount(d.day) && isCount(d.goes) ? { day: d.day, goes: d.goes, paid: d.paid === true } : base.darts,
       issues: numbers(o.issues),
       cards: strings(o.cards),
       setDone: o.setDone === true,
@@ -127,14 +127,14 @@ export const streetShops = {
     commit({ quiz: { day, right } });
   },
   /** Today's darts (a new day starts afresh). */
-  darts(day: number): { goes: number; best: number; paid: boolean } {
+  darts(day: number): { goes: number; paid: boolean } {
     const d = state.darts;
-    return d.day === day ? { goes: d.goes, best: d.best, paid: d.paid } : { goes: 0, best: 0, paid: false };
+    return d.day === day ? { goes: d.goes, paid: d.paid } : { goes: 0, paid: false };
   },
-  /** A go thrown on `day` for `score`; `paid`: it beat the board. */
-  markDarts(day: number, score: number, paid: boolean): void {
+  /** A go thrown on `day`; `paid`: it checked out and the prize was paid. */
+  markDarts(day: number, paid: boolean): void {
     const d = this.darts(day);
-    commit({ darts: { day, goes: d.goes + 1, best: Math.max(d.best, score), paid: d.paid || paid } });
+    commit({ darts: { day, goes: d.goes + 1, paid: d.paid || paid } });
   },
 
   // --- the newsagent ---------------------------------------------------------------------------

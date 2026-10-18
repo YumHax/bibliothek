@@ -18,6 +18,16 @@ export interface Interactable extends Hoverable {
   labelPlacement?(): LabelPlacement;
   /** Left click while hovered. */
   activate(session: SessionActions): void;
+  /**
+   * Optional: true while the crosshair's ray should go through it to what is behind (an empty spot on a table that only
+   * takes a box in hand: with free hands the cake under it is what is clicked). `holding`: a box is in hand.
+   */
+  passesThrough?(holding: boolean): boolean;
+  /**
+   * Optional: the interactable whose hitbox this one lies inside (an instruction card on a cabinet's panel): the ray
+   * picks this one wherever it reaches it through that hitbox, not the host.
+   */
+  readonly within?: Interactable;
 }
 
 export function isInteractable(obj: object): obj is Interactable {

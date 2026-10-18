@@ -26,6 +26,8 @@ export interface Fault {
   action: RepairAction;
   /** What the job card says once done. */
   done: string;
+  /** The other way the same fault shows on some consoles (`faultOf` picks which): what the seller says, what is found. */
+  alt: { symptom: string; finding: string };
 }
 
 /** The parts drawn on a board: the faulty one is one of them, the rest look fine. */
@@ -39,6 +41,7 @@ export const FAULTS: Readonly<Record<FaultId, Fault>> = {
     tool: 'spare',
     action: 'swap',
     done: 'A new 72-pin connector: the cartridge seats with a soft click.',
+    alt: { symptom: 'You have to wiggle the cartridge for ages before anything comes up.', finding: 'The connector’s pins are splayed: a cartridge only touches them pushed hard to one side.' },
   },
   contacts: {
     symptom: 'Games freeze, or the screen comes up garbled.',
@@ -47,6 +50,7 @@ export const FAULTS: Readonly<Record<FaultId, Fault>> = {
     tool: 'brush',
     action: 'scrub',
     done: 'The contacts scrubbed bright with cleaner and a brush.',
+    alt: { symptom: 'Some games work, some don’t, and blowing on them only helps sometimes.', finding: 'Black tarnish along the slot’s contacts, worst at the middle where every cartridge rubs.' },
   },
   capacitor: {
     symptom: 'No sound, and a hum through the picture.',
@@ -55,6 +59,7 @@ export const FAULTS: Readonly<Record<FaultId, Fault>> = {
     tool: 'iron',
     action: 'solder',
     done: 'The leaky capacitor out, a new one soldered in.',
+    alt: { symptom: 'The picture rolls, and it crackles when it warms up.', finding: 'A capacitor near the regulator has bulged and wept brown onto the board.' },
   },
   fuse: {
     symptom: 'Dead: no light, nothing.',
@@ -63,6 +68,7 @@ export const FAULTS: Readonly<Record<FaultId, Fault>> = {
     tool: 'spare',
     action: 'swap',
     done: 'A new fuse in its clips.',
+    alt: { symptom: 'It clicked once, smelled hot, and that was that.', finding: 'The little fuse has gone grey inside: the wire in it melted through.' },
   },
   battery: {
     symptom: 'Will not switch on on batteries.',
@@ -71,6 +77,7 @@ export const FAULTS: Readonly<Record<FaultId, Fault>> = {
     tool: 'swab',
     action: 'scrub',
     done: 'The terminals cleaned with vinegar on a cotton bud, then dried.',
+    alt: { symptom: 'Dead on batteries, fine on the mains adapter, which nobody has any more.', finding: 'White crust has crept up the battery springs: someone left a set in over a winter.' },
   },
   lens: {
     symptom: 'Spins the disc, then gives up.',
@@ -79,6 +86,7 @@ export const FAULTS: Readonly<Record<FaultId, Fault>> = {
     tool: 'swab',
     action: 'scrub',
     done: 'The lens wiped clean with alcohol on a cotton bud.',
+    alt: { symptom: 'The disc spins up, slows, and the menu comes back.', finding: 'A furry film on the laser lens: years of a smoker’s living room.' },
   },
   ribbon: {
     symptom: 'Lines missing down the screen.',
@@ -87,16 +95,17 @@ export const FAULTS: Readonly<Record<FaultId, Fault>> = {
     tool: 'iron',
     action: 'solder',
     done: 'The ribbon’s joints reflowed: every line back.',
+    alt: { symptom: 'Half the screen is just bars, and it flickers if you press the corner.', finding: 'The ribbon cable’s joints have cracked at one end: they only touch when pressed.' },
   },
 };
 
-/** The bench's tools, as the tray shows them. */
-export const TOOLS: Readonly<Record<ToolId, { name: string; icon: string }>> = {
-  brush: { name: 'Contact cleaner and brush', icon: '🖌' },
-  iron: { name: 'Soldering iron', icon: '🔥' },
-  spare: { name: 'Spare parts box', icon: '📦' },
-  swab: { name: 'Cotton buds', icon: '🧴' },
-  screwdriver: { name: 'Screwdriver', icon: '🪛' },
+/** The bench's tools, as the tray names them (`ui/repair/repairArt` draws them). */
+export const TOOLS: Readonly<Record<ToolId, { name: string }>> = {
+  brush: { name: 'Contact cleaner and brush' },
+  iron: { name: 'Soldering iron' },
+  spare: { name: 'Spare parts box' },
+  swab: { name: 'Cotton buds' },
+  screwdriver: { name: 'Screwdriver' },
 };
 
 /** Each platform's faults, its value working (coins), and how many screws hold its shell. */
@@ -133,6 +142,17 @@ export function brokenOf(platform: PlatformId, u1: number, u2: number): { fault:
   const fault = spec.faults[Math.floor(u1 * spec.faults.length)] ?? spec.faults[0]!;
   const [lo, hi] = REPAIR.brokenShare;
   return { fault, price: Math.max(5, Math.round(spec.value * (lo + u2 * (hi - lo)))) };
+}
+
+/**
+ * How `console`'s fault shows: its usual symptom and finding, or the other one (`Fault.alt`) for about half of them,
+ * the same before it is bought (the seller's word) as on the kitchen table after (drawn from what it is and its price).
+ */
+export function faultOf(console: { platform: PlatformId; fault: FaultId; paid: number }): Fault {
+  const fault = FAULTS[console.fault];
+  let h = console.paid;
+  for (const ch of `${console.platform}${console.fault}`) h = (h * 31 + ch.charCodeAt(0)) % 9973;
+  return h % 2 ? { ...fault, ...fault.alt } : fault;
 }
 
 /** What TV REPAIR pays for a working `platform`. */

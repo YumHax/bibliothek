@@ -119,6 +119,20 @@ export class YouTubePlayer {
     this.send();
   }
 
+  /** Holds the picture where it is (the IFrame API's `pauseVideo`); `resume` runs it on. Ignored until ready. */
+  pause(): void {
+    if (this.ready) this.post({ event: 'command', func: 'pauseVideo', args: [] });
+  }
+
+  resume(): void {
+    if (this.ready) this.post({ event: 'command', func: 'playVideo', args: [] });
+  }
+
+  /** Jumps to `seconds` into the video (the API's `seekTo`, allowed to fetch what is not buffered yet). */
+  seekTo(seconds: number): void {
+    if (this.ready) this.post({ event: 'command', func: 'seekTo', args: [Math.max(0, seconds), true] });
+  }
+
   /** 0–100, scaled by the mixer's screens channel. Ignored until the player is ready; only sent when the rounded value changes. */
   setVolume(volume: number): void {
     this.wanted = volume;

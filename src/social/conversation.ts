@@ -7,6 +7,7 @@ import {
   BIRTHDAY_LINES,
   CALLBACK_LINES,
   COLD_LINES,
+  KEEPSAKE_LINES,
   FAREWELL_LINES,
   GRUDGE_LINES,
   HELD_LINES,
@@ -15,14 +16,27 @@ import {
   LEAVING_LINES,
   MOOD_OPENINGS,
   NEWS_LINES,
+  PHONE_FAREWELL_LINES,
+  PHONE_HELLO_LINES,
+  PHONE_LEAVING_LINES,
+  PHONE_NEWS_LINES,
+  PHONE_PLAYER_LINES,
+  PHONE_SOCIAL_LINES,
+  PHONE_TWICE_LINES,
   PLAYER_LINES,
   REPEAT_LINES,
   SOCIAL_LINES,
-  TRADE_LINES,
+  TWICE_LINES,
 } from './socialLines';
-import { bumpCount, countOf, countedToday, giveNumber, learn, learnTrait, markCounted, meet, nudge, standing } from './standing';
+import { hasKeepsake, keepsakeFor } from './keepsakes';
+import { MOOD_SAYS } from './moodLines';
+import { outfitRemark } from './outfitRemarks';
+import { bumpCount, countOf, countedToday, giveNumber, lastCounted, learn, learnTrait, markCounted, meet, nudge, standing } from './standing';
 import { atLeast, tierOf, tierRank, warmthTier } from './tiers';
+import { eventTopics } from './topicSources';
+import { GOOD_TALK_MEMORY, memoryToRecall, recallKey } from './recall';
 import type { Fit, GiftKind, InteractionGroup, InteractionId, LineKey, PersonFact, PersonId, PersonTopic, SocialChange, SocialPlace, Trait } from './types';
+import { isYoung, personSeed, voiced } from './voices';
 import { random } from '@/random';
 
 /*
@@ -148,8 +162,6 @@ const ICONS: Record<InteractionId, string> = {
 /** Where what the player does is seen by whoever is around (`witnesses.ts` passes it on); elsewhere their ties hear of it (`gossip`). */
 const PUBLIC: ReadonlySet<SocialPlace> = new Set(['stairs', 'courtyard', 'street', 'shop', 'market', 'arcade', 'saleroom']);
 
-/** What a good talk leaves them (mild: it fades, and it is never called back). */
-const GOOD_TALK_MEMORY = 'we had a good talk';
 
 /** The order of fits, best first (a repetition steps down it). */
 const FITS: readonly Fit[] = ['loves', 'likes', 'meh', 'dislikes'];
@@ -162,13 +174,62 @@ function pick<T>(list: readonly T[], r: number): T {
   return list[Math.floor(r * list.length) % list.length]!;
 }
 
-/** A line of `key` from their card, else their trade's (a light person), else none. */
-function ownLines(id: PersonId, key: LineKey): readonly string[] | undefined {
-  const card = findPerson(id);
-  const own = card?.lines?.[key];
-  if (own?.length) return own;
-  const trade = card?.trade ? TRADE_LINES[card.trade]?.[key] : undefined;
-  return trade?.length ? trade : undefined;
+/** A line of `key` in their voice: their card's, their trade's, their strongest trait's (`voices`), else none. */
+function ownLines(id: PersonId, key: LineKey, place?: SocialPlace): readonly string[] | undefined {
+  return voiced(id, key, place);
+}
+
+/*
+ * On a call (docs/social.md "The phone") nobody passes the salt: every pool a conversation draws from has its words
+ * for the phone where the in-person ones need the player there (`socialLines` PHONE_*, a card's `phoneLines`, a
+ * topic's `phone`). What follows picks the right one by place.
+ */
+
+/** The shared answers to `interaction` landing `fit`, here. */
+export function socialPool(interaction: keyof typeof SOCIAL_LINES, fit: Fit, place?: SocialPlace): readonly string[] {
+  return (place === 'phone' ? PHONE_SOCIAL_LINES[interaction]?.[fit] : undefined) ?? SOCIAL_LINES[interaction][fit];
+}
+
+/** The shared answers to the player's news (`kind`: any news, a game's) landing `fit`, here. */
+export function newsPool(kind: keyof typeof NEWS_LINES, fit: Fit, place?: SocialPlace): readonly string[] {
+  return (place === 'phone' ? PHONE_NEWS_LINES[kind]?.[fit] : undefined) ?? NEWS_LINES[kind][fit];
+}
+
+/** The player's own words for `interaction`, here. */
+export function playerPool(interaction: InteractionId, place?: SocialPlace): readonly string[] {
+  return (place === 'phone' ? PHONE_PLAYER_LINES[interaction] : undefined) ?? PLAYER_LINES[interaction];
+}
+
+/** `topic` as it is said here: on a call, its phone words in place of the in-person ones; null: not for a call. */
+export function topicHere(topic: PersonTopic, place?: SocialPlace): PersonTopic | null {
+  if (place !== 'phone' || topic.phone === undefined) return topic;
+  if (topic.phone === false) return null;
+  const { say, again, answers, deeper } = topic.phone;
+  return { ...topic, say: say ?? topic.say, again: again ?? topic.again, answers: answers ?? topic.answers, deeper: deeper ?? topic.deeper };
+}
+
+/** What a fact of theirs says, here. */
+export function factSays(fact: PersonFact, place?: SocialPlace): string {
+  return (place === 'phone' ? fact.phoneSays : undefined) ?? fact.says;
+}
+
+/** A player's line of `list` for `id` on `day`: picked per person, so the menu is not the same for everyone that day. */
+function playerPick(list: readonly string[], id: PersonId, day: number, salt: number): string {
+  return list[(personSeed(id) + day * salt) % list.length]!;
+}
+
+/** `topic`'s answers as `id` would give them now: a friend hears one more, once the others are told (`deeper`). */
+function answersOf(id: PersonId, topic: PersonTopic): readonly string[] {
+  if (!topic.deeper) return topic.answers;
+  const s = standing(id);
+  return atLeast(tierOf(s.warmth, s.trust), 'friend') ? [...topic.answers, topic.deeper] : topic.answers;
+}
+
+/** When `topic` was last talked about with `id`, as a repeat: the same day, a day or two ago, or not lately. */
+function lastTalked(id: PersonId, topic: PersonTopic, day: number): 'today' | 'lately' | null {
+  const last = standing(id).last[`topic:${topic.id}`];
+  if (last === undefined || day - last > TALK.repeatDays) return null;
+  return last === day ? 'today' : 'lately';
 }
 
 function fill(line: string, id: PersonId, extra: InteractionExtra): string {
@@ -192,9 +253,10 @@ function topicOpen(id: PersonId, topic: PersonTopic): boolean {
   return atLeast(tier, topic.from ?? 'acquaintance');
 }
 
-/** The topics of `id`'s open now, best to offer first: not said in this conversation, not talked about lately. */
-export function openTopics(id: PersonId): PersonTopic[] {
-  return (findPerson(id)?.topics ?? []).filter((t) => topicOpen(id, t));
+/** The topics of `id`'s open now: their own, then what is going on that they would talk about on `day` (`topicSources`). */
+export function openTopics(id: PersonId, day?: number): PersonTopic[] {
+  const own = (findPerson(id)?.topics ?? []).filter((t) => topicOpen(id, t));
+  return day === undefined ? own : [...own, ...eventTopics(id, day)];
 }
 
 /** How a trait of theirs bends a small-talk choice at this hour, and which trait (found out when it shows). */
@@ -215,11 +277,19 @@ function fitOf(id: PersonId, choice: Pick<Choice, 'key' | 'interaction' | 'topic
     case 'topic': {
       const topic = choice.topic;
       if (!topic) return 'meh';
-      const last = standing(id).last[`topic:${topic.id}`];
-      const lately = last !== undefined && ctx.day - last <= TALK.repeatDays && !(convo && again);
+      const lately = lastTalked(id, topic, ctx.day) !== null && !(convo && again);
       // Everything they had to say about it said: it is old news to them now.
-      const told = countOf(id, `topic:${topic.id}`) >= topic.answers.length && topic.fit !== 'dislikes';
+      const told = countOf(id, `topic:${topic.id}`) >= answersOf(id, topic).length && topic.fit !== 'dislikes';
       return stepDown(topic.fit, again + (lately ? 1 : 0) + (told ? 1 : 0));
+    }
+    case 'askNumber': {
+      // A bad day is no day to swap numbers; the shy and the businesslike give it, no more; the warm gladly.
+      if (moodOf(id, ctx.day, ctx.hour).mood === 'annoyed') return 'dislikes';
+      const traits = findPerson(id)?.traits ?? [];
+      if (traits.includes('shy') || traits.includes('businesslike')) return 'meh';
+      const s = standing(id);
+      if (traits.includes('chatty') || traits.includes('gossip') || atLeast(tierOf(s.warmth, s.trust), 'friendly')) return 'loves';
+      return 'likes';
     }
     case 'news':
       return choice.news ? stepDown(newsFit(id, choice.news), again) : 'meh';
@@ -260,8 +330,10 @@ export function choicesFor(id: PersonId, ctx: TalkContext, convo: Conversation):
   // Someone cold or worse is not for talking: an apology, a word, or worse.
   const cold = tierRank(tier) <= tierRank('cold');
   if (!cold) {
-    const topics = openTopics(id)
-      .map((topic) => ({ topic, key: `topic:${topic.id}`, times: countOf(id, `topic:${topic.id}`) }))
+    const topics = openTopics(id, ctx.day)
+      .map((topic) => topicHere(topic, ctx.place))
+      .filter((topic): topic is PersonTopic => topic !== null)
+      .map((topic) => ({ topic, key: `topic:${topic.id}`, times: countOf(id, `topic:${topic.id}`), told: countOf(id, `topic:${topic.id}`) >= answersOf(id, topic).length }))
       .filter(({ topic, key, times }) => {
         if (convo.said[key]) return false;
         // A sore spot found out is not brought up again; a first meeting's question is not asked twice.
@@ -269,17 +341,19 @@ export function choicesFor(id: PersonId, ctx: TalkContext, convo: Conversation):
         return !(times > 0 && topic.obvious && !topic.again);
       })
       // The fresh ones first: not talked about yet, then the longest ago; the ones they have told all about last.
-      .sort((a, b) => Number(a.times >= a.topic.answers.length) - Number(b.times >= b.topic.answers.length) || (s.last[`topic:${a.topic.id}`] ?? -1) - (s.last[`topic:${b.topic.id}`] ?? -1))
+      .sort((a, b) => Number(a.told) - Number(b.told) || (s.last[`topic:${a.topic.id}`] ?? -1) - (s.last[`topic:${b.topic.id}`] ?? -1))
       .slice(0, TALK.topics);
     for (const { topic, key, times } of topics) add({ key, interaction: 'topic', group: 'talk', label: times > 0 && topic.again ? topic.again : topic.say, icon: topic.icon, topic });
     for (const news of newsFor(id, ctx.day).slice(0, TALK.news)) add({ key: `news:${news.id}`, interaction: 'news', group: 'talk', label: news.say, icon: news.icon, news });
   }
-  add({ key: 'talk:chat', interaction: 'chat', group: 'talk', label: pick(PLAYER_LINES.chat, (ctx.day / 7) % 1), icon: ICONS.chat });
-  if (!cold) add({ key: 'talk:joke', interaction: 'joke', group: 'talk', label: pick(PLAYER_LINES.joke, ((ctx.day * 3) / 7) % 1), icon: ICONS.joke });
-  if (offered('apologise') && !countedToday(id, 'talk:apologise', ctx.day)) add({ key: 'talk:apologise', interaction: 'apologise', group: 'talk', label: pick(PLAYER_LINES.apologise, ctx.day / 5 % 1), icon: ICONS.apologise });
-  if (offered('askNumber') && card.phone && !s.number) add({ key: 'ask:askNumber', interaction: 'askNumber', group: 'ask', label: PLAYER_LINES.askNumber[0]!, icon: ICONS.askNumber });
-  if (offered('tease')) add({ key: 'mean:tease', interaction: 'tease', group: 'mean', label: pick(PLAYER_LINES.tease, ctx.day / 3 % 1), icon: ICONS.tease });
-  if (offered('insult')) add({ key: 'mean:insult', interaction: 'insult', group: 'mean', label: pick(PLAYER_LINES.insult, ctx.day / 2 % 1), icon: ICONS.insult, once: true });
+  const words = (interaction: InteractionId): readonly string[] => playerPool(interaction, ctx.place);
+  add({ key: 'talk:chat', interaction: 'chat', group: 'talk', label: playerPick(words('chat'), id, ctx.day, 1), icon: ICONS.chat });
+  if (!cold) add({ key: 'talk:joke', interaction: 'joke', group: 'talk', label: playerPick(words('joke'), id, ctx.day, 3), icon: ICONS.joke });
+  if (offered('apologise') && !countedToday(id, 'talk:apologise', ctx.day)) add({ key: 'talk:apologise', interaction: 'apologise', group: 'talk', label: playerPick(words('apologise'), id, ctx.day, 1), icon: ICONS.apologise });
+  if (offered('askNumber') && card.phone && !s.number) add({ key: 'ask:askNumber', interaction: 'askNumber', group: 'ask', label: playerPick(words('askNumber'), id, 0, 0), icon: ICONS.askNumber });
+  if (offered('tease')) add({ key: 'mean:tease', interaction: 'tease', group: 'mean', label: playerPick(words('tease'), id, ctx.day, 2), icon: ICONS.tease });
+  // Nobody insults their grandmother or a child: the choice is not there.
+  if (offered('insult') && !card.family && !isYoung(card)) add({ key: 'mean:insult', interaction: 'insult', group: 'mean', label: playerPick(words('insult'), id, ctx.day, 1), icon: ICONS.insult, once: true });
   return out;
 }
 
@@ -289,7 +363,8 @@ export function playerLine(id: PersonId, interaction: InteractionId, extra: Inte
 }
 
 /** The kind of first word they said (the panel may show it differently: an introduction, a memory called back). */
-export type OpeningKind = 'intro' | 'hostile' | 'cold' | 'birthday' | 'held' | 'memory' | 'mood' | 'hello';
+export type OpeningKind = 'intro' | 'hostile' | 'cold' | 'birthday' | 'held' | 'memory' | 'mood' | 'twice' | 'outfit' | 'hello';
+
 
 /**
  * Their first word on opening the conversation: an introduction the first time; a cold or hostile word; their
@@ -300,50 +375,75 @@ export type OpeningKind = 'intro' | 'hostile' | 'cold' | 'birthday' | 'held' | '
 export function opening(id: PersonId, ctx: TalkContext): { line: string; introduced: boolean; kind: OpeningKind } {
   const card = findPerson(id);
   const r = (ctx.rand ?? random)();
-  if (card && meet(id, ctx.day)) return { line: card.intro, introduced: true, kind: 'intro' };
+  const place = ctx.place;
+  const phone = place === 'phone';
+  if (card && meet(id, ctx.day)) return { line: (phone ? card.phoneIntro : undefined) ?? card.intro, introduced: true, kind: 'intro' };
   const s = standing(id);
   const tier = tierOf(s.warmth, s.trust);
-  if (tierRank(tier) <= tierRank('hostile')) return { line: pick(ownLines(id, 'hostile') ?? HOSTILE_LINES, r), introduced: false, kind: 'hostile' };
-  if (tier === 'cold') return { line: pick(ownLines(id, 'cold') ?? COLD_LINES, r), introduced: false, kind: 'cold' };
+  if (tierRank(tier) <= tierRank('hostile')) return { line: pick(ownLines(id, 'hostile', place) ?? HOSTILE_LINES, r), introduced: false, kind: 'hostile' };
+  if (tier === 'cold') return { line: pick(ownLines(id, 'cold', place) ?? COLD_LINES, r), introduced: false, kind: 'cold' };
   if (isBirthday(id, ctx.day) && !countedToday(id, 'birthdaySaid', ctx.day)) {
     nudge(id, { reason: 'birthdaySaid', day: ctx.day });
-    return { line: pick(BIRTHDAY_LINES, r), introduced: false, kind: 'birthday' };
+    return { line: pick(ownLines(id, 'birthday', place) ?? BIRTHDAY_LINES, r), introduced: false, kind: 'birthday' };
   }
   if (!card?.family && warmthTier(s.warmth) !== tier && !countedToday(id, 'heldSaid', ctx.day)) {
     nudge(id, { reason: 'heldSaid', day: ctx.day });
     return { line: pick(HELD_LINES, r), introduced: false, kind: 'held' };
   }
+  // Talked to already today (that one counted, this one is talk): they notice, once.
+  if (countedToday(id, 'conversation', ctx.day) && !countedToday(id, 'twiceSaid', ctx.day)) {
+    markCounted(id, 'twiceSaid', ctx.day);
+    return { line: pick(ownLines(id, 'twice', place) ?? (phone ? PHONE_TWICE_LINES : TWICE_LINES), r), introduced: false, kind: 'twice' };
+  }
   // A memory called back, once a day at most, one from a day or more ago.
   if (!countedToday(id, 'recalled', ctx.day) && r < 0.45) {
-    // Something particular, not a talk like any other (`goodTalk`'s memory).
-    const memory = s.memories.find((m) => ctx.day - m.day >= 1 && ctx.day - m.day <= 12 && Math.abs(m.weight) >= 3 && m.text !== GOOD_TALK_MEMORY);
+    const memory = memoryToRecall(id, ctx.day);
     if (memory) {
       nudge(id, { reason: 'recalled', day: ctx.day });
+      bumpCount(id, recallKey(memory));
       const lines = memory.weight > 0 ? CALLBACK_LINES : GRUDGE_LINES;
       return { line: pick(lines, r * 2 % 1).replace('{memory}', memory.text), introduced: false, kind: 'memory' };
     }
   }
-  const { mood } = moodOf(id, ctx.day, ctx.hour);
+  // Their keepsake on the player's fridge, mentioned now and then (once a week at most).
+  const kept = hasKeepsake(id, 'close') ? keepsakeFor(id, 'close') : hasKeepsake(id, 'friend') ? keepsakeFor(id, 'friend') : null;
+  const keptSaid = lastCounted(id, 'keepsakeSaid');
+  if (kept && r > 0.8 && (keptSaid === null || ctx.day - keptSaid >= 7)) {
+    markCounted(id, 'keepsakeSaid', ctx.day);
+    return { line: pick(KEEPSAKE_LINES, r * 3 % 1).replace('{keepsake}', kept.name), introduced: false, kind: 'memory' };
+  }
+  // What the player has on, now and then (once a game day each; not family, who see it every Sunday; not on a call).
+  if (!card?.family && !phone && r > 0.6 && r <= 0.8 && !countedToday(id, 'outfitSaid', ctx.day)) {
+    const remark = outfitRemark(id, (r - 0.6) * 5);
+    if (remark) {
+      markCounted(id, 'outfitSaid', ctx.day);
+      return { line: remark, introduced: false, kind: 'outfit' };
+    }
+  }
+  const { mood, why } = moodOf(id, ctx.day, ctx.hour);
   if (mood !== 'fine' && !countedToday(id, 'moodSaid', ctx.day)) {
     nudge(id, { reason: 'moodSaid', day: ctx.day });
-    return { line: pick(MOOD_OPENINGS[mood], r), introduced: false, kind: 'mood' };
+    // The cause said in their own words when it has some ("My daughter rang from Lyon again…").
+    const says = why ? MOOD_SAYS[why] : undefined;
+    return { line: says ?? pick(MOOD_OPENINGS[mood], r), introduced: false, kind: 'mood' };
   }
-  return { line: pick(ownLines(id, 'hello') ?? HELLO_LINES, r), introduced: false, kind: 'hello' };
+  // On a call, their hello is how they pick up.
+  return { line: pick(ownLines(id, 'hello', place) ?? (phone ? PHONE_HELLO_LINES : HELLO_LINES), r), introduced: false, kind: 'hello' };
 }
 
-/** Their goodbye when the player leaves, by how warm they are. */
-export function farewell(id: PersonId, r: number = random()): string {
+/** Their goodbye when the player leaves, by how warm they are (on a call, as they hang up). */
+export function farewell(id: PersonId, place?: SocialPlace, r: number = random()): string {
   const s = standing(id);
   const rank = tierRank(tierOf(s.warmth, s.trust));
-  const own = ownLines(id, 'bye');
+  const own = ownLines(id, 'bye', place);
   if (own && rank >= tierRank('polite')) return pick(own, r);
   const band = rank >= tierRank('friendly') ? 'warm' : rank >= tierRank('polite') ? 'even' : rank >= tierRank('cold') ? 'cold' : 'hostile';
-  return pick(FAREWELL_LINES[band], r);
+  return pick((place === 'phone' ? PHONE_FAREWELL_LINES : FAREWELL_LINES)[band], r);
 }
 
-/** What they say when their talk is done ("Right, I must dash!"). */
-export function leavingLine(id: PersonId, r: number = random()): string {
-  return pick(ownLines(id, 'leaving') ?? LEAVING_LINES, r);
+/** What they say when their talk is done ("Right, I must dash!"; on a call, "I'll let you go"). */
+export function leavingLine(id: PersonId, place?: SocialPlace, r: number = random()): string {
+  return pick(ownLines(id, 'leaving', place) ?? (place === 'phone' ? PHONE_LEAVING_LINES : LEAVING_LINES), r);
 }
 
 /** The reaction a choice gets, and how big a moment it is for their body. */
@@ -416,11 +516,18 @@ export function say(id: PersonId, choice: Pick<Choice, 'key' | 'interaction' | '
   if (interaction === 'topic' && choice.topic) {
     const topic = choice.topic;
     const first = !standing(id).known.includes(`fit:${topic.id}`);
+    // Brought up again today or the day before: they say so, before their answer while it still pleases them.
+    const repeat = lastTalked(id, topic, ctx.day);
     learn(id, `fit:${topic.id}`);
     nudge(id, { reason: `topic:${topic.id}`, day: ctx.day });
-    // Their answers in turn, never the same one twice running.
-    const times = bumpCount(id, `topic:${topic.id}`);
-    line = again ? pick(ownLines(id, 'repeat') ?? REPEAT_LINES, lineDraw) : topic.answers[times % topic.answers.length]!;
+    // Their answers in turn, never the same one twice running (a friend's deeper one last).
+    // An answer only moves on when it is said: a repeat they no longer enjoy keeps it for another day.
+    const answers = answersOf(id, topic);
+    const noticed = repeat ? pick(ownLines(id, 'repeat', ctx.place) ?? REPEAT_LINES[repeat], lineDraw) : '';
+    const answering = !noticed || fit === 'loves' || fit === 'likes';
+    const times = answering ? bumpCount(id, `topic:${topic.id}`) : countOf(id, `topic:${topic.id}`);
+    const answer = answers[times % answers.length]!;
+    line = !noticed ? answer : answering ? `${noticed} ${answer}` : noticed;
     why = fit === 'dislikes' ? `didn’t want to talk about ${topic.name.toLowerCase()}` : fit === 'meh' ? 'wasn’t much for talking' : `loved talking about ${topic.name.toLowerCase()}`;
     if ((fit === 'loves' || fit === 'likes') && warmth > 0) {
       if (topic.teaches) {
@@ -433,11 +540,13 @@ export function say(id: PersonId, choice: Pick<Choice, 'key' | 'interaction' | '
     const news = choice.news;
     told(id, news.id);
     // A game's news in game words only to someone who plays; anyone else is glad for the player, not the game.
-    line = fill(pick(news.game && card?.tastes ? NEWS_LINES.game[fit] : NEWS_LINES.any[fit], lineDraw), id, { news });
+    // Glad news in their own voice when they have one (grumpy Mr Leclerc is not "so pleased").
+    const own = (fit === 'loves' || fit === 'likes') && !news.game ? ownLines(id, 'news', ctx.place) : undefined;
+    line = fill(pick(own ?? newsPool(news.game && card?.tastes ? 'game' : 'any', fit, ctx.place), lineDraw), id, { news });
     why = WHY.news[fit];
   } else if (interaction === 'chat' || interaction === 'joke' || interaction === 'tease') {
-    const own = fit === 'loves' || fit === 'likes' ? ownLines(id, interaction) : undefined;
-    line = again && interaction === 'chat' ? pick(ownLines(id, 'repeat') ?? REPEAT_LINES, lineDraw) : pick(own ?? SOCIAL_LINES[interaction][fit], lineDraw);
+    const own = fit === 'loves' || fit === 'likes' ? ownLines(id, interaction, ctx.place) : undefined;
+    line = pick(own ?? socialPool(interaction, fit, ctx.place), lineDraw);
     why = WHY[interaction][fit];
     const by = bent(id, interaction, ctx.hour)?.by;
     if (by && learnTrait(id, by)) trait = by;
@@ -446,7 +555,7 @@ export function say(id: PersonId, choice: Pick<Choice, 'key' | 'interaction' | '
       const f = nextFact(id);
       if (f && learn(id, f.id)) {
         fact = f;
-        line = f.says;
+        line = factSays(f, ctx.place);
       }
     }
   } else if (interaction === 'apologise') {
@@ -454,18 +563,21 @@ export function say(id: PersonId, choice: Pick<Choice, 'key' | 'interaction' | '
     const by = bent(id, 'apologise', ctx.hour)?.by;
     if (by && learnTrait(id, by)) trait = by;
     warmth = { loves: 14, likes: rule.win.warmth, meh: 5, dislikes: 2 }[fit] + (countedToday(id, 'gift', ctx.day) ? 4 : 0);
-    line = pick(SOCIAL_LINES.apologise[fit], lineDraw);
+    line = pick(socialPool('apologise', fit, ctx.place), lineDraw);
     why = fit === 'meh' || fit === 'dislikes' ? 'isn’t quite ready to forgive' : 'accepted the apology';
     [memory, memoryWeight] = ['you apologised', 6];
   } else if (interaction === 'askNumber') {
-    warmth = rule.win.warmth;
-    giveNumber(id);
-    line = pick(SOCIAL_LINES.askNumber.likes, lineDraw);
-    why = 'gave you their number';
+    // On a bad day they put it off (it is still there to ask another time).
+    if (fit !== 'dislikes') {
+      warmth = rule.win.warmth;
+      giveNumber(id);
+      why = 'gave you their number';
+    }
+    line = pick(SOCIAL_LINES.askNumber[fit], lineDraw);
   } else if (interaction === 'insult') {
     warmth = rule.win.warmth;
     trust = rule.win.trust ?? 0;
-    line = pick(SOCIAL_LINES.insult.dislikes, lineDraw);
+    line = pick(ownLines(id, 'hurt', ctx.place) ?? socialPool('insult', 'dislikes', ctx.place), lineDraw);
     why = 'took offence';
     [memory, memoryWeight] = ['you insulted me', -18];
     convo.leaving = true;
@@ -480,7 +592,9 @@ export function say(id: PersonId, choice: Pick<Choice, 'key' | 'interaction' | '
     fit = warmth >= 10 ? 'loves' : warmth > 0 ? 'likes' : warmth === 0 ? 'meh' : 'dislikes';
     why = warmth >= 0 ? `loved ${kind === 'game' ? (extra.game?.title ?? 'the game') : giftName(kind)}` : `didn’t want ${giftName(kind)}`;
     if (kind !== 'game') learn(id, tasteFact(kind));
-    line = fill(pick(SOCIAL_LINES[interaction][fit], lineDraw), id, extra);
+    // A gift that pleased, thanked in their own voice when they have one; the shared lines name the gift.
+    const own = fit === 'likes' || fit === 'loves' ? ownLines(id, 'thanks') : undefined;
+    line = fill(pick(own ?? SOCIAL_LINES[interaction][fit], lineDraw), id, extra);
     if (kind === 'game' && warmth > 0) [memory, memoryWeight, memoryGame] = [`you gave me ${extra.game?.title ?? 'a game'}`, 12, extra.game?.id];
   } else if (interaction === 'giveCoins') {
     reason = 'coins';
@@ -496,7 +610,7 @@ export function say(id: PersonId, choice: Pick<Choice, 'key' | 'interaction' | '
     : null;
   const { reaction, strength } = reactionOf(interaction, fit);
   const outcome: Outcome = { ok: fit === 'loves' || fit === 'likes', fit, line, reaction, strength, change, fact, trait, remembered: change && memory ? memory : undefined };
-  if (interaction === 'askNumber') outcome.number = true;
+  if (interaction === 'askNumber' && fit !== 'dislikes') outcome.number = true;
   if (talk && convo.exchanges >= TALK.exchanges) convo.leaving = true;
   if (convo.leaving) {
     outcome.leaving = true;

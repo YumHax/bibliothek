@@ -43,6 +43,8 @@ export interface Acquisition {
   where: string;
   /** The market day it was bought on (see `MarketCalendar`). */
   day: number;
+  /** A swap's whole cost (the coins added and what the game given counted for): what a dealer reads as paid for it. */
+  worth?: number;
 }
 
 /** Physical box size in metres (width, height, depth) — drives the 3D geometry. */
@@ -105,6 +107,11 @@ export interface Game {
    * of his flat (1 to 412). A keepsake: the WE BUY desk refuses it.
    */
   felixLot?: number;
+  /**
+   * One of Félix's round F.A. stickers from the half roll Mémé gave (`grandma/stickerRoll`), put on the back of a game
+   * that came home after it: the player finishing his roll.
+   */
+  hisSticker?: boolean;
   /** Where and for how much the player got it; absent for games from before receipts were kept. */
   acquired?: Acquisition;
   /**
@@ -114,7 +121,7 @@ export interface Game {
   externalIds?: {
     /** No-Intro style name used by libretro-thumbnails (without extension). */
     libretroName?: string;
-    igdbId?: number;
-    theGamesDbId?: number;
   };
+  /** How many can play at once, as the back of the box prints it ("1-2"); absent when it is not known. */
+  players?: string;
 }

@@ -165,6 +165,22 @@ export class Journal {
   /** Adds a line to today, an ordinary `line` unless `weight` says otherwise. */
   note(kind: JournalKind, text: string, options: NoteOptions = {}): void {
     const page = this.page();
+    // The page full, a line that weighs more than a plain note (a headline above all) takes the place of the oldest note.
+    if (page.entries.length >= MAX_ENTRIES && options.weight !== 'note') {
+      const rank = (w: JournalWeight | undefined): number => (w === 'headline' ? 2 : w === 'note' ? 0 : 1);
+      const mine = rank(options.weight);
+      const i = page.entries.findIndex((e, n) => n < MAX_ENTRIES && rank(e.weight) < mine && !(typeof e.data?.more === 'number'));
+      if (i >= 0) {
+        page.entries.splice(i, 1);
+        // The closing "…and N more" stays last, the new line goes in before it.
+        const closing = typeof page.entries[page.entries.length - 1]?.data?.more === 'number' ? page.entries.pop() : undefined;
+        const { weight, data } = options;
+        page.entries.push({ kind, text, at: this.stamp(), ...(weight && weight !== 'line' ? { weight } : {}), ...(data ? { data } : {}) });
+        if (closing) page.entries.push(closing);
+        this.commit();
+        return;
+      }
+    }
     if (page.entries.length >= MAX_ENTRIES) {
       // The page is full: one closing line counts what came after, so a busy day says so rather than losing it in silence.
       const over = page.entries[MAX_ENTRIES];

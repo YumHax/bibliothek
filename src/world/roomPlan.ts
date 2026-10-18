@@ -84,6 +84,8 @@ export const ROOM_PLAN = {
 
   /** CRT on its console stand against the left wall, screen facing +x. */
   tv: { floor: [-2.7, 0], rotationY: Math.PI / 2 } as Placement,
+  /** On the console stand's top, left of the set (stand-local, its front +z): the game to play next, set down for the day. */
+  standStray: { at: [-0.54, 0.02] as [number, number], yaw: 0, jitter: { yaw: 0.06, offset: 0.008 }, where: 'the TV stand' },
   /** Ceiling projector a metre left of centre, throwing +x; sold by the TV repair shop. */
   projector: { ceiling: [-1, 0], rotationY: Math.PI / 2 } as Placement,
   projectorUpgrade: 'projector' as Owned,

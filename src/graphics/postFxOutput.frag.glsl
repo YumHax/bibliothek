@@ -27,6 +27,10 @@ uniform vec2 uvLimit;
 uniform vec3 shadows;
 uniform vec3 highlights;
 uniform float vignette;
+// The room in shade round the box being examined (`graphics/readingDim`): how dark (0..1), the disc's centre (uv) and radius (share of the height).
+uniform float readingDim;
+uniform vec2 readingAt;
+uniform float readingRadius;
 uniform float grain;
 uniform float sharpen;
 // 0 ACES .. 1 Khronos PBR Neutral (`Look.neutralTone`): Neutral keeps saturated print colours where ACES whitens them.
@@ -161,6 +165,10 @@ void main() {
   vec2 q = (vUv - 0.5) * vec2(aspect, 1.0);
   float corner = length(q) / length(vec2(aspect, 1.0) * 0.5);
   float veil = 1.0 - vignette * smoothstep(0.35, 1.05, corner);
+  if (readingDim > 0.001) {
+    float fromBox = length((vUv - readingAt) * vec2(aspect, 1.0));
+    veil *= 1.0 - readingDim * smoothstep(readingRadius, readingRadius * 1.9 + 0.3, fromBox);
+  }
   float alpha = 1.0 - (1.0 - texel0.a) * veil;
   color *= veil;
 

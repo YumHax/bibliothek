@@ -72,7 +72,7 @@ export const BEDROOM_PLAN = {
    * lamp (base r 0.06 at [0, 0.18]) and across from the phone: stand-local [x, z] on the top, and its turn. The top is
    * small: the box lies nearly square, a centimetre off at most, so it stays on it and clear of the lamp's foot.
    */
-  strayBox: { stand: 0, at: [0.1, 0.33] as [number, number], yaw: Math.PI / 2 + 0.15, jitter: { yaw: 0.1, offset: 0.008 } },
+  strayBox: { stand: 0, at: [0.1, 0.33] as [number, number], yaw: Math.PI / 2 + 0.15, jitter: { yaw: 0.1, offset: 0.008 }, where: 'the nightstand' },
   /**
    * The neighbours heard through the party wall (the right wall): where their muffled voices come from, just in front of
    * the wall at head height beside the bed. It is inside the room so the wall is not counted twice; the voice is muffled itself.
@@ -95,6 +95,8 @@ export const BEDROOM_PLAN = {
   bookcase: { at: { wall: 'left', along: -0.82, y: 0, offset: 0.16 } as Placement, width: 0.98 },
   /** The kit leaning where the bookcase will stand, until it is bought. */
   bookcaseKit: { wall: 'left', along: -0.82, y: 0 } as Placement,
+  /** The games no shelf has room for (before Mrs Roux's rooms join the flat), stacked flat in front of the bookcase slot. */
+  boxPile: { wall: 'left', along: -0.82, y: 0, offset: 0.6 } as Placement,
   /** Where the cat comes to look round: the rug at the foot of the bed, the passage by the wardrobe. */
   catVisits: [
     [0.4, 0.65],

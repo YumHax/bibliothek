@@ -46,10 +46,10 @@ export function addSaveFileSettings(host: SettingsHost, options: SaveFileOptions
   const loadFrom = async (file: File): Promise<void> => {
     const read = readSaveFile(await file.text());
     if (!read.ok) {
-      host.confirm({ title: 'Not a save', message: read.reason, yes: 'OK', onYes: () => undefined });
+      host.confirm({ title: 'That file is not a save', message: read.reason, yes: 'OK', info: true, onYes: () => undefined });
       return;
     }
-    const when = read.file.exportedAt ? ` written on ${read.file.exportedAt.slice(0, 10)}` : '';
+    const when = read.file.exportedAt ? ` written ${savedWhen(read.file.exportedAt)}` : '';
     const games = read.games ? ` (${formatCount(read.games, 'game')})` : '';
     host.confirm({
       title: 'Load this save?',
@@ -66,21 +66,58 @@ export function addSaveFileSettings(host: SettingsHost, options: SaveFileOptions
   saveGroup.append(picker);
   host.addSetting('game', 'Save file', saveGroup, 'Your progress as a file: keep a copy, or carry it to another browser. Loading one replaces this browser’s progress.');
 
-  const cardButton = action('Collection card (PNG)', () => {
+  // The card is drawn first and shown here (the picture as it will be sent); "Save the picture" keeps it.
+  const preview = document.createElement('figure');
+  preview.className = 'menu__share-preview';
+  preview.hidden = true;
+  const previewImg = document.createElement('img');
+  previewImg.alt = 'Your collection card';
+  const previewSave = action('Save the picture', () => {
+    if (drawn) download(`bibliothek-collection-${fileDate()}.png`, drawn);
+  });
+  preview.append(previewImg, previewSave);
+  const shareNote = document.createElement('p');
+  shareNote.className = 'menu__note';
+  let drawn: Blob | null = null;
+  let previewUrl: string | null = null;
+  const cardButton = action('Collection card (picture)', () => {
     const label = cardButton.textContent;
     cardButton.textContent = 'Drawing the card…';
     cardButton.setAttribute('disabled', '');
+    shareNote.textContent = '';
     void collectionCard(options.summary(), options.coverUrl, WHO)
-      .then((blob) => download(`bibliothek-collection-${fileDate()}.png`, blob))
-      .catch((err) => console.warn('[share] the card could not be drawn', err))
+      .then((blob) => {
+        drawn = blob;
+        if (previewUrl) URL.revokeObjectURL(previewUrl);
+        previewUrl = URL.createObjectURL(blob);
+        previewImg.src = previewUrl;
+        preview.hidden = false;
+        previewSave.focus({ preventScroll: true });
+      })
+      .catch((err) => {
+        console.warn('[share] the card could not be drawn', err);
+        shareNote.textContent = 'The card could not be drawn this time (the covers would not load). Try again in a moment.';
+      })
       .finally(() => {
         cardButton.textContent = label;
         cardButton.removeAttribute('disabled');
       });
   });
-  const pageButton = action('Collection page (HTML)', () => {
+  const pageButton = action('Collection page (web page)', () => {
     const html = collectionPage(options.summary(), options.publicCoverUrl, WHO);
     download(`bibliothek-collection-${fileDate()}.html`, new Blob([html], { type: 'text/html' }));
   });
-  host.addSetting('game', 'Share your collection', group(cardButton, pageButton), 'A picture of your shelves (every cover, the counts, the worth), or a web page of the whole collection to keep or send.');
+  const shareGroup = group(cardButton, pageButton);
+  shareGroup.append(preview, shareNote);
+  host.addSetting('game', 'Share your collection', shareGroup, 'A picture of your shelves (every cover, the counts, the worth), or a web page of the whole collection to keep or send.');
+}
+
+/** When a save file was written, in words: "today", "yesterday", "on 3 October 2026". */
+function savedWhen(iso: string): string {
+  const at = new Date(iso);
+  if (Number.isNaN(at.getTime())) return '';
+  const days = Math.round((new Date().setHours(0, 0, 0, 0) - new Date(at).setHours(0, 0, 0, 0)) / 86_400_000);
+  if (days === 0) return 'today';
+  if (days === 1) return 'yesterday';
+  return `on ${at.toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' })}`;
 }

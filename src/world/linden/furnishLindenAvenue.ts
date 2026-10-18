@@ -20,6 +20,7 @@ import { Bollards } from './Bollards';
 import { WorksFences } from './WorksFences';
 import { LindenStop } from './LindenStop';
 import { BakeryCounter } from './BakeryCounter';
+import { TilleulWindow } from './TilleulWindow';
 import { DepotTable } from './DepotTable';
 import { DogWalk } from './DogWalk';
 import { MemeOffTheBus } from './MemeOffTheBus';
@@ -80,6 +81,9 @@ export function furnishLindenAvenue(zone: Zone, ctx: BuildContext): ZoneHandle {
   for (const [offer, x] of [['baguette', bakery.door], ['croissant', bakery.window]] as const) {
     zone.place(new BakeryCounter({ offer, name: bakery.name, hours: bakery.hours, closedWeekday: bakery.closedWeekday, bread: ctx.grandmaBread ?? null, day, hour: hours }), at([x, PLAN.lines.hers]), 0);
   }
+
+  // LE TILLEUL across the avenue: its owner's word through the glass, and what the café saw before the sale.
+  zone.place(new TilleulWindow({ family: ctx.family ?? null, hour: hours }), at(PLAN.tilleul.at), PLAN.tilleul.yaw);
 
   // The dépôt-vente's trestle on the pavement.
   const { depot } = PLAN;

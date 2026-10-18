@@ -63,6 +63,14 @@ interface Saved {
  * knock, her line, the cat on the mat); found and walked home, it sometimes brings something back in
  * its mouth (`addCatFind` first: the treasure hunt's clues). An empty prop; placed in the stairwell's zone.
  */
+/** `?debug` (the panel's "Send the cat out"): the next frame the cat goes, whatever the door, the day or the draw. */
+let forcedOut = false;
+
+/** `?debug`: the cat slips out now, to one of its spots (`forcedOut`). */
+export function forceCatOut(): void {
+  forcedOut = true;
+}
+
 class CatEscapes extends Prop implements Updatable {
   readonly contactShadow = false;
   private openFor = 0;
@@ -95,6 +103,10 @@ class CatEscapes extends Prop implements Updatable {
       this.tried = true;
       this.maybeGo();
     }
+    if (forcedOut) {
+      forcedOut = false;
+      this.maybeGo(true);
+    }
     const out = cat.out;
     const isOut = out?.isOut ?? false;
     if (isOut && !this.wasOut) this.told();
@@ -110,14 +122,17 @@ class CatEscapes extends Prop implements Updatable {
     this.untip?.();
   }
 
-  private maybeGo(): void {
+  /** The door stood open: maybe the cat goes (`forced`, the debug panel's: whatever the distance, the day and the draw). */
+  private maybeGo(forced = false): void {
     const { cat, day, building } = this.options;
     if (!cat.mayGoOut) return;
     cat.getWorldPosition(this.here);
-    if (this.here.distanceTo(this.inside) > plan.reach) return;
     const today = day();
-    if (this.saved.lastDay !== null && today - this.saved.lastDay < plan.everyDays) return;
-    if (random() >= plan.chance) return;
+    if (!forced) {
+      if (this.here.distanceTo(this.inside) > plan.reach) return;
+      if (this.saved.lastDay !== null && today - this.saved.lastDay < plan.everyDays) return;
+      if (random() >= plan.chance) return;
+    }
     const spot = this.pick();
     if (!spot) return;
     if (!cat.goOut(building, spot, (how, found) => this.ended(how, found))) return;

@@ -71,6 +71,8 @@ export interface ArcadeGame {
   readonly demoable?: boolean;
   /** The play ended with nothing reported through no fault of the player's (LexiPunk's page sent no score): the coin goes back. */
   readonly unreported?: boolean;
+  /** The feats this play pulled off (a PERFECT WAVE, ALL HOME, a RALLY OF 10…): what a feat challenge asks for. */
+  readonly feats?: readonly string[];
   /** A two-player game: who holds the second stick ('CPU' when nobody does) and how well they play (0..1). */
   setOpponent?(name: string, skill: number): void;
   /** What the second player's hands are doing this frame (the cabinet's second stick follows it). */

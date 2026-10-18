@@ -79,8 +79,8 @@ function aheadHtml(ctx: PageContext): Html | '' {
   const c = ctx.options.challenge?.();
   if (c) {
     const title = ctx.options.titleOf?.(c.gameId) ?? c.gameId.toUpperCase();
-    const ask = c.kind === 'twice' ? `${formatNumber(c.target)} twice` : c.kind === 'total' ? `${formatNumber(c.target)} in all` : formatNumber(c.target);
-    lines.push({ kind: 'arcade', text: c.done ? `Challenge on ${title}: beaten ✓` : `Challenge: ${ask} on ${title}, for ${c.reward} bonus tickets`, inDays: 0 });
+    const ask = c.ask;
+    lines.push({ kind: 'arcade', text: c.done ? `Today’s challenge on ${title}: beaten` : `Today’s challenge: ${ask} on ${title}`, inDays: 0 });
   }
   lines.push(...(ctx.options.upcoming?.() ?? []));
   if (!lines.length) return '';

@@ -80,9 +80,25 @@ touching anyone the player talks to. (Social v2, 2026-10-17: the design is the "
   `endConversation`). No hidden draw decides: the same thing said to the same person in the same mood lands the same
   way. Gifts (`giveGift`, `giveGame`, `giveCoins`) count one a day; a game given leaves a memory with its cover.
   `onInteraction` hears every choice (favours, birthdays, witnesses, the rival).
+- **Topics that keep going.** A friend hears a third answer once the others are told (`PersonTopic.deeper`, laid on
+  from `people/deeper.ts`); the light people have a second topic from Regular (`people/lightTopics.ts`). What is going
+  on brings its own topics, once each (`topicSources.addTopicSource`): the power cut, Mrs Roux's flat for sale,
+  Mr Lambert's sale (`life/buildingTalk.ts`), a quarrel on the stairs (`conflicts.ts`), each answered by temperament
+  (the gossip all ears, the grumbler grumbling). A topic brought up again within `TALK.repeatDays` gets a "you asked
+  me that yesterday" (`REPEAT_LINES`, or the card's `repeat`) before the answer, or instead of it once it has gone flat.
+- **Whose words** (`voices.ts`): a card's own `lines`, then their trade's (`TRADE_LINES`), then their strongest trait's
+  voice: thanks for a gift, glad news, their birthday, an insult's hurt, a second hello the same day (`twice`), the
+  phone's first word (`call`). Grumpy Mr Leclerc does not say "You dear thing". The player's small talk and jokes are
+  picked per person, and a joke has its punchline. Nobody is offered an insult for their grandmother or a child.
+  Asking for a number takes their mood: on a bad day they put it off.
 - **Their first word** (`opening`): the introduction the first time, a cold or hostile word, their birthday, once a day
-  what they would like when stamps hold them, now and then a memory called back ("Remember when you lent me Zelda?",
-  `CALLBACK_LINES`; a grudge's `GRUDGE_LINES`), their mood when it is not fine, else their hello. `farewell` by warmth.
+  what they would like when stamps hold them, "Twice in one day!" in a second conversation, now and then a memory called
+  back ("Remember when you lent me Zelda?", `CALLBACK_LINES`; a grudge's `GRUDGE_LINES`; `recall.memoryToRecall`: the
+  least called back first), once a week their keepsake on the fridge (`KEEPSAKE_LINES`), now and then a word on what the
+  player has on (`outfitRemarks`: the arcade tee, the jacket, the Sunday best, Mémé's scarf, in their manner; once a
+  game day, never family), their mood when it is not fine
+  in their own words (`moodLines.MOOD_SAYS`, keyed by the cause; the light people's causes by trade, `TRADE_MOODS`), else
+  their hello. `farewell` by warmth.
 - **Extending**: a feature adds entries to anyone's conversation with `extras.addExtras(ctx => TalkExtra[])`, and
   threads (what someone waits for, `threads.addThreadSource`).
 
@@ -133,13 +149,16 @@ each own a `SocialSelf`.
   second after.
 - **Before the click**: `anticipate(fit)`: leaning in with the brows up for what they love, a half smile, a look aside
   for "meh", a wince and a lean back.
-- **After it**: `react(reaction, strength)` in their own measure (temperament, `PersonModel.socialReact`): a laugh or a
-  chuckle, a clap or a nod, joined hands for thanks, a glance away, a head shake, a wince. Reactions come once their
-  line is said, never mid-line.
+- **After it**: `react(reaction, strength, manner)` in their own measure (temperament, `PersonModel.socialReact`): a laugh
+  or a chuckle, a clap or a nod, joined hands for thanks, a glance away, a head shake, a wince. Their manner
+  (`voices.mannerOf`, from the traits: gruff, shy, proud, lively, warm; `repertoire.Manner`) shapes it: the gruff keep to
+  a nod, the shy cover a laugh with a hand and look away, the proud straighten up, the lively clap and pump a fist, the
+  warm join their hands; it sizes the face before the click too. Reactions come once their line is said, never mid-line.
 - **Kept**: while the conversation is open (`hold`), a passer-by stays and keeps their eyes on the player.
 - **Passing**: within 8 m, once a pass, they greet by tier: a look away (hostile), eyes avoided (cold), a glance and
-  "Hello." (polite), a nod (acquaintance), a wave and their hello (friendly), a friend slowing, a close friend stopping
-  turned to the player. Someone with a word for the player (`threads.hasWordFor`) then beckons.
+  a word by their manner (polite: "Hm.", "…Hello.", "Hiya!"), a nod (acquaintance), a wave and their hello (friendly),
+  a friend slowing, a close friend stopping turned to the player; on a bad day only the look. Someone with a word for
+  the player (`threads.hasWordFor`) then beckons. On the stairs the residents' old plan hello is not said on top of it.
 
 ## Your news (`news.ts`, `newsSources.ts`)
 
@@ -160,8 +179,12 @@ open houses, the club's visit.
   Refusing costs nothing. Mémé never asks one and never loses anything over one.
 - Favours (`favoursPlan.FAVOURS`): on a new game day someone met at Acquaintance or warmer, without one going, may ask
   (`odds`, `perDay` across everyone in a fresh order each day, `gapDays` between one person's): fetch, find a game,
-  lend one, check in at their door, carry a parcel up from the lodge. Someone Hostile or worse offers a make-amends
-  favour once; done, they are civil again at least.
+  lend one, check in at their door, carry a parcel up from the lodge. The player can offer too: "Anything I can do for
+  you?" (every `askEveryDays` per person, to someone at Acquaintance or warmer with nothing going) draws one there and
+  then (a favour of theirs just done: "Nothing just now"), so a stamp can be earned when it is wanted. Their ask, yes
+  and no come in their voice (`FAVOUR_VOICES`, `FAVOUR_ANSWERS`: an elder, a kid, at work, an old friend, the gruff).
+  Someone Hostile or worse offers a make-amends favour once (a fetch when the kind drawn has nothing to ask: the way
+  back is never spent for nothing); done, they are civil again at least. The open house's guests ask none (`occasional`).
 - The vote promised before a co-owners' meeting (each resident with a stance asks while the ballot is open) and the
   espresso owed on a lost wager are promises too. `promisesOf` / `promiseCounts` read them all.
 - **Threads** (`threads.ts`): what someone waits for, in their words: a promise going (a ticket with its due), a need
@@ -174,8 +197,12 @@ Three quarrels (docs/building.md "The quarrels"): the noise (Leclerc against Th�
 against Pascal), the hunt (Mrs Haddad against Victor). Each starts once both sides are met; while it runs their ties
 part further (`lifeStore.tieOffset`). Each side tells its version when asked, then asks the player to take its side
 (held): `CONFLICT.won` (warmth and a stamp) for one, `CONFLICT.lost` for the other, seen by any witness. Left alone it
-lapses after `lapseDays` (each cools a little). Then the winner's word on how it ended, the loser's grudge, and after
-`wayBackDays` the loser's way back. The cards' ties for these pairs are strong both ways (-0.7, -0.5, -0.5).
+lapses after `lapseDays` (each cools a little). A friend of both who has heard both sides can get them to make up
+(`ConflictPlan.peace`: `CONFLICT.peace` to each, a stamp, the distance between them gone). Then the winner's word on how
+it ended, the loser's grudge, and after `wayBackDays` the loser's way back. While it brews the rest of the building talks
+of it (`ConflictPlan.talk`, a topic). The noise row settled for Mr Leclerc, or made up, quietens the attic for good
+(`perks.addEffectSource`: `quietAttic`, read by `neighbourNoisePlan`'s `softer`). The cards' ties for these pairs are
+strong both ways (-0.7, -0.5, -0.5).
 
 ## Witnesses (`witnesses.ts`, `presence.ts`)
 
@@ -211,7 +238,8 @@ what a tier change brought. Rules shared by everything here:
   nothing mid-conversation (`talkState.onTalkEnd`). Friend or Close, for the building's people and the old friends: they
   come up to the flat's door one evening when the player is home (17:00-22:30; any waking hour after two days), knock
   (`StairLife.visitor` with their own look), say two or three lines, hand over the keepsake with a gesture (Close: an
-  invitation, and a photo of the two of them); the reward banner comes once they have gone back down. Unanswered, the
+  invitation, and a photo of the two of them), a slip showing it drawn as it will hang on the fridge
+  (`SceneStage.keepsakePicture`: `kitchen/keepsakeTextures`); the reward banner comes once they have gone back down. Unanswered, the
   keepsake is slipped under the door with a word; after four days without a scene, it is posted. Everyone else posts
   theirs (an envelope on the hallway's mat, `Doorstep.slipNote`) and the banner shows at once. Friendly is a note under
   the door, once. A fall to Cold or lower is a letter in their hand under the door with what it costs now
@@ -257,7 +285,38 @@ conversation with place `phone` (what needs hands is not offered). Friends ring 
 days, between 10:30 and 20:30, someone deep or an old friend, a friend or closer, whose number the player has and who is
 free then (never over Mémé's ring, never while a conversation is open). Picked up in time, the conversation opens on
 their first word (`callerOpening`); let ring out, they leave a message (`KEYS.phoneCalls`): a red dot blinks on the
-phone until its panel plays the messages, each on a paper slip.
+phone until its panel plays the messages, each by the sender's face, dated in words ("yesterday, 14:00"); a message
+waiting opens the phone on Messages. Their first word is in their voice (`LineKey` 'call'), a message calls back a
+memory they keep (never a talk like any other). The stalls are rung by their stallholder's name ("Gégé, the NES
+stall").
+
+**On a call nobody passes the salt.** A conversation with place `phone` draws every line from its words for a call
+where the in-person ones need the player there (`conversation.ts` picks by place):
+- a topic's `phone` (`PersonTopic.phone`: `say`, `again`, `answers`, `deeper`, each in place of its own; `false`: not
+  offered on a call), as `topicHere` gives it ("Something smells good, Mémé!" becomes "What are you cooking on
+  Sunday, Mémé?", her blanquette told down the line); a fact's `phoneSays`;
+- their own words through `voices.voiced(id, key, 'phone')`: at each level (their card, their trade, their strongest
+  trait) the call's words first (`phoneLines`, `socialLines.TRADE_PHONE_LINES`, `voices` `TRAIT_PHONE_VOICES`), then
+  the others but for `hello`, `leaving` and `bye`, which a card or a trade only ever says standing there. Their hello
+  is how they pick up ("Allô? Allô? Oh, it's you, darling!"), their leaving lets the player go ("I'll let you go,
+  this must be costing you a fortune"), their goodbye is heard down the line as they hang up (`notices.say` once the
+  panel is gone); a first conversation that is a call opens on `phoneIntro`;
+- the shared pools' `PHONE_*` (`socialLines`: picking up, letting go, hanging up, a second call, small talk, an
+  apology, an insult, news, and the player's own small talk and teasing: "Nice to hear your voice", never "Nice to see
+  you"); no remark on what the player wears;
+- a place entry that needs hands (group `give` or `trade`: a favour handed in, a swap, a buy) is not offered
+  (`extras.extrasFor`), as gifts are not.
+The social sim fails on a line a call can show with words that need the player there (docs/checks.md "Social sim").
+
+The panel is drawn as the handset (`ui/household/phone.css`): a status bar with the game's clock, one app at a time
+(Contacts: who is free to talk, then who is not; Messages; Market: the stalls; Small ads; Invite: a friend today,
+everyone tonight, the paper) along a bar at the bottom (the arrows step through them), and a call screen over them
+for every ring (`phoneCall.ts`): the face big with rings pulsing out and the far end's tone (`audio/phoneRing`
+`playRingback`) for about two burrs, then what came of it. Someone who picks up opens the conversation (the phone goes
+down); nobody there rings on a little and says why under their name ("No answer"); a stallholder reads the table out
+(covers, prices, Put it aside for the deposit); a seller, a friend asked round or the paper answer in balloons by
+their faces (`phoneLines` reads the rules' `Name: “…”` answers back into balloons and notes). Hang up, Esc or B end
+a call; Put it down closes the phone.
 
 ## Mémé (`people/family.ts`, `grandmaSocial.ts`)
 
@@ -385,12 +444,17 @@ change; wired once from `bootstrap/world` (`wire.ts`). What was given once and w
   "Come to dinner" on Fridays 17-21. A beat in the dark (`household/Pastimes`, 150 min), warmth and trust, a card.
 - **Cat sitting** (`catSitter.ts`): Friend with the Moreaus and trusted, back from 5 game hours out with the cat's bowl
   under 0.4, they have filled it (`Cat.bowl.refill`) and left a note. Once a game day.
+- **Mrs Dubois' cake** (`duboisCake.ts`, `leavesCake`): Friend and trusted, back from 4 game hours out, every 3 game
+  days at most: a slice of her lemon cake in the pocket (to give or share) and her note on the mat.
+- **Mrs Roux's door** (`curtAtDoor`, Cold): she no longer asks the player in (`neighbourFlat/visits`).
 - **The race** (`stairsRace.ts`): Friendly with Pascal, met 2 storeys or more below our landing, "Race you up!": back
   on our landing (world y 0) before his 6.2 s a storey pays 10 coins. One a day.
 - **Word of mouth** (`smallPerks.ts`): Sofia's "Anything in the post for me?" (`MailPost`) and a Comets tip a day (it
-  pays on the player's next COMET DASH game: `rossiCoaching` tickets, "a better first strip", `arcade/guestDays`); the
-  postman's, Pascal's (carrying) and the Nguyens' (the spare pad) offers are lines only: the flat's furniture has no
-  weight and a games night no pad limit to lift.
+  pays on the player's next COMET DASH game: `rossiCoaching` tickets, "a better first strip", `arcade/guestDays`). The
+  postman (`carriesUp`, Friend) brings the parcels up a round sooner whatever the lodge thinks
+  (`socialBuilding.parcelDelayHours`); Pascal (`helpsCarry`) carries the furniture shop's pieces up: no delivery in its
+  prices (`streetPerks.shopFactor`, with Marco's van and Sam's arms); the Nguyens' spare pad (`lendsPad`) makes games
+  night winner-stays-on, everyone taking a turn as player two, one match more.
 
 ## The market, the saleroom, the small ads (`social/market.ts`, `social/saleroom.ts`, `social/sellers.ts`)
 
@@ -457,7 +521,8 @@ as having met him (`RivalCollector.meet`).
 ## Friends (`world/visitors/friendSocial.ts`, `social/friendsLife.ts`)
 
 Sam, Inès and Marco on a visit are talkable (`Friend.talker`, place `flat`): a click turns them to the player and
-opens the conversation; a game they asked to borrow is its first entry ("They ask to borrow …", the `BorrowPanel`).
+opens the conversation; a game they asked to borrow is its first entry ("You’d like to borrow …?", `FriendRequest.say`,
+the `BorrowPanel`).
 - **What moves them.** The door opened (+3 a day), a game lent (+4 warmth, +5 trust, a memory), a loan refused
   (−2), the bell unanswered (−2), their loan brought back (+2), cake (+4), a games night with a match (+5 each).
   A game one of them gave (`a gift from Sam`) leaving the collection, sold, swapped or given away (`watchGifts`):
@@ -465,13 +530,17 @@ opens the conversation; a game they asked to borrow is its first entry ("They as
 - **Perks.** `lendsGames` (Friend): "Borrow one of their games": a game of their taste the player lacks joins the
   collection for 5 game days (`friendsLife.borrow`; `Transactions.isKeepsake` keeps it off every desk, stall,
   swap and gift), then goes back with a note on the mat (`returnBorrowed`; a copy the player bought meanwhile stays).
-  `helpsCarry` (Marco Friendly, Sam Friend): a hand with the furniture (a tip on moving it). `arcadePartner`
+  `helpsCarry` (Marco Friendly, Sam Friend): the furniture shop's prices without delivery (see the building's perks). `arcadePartner`
   (Marco): "Fancy the arcade tomorrow?" fixes the next game day (`friendsLife.arcadeDate`): that afternoon he is in
   the hall (`arcade/guestDays`), takes player two at PADDLE WARS and signs MAR on its table; a game together, +2. `postcards` (Inès Friendly): a postcard now and then on a new day at home,
   sometimes with a game (`maybePostcard`). `dropsBy` (Close): an unannounced visit outside the usual round
   (`VisitBook.plan`, `PlannedVisit.dropBy`) with a game they found. `takesSide` (Close): "Could you have a word
-  with …?" for the coldest person met, once a week per friend (+8 warmth to them).
-- **Penalty.** `stopsVisiting` (Cold): out of the day's draw and the phone's invitation; a loan still comes back.
+  with …?" for the coldest person met that they know (someone they are tied to and like, or the building's people;
+never someone they can't stand), once a week per friend (+8 warmth to them). A game borrowed from them goes back with
+their own note; one gone from the collection costs (−6 warmth, −8 trust). Inès writes from every place once before any
+twice (`friendsLife.postcardPlacesSent`).
+- **Penalty.** `stopsVisiting` (Cold): out of the day's draw, the phone's invitation and games night (they say no on
+  the phone); a loan still comes back.
 
 ## Front Street and the arcade (`social/street/streetPerks.ts`, `street/shops/baristaTalk`, `shop/clerkTalk`, `arcade/arcadeTalk`)
 
@@ -536,7 +605,9 @@ with (a `Walker` adds 200 to its seed: the busker's 77 is 277, Nico's 23 is 223)
 - **Gifts from the street**: a coffee and a slice of cake to take away at either café ("A coffee to take away" in the
   barista's conversation: `errands` `coffee`, `cake`, into the pocket); the claw's bunnies from the prize shelf
   (`social/street/plushGifts`: what was won less what was given; the shelf still shows them). A game wrapped at the
-  Christmas stall (`holidays/giftWrap`) comes first in "A game…" and means more given (`WRAPPED_GIFT`); a card posted
+  Christmas stall (`holidays/giftWrap`) comes first in "A game…" (then every givable game by title, seven a page,
+  "Others on your shelves…" turning it; never by fit: their face on hover is the only hint) and means more given
+  (`WRAPPED_GIFT`); a card posted
   in Front Street's pillar box warms a friend or family member once a game week (`post/cards`).
 
 ## Favours, birthdays, introductions, go-betweens (`social/life/`, saved under `KEYS.socialLife`)
@@ -545,7 +616,8 @@ Started once by `bootstrap/social` (`life/startLife.startSocialLife`); the journ
 promised and the birthdays coming (`upcomingSocial`).
 - **Favours** (`favours.ts`, data `favoursPlan.ts`): the promises' engine (see "Promises" above). It shows in their
   conversation as "What can I do for you?"; asked, then "I'll do it" (a promise) / "Sorry, I can't" (an offer lapses
-  after `offerDays`, nothing lost). Kinds: `fetch` (bring a croissant, flowers or treats: given through Give),
+  after `offerDays`, nothing lost). Kinds: `fetch` (bring a croissant, flowers, a coffee, cake, or cat treats from
+  someone with a cat: given through Give),
   `findGame` (a seed game to their taste the player lacks, within a week), `lend` (one of the player's games to their
   taste, `lent` for `lendDays`, then back on its shelf), `checkIn` (knock on their door within a few days),
   `parcel` (collect it at Mme Pereira's, then hand it over). A yes pins a To-do tip and a journal line. Completion

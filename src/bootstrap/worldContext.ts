@@ -123,6 +123,7 @@ export function makeBuildContext(services: Services, parts: ContextParts): Build
         notices: flat.notices,
         catName: () => services.catSettings.settings.name,
         callCat: () => callCatFor(cat.get(), 'treats'),
+        smellToast: () => cat.get().adopted !== false && callCatFor(cat.get(), 'voice').came,
         pastimes,
         boxOf: (gameId) => strays.homeBox?.(gameId),
       },

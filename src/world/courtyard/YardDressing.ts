@@ -296,9 +296,8 @@ export class YardDressing extends THREE.Group implements Furniture, Updatable {
     this.add(cylinderMesh(0.075, 0.12, paint(0xd83a2a, 0.45), { x: bucket[0], y: sand + 0.06, z: bucket[1] }, { radiusBottom: 0.055 }));
     const spade = part(this, 0.06, 0.008, 0.26, paint(0x2a6ad8, 0.45), { x: bucket[0] + 0.18, y: sand + 0.03, z: bucket[1] + 0.05 });
     spade.rotation.set(0.12, 0.6, 0);
-    const b = new THREE.Mesh(new THREE.SphereGeometry(0.1, 18, 12), paint(0xe8b820, 0.5));
-    b.position.set(ball[0], 0.03 + 0.1, ball[1]);
-    this.add(b);
+    // The ball is its own prop, to be kicked (`YardBall`): the builder places it at `ball`.
+    void ball;
   }
 
   private collide(x0: number, z0: number, x1: number, z1: number, high: number): void {

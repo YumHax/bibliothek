@@ -17,7 +17,9 @@ import { Vestibule } from './Vestibule';
 import { FavouriteGame } from './FavouriteGame';
 import { FlatDressing } from './FlatDressing';
 import { leaveFor } from './visits';
-import { NEIGHBOUR_FLAT_PLAN as plan } from './neighbourFlatPlan';
+import { NEIGHBOUR_FLAT_PLAN as plan, type TvCornerLayout } from './neighbourFlatPlan';
+import type { Furniture } from '../Furniture';
+import type { Placement } from '../Placement';
 import { FlatOutlook } from './FlatOutlook';
 import { buildingWindowLife } from '@/building/rearWindows';
 
@@ -29,7 +31,7 @@ import { buildingWindowLife } from '@/building/rearWindows';
  * (`FlatDressing`: their paint, furniture, shelf of their own games, themselves). One lamp, the TV's glow and nothing
  * else lights it, whoever the host: the scene's light count never changes with them.
  */
-export function furnishNeighbourFlat(zone: Zone, ctx: Pick<BuildContext, 'sky' | 'cssLayer' | 'covers' | 'listener' | 'acoustics' | 'today' | 'building' | 'collection' | 'market' | 'social'>): ZoneHandle {
+export function furnishNeighbourFlat(zone: Zone, ctx: Pick<BuildContext, 'sky' | 'cssLayer' | 'covers' | 'listener' | 'acoustics' | 'today' | 'building' | 'collection' | 'market' | 'social' | 'classifieds'>): ZoneHandle {
   const { sky, cssLayer, covers, listener, today } = ctx;
   const room = furnishShell(zone, sky, plan.room);
   placeRoomLight(zone, room, 'pendant', plan.lamp.at, plan.lamp.switchAt);
@@ -46,13 +48,27 @@ export function furnishNeighbourFlat(zone: Zone, ctx: Pick<BuildContext, 'sky' |
   // The TV and its side table (the favourite game on it), the armchairs facing it.
   const tv = zone.placeAt(new Television(cssLayer, heardBy(ctx)), plan.tv.at);
   const table = zone.placeAt(new SideTable({ radius: 0.3, covers: [], mug: 0xe8e2d4 }), plan.sideTable.at);
-  zone.placeAt(new Seat(), plan.seats.player);
+  const playerSeat = zone.placeAt(new Seat(), plan.seats.player);
   const hostSeat = zone.placeAt(new Seat(), plan.seats.host);
   let dressing: FlatDressing | null = null;
   const favourite = new FavouriteGame({ covers, screen: tv, who: () => dressing?.host.who ?? 'them', onWatch: () => dressing?.watching() });
   zone.place(favourite, table.position.clone().add(new THREE.Vector3(-0.08, table.topHeight, -0.06)), 0);
+  zone.ride(table, favourite);
   const tvAt = resolvePlacement(plan.room, plan.tv.at).position.clone().setY(1.0);
-  dressing = zone.place(new FlatDressing(zone, ctx, { room, vestibule, favourite, tvAt, hostSeat }), new THREE.Vector3());
+  // Each host's TV corner their own way round (`plan.layouts`): the same set, table and armchairs moved on the way in.
+  const arrange = (layout: TvCornerLayout): void => {
+    const corner = plan.layouts[layout];
+    const moveTo = (item: Furniture, at: Placement): THREE.Vector3 => {
+      const { position, rotationY } = resolvePlacement(plan.room, at);
+      zone.move(item, position, rotationY);
+      return position;
+    };
+    tvAt.copy(moveTo(tv, corner.tv)).setY(1.0);
+    moveTo(table, corner.sideTable);
+    moveTo(playerSeat, corner.seats.player);
+    moveTo(hostSeat, corner.seats.host);
+  };
+  dressing = zone.place(new FlatDressing(zone, ctx, { room, vestibule, favourite, tvAt, hostSeat, arrange }), new THREE.Vector3());
 
   // Out onto the landing, in front of their own door.
   const door = new TravelDoor({ style: 'entrance', mat: false, leafColor: 0xe8e2d4, label: 'Back to the landing · go out', to: 'stairwell', onGo: () => leaveFor(dressing!.host) });

@@ -59,14 +59,14 @@ export interface CardParts {
   stamp: HTMLElement;
   /** What the card changed: shown on the last page only. */
   effect: HTMLElement | null;
-  /** "…and 2 more notes": the queue's overflow, on the last page. */
-  more: HTMLElement | null;
+  /** "2 more to read": the cards waiting behind this one, on its last page (`ReadingCard` fills it). */
+  more: HTMLElement;
   /** The pill at the foot: "Turn over" or "Put down" with the key in hand (`setDismissVerb`). */
   hint: HTMLElement;
 }
 
 /** A card's markup for its look: the frame, the title, the body and the lines around it, empty until `ReadingCard` fills the page. */
-export function buildCard(card: ReadingNotice & { more?: number }): CardParts {
+export function buildCard(card: ReadingNotice): CardParts {
   const look = card.look ?? 'note';
   const el = document.createElement('article');
   el.className = 'reading';
@@ -115,13 +115,10 @@ export function buildCard(card: ReadingNotice & { more?: number }): CardParts {
     effect.textContent = card.effect;
     face.appendChild(effect);
   }
-  let more: HTMLElement | null = null;
-  if (card.more) {
-    more = document.createElement('p');
-    more.className = 'reading__more';
-    more.textContent = `…and ${card.more} more ${card.more === 1 ? 'note' : 'notes'}`;
-    face.appendChild(more);
-  }
+  const more = document.createElement('p');
+  more.className = 'reading__more';
+  more.hidden = true;
+  face.appendChild(more);
   const foot = document.createElement('div');
   foot.className = 'notice-foot';
   const hint = dismissHint();

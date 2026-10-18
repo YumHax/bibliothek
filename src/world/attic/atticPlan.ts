@@ -49,6 +49,8 @@ export interface AtticDoorPlan {
   who?: string;
   /** What a knock gets, in turn. */
   knock: string[];
+  /** What a knock gets once Théo next door is a friend (`social`: he shouts through the wall what is behind it), in turn. */
+  friendKnock?: string[];
   /** The student's music is heard behind it (`MusicUpstairs`, the bass the flat hears through its ceiling). */
   music?: boolean;
 }
@@ -75,12 +77,29 @@ export const ATTIC_PLAN = {
     { n: 1, x: -0.7, side: 'back', knock: ['Nothing. The keyhole is full of dust.', 'A draught under the door, cold as a cellar.'] },
     { n: 2, x: 1.0, side: 'back', who: 'the old WC', knock: ['The shared WC, from when the maids lived up here. Out of order since 1974, a card says.', 'A cistern drips somewhere behind it.'] },
     { n: 4, x: -0.7, side: 'front', knock: ['Silence. A name card on the door, faded past reading.', 'Pigeons, on the other side of it. Lots of pigeons.'] },
-    { n: 5, x: 1.0, side: 'front', knock: ['Locked. Someone has written TEMP. KEEP OUT in pencil.', 'Nobody. A radio crackles faintly, tuned to nothing.'] },
-    { n: 6, x: 2.65, side: 'front', who: 'the student', music: true, knock: ['The music stops. “Is that the landlord?” It starts again, louder.', 'A muffled “Not now, I’m mixing!”', '“Are you the one with all the old games downstairs? Cool. Busy, though.”'] },
-    { n: 7, x: 4.25, side: 'front', knock: ['Nobody. Under the door, a strip of daylight and a smell of paint.'] },
+    { n: 5, x: 1.0, side: 'front', knock: ['Locked. Someone has written TEMP. KEEP OUT in pencil.', 'Nobody. A radio crackles faintly, tuned to nothing.'], friendKnock: ['Théo, through the wall: “That’s my booth! The radio’s on purpose: I sample the static. Don’t touch the dial.”', 'The radio hisses on behind No 5. Théo’s booth, his TEMP. KEEP OUT in his own pencil.'] },
+    { n: 6, x: 2.65, side: 'front', who: 'the student', music: true, knock: ['The music stops. “Is that the landlord?” It starts again, louder.', 'A muffled “Not now, I’m mixing!”', '“Are you the one with all the old games downstairs? Cool. Busy, though.”'], friendKnock: ['The door opens a crack. “Oh, it’s you! Come in a sec, listen to this.” Ten minutes of a chiptune he is mixing, the drums too loud. You tell him. He is thrilled.', '“Perfect timing, I need ears.” A loop of square waves and a sample of a lift’s bell. Our lift’s bell. You nod along.', 'He hands you one side of his headphones through the door. A bass line that would rattle Mr Leclerc’s ceiling. “Too much?” A bit. “Perfect.”'] },
+    { n: 7, x: 4.25, side: 'front', knock: ['Nobody. Under the door, a strip of daylight and a smell of paint.'], friendKnock: ['Théo, through the wall: “No 7? Mr Rossi paints up there on Sundays. Landscapes. Terrible ones. Don’t tell him I said.”', 'Turpentine and daylight under the door: Mr Rossi’s Sunday studio.'] },
   ] as AtticDoorPlan[],
   /** The old service stair down, its door behind a wardrobe on the courtyard side. */
-  serviceStair: { x: 2.65, label: 'A wardrobe against the old service stair’s door', line: 'Somebody shoved a wardrobe against the service stair years ago. It will not budge, and it is full of something heavy.' },
+  serviceStair: {
+    x: 2.65,
+    label: 'A wardrobe against the old service stair’s door',
+    line: 'Somebody shoved a wardrobe against the service stair years ago. It will not budge, and it is full of something heavy.',
+    /** With the collector's chest open, its key ring has a small key that fits: the wardrobe opens, once, on his magazines and a spare of his. */
+    openLabel: 'The collector’s wardrobe · try the little key from his chest',
+    open: 'The little key from the chest’s ring turns. Inside, stacked to the top: games magazines, 1986 to 1994, every issue. And on the top shelf, a box he kept for best.',
+    after: 'The wardrobe’s doors stand open on his magazines. Still heavy: still not budging.',
+    where: 'the collector’s wardrobe, in the attic',
+    said: 'His spare. Nobody has touched it since.',
+  },
+  /** The cartridge down the side of the sheeted sofa: a Game Boy game, its label peeled off, his initials inside the shell. */
+  sofaCart: {
+    line: 'Green velvet, the colour of a billiard table. A cloud of dust, and down the side, a Game Boy cartridge with a blank label.',
+    where: 'down the side of the collector’s sofa',
+    said: 'No label. Someone peeled it off. A.V. in marker inside the shell.',
+    past: 'No label: someone peeled it off long ago. Inside the shell, in marker: A.V.',
+  },
   /** The roof hatch in the corridor's ceiling, its steel ladder fixed to the street-side wall under it. */
   hatch: { x: 1.83, z: -1.2, width: 0.6, depth: 0.6 },
   /** The bulbs over the corridor (x), a real light at the first, its colour and strength; the collector's room's lamp. */
@@ -90,7 +109,7 @@ export const ATTIC_PLAN = {
   /**
    * The lift's code, pressed on the car's panel by the floors' names (`STAIRWELL_PLAN.floorNames`) one after
    * the other, each within `gap` seconds of the last: the car then climbs past our landing to the attic.
-   * Scratched into the car's back panel, half under the mirror (and told round the building as a rumour).
+   * Scratched as tally strokes into the mirror's lower edge, among other scratches (`stairwell/liftAttic`); the hunt gives it whole.
    */
   liftCode: { floors: ['4th', '2nd', '5th', '2nd', '1st', 'G'], gap: 6 },
   /** The ride up past our landing before the view goes dark (m, m/s). */

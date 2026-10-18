@@ -1,13 +1,13 @@
 import * as THREE from 'three';
-import type { Game } from '@/catalog/types';
-import { boxDimensionsOf } from '@/catalog/media';
+import type { BoxDimensions, Game } from '@/catalog/types';
+import { boxDimensionsOf, isLandscape } from '@/catalog/media';
 import type { BoxArtLoader } from '@/covers/BoxArtLoader';
 import type { GameSource } from '@/collection/GameSource';
 import { GameList } from '@/collection/GameList';
 import type { RoomOptions } from '../Room';
 import type { Furniture } from '../Furniture';
 import { GameBox } from '../GameBox';
-import { PLINTH, Shelf } from '../Shelf';
+import { PLINTH, Shelf, SPINE_GAP } from '../Shelf';
 import { ShelfLamp } from '../props/ShelfLamp';
 import { BoxMotion } from './BoxMotion';
 import { LampFollow } from './LampFollow';
@@ -97,6 +97,14 @@ const DEFAULT_SPEC: Omit<BookcaseSpec, 'width' | 'rows'> = {
 
 /** A game's box size, without a box: the plan decides what fits before any box is made. */
 const dimensionsOf = (game: Game) => boxDimensionsOf(game);
+
+/**
+ * Whether a game's box may stand spine out: an upright one (a landscape box's spine runs along its top), and a box
+ * at all (a wish or a game lent out is a card in its gap, cover out).
+ */
+export function mayStandSpineOut(game: Pick<Game, 'platform' | 'region' | 'externalIds' | 'status'>): boolean {
+  return !isLandscape(boxDimensionsOf(game)) && game.status !== 'wishlist' && game.status !== 'lent';
+}
 
 /**
  * Owns every bookcase in the room. Sizes the shelving to the collection (as many bookcases as
@@ -249,7 +257,9 @@ export class Shelving {
 
   rebuild(): void {
     const games = dedupe(sortGames(this.source.games, this.mode));
-    const settings = `${this.mode}|${this.capacity}|${this.minBookcases}|${this.mode === 'custom' ? this.revision : ''}`;
+    // Which boxes stand spine out is part of the layout: a box turned (or lent, so a card again) lays its row out anew.
+    const turned = games.filter((game) => this.turned(game)).map((game) => game.id).join(',');
+    const settings = `${this.mode}|${this.capacity}|${this.minBookcases}|${this.mode === 'custom' ? this.revision : ''}|${turned}`;
     // Most changes (a status, another room's list) leave the same games in the same order: restyle, do not rebuild.
     if (this.laidOut && this.laidOut.settings === settings && sameLayout(this.laidOut.games, games)) {
       this.restyle(games, this.laidOut.leftover);
@@ -261,6 +271,8 @@ export class Shelving {
     const placed = plan.bookcases.flatMap((b) => b.rows.flatMap((r) => r.items));
     const boxes = this.takeBoxes(placed);
     const boxOf = (game: Game): GameBox => boxes.get(game.id)!;
+    // How each stands, from the fresh games (a reused box still holds the one it was built with, its old status).
+    for (const game of placed) boxOf(game).spineOut = this.turned(game);
     // The bookcases come out as they stand: they stay, and the boxes slide to their new spots.
     const inPlace = this.laidOut !== null && plan.bookcases.length === this.shelves.length && plan.bookcases.every((planned, i) => sameNumbers(planned.rowHeights, this.shelves[i]!.options.rowHeights));
 
@@ -323,7 +335,8 @@ export class Shelving {
       return planArranged<Game>({
         items: games,
         id: (game) => game.id,
-        dimensions: dimensionsOf,
+        dimensions: (game) => this.footprint(game),
+        gapBetween: (left, right) => this.gapBetween(left, right),
         arranged: arrangement.rowsOf(this.id),
         elsewhere: (id) => {
           if (!this.passesOn) return false;
@@ -337,12 +350,29 @@ export class Shelving {
     }
     return planShelving<Game>({
       items: games,
-      dimensions: dimensionsOf,
+      dimensions: (game) => this.footprint(game),
+      gapBetween: (left, right) => this.gapBetween(left, right),
       groupKey: (game) => rowGroupKey(game, this.mode),
       spec,
       maxBookcases: this.capacity,
       minBookcases: this.minBookcases,
     });
+  }
+
+  /** Whether `game`'s box stands spine out (the player turned it, and it may: `mayStandSpineOut`), in every sort. */
+  private turned(game: Game): boolean {
+    return (this.arrangement?.isSpineOut(game.id) ?? false) && mayStandSpineOut(game);
+  }
+
+  /** The room a game's box takes on a row, as it stands: spine out, its thickness along the row and its width deep. */
+  private footprint(game: Game): BoxDimensions {
+    const dims = dimensionsOf(game);
+    return this.turned(game) ? { width: dims.depth, height: dims.height, depth: dims.width } : dims;
+  }
+
+  /** The air between two neighbours, as `Shelf.placeRow` leaves it: two spines pressed close. */
+  private gapBetween(left: Game, right: Game): number {
+    return this.turned(left) && this.turned(right) ? SPINE_GAP : this.spec.gap;
   }
 
   private bookcaseSpec(games: readonly Game[]): BookcaseSpec {

@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { presentNear, registerPresence, type PresentBody } from '@/social/presence';
-import type { Fit } from '@/social/types';
+import type { Fit, Manner } from '@/social/types';
 import type { FaceKey, GestureName } from './motion/gestures';
 import type { Greeting, Mien, SocialHook } from './socialHook';
 
@@ -60,6 +60,16 @@ const ANTICIPATION: Record<Fit, { face: FaceKey; lean: number; aside: number }> 
   meh: { face: { smirk: 0.3, press: 0.25 }, lean: -0.02, aside: 0.5 },
   dislikes: { face: { press: 0.85, frown: 0.8, squint: 0.45, sad: 0.2 }, lean: -0.11, aside: 0.26 },
 };
+/** How a manner (`Mien.manner`) sizes the face before the click: the face, the lean, the look aside. */
+const MANNER_ANTICIPATION: Record<Manner | 'none', { face: number; lean: number; aside: number }> = {
+  none: { face: 1, lean: 1, aside: 1 },
+  gruff: { face: 0.6, lean: 0.5, aside: 0.8 },
+  shy: { face: 0.8, lean: 0.6, aside: 1.4 },
+  proud: { face: 0.8, lean: 0.7, aside: 0.7 },
+  lively: { face: 1.1, lean: 1.3, aside: 1 },
+  warm: { face: 1, lean: 1.1, aside: 0.9 },
+};
+
 /** What the cold do with their head passing (a look away, rad) and their face. */
 /** At least this long (s) between two curious head tilts. */
 const TILT_GAP_S = 2.5;
@@ -154,10 +164,12 @@ export class SocialSelf {
       return;
     }
     const a = ANTICIPATION[fit];
+    // Their manner sizes it: the gruff hardly move, the shy look away further, the lively lean right in.
+    const m = MANNER_ANTICIPATION[this.person?.mien().manner ?? 'none'];
     // Quicker in than out: the face answers the pointer at once, and eases back.
-    body.feel(this.scaled(a.face), 30, 0.25);
+    body.feel(this.scaled(a.face, m.face), 30, 0.25);
     if (!this.anticipating) this.asideSide = -this.asideSide;
-    body.attitude(a.lean, a.aside * this.asideSide);
+    body.attitude(a.lean * m.lean, a.aside * m.aside * this.asideSide);
     // Something they love: the head tilts, curious, once (not again for every balloon pointed at).
     if (fit === 'loves' && this.sinceTilt > TILT_GAP_S && !body.gesturing) {
       body.gesture('listenTilt');
@@ -333,8 +345,8 @@ export class SocialSelf {
   }
 
   /** A face in their own measure: the reserved show less of it. */
-  private scaled(face: FaceKey): FaceKey {
-    const amp = 0.7 + 0.4 * this.owner.body.expressiveness;
+  private scaled(face: FaceKey, by = 1): FaceKey {
+    const amp = (0.7 + 0.4 * this.owner.body.expressiveness) * by;
     const out: FaceKey = {};
     for (const [k, v] of Object.entries(face) as [keyof FaceKey, number][]) out[k] = Math.min(1, v * amp);
     return out;

@@ -11,12 +11,13 @@ import { errandOf } from '@/errands/errands';
 import { pocket } from '@/errands/pocket';
 import type { Pastime } from '@/household/pastime';
 import type { Outcome } from '@/household/HomeLife';
-import { nudge } from '@/social/standing';
+import { isMet, nudge } from '@/social/standing';
+import { findPerson } from '@/social/people';
 import { effectValue } from '@/social/perks';
 import { STREET_SHOPS } from '@/streetShops/rules';
 import { gameWeekOf, streetShops } from '@/streetShops/store';
 import { guidesOnShelf, lackingManuals, manualPrice, manualsInBox } from '@/streetShops/bookshop';
-import { barOf, boardBest, dartsOpen, gigOn, GIG_SETS, quizOn } from '@/streetShops/bars';
+import { barOf, checkoutPrize, dartsOpen, gigOn, GIG_SETS, quizOn, tonightsCheckout } from '@/streetShops/bars';
 import { quizRound, rivalsRight } from '@/streetShops/quizBank';
 import { BOARD_CARDS, boardAdOn } from '@/streetShops/laundryBoard';
 import { POP_UP_NAME, POP_UP_WHERE, popUpOpen, popUpOpened, popUpStock } from '@/streetShops/popUp';
@@ -30,6 +31,7 @@ import type { CounterDeal, CounterRow, CounterSection } from '@/ui/streetShops/C
 import type { QuizNight } from '@/ui/streetShops/PubQuizPanel';
 import type { DartsGo } from '@/ui/streetShops/DartsPanel';
 import type { ShopDoor, Vec2 } from '../streetPlan';
+import { SHOP_OWN_LOOKS } from './shopPlan';
 
 /** What a door does beyond its plain offer (`ShopEntrance`): its caption now, the entry it is in a shopkeeper's conversation, and its click. */
 export interface CounterTurn {
@@ -73,6 +75,12 @@ export const POP_UP_FACADE = 'n5';
 /** CORNER BOOKS' bookseller (`social/people/town`): her standing's discount, or markup, on the box's manuals. */
 const BOOKSELLER = 'bookseller';
 
+/** The name over a known shopkeeper's words on the counter: theirs once met, else `role`. */
+function keeperName(id: string, role: string): string {
+  const card = findPerson(id);
+  return card && isMet(id) ? (card.short ?? card.name) : role;
+}
+
 /** A manual's price at CORNER BOOKS as Agnès asks it of the player (a friend's discount, a cold markup). */
 function agnesPrice(base: number): number {
   return Math.max(1, Math.round(base * effectValue(BOOKSELLER, 'discount', 1) * effectValue(BOOKSELLER, 'markup', 1)));
@@ -101,15 +109,18 @@ export class StreetCounters {
     const facadeId = facade.id;
     const day = this.deps.day();
     const hours = this.deps.hours();
+    // The shops past the works with lines of their own (`SHOP_OWN_LOOKS`) are not the near ones' copies: no basket,
+    // tart or board of their own kind's; only their plain offer.
+    const own = shop.name !== undefined && shop.name in SHOP_OWN_LOOKS;
     switch (shop.kind) {
       case 'books':
-        return shop.name === 'CORNER BOOKS' ? this.manuals(name) : this.guides(name);
+        return shop.name === 'CORNER BOOKS' ? this.manuals(name) : shop.name === 'COMICS & MANGA' ? this.guides(name) : null;
       case 'grocer':
-        return this.basket(name, day, hours);
+        return own ? null : this.basket(name, day, hours);
       case 'bakery':
-        return this.tart(name, day);
+        return own ? null : this.tart(name, day);
       case 'laundry':
-        return this.board(name, day);
+        return own ? null : this.board(name, day);
       case 'bar': {
         const bar = barOf(shop.name);
         if (bar === 'anchor' && gigOn(day, hours)) return this.gig(name, day);
@@ -136,7 +147,9 @@ export class StreetCounters {
         const handed = this.handOverOrders();
         this.openCounter(session, {
           title: name.toUpperCase(),
-          says: () => handed ?? '“Loose manuals in the box by the till, sorted by nobody. If yours isn’t there, I can order it in.”',
+          paper: 'bookshop',
+          keeper: { id: BOOKSELLER, name: keeperName(BOOKSELLER, 'The bookseller') },
+          says: () => handed ?? 'Loose manuals in the box by the till, sorted by nobody. If yours isn’t there, I can order it in.',
           sections: () => this.manualSections(),
           coins: () => this.deps.purse.coins,
           take: (id) => this.takeManual(id),
@@ -183,13 +196,13 @@ export class StreetCounters {
     const life = this.deps.homeLife;
     const [kind, gameId] = id.split(/:(.+)/) as [string, string];
     const game = this.deps.games().find((g) => g.id === gameId);
-    if (!life || !game) return { ok: false, line: '“That one’s gone, I’m afraid.”' };
+    if (!life || !game) return { ok: false, line: 'That one’s gone, I’m afraid.' };
     const price = agnesPrice(manualPrice(game)) + (kind === 'order' ? STREET_SHOPS.manuals.orderExtra : 0);
-    if (!this.deps.purse.spend(price)) return { ok: false, line: `That is ${formatCoins(price)} and you have ${this.deps.purse.coins}.` };
+    if (!this.deps.purse.spend(price)) return { ok: false, line: `That is ${formatCoins(price)} and you have ${formatCoins(this.deps.purse.coins)}.` };
     if (kind === 'order') {
       const ready = this.deps.day() + STREET_SHOPS.manuals.orderDays;
       streetShops.order(game.id, ready, price);
-      return { ok: true, coins: true, line: `“The manual of ${game.title}: I’ll ring the wholesaler. Come back in ${STREET_SHOPS.manuals.orderDays} days.”` };
+      return { ok: true, coins: true, line: `The manual of ${game.title}: I’ll ring the wholesaler. Come back in ${STREET_SHOPS.manuals.orderDays} days.` };
     }
     const done = life.completeWithManual(game.id);
     if (!done.done) {
@@ -210,7 +223,9 @@ export class StreetCounters {
       act: (session) => {
         this.openCounter(session, {
           title: name.toUpperCase(),
-          says: () => '“Guides are on the back wall. Read one and you’ll talk like you made the game.”',
+          paper: 'comics',
+          keeper: { name: 'Behind the till', seed: 2411 },
+          says: () => 'Guides are on the back wall. Read one and you’ll talk like you made the game.',
           sections: () => {
             const shelf = guidesOnShelf(gameWeekOf(this.deps.day()), this.deps.games());
             const rows: CounterRow[] = shelf.map((g) => ({ id: g.id, title: g.title, detail: g.blurb, price: STREET_SHOPS.guides.price, verb: 'Buy', ...(streetShops.hasGuide(g.id) ? { unavailable: 'You have this one, and you read it cover to cover.' } : {}) }));
@@ -219,10 +234,10 @@ export class StreetCounters {
           coins: () => this.deps.purse.coins,
           take: (id) => {
             const guide = guidesOnShelf(gameWeekOf(this.deps.day()), this.deps.games()).find((g) => g.id === id);
-            if (!guide) return { ok: false, line: '“Sold that one this morning.”' };
+            if (!guide) return { ok: false, line: 'Sold that one this morning.' };
             const { price } = STREET_SHOPS.guides;
             if (streetShops.hasGuide(guide.id)) return { ok: false, line: 'You have this one, and you read it cover to cover.' };
-            if (!this.deps.purse.spend(price)) return { ok: false, line: `That is ${formatCoins(price)} and you have ${this.deps.purse.coins}.` };
+            if (!this.deps.purse.spend(price)) return { ok: false, line: `That is ${formatCoins(price)} and you have ${formatCoins(this.deps.purse.coins)}.` };
             const read = life.readGuide(guide.platform, guide.id, guide.title);
             if (!read.done) {
               this.deps.purse.earnCoins(price);
@@ -304,7 +319,7 @@ export class StreetCounters {
       entry: `Go in for the set (${formatCoins(gig.cover)})`,
       act: (session) => {
         if (!this.deps.purse.spend(gig.cover)) {
-          session.refuse(`The door is ${formatCoins(gig.cover)} and you have ${this.deps.purse.coins}.`);
+          session.refuse(`The door is ${formatCoins(gig.cover)} and you have ${formatCoins(this.deps.purse.coins)}.`);
           return;
         }
         const set = GIG_SETS[(streetShops.gigsSeen() + day) % GIG_SETS.length]!;
@@ -337,25 +352,26 @@ export class StreetCounters {
       entry: `Join a quiz team (${formatCoins(quiz.fee)})`,
       act: (session) => {
         if (!this.deps.purse.spend(quiz.fee)) {
-          session.refuse(`It is ${formatCoins(quiz.fee)} a head and you have ${this.deps.purse.coins}.`);
+          session.refuse(`It is ${formatCoins(quiz.fee)} a head and you have ${formatCoins(this.deps.purse.coins)}.`);
           return;
         }
-        const questions = quizRound(day);
+        const questions = quizRound(day, this.deps.games().filter((g) => g.status !== 'wishlist'));
+        const rivals = rivalsRight(day, questions.length);
         this.deps.panels.quiz.show({
           questions,
+          rivals,
           finished: (right) => {
             streetShops.markQuiz(day, right);
-            const rivals = rivalsRight(day, questions.length);
             const prize = right > rivals ? (quiz.prizes[right] ?? 0) : 0;
             this.deps.cues?.applause(at, 14);
             if (prize) {
               this.deps.cues?.cheer(at);
               this.deps.purse.earnCoins(prize);
               session.reward({ title: 'Quiz night won', detail: `${right} right, THE USUAL SUSPECTS ${rivals}. The kitty is yours.`, coins: prize });
-              return `“And the winners tonight, with ${right}… not THE USUAL SUSPECTS!” The kitty comes over in a pint glass.`;
+              return { won: true, says: `And the winners tonight, with ${right}… not THE USUAL SUSPECTS!`, aside: 'The kitty comes over in a pint glass.' };
             }
-            if (right === rivals) return `A tie with THE USUAL SUSPECTS on ${right}. They win the tie-break, as ever. “Next Tuesday,” they say.`;
-            return `${right} right. THE USUAL SUSPECTS win again, on ${rivals}. A round of applause for the newcomers.`;
+            if (right === rivals) return { won: false, says: `A tie on ${right}! THE USUAL SUSPECTS take the tie-break, as ever.`, aside: '“Next Tuesday,” they say, raising their glasses.' };
+            return { won: false, says: `THE USUAL SUSPECTS win again, on ${rivals}! And ${right} for our newcomers: a big hand for them.`, aside: 'A round of applause from the tables.' };
           },
         });
         session.openPanel(this.deps.panels.quiz);
@@ -371,29 +387,32 @@ export class StreetCounters {
       entry: `Three darts at the back (${formatCoins(darts.fee)})`,
       act: (session) => {
         if (!this.deps.purse.spend(darts.fee)) {
-          session.refuse(`Three darts are ${formatCoins(darts.fee)} and you have ${this.deps.purse.coins}.`);
+          session.refuse(`Three darts are ${formatCoins(darts.fee)} and you have ${formatCoins(this.deps.purse.coins)}.`);
           return;
         }
-        const best = boardBest(day);
+        const checkout = tonightsCheckout(day);
         this.deps.panels.darts.show({
-          best,
+          checkout,
+          fee: darts.fee,
           thrown: () => this.deps.cues?.dart(at),
           refund: () => this.deps.purse.earnCoins(darts.fee),
-          over: (score) => {
-            const paid = score > best && !streetShops.darts(day).paid;
-            streetShops.markDarts(day, score, paid);
+          over: (end, left) => {
+            const paid = end === 'out' && !streetShops.darts(day).paid;
+            streetShops.markDarts(day, paid);
             if (paid) {
+              const prize = checkoutPrize(checkout);
               this.deps.cues?.cheer(at);
-              this.deps.purse.earnCoins(darts.prize);
-              session.reward({ title: 'Best on the board tonight', detail: `${score}, over the chalkboard’s ${best}. The barman rubs it out and chalks yours up.`, coins: darts.prize });
-              return `${score}! The best on the board tonight. The regulars buy you a lemonade.`;
+              this.deps.purse.earnCoins(prize);
+              session.reward({ title: 'Checked out', detail: `${checkout} to nought, the last dart in the double. The barman chalks your name under it.`, coins: prize });
+              return { says: `Game shot! ${checkout} checked out. I’ll chalk your name up.`, aside: 'The regulars buy you a lemonade.' };
             }
-            if (score > best) return `${score}: still the best tonight. Nobody is paying twice, though.`;
-            return `${score}. The chalkboard still says ${best}.`;
+            if (end === 'out') return { says: `${checkout} out again! You’ve had the kitty already tonight, mind.`, aside: 'The regulars clap.' };
+            if (end === 'bust') return { says: `Bust! ${checkout} stays on the board.`, aside: '“Happens to the best of us,” says somebody at the bar.' };
+            return { says: `${left} left. The board still says ${checkout}.`, aside: 'Somebody pulls the darts out for you.' };
           },
           again: () => {
-            if (streetShops.darts(day).goes >= darts.perDay) return '“That’s enough darts for one night, the others want a go.”';
-            if (!this.deps.purse.spend(darts.fee)) return `Three darts are ${formatCoins(darts.fee)} and you have ${this.deps.purse.coins}.`;
+            if (streetShops.darts(day).goes >= darts.perDay) return 'That’s enough darts for one night, the others want a go.';
+            if (!this.deps.purse.spend(darts.fee)) return `Three darts are ${formatCoins(darts.fee)} and you have ${formatCoins(this.deps.purse.coins)}.`;
             return null;
           },
         });
@@ -420,19 +439,21 @@ export class StreetCounters {
         this.price(stock);
         this.openCounter(session, {
           title: POP_UP_NAME,
-          says: () => '“Everything complete, everything checked. Some first prints. Prices are prices: I don’t haggle.”',
+          paper: 'popup',
+          keeper: { name: 'The young dealer', seed: 3527 },
+          says: () => 'Everything complete, everything checked. Some first prints. Prices are prices: I don’t haggle.',
           sections: () => [{ title: 'This week', rows: stock.filter((g) => !this.deps.owns(g.id)).map((g) => this.popUpRow(g)), empty: 'Sold out till next week. “I’ve got a van coming Monday.”' }],
           coins: () => this.deps.purse.coins,
           take: (id) => {
             const game = stock.find((g) => g.id === id);
             const price = game ? this.prices.get(game.id) : undefined;
-            if (!game || price === undefined) return { ok: false, line: '“One moment, let me look that up.”' };
+            if (!game || price === undefined) return { ok: false, line: 'One moment, let me look that up.' };
             const done = buyGame(game, price, POP_UP_WHERE);
             if (done.ok) {
               session.slip({ title: `Bought ${game.title}`, detail: 'It waits in the parcel under the hall console.', coins: -price });
-              return { ok: true, line: `“${game.title}, a good copy. Look after it.”` };
+              return { ok: true, line: `${game.title}, a good copy. Look after it.` };
             }
-            return { ok: false, line: done.reason === 'short' ? `That is ${formatCoins(price)} and you have ${done.have ?? 0}.` : done.reason === 'owned' ? `You have ${game.title} already.` : '“Can’t do that one, sorry.”' };
+            return { ok: false, line: done.reason === 'short' ? `That is ${formatCoins(price)} and you have ${done.have ?? 0}.` : done.reason === 'owned' ? `You have ${game.title} already.` : 'Can’t do that one, sorry.' };
           },
           onChange: (cb) => {
             this.priceListeners.add(cb);

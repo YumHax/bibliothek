@@ -10,6 +10,8 @@ import { playRelay } from '../stairSounds';
 
 const PLATE = paint(0x2a2420, 0.35);
 const KNOB = paint(0xe9e2d2, 0.4);
+/** The electrician's new button: whiter, glossier. */
+const NEW_KNOB = paint(0xfbf8f0, 0.2);
 /** The pilot's orange: bright while the landing is dark (to find the button by), faint once lit. */
 const PILOT = new THREE.Color(0xff8a1e);
 
@@ -20,8 +22,12 @@ interface TimerButtonOptions {
   press: () => boolean;
   /** How lit its landing's globe is (0 .. 1). */
   glow: () => number;
-  /** Told of every press (the concierge's errand); what the button did under the finger. */
-  pressed?: (k: number) => 'sticks' | 'fine';
+  /** Told of every press (the concierge's errand); what the button did under the finger (`new`: the sticky one, replaced). */
+  pressed?: (k: number) => 'sticks' | 'fine' | 'new';
+  /** The line said when the replaced button is pressed. */
+  newLine?: string;
+  /** Whether this landing's button is the replaced one: its new knob shows from the start. */
+  isNew?: () => boolean;
 }
 
 /**
@@ -36,6 +42,8 @@ export class TimerButton extends Prop implements Interactable, Updatable {
   private readonly pilot: THREE.MeshBasicMaterial;
   private readonly knob: THREE.Mesh;
   private pushed = 0;
+  /** The replaced button said so once this visit. */
+  private toldNew = false;
 
   constructor(private readonly options: TimerButtonOptions) {
     super();
@@ -45,6 +53,7 @@ export class TimerButton extends Prop implements Interactable, Updatable {
     this.add(plate);
     this.knob = new THREE.Mesh(new THREE.CylinderGeometry(0.018, 0.018, 0.012, 12).rotateX(Math.PI / 2), KNOB);
     this.knob.position.z = 0.016;
+    if (options.isNew?.()) this.knob.material = NEW_KNOB;
     this.add(this.knob);
     this.pilot = new THREE.MeshBasicMaterial({ color: PILOT.clone() });
     const pilot = new THREE.Mesh(new THREE.TorusGeometry(0.026, 0.004, 4, 20), this.pilot);
@@ -75,6 +84,11 @@ export class TimerButton extends Prop implements Interactable, Updatable {
     playRelay(0.0012, true);
     if (!lit) session.refuse('Click. Nothing: no power.');
     else if (how === 'sticks') session.react('It stays in, then springs back with a clack. This one sticks.');
+    else if (how === 'new' && !this.toldNew) {
+      this.toldNew = true;
+      this.knob.material = NEW_KNOB;
+      if (this.options.newLine) session.react(this.options.newLine);
+    }
   }
 
   update(dt: number): void {

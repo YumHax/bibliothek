@@ -1,78 +1,197 @@
-/* The co-owners' postal vote: a card over the view (`.ui-modal--centre`); the card shell is the kit's. */
+/*
+ * The co-owners' postal vote: a printed ballot paper on the card (`.ui-modal--centre`). Crosses are pen strokes that
+ * draw themselves in their box; the residents' faces carry their name on a tag on hover and stand under written
+ * heads; bought words are stamps licked onto the line (the paid ones postmarked); the controls are written in ink
+ * on the paper, not dark buttons. Posting folds the ballot into its envelope.
+ */
 @layer tokens, base, components, panels;
 @layer panels {
-  .copro-panel__card { --card-w: var(--card-w-lg); }
-  .copro-panel__card h2 {
-    margin: 0 0 0.3rem;
-    font-family: var(--ui-font-display);
-    font-weight: 400;
-    font-size: var(--fs-t2);
+  .copro-panel__card {
+    --card-w: var(--card-w-lg);
+    --ballot-paper: var(--paper-letter);
+    --ballot-ink: var(--ink-letter);
+    --ballot-pen: var(--ink-note);
+    --ballot-rule: var(--paper-note-line);
+    --ballot-hover: var(--paper-note-wash);
+    --ballot-with: var(--ink-green);
+    --ballot-against: var(--ink-red);
+    --focus: var(--ballot-pen);
+    /* How long the ballot folds before the card goes (`CoproPanel` FOLD_MS waits for it). */
+    --fold-ms: 650ms;
+    --stamp-mask: #000;
+    background: var(--ballot-paper);
+    color: var(--ballot-ink);
+    border-color: transparent;
+    box-shadow: var(--ui-shadow-paper);
+    font-family: var(--ui-font-serif);
+    color-scheme: light;
   }
-  .copro-panel__item {
-    margin-top: 0.9rem;
-    padding-top: 0.7rem;
-    border-top: 1px solid var(--ui-border);
-  }
-  .copro-panel__item h3 {
+  .copro-panel__kicker {
     margin: 0;
-    font-size: var(--fs-7);
-    font-weight: 600;
+    font-size: var(--fs-2);
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    opacity: 0.7;
   }
-  .copro-panel__dim {
-    margin: 0.2rem 0 0;
-    font-size: var(--fs-4);
-    color: var(--ui-text-dim);
+  .copro-panel__card h2 {
+    margin: 0 0 var(--sp-1);
+    font-family: var(--ui-font-print);
+    font-weight: 400;
+    font-size: var(--fs-t3);
   }
-  .copro-panel__options {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 0.4rem;
-    margin-top: var(--sp-2);
+  .copro-panel__no { opacity: 0.6; }
+  .copro-panel__item {
+    margin-top: var(--sp-3);
+    padding-top: var(--sp-3);
+    border-top: 1px dashed var(--ballot-rule);
   }
+  .copro-panel__item h3 { margin: 0; font-size: var(--fs-7); font-weight: 600; }
+  .copro-panel__dim { margin: var(--sp-1) 0 0; font-size: var(--fs-4); opacity: 0.75; }
+  .copro-panel__blank { margin: var(--sp-4) 0 var(--sp-2); font-family: var(--ui-font-hand); font-size: var(--fs-t1); }
+
+  /* --- the options and their crosses --------------------------------------------------------------- */
+
+  .copro-panel__options { display: flex; flex-wrap: wrap; gap: var(--sp-2); margin-top: var(--sp-2); }
   .copro-panel__option {
     display: flex;
-    flex-direction: column;
-    align-items: flex-start;
-    text-align: left;
-  }
-  .copro-panel__who,
-  .copro-panel__now {
-    font-size: var(--fs-2);
-    color: var(--ui-text-dim);
-  }
-  .copro-panel__buy {
-    display: flex;
     align-items: center;
-    gap: 0.4rem;
-    margin-top: var(--sp-2);
-    font-size: var(--fs-4);
-  }
-  .copro-panel__buy span {
-    flex: 1;
-  }
-  .copro-panel__status {
-    min-height: 1.2em;
-    margin: 0.8rem 0 0;
-    font-size: var(--fs-4);
-    color: var(--ui-danger);
-  }
-  .copro-panel__card footer {
-    display: flex;
-    flex-wrap: wrap;
     gap: var(--sp-2);
-    margin-top: 0.6rem;
+    min-width: 12rem;
+    padding: 0.35rem var(--sp-2);
+    border: 1px solid var(--ballot-rule);
+    background: transparent;
+    color: inherit;
+    font: inherit;
+    text-align: left;
+    cursor: pointer;
+    transition: background var(--dur-hover) ease;
   }
-  /* How the residents stand to the player's ballot (their standing with the player, docs/social.md). */
-  .copro-panel__sway {
-    margin: 0.4rem 0 0;
-    font-size: var(--fs-3);
-    line-height: 1.5;
+  .copro-panel__option:hover,
+  .copro-panel__option:focus-visible { background: var(--ballot-hover); }
+  .copro-panel__option[aria-pressed='true'] { border-color: var(--ballot-pen); }
+  .copro-panel__box {
+    display: inline-grid;
+    place-items: center;
+    flex: none;
+    width: 1.15em;
+    height: 1.15em;
+    border: 1.5px solid var(--ballot-ink);
   }
-  .copro-panel__stance--with,
-  .copro-panel__stance--lobbied {
-    color: var(--ui-success-dim);
+  .copro-panel__cross { width: 1.35em; height: 1.35em; fill: none; stroke: var(--ballot-pen); stroke-width: 2.4; stroke-linecap: round; }
+  .copro-panel__cross path { stroke-dasharray: 18; stroke-dashoffset: 0; animation: copro-pen var(--dur-enter) ease-out both; }
+  .copro-panel__cross path + path { animation-delay: var(--dur-fade); }
+  @keyframes copro-pen {
+    from { stroke-dashoffset: 18; }
+    to { stroke-dashoffset: 0; }
   }
-  .copro-panel__stance--against {
-    color: var(--ui-danger);
+  .copro-panel__label { flex: 1; }
+  .copro-panel__now { font-size: var(--fs-2); font-style: italic; opacity: 0.7; }
+
+  /* --- faces, with their names --------------------------------------------------------------------- */
+
+  .copro-panel__faces { display: inline-flex; flex-wrap: wrap; gap: 3px; }
+  .copro-panel__face {
+    position: relative;
+    display: inline-grid;
+    place-items: center;
+    width: 26px;
+    height: 26px;
+    border-radius: 50%;
+    background: var(--ballot-hover);
+    font-size: var(--fs-2);
   }
+  .copro-panel__face canvas { display: block; width: 26px; height: 26px; border-radius: 50%; }
+  /* The name on a tag over the face, on hover. */
+  .copro-panel__face::after {
+    content: attr(data-name);
+    position: absolute;
+    bottom: calc(100% + 4px);
+    left: 50%;
+    translate: -50% 2px;
+    padding: 0.1rem 0.4rem;
+    border-radius: var(--ui-radius-xs);
+    background: var(--ballot-ink);
+    color: var(--ballot-paper);
+    font-family: var(--ui-font-body);
+    font-size: var(--fs-1);
+    white-space: nowrap;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity var(--dur-hover) ease, translate var(--dur-hover) ease;
+  }
+  .copro-panel__face:hover::after { opacity: 1; translate: -50% 0; }
+  .copro-panel__sway { display: grid; gap: var(--sp-2); margin: var(--sp-3) 0 0; }
+  .copro-panel__lean { display: grid; gap: var(--sp-1); padding-left: var(--sp-2); border-left: 3px solid var(--lean, var(--ballot-rule)); }
+  .copro-panel__lean--with { --lean: var(--ballot-with); }
+  .copro-panel__lean--against { --lean: var(--ballot-against); }
+  .copro-panel__lean-head { font-size: var(--fs-2); letter-spacing: 0.08em; text-transform: uppercase; color: var(--lean); font-weight: 700; }
+  .copro-panel__lean .copro-panel__faces { gap: var(--sp-1) var(--sp-3); }
+  .copro-panel__voter { display: inline-flex; align-items: center; gap: var(--sp-1); font-size: var(--fs-3); }
+  .copro-panel__voter .copro-panel__face::after { content: none; }
+  .copro-panel__voter-name em { opacity: 0.7; }
+
+  /* --- words with the syndic: stamps on the line ----------------------------------------------------- */
+
+  .copro-panel__buy { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-2); margin-top: var(--sp-2); font-size: var(--fs-4); }
+  .copro-panel__buy-label { flex: 1; display: inline-flex; align-items: center; gap: var(--sp-2); font-style: italic; }
+  .copro-panel__stamps { display: inline-flex; gap: 4px; }
+  .copro-panel__stamp {
+    width: 14px;
+    height: 17px;
+    background: var(--ink-gold);
+    /* A stamp's perforated edge. */
+    -webkit-mask: radial-gradient(circle, transparent 1.2px, var(--stamp-mask) 1.4px) -2px -2px / 4px 4px;
+    mask: radial-gradient(circle, transparent 1.2px, var(--stamp-mask) 1.4px) -2px -2px / 4px 4px;
+    animation: copro-lick var(--dur-settle) var(--ui-ease-pop) both;
+  }
+  @keyframes copro-lick {
+    from { transform: scale(1.6) rotate(-12deg); opacity: 0; }
+    to { transform: none; opacity: 1; }
+  }
+  /* Paid already: postmarked with wavy lines, and it stays. */
+  .copro-panel__stamp--paid {
+    background:
+      repeating-linear-gradient(170deg, transparent 0 3px, var(--ballot-ink) 3px 4px),
+      var(--ink-gold);
+    animation: none;
+  }
+  /* Ink controls written on the paper: underlined pen words, not dark buttons. */
+  .copro-panel__pen {
+    padding: 0.2rem 0.4rem;
+    border: 1px solid transparent;
+    border-radius: var(--ui-radius-xs);
+    background: transparent;
+    color: var(--ballot-pen);
+    font: inherit;
+    font-weight: 600;
+    text-decoration: underline;
+    text-underline-offset: 3px;
+    cursor: pointer;
+  }
+  .copro-panel__pen:hover,
+  .copro-panel__pen:focus-visible { background: var(--ballot-hover); }
+  .copro-panel__pen[aria-disabled='true'] { opacity: 0.5; cursor: default; text-decoration: none; }
+  .copro-panel__sign { margin: var(--sp-4) 0 0; text-align: right; font-family: var(--ui-font-hand); font-size: var(--fs-t1); }
+
+  /* --- the foot: the buttons on paper ---------------------------------------------------------------- */
+
+  .copro-panel__card .ui-panel__footer .ui-btn { color: var(--ballot-ink); background: transparent; border-color: var(--ballot-ink); }
+  .copro-panel__card .ui-panel__footer .ui-btn:hover { background: var(--ballot-hover); }
+  .copro-panel__card .ui-panel__footer .ui-btn--primary { color: var(--ballot-paper); background: var(--ballot-pen); border-color: var(--ballot-pen); }
+  .copro-panel__card .ui-panel__footer .ui-btn--primary:hover { background: var(--ballot-ink); }
+  .copro-panel__card .ui-panel__footer .is-short { opacity: 0.6; background: transparent; color: var(--ballot-against); border: 1.5px dashed var(--ballot-against); }
+  .copro-panel__card .ui-panel__status--error { color: var(--ballot-against); }
+
+  /* --- posting: the ballot folds in three and drops into the box ------------------------------------ */
+
+  .copro-panel__fold--posting { animation: copro-fold var(--fold-ms) var(--ui-ease) forwards; transform-origin: 50% 0; }
+  @keyframes copro-fold {
+    0% { transform: none; opacity: 1; }
+    45% { transform: perspective(800px) rotateX(60deg) scaleY(0.6); opacity: 1; }
+    100% { transform: perspective(800px) rotateX(80deg) scaleY(0.2) translateY(60%); opacity: 0; }
+  }
+  /* Reduced motion: the game's setting (`.reduce-motion` on <html>, settings/motion), never the media query alone. */
+  .reduce-motion .copro-panel__cross path,
+  .reduce-motion .copro-panel__stamp,
+  .reduce-motion .copro-panel__fold--posting { animation: none; }
 }

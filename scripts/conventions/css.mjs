@@ -50,6 +50,15 @@ export const rules = [
     hint: 'use a --dur-* token (tokens.css), or a slot variable in the block when TypeScript waits for exactly that time',
   },
   {
+    name: 'reduced-motion media query',
+    files: 'css',
+    // Reduced motion is the game's setting (Settings > Display, `settings/motion`): `.reduce-motion` on <html>. A media
+    // query of its own ignores "always" on a system that does not ask, and "never" on one that does.
+    test: (line) => /prefers-reduced-motion/.test(line),
+    except: [],
+    hint: 'prefix the rule with `.reduce-motion ` (the class settings/motion puts on <html>), never @media (prefers-reduced-motion)',
+  },
+  {
     name: 'important',
     files: 'css',
     // An `!important` fights the cascade instead of naming the layer; the overrides that must say why.

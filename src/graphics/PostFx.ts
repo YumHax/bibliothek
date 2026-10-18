@@ -11,6 +11,7 @@ import { GlassMask } from './glassMask';
 import { RENDER_TUNING } from './renderTuning';
 import { AO_FRAGMENT, AO_BLUR_FRAGMENT, DOF_FRAGMENT, LUMINANCE_FRAGMENT, METER_DOWNSAMPLE_FRAGMENT, OUTPUT_FRAGMENT, QUAD_VERTEX } from './postFxShaders';
 import { damp, dampFactor } from '@/math/damp';
+import { readingDim } from './readingDim';
 
 interface PostFxOptions {
   /** Distance (metres) of what the player is reading up close, or null: the background blurs beyond it. */
@@ -305,6 +306,9 @@ export class PostFx implements FramePipeline, Updatable {
         grain: { value: 0 },
         sharpen: { value: 0 },
         neutral: { value: 0 },
+        readingDim: { value: 0 },
+        readingAt: { value: new THREE.Vector2(0.5, 0.5) },
+        readingRadius: { value: 0.3 },
       } satisfies Record<string, THREE.IUniform> & LookUniforms,
     });
     // Tone mapping and sRGB are done by the output shader itself, after the HDR passes.
@@ -439,6 +443,11 @@ export class PostFx implements FramePipeline, Updatable {
     const stretch = window.devicePixelRatio / Math.max(0.1, renderer.getPixelRatio() * this.renderScale);
     out.sharpen!.value = THREE.MathUtils.clamp((this.quality.fxaa ? SHARPEN_AFTER_FXAA : 0) + Math.max(0, stretch - 1) * SHARPEN_PER_STRETCH, 0, 1);
     out.time!.value = this.time;
+    // The room in shade round the box being examined (`graphics/readingDim`).
+    const reading = readingDim();
+    out.readingDim!.value = reading.amount;
+    (out.readingAt!.value as THREE.Vector2).copy(reading.at);
+    out.readingRadius!.value = reading.radius;
     renderer.setRenderTarget(null);
     this.quad.material = this.outputMaterial;
     this.quad.render(renderer);

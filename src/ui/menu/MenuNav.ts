@@ -14,6 +14,9 @@ const FOCUSABLE_SELECTOR = [
   '[data-nav]',
 ].join(', ');
 
+/** The arrow keys as the D-pad's moves (`PanelNavOptions.onMove`). */
+const ARROW_MOVES: Partial<Record<string, 'up' | 'down' | 'left' | 'right'>> = { ArrowUp: 'up', ArrowDown: 'down', ArrowLeft: 'left', ArrowRight: 'right' };
+
 /** The navigable elements of `scope`, skipping those inside a hidden ancestor. */
 export function navItems(scope: HTMLElement, selector = NAV_SELECTOR): HTMLElement[] {
   return [...scope.querySelectorAll<HTMLElement>(selector)].filter((el) => el.offsetParent !== null && !el.closest('[hidden], [inert]'));
@@ -44,6 +47,8 @@ interface PanelNavOptions {
   onBack?(): void;
   /** D-pad left / right: switch tabs or pages; return true when handled, else the focus moves like up / down. */
   onSide?(direction: 1 | -1): boolean;
+  /** Any D-pad move or arrow key, asked first (a grid of keys walks in two dimensions: `panel/letterPad`; the darts' aim); true when handled. */
+  onMove?(direction: 'up' | 'down' | 'left' | 'right'): boolean;
 }
 
 interface Panel extends PanelNavOptions {
@@ -61,8 +66,14 @@ let input: Input | null = null;
 export function registerPanel(root: HTMLElement, options: PanelNavOptions): void {
   panels.push({ root, ...options });
   // The panels keep their keys from the window's Input (WASD would walk), so their arrows are read here.
-  root.addEventListener('keydown', (e) => {
+  root.addEventListener('keydown', (e) => { // convention-ok: the panels' own arrow walk, the one place it is read
     if (!options.isOpen() || isField(document.activeElement)) return;
+    // The panel's own grid or aim first (a letter pad, the dartboard), as for the D-pad.
+    const move = ARROW_MOVES[e.code];
+    if (move && options.onMove?.(move)) {
+      e.preventDefault();
+      return;
+    }
     if (e.code === 'ArrowDown' || e.code === 'ArrowUp') {
       e.preventDefault();
       moveFocus(root, e.code === 'ArrowDown' ? 1 : -1, FOCUSABLE_SELECTOR);
@@ -125,10 +136,12 @@ export function initPanelNav(source: Input): void {
     switch (code) {
       case 'GamepadUp':
       case 'GamepadDown':
+        if (panel.onMove?.(code === 'GamepadDown' ? 'down' : 'up')) return;
         moveFocus(panel.root, code === 'GamepadDown' ? 1 : -1, FOCUSABLE_SELECTOR);
         return;
       case 'GamepadLeft':
       case 'GamepadRight':
+        if (panel.onMove?.(code === 'GamepadLeft' ? 'left' : 'right')) return;
         if (!panel.onSide?.(code === 'GamepadLeft' ? -1 : 1)) moveFocus(panel.root, code === 'GamepadLeft' ? -1 : 1, FOCUSABLE_SELECTOR);
         return;
       case 'ArrowUp':

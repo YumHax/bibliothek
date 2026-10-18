@@ -40,6 +40,8 @@ export const OCCASION_LINES = {
     present: 'On my birthday too. You’ll make an old woman cry.',
     /** The candles. */
     candles: 'Help me with the candles, I haven’t the breath any more. Félix used to blow them out before I’d finished the song.',
+    /** The candles blown out by the player. */
+    blown: 'All of them, in one go! Now I’ve got my wish. I won’t tell you what it was. It was you, mostly.',
   },
   christmas: {
     hello: 'Happy Christmas, love! Come and see the tree, I did it myself. The star’s crooked, it’s always been crooked.',
@@ -47,5 +49,15 @@ export const OCCASION_LINES = {
   allSaints: {
     hello: 'I went to see Félix this morning. I took him chrysanthemums. He hated chrysanthemums, but it’s what you take.',
     chat: 'He’s next to your grandfather. They argue less now.',
+    /** The conversation's entry: going back with her, the 38 to the cemetery and back (a fade). */
+    go: 'Go and see Félix with her',
+    ask: 'You’d come? Now? I’ll get my coat. We’ll take him something that isn’t a chrysanthemum.',
+    /** Back from it, a line at a time. */
+    back: [
+      'Thank you, love. He’d have pretended not to care, and rung me about it the next day.',
+      'You stood there a long time. He did that at your grandfather’s too.',
+      'A packet of sweets on a grave. The keeper will think we’re mad. Félix would have eaten them.',
+    ],
+    note: 'Went to see Félix at the cemetery with Mémé, on All Saints',
   },
 } as const;

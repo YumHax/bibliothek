@@ -1,4 +1,4 @@
-import { BEGINNER, CLAW_MISS_TICKETS, HALL_TOUR, LEAGUE, TICKET_FLOOR, ticketsFor } from './pricing';
+import { BEGINNER, CLAW_DUPLICATE_TICKETS, CLAW_MISS_TICKETS, HALL_TOUR, LEAGUE, TICKET_FLOOR, ticketsFor } from './pricing';
 import { getPrize } from './Prizes';
 import { formatNumber, ordinal } from '@/text/count';
 import { formatTickets } from '@/text/money';
@@ -19,6 +19,10 @@ interface PayoutPlay {
   readonly best: boolean;
   readonly first?: boolean;
   readonly prize?: string;
+  /** The prize won is on the bed at home already: it turns into tickets at the counter. */
+  readonly prizeOwned?: boolean;
+  /** The feats the play pulled off (a feat challenge counts them). */
+  readonly feats?: readonly string[];
   /** One of the player's first plays on this machine (`BEGINNER`): a poor score still pays twice its coin. */
   readonly beginner?: boolean;
   /** The play cost a coin (`TICKET_FLOOR`: a poor score still pays more than it; a claw miss pays it back). */
@@ -33,7 +37,7 @@ interface PayoutBooks {
   daily?: {
     challenge(): { gameId: string; target: number; reward: number; done: boolean };
     /** The play counts towards the challenge; true when that meets it (still to claim). */
-    advance(gameId: string, score: number): boolean;
+    advance(gameId: string, score: number, feats?: readonly string[]): boolean;
     claimChallenge(): boolean;
   };
   medals?: {
@@ -95,7 +99,7 @@ class Settlement implements ArcadePayout {
  * card (gold tokens, its colour), and a finished week is announced (a won one brings its division's pennant home).
  */
 export function arcadePayout(machine: PayoutMachine, play: PayoutPlay, books: PayoutBooks): ArcadePayout {
-  if (play.prize) return prizeWon(play.prize);
+  if (play.prize) return play.prizeOwned ? prizeTwice(play.prize) : prizeWon(play.prize);
   if (!machine.freeWhenBroke) return clawMissed(play);
   const earned = ticketsFor(machine.game.id, play.score);
   const floor = floorOf(machine, play);
@@ -118,6 +122,13 @@ export function arcadePayout(machine: PayoutMachine, play: PayoutPlay, books: Pa
 /** The claw's prize: on the bed at home, nothing else to settle. */
 function prizeWon(prize: string): ArcadePayout {
   return { prizes: [prize], tickets: null, lines: [`You won the ${getPrize(prize)?.name ?? 'prize'}! It is sitting on the bed at home.`], bonuses: [], notable: true };
+}
+
+/** The claw's prize, a second time: the attendant swaps it for tickets (one of each is enough on a bed). */
+function prizeTwice(prize: string): ArcadePayout {
+  const back = CLAW_DUPLICATE_TICKETS;
+  const name = getPrize(prize)?.name ?? 'prize';
+  return { prizes: [], tickets: { earned: 0, counted: back, paid: back }, lines: [`Another ${name}! Gus swaps it for ${formatTickets(back)}: one of each is plenty.`], bonuses: [], notable: true };
 }
 
 /** A claw play that dropped nothing: the coin comes back in tickets (only the plush was a gamble). */
@@ -144,7 +155,7 @@ function scoreLine(machine: PayoutMachine, play: PayoutPlay, counted: number): s
 function payChallenge(settled: Settlement, machine: PayoutMachine, play: PayoutPlay, daily: PayoutBooks['daily']): void {
   const challenge = daily?.challenge();
   if (machine.luck || !challenge || challenge.done || challenge.gameId !== machine.game.id) return;
-  if (daily?.advance(machine.game.id, play.score) && daily.claimChallenge()) {
+  if (daily?.advance(machine.game.id, play.score, play.feats) && daily.claimChallenge()) {
     settled.bonus('CHALLENGE', challenge.reward, `Daily challenge beaten: +${formatTickets(challenge.reward)}!`);
   }
 }

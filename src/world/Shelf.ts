@@ -77,12 +77,18 @@ const BOX_PULL = 0.008;
 /** What stands in for the boxes in the shadow maps: a plain unit box per box, scaled, all in one instanced draw. */
 const PROXY_GEOMETRY = new THREE.BoxGeometry(1, 1, 1);
 const PROXY_MATERIAL = basic({});
-/** Narrowest box a row could hold (m): sizes the proxy's instance buffer. */
-const MIN_BOX_WIDTH = 0.05;
+/** Narrowest share of a row a box could take (m, with the air beside it: a jewel case spine out): sizes the proxy's instance buffer. */
+const MIN_BOX_WIDTH = 0.014;
+/** The air between two boxes standing spine out side by side (m): pressed together, as books are; a cover keeps `gap`. */
+export const SPINE_GAP = 0.004;
+/** Spine out, a box is turned this share of the untidiness a cover-out one gets: pressed close, it barely can. */
+const SPINE_YAW_SHARE = 0.4;
 
 /**
  * A bookcase whose rows can each have their own height. Boxes stand upright with the cover
- * facing +Z (out of the shelf), laid left-to-right on the row they are given.
+ * facing +Z (out of the shelf), laid left-to-right on the row they are given; a box the player
+ * stood spine out (`GameBox.spineOut`) is turned a quarter, its left spine out, and takes only its
+ * thickness of the row (`across`).
  *
  * The boxes standing on it do not cast shadows themselves: one instanced proxy of plain boxes
  * does, on the zone's shadow layer only (the camera never draws it), kept in step with the boxes
@@ -167,23 +173,26 @@ export class Shelf extends THREE.Group {
     this.rowBoxes[row] = [...boxes];
 
     const inner = width / 2 - boardThickness;
-    let cursorX = -inner;
-    boxes.forEach((box) => {
-      const { width: bw, height: bh, depth: bd } = box.dimensions;
+    const { xs } = pack(boxes.map((box) => standing(box)), gap);
+    boxes.forEach((box, i) => {
+      const bd = deep(box);
+      const bh = box.dimensions.height;
       const carried = box.parent !== null && !(box.parent instanceof Shelf);
       // Real shelves are not tidy: each box a touch turned, some pushed back or pulled out, all
       // following the board's sag, but every one stands flat on its bottom (a box balanced on a
-      // corner looks wrong). Seeded by the game, so a box always stands the same way.
-      const x = cursorX + bw / 2;
-      const [yaw, push] = untidiness(box.game.id);
+      // corner looks wrong). Seeded by the game, so a box always stands the same way; spine out, pressed
+      // close to its neighbours, hardly turned.
+      const x = -inner + xs[i]!;
+      const [untidyYaw, push] = untidiness(box.game.id);
+      const yaw = box.spineOut ? untidyYaw * SPINE_YAW_SHARE : untidyYaw;
       const z = depth / 2 - bd / 2 - FRONT_SET + push;
       box.slideOut = depth / 2 - (z + bd / 2) + EDGE_CLEAR;
       box.restPosition.set(x, top + bh / 2 - this.sagAt(row, x), z);
-      box.restQuaternion.setFromEuler(new THREE.Euler(0, yaw, 0));
+      box.restQuaternion.setFromEuler(new THREE.Euler(0, yaw + (box.spineOut ? Math.PI / 2 : 0), 0));
       box.home = this;
       if (!carried) {
         // Already standing on its (new) spot here: nothing to slide (a box moved by hand shifts only its neighbours).
-        const unmoved = box.parent === this && box.position.distanceToSquared(box.restPosition) < 1e-10;
+        const unmoved = box.parent === this && box.position.distanceToSquared(box.restPosition) < 1e-10 && box.quaternion.angleTo(box.restQuaternion) < 1e-4;
         const delay = unmoved ? null : (slide?.(box) ?? null);
         if (delay !== null && box.parent && box.parent !== this) this.attach(box); // keeps where it stands, in this shelf's frame
         else if (box.parent !== this) this.add(box);
@@ -194,7 +203,6 @@ export class Shelf extends THREE.Group {
           box.quaternion.copy(box.restQuaternion);
         }
       }
-      cursorX += bw + gap;
     });
     this.dressRow(row);
   }
@@ -215,7 +223,7 @@ export class Shelf extends THREE.Group {
     const { width, depth, gap, boardThickness } = this.options;
     const inner = width / 2 - boardThickness;
     const boxes = this.rowBoxes[row] ?? [];
-    const used = boxes.reduce((sum, box) => sum + box.dimensions.width + gap, 0);
+    const used = this.used(row);
     const fits = (!trinket.leans || boxes.length > 0) && inner - (-inner + used) >= trinket.width + 0.02;
     trinket.object.visible = fits;
     if (!fits) return;
@@ -229,9 +237,9 @@ export class Shelf extends THREE.Group {
    * clearance. The opening's dream fills the rest (`DreamShelves`).
    */
   rowRoom(row: number): { floor: number; from: number; to: number; front: number; height: number } {
-    const { width, depth, gap, boardThickness, rowHeights } = this.options;
+    const { width, depth, boardThickness, rowHeights } = this.options;
     const inner = width / 2 - boardThickness;
-    const used = (this.rowBoxes[row] ?? []).reduce((sum, box) => sum + box.dimensions.width + gap, 0);
+    const used = this.used(row);
     // A trinket at the row's end keeps its spot (a bookend by the boxes takes its width from the start).
     const trinket = this.trinkets[row];
     const kept = trinket?.object.visible ? trinket.width + 0.02 : 0;
@@ -248,9 +256,10 @@ export class Shelf extends THREE.Group {
   /**
    * Where `held` would go if put in at local point `at` (a point on this bookcase under the crosshair): the row
    * whose space holds it, the index among that row's boxes (`held` left out) and the gap's centre (local, on the
-   * front of the row). `fits` is false when the row has no room left for it. Null outside every row.
+   * front of the row). `fits` is false when the row has no room left for it. Null outside every row. `spineOut`: it
+   * would go in standing spine out (the ghost and the room it needs are its thickness, not its width).
    */
-  spotAt(at: THREE.Vector3, held: GameBox): ShelfSpot | null {
+  spotAt(at: THREE.Vector3, held: GameBox, spineOut = false): ShelfSpot | null {
     const { width, depth, gap, boardThickness: t, rowHeights } = this.options;
     const inner = width / 2 - t;
     if (Math.abs(at.x) > width / 2 + 0.01) return null;
@@ -262,40 +271,36 @@ export class Shelf extends THREE.Group {
     const shownX = (box: GameBox) => box.restPosition.x + box.parted;
     const index = boxes.filter((box) => shownX(box) < at.x).length;
     const top = this.boardTops[row]!;
-    const { width: hw, height: hh, depth: hd } = held.dimensions;
+    const hw = across(held, spineOut);
+    const hd = deep(held, spineOut);
+    const hh = held.dimensions.height;
     const standZ = (d: number) => depth / 2 - d / 2 - FRONT_SET;
-    const swap = boxes.find((box) => Math.abs(at.x - shownX(box)) <= box.dimensions.width * SWAP_SPAN);
+    const swap = boxes.find((box) => Math.abs(at.x - shownX(box)) <= across(box) * SWAP_SPAN);
     if (swap) {
-      // The box in hand's own row may be this one (a swap along the row always fits); the other end is the group's to check.
-      const fits = (this.rowBoxes[row] ?? []).includes(held) || this.roomFor(row, swap, held);
-      const { width: sw, height: sh, depth: sd } = swap.dimensions;
+      // The box in hand's own row may be this one (a swap along it); the other end of a swap across rows is the group's to check.
+      const fits = this.roomFor(row, swap, held, spineOut);
+      const sw = across(swap);
+      const sd = deep(swap);
+      const sh = swap.dimensions.height;
       const size = new THREE.Vector3(Math.max(hw, sw), Math.max(hh, sh), Math.max(hd, sd)).addScalar(0.006);
       // Wrapped round the box it would swap with, standing where that one stands (its own push and pull).
       const { x, y: sy, z } = swap.restPosition;
       const centre = new THREE.Vector3(x, sy - sh / 2 + size.y / 2 - 0.003, z);
       return { row, index: boxes.indexOf(swap), fits, gap: new THREE.Vector3(x, top - this.sagAt(row, x), depth / 2 - FRONT_SET + 0.004), height: hh, swap, centre, size, parting: [] };
     }
-    const used = boxes.reduce((sum, box) => sum + box.dimensions.width, 0) + boxes.length * gap;
-    const fits = used + hw <= 2 * inner + 1e-6;
     // Where the row would stand with the box in: packed from the left like `placeRow`, the box in hand at `index`.
+    const withHeld = boxes.map((box) => standing(box));
+    withHeld.splice(index, 0, standing(held, spineOut));
+    const packed = pack(withHeld, gap);
+    const fits = packed.length <= 2 * inner + 1e-6;
     const parting: [GameBox, number][] = [];
-    let cursor = -inner;
-    let x = -inner + hw / 2;
-    boxes.forEach((box, i) => {
-      if (i === index) {
-        x = cursor + hw / 2;
-        cursor += hw + gap;
-      }
-      const bw = box.dimensions.width;
-      if (fits) parting.push([box, cursor + bw / 2 - box.restPosition.x]);
-      cursor += bw + gap;
-    });
-    if (index >= boxes.length) x = cursor + hw / 2;
+    let x = -inner + packed.xs[index]!;
+    if (fits) boxes.forEach((box, i) => parting.push([box, -inner + packed.xs[i < index ? i : i + 1]! - box.restPosition.x]));
     if (!fits) {
       // No room: nothing parts; the ghost stands in the gap as it is, overlapping its neighbours.
       const before = boxes[index - 1];
       const after = boxes[index];
-      x = before ? before.restPosition.x + before.dimensions.width / 2 + gap / 2 + hw / 2 : after ? after.restPosition.x - after.dimensions.width / 2 - gap / 2 - hw / 2 : -inner + hw / 2;
+      x = before ? before.restPosition.x + across(before) / 2 + gap / 2 + hw / 2 : after ? after.restPosition.x - across(after) / 2 - gap / 2 - hw / 2 : -inner + hw / 2;
     }
     x = THREE.MathUtils.clamp(x, -inner + hw / 2, inner - hw / 2);
     const centre = new THREE.Vector3(x, top - this.sagAt(row, x) + hh / 2, standZ(hd));
@@ -330,12 +335,33 @@ export class Shelf extends THREE.Group {
     return this.rowBoxes.findIndex((boxes) => boxes?.includes(box));
   }
 
-  /** Whether row `row` has room for `coming` once `leaving` (on it) is gone. */
-  roomFor(row: number, leaving: GameBox, coming: GameBox): boolean {
+  /**
+   * Whether row `row` has room for `coming` (standing spine out or not, as `spineOut` says) in `leaving`'s place on it;
+   * both on the row (a swap along it), each in the other's place. `leaving` === `coming`: the box turned where it stands.
+   */
+  roomFor(row: number, leaving: GameBox, coming: GameBox, spineOut = coming.spineOut): boolean {
     const { width, gap, boardThickness } = this.options;
-    const boxes = (this.rowBoxes[row] ?? []).filter((box) => box !== leaving && box !== coming);
-    const used = boxes.reduce((sum, box) => sum + box.dimensions.width, 0) + boxes.length * gap;
-    return used + coming.dimensions.width <= width - 2 * boardThickness + 1e-6;
+    const boxes = this.rowBoxes[row] ?? [];
+    const both = boxes.includes(coming);
+    const after = boxes.flatMap((box): Standing[] => {
+      if (box === leaving) return [standing(coming, spineOut)];
+      if (box === coming) return both ? [standing(leaving)] : [];
+      return [standing(box)];
+    });
+    if (!boxes.includes(leaving)) after.push(standing(coming, spineOut));
+    return pack(after, gap).length <= width - 2 * boardThickness + 1e-6;
+  }
+
+  /** How much of row `row` its boxes take (m), with the air after the last one: where what comes next may start. */
+  private used(row: number): number {
+    const boxes = this.rowBoxes[row] ?? [];
+    return boxes.length ? pack(boxes.map((box) => standing(box)), this.options.gap).length + this.options.gap : 0;
+  }
+
+  /** Whether `box`'s row (in hand: the row it came from) still holds it once it is turned spine out (`spineOut`) or cover out. */
+  roomToTurn(box: GameBox, spineOut: boolean): boolean {
+    const row = this.rowOf(box);
+    return row >= 0 && this.roomFor(row, box, box, spineOut);
   }
 
   /**
@@ -519,6 +545,43 @@ function bow(geometry: THREE.BufferGeometry, span: number, sag: number): void {
   position.needsUpdate = true;
   geometry.computeBoundingBox();
   geometry.computeBoundingSphere();
+}
+
+/** A box as it would stand on a row: spine out or not (the box in hand may be about to be turned). */
+interface Standing {
+  box: GameBox;
+  spine: boolean;
+}
+
+function standing(box: GameBox, spine = box.spineOut): Standing {
+  return { box, spine };
+}
+
+/**
+ * A row packed from its left end: each box's centre (m from the end) and the length they take, the air between two
+ * neighbours `gap`, or `SPINE_GAP` between two spines. Every room check measures a row this way, as `placeRow` lays it.
+ */
+function pack(row: readonly Standing[], gap: number): { xs: number[]; length: number } {
+  const xs: number[] = [];
+  let cursor = 0;
+  row.forEach((item, i) => {
+    const w = across(item.box, item.spine);
+    xs.push(cursor + w / 2);
+    cursor += w;
+    const next = row[i + 1];
+    if (next) cursor += item.spine && next.spine ? SPINE_GAP : gap;
+  });
+  return { xs, length: cursor };
+}
+
+/** How much of its row a box takes (m, along it): its width, or its thickness standing spine out. */
+function across(box: GameBox, spineOut = box.spineOut): number {
+  return spineOut ? box.dimensions.depth : box.dimensions.width;
+}
+
+/** How deep it stands on the board (m): its thickness, or its width standing spine out. */
+function deep(box: GameBox, spineOut = box.spineOut): number {
+  return spineOut ? box.dimensions.width : box.dimensions.depth;
 }
 
 /** Yaw and depth offset of a box on the shelf, from its game id (the same every time). */

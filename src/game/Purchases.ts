@@ -50,18 +50,17 @@ export class Purchases {
     if (!wallet) return;
     if (!wallet.spend(payment.price)) {
       const coins = `${formatCoins(payment.price)}`;
-      this.host.refuse(wallet.coins === 0 ? `It costs ${coins} and your pockets are empty.` : `It costs ${coins} and you have ${wallet.coins}.`);
+      this.host.refuse(wallet.coins === 0 ? `It costs ${coins} and your pockets are empty.` : `It costs ${coins} and you have ${formatCoins(wallet.coins)}.`);
       return;
     }
-    // A line with an effect under it (the coffee's "they will go easier on you") is a card to read, else a reaction; the cost either way.
+    // Coins changed hands with no fanfare: a slip with the coin chip, what was bought as its title, the line (and what it changed) under it.
     const [story = '', ...effect] = payment.paid().split('\n');
-    const cost = payment.price > 0 ? ` (−${formatCoins(payment.price)})` : '';
-    if (effect.length) this.host.read({ text: `${story}${cost}`, effect: effect.join('\n') });
-    else this.host.react(`${story}${cost}`);
+    const detail = [payment.title ? story : '', ...effect].filter(Boolean).join(' ');
+    this.host.slip({ title: payment.title ?? story, ...(detail ? { detail } : {}), ...(payment.price > 0 ? { coins: -payment.price } : {}) });
   }
 
   private refuseShort(offer: UpgradeOfferLike, coins: number): void {
     this.host.refuse(`${offer.title} costs ${formatCoins(offer.price)} and you have ${coins}.`);
-    this.host.tip('Short of coins? Tickets become coins at the arcade’s prize counter.', { id: 'short-of-coins' });
+    this.host.tip('Short of coins? Tickets become coins at the arcade’s prize counter.', { id: 'short-of-coins', head: 'Coins', times: 3 });
   }
 }

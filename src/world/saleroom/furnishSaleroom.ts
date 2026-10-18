@@ -31,7 +31,7 @@ const AUCTIONEER_SEED = 461;
  * room's bidders in their seats (the rival in the front row), the decor, and the `Saleroom` that runs the sale.
  * Without the lot services (`ctx.market.lots`) it is an empty room with its door.
  */
-export function furnishSaleroom(zone: Zone, ctx: Pick<BuildContext, 'sky' | 'listener' | 'acoustics' | 'covers' | 'collection' | 'money' | 'today' | 'market' | 'social'>): ZoneHandle {
+export function furnishSaleroom(zone: Zone, ctx: Pick<BuildContext, 'sky' | 'listener' | 'acoustics' | 'covers' | 'collection' | 'money' | 'today' | 'market' | 'social' | 'panels' | 'notices'>): ZoneHandle {
   const { sky, listener, covers, collection, money, today } = ctx;
   const plan = SALEROOM_PLAN;
   const room = furnishShell(zone, sky, plan.room, { fixedDaylight: DAYLIGHT });
@@ -61,7 +61,7 @@ export function furnishSaleroom(zone: Zone, ctx: Pick<BuildContext, 'sky' | 'lis
     seed: AUCTIONEER_SEED,
     speaker: 'The auctioneer',
     label: 'The auctioneer · chat',
-    lines: ['Bid with a click on the rostrum, or on the stand. I see every paddle in this room.', 'Silence is golden, and silence sells: three calls and down comes the hammer.', 'Sale every week. The lots are on the board days ahead.'],
+    lines: ['Bid with a click on the rostrum, or on the stand. I see every paddle in this room.', 'Silence is golden, and silence sells: three calls and down comes the hammer.', 'Sale every week. The lots are on the board days ahead.', 'Got something good at home? Bring it to the rostrum between sales and I’ll put it in front of the room.'],
   }), new THREE.Vector3(ax, 0, az));
   auctioneer.stand(0, 'lead', 'viewer');
 
@@ -109,6 +109,8 @@ export function furnishSaleroom(zone: Zone, ctx: Pick<BuildContext, 'sky' | 'lis
     board,
     auctioneer,
     bidders,
+    ...(ctx.panels.consign ? { openConsign: (session: Parameters<Saleroom['bid']>[0]) => session.openPanel(ctx.panels.consign!) } : {}),
+    notices: ctx.notices,
   }), new THREE.Vector3());
   // The regulars' side of a word with them: leave a lot, the star lot's tip, a lot sold on at what they paid.
   zone.onUnload(saleroomExtras({ starLot: () => sale?.starLot() ?? null, wonBy: (b) => sale?.wonBy(b) ?? null, buyFrom: (b) => sale?.buyFrom(b, shortName(b)) ?? { ok: false, why: 'Not now.' } }));

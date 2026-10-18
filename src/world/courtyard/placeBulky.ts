@@ -6,7 +6,7 @@ import type { Vec2 } from '../street/streetPlan';
 import { getPlatform } from '@/catalog/platforms';
 import { homeGood } from '@/economy/homeGoods';
 import { StockItem } from '@/economy/StockItem';
-import { FAULTS } from '@/repair/consoles';
+import { faultOf } from '@/repair/consoles';
 import { bulkyTaken, takeFromBulky, type BulkyLot } from '@/building/bulkyWaste';
 import { Prop } from '../props/Prop';
 import { UsableProp, type UseOptions } from '../props/UsableProp';
@@ -122,7 +122,7 @@ export function placeBulky(zone: Zone, ctx: BulkyContext, lot: BulkyLot, at: (p:
           workshop.add({ platform, fault, paid: 0, from: `${lot.owner.name}’s clear-out` });
           takeFromBulky(lot, 'console');
           zone.remove(prop);
-          notices.reward({ title: `A broken ${console_.shortName}, free`, detail: `“${FAULTS[fault].symptom}” It waits on a kitchen chair at home.` });
+          notices.reward({ title: `A broken ${console_.shortName}, free`, detail: `“${faultOf({ platform, fault, paid: 0 }).symptom}” It waits on a kitchen chair at home.` });
         },
       }),
       at(plan.console.at),

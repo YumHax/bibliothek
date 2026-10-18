@@ -5,7 +5,7 @@ import type { Ad } from '@/classifieds/ads';
 import { SellerDealer } from '@/classifieds/dealer';
 import type { ConsoleOffer } from '@/classifieds/sellerLot';
 import type { StockItem } from '@/economy/StockItem';
-import { FAULTS } from '@/repair/consoles';
+import { faultOf } from '@/repair/consoles';
 import { playBoxClack } from '@/audio/boxClack';
 import type { BuildContext, ClassifiedsContext, ZoneHandle } from '../buildContext';
 import type { Furniture } from '../Furniture';
@@ -32,6 +32,11 @@ import { ForSaleBox } from '../market/ForSaleBox';
 import { ConsoleProp } from '../repair/ConsoleProp';
 import { NO_BENCH, hasBench } from '../repair/furnishRepair';
 import { NoteCard } from './NoteCard';
+import { LotCard } from './LotCard';
+import { TABLE_LOT } from '@/classifieds/rules';
+import { ARM_ABOVE, purchaseClinks } from '@/economy/pricing';
+import { playCoins } from '@/audio/coins';
+import { Arming } from '@/ui/confirmTwice';
 import { Seller } from './Seller';
 import { bodyOf, talkHook } from '../people/socialHook';
 import { randomLook } from '../people/looks';
@@ -57,7 +62,7 @@ const GREET_AFTER = 1;
  * their lot on it once drawn (market boxes whose haggle and sale go through the seller, `SellerDealer`), their broken
  * console on the box of spares, a scripted ad's note on the sideboard.
  */
-export function furnishSellerFlat(zone: Zone, ctx: Pick<BuildContext, 'sky' | 'listener' | 'acoustics' | 'classifieds' | 'collection' | 'covers' | 'money' | 'social' | 'today' | 'home'>): ZoneHandle {
+export function furnishSellerFlat(zone: Zone, ctx: Pick<BuildContext, 'sky' | 'listener' | 'acoustics' | 'classifieds' | 'collection' | 'covers' | 'money' | 'social' | 'today' | 'home' | 'market'>): ZoneHandle {
   const { sky, listener } = ctx;
   const room = furnishShell(zone, sky, PLAN.room);
   placeRoomLight(zone, room, 'pendant', PLAN.pendant, PLAN.lightSwitch);
@@ -109,7 +114,7 @@ class Visit extends Prop implements Updatable {
   /** The ad whose seller is being visited, until the visit ends. */
   private visiting: Ad | null = null;
 
-  constructor(private readonly zone: Zone, private readonly ctx: Pick<BuildContext, 'sky' | 'listener' | 'acoustics' | 'classifieds' | 'collection' | 'covers' | 'money' | 'social' | 'today' | 'home'>, private readonly classifieds: ClassifiedsContext, private readonly hosts: Hosts) {
+  constructor(private readonly zone: Zone, private readonly ctx: Pick<BuildContext, 'sky' | 'listener' | 'acoustics' | 'classifieds' | 'collection' | 'covers' | 'money' | 'social' | 'today' | 'home' | 'market'>, private readonly classifieds: ClassifiedsContext, private readonly hosts: Hosts) {
     super();
     this.name = 'SellerVisit';
     zone.onUnload(() => {
@@ -183,6 +188,7 @@ class Visit extends Prop implements Updatable {
         wallet: ctx.money.wallet,
         isWanted: () => ctx.collection.isWanted(item.game.id),
         where,
+        seller: person,
         thanks: () => seller.thanks(),
         react: (reaction) => {
           if (reaction === 'pickUp' || reaction === 'putBack') playBoxClack(reaction === 'putBack');
@@ -215,14 +221,60 @@ class Visit extends Prop implements Updatable {
         lay(item, PLAN.spots[i]!);
       });
       if (lot.console && !book.consoleSold(ad.id)) this.placeConsole(ad, lot.console, seller);
+      if (TABLE_LOT.kinds.includes(ad.kind) && onTable.size >= 2) this.placeLotCard(ad, seller, onTable, where);
     });
+  }
+
+  /**
+   * A parent clearing out or someone moving away prices the whole table (`TABLE_LOT`): a card by the boxes, its caption
+   * the price of what is left on it; a click has them pitch it, another buys it all (into the parcel, one receipt each).
+   */
+  private placeLotCard(ad: Ad, seller: Seller, onTable: ReadonlySet<SellerBox>, where: string): void {
+    const { zone, ctx, classifieds, hosts } = this;
+    const tx = ctx.market.lots?.tx;
+    if (!tx) return;
+    const arming = new Arming<string>(() => {});
+    const left = () => [...onTable];
+    const price = () => Math.max(1, Math.round(left().reduce((sum, box) => sum + box.item.price, 0) * TABLE_LOT.share));
+    const card: LotCard = new LotCard({
+      writing: () => ({ price: price(), count: onTable.size }),
+      label: () => (onTable.size >= 2 ? `The lot · ${formatCoins(price())} for all ${onTable.size}` : null),
+      use: (session) => {
+        if (onTable.size < 2) return;
+        const total = price();
+        if (!arming.press(`${onTable.size}:${total}`) && total > ARM_ABOVE) {
+          seller.speak(ad.kind === 'mover' ? `All of it, ${formatCoins(total)}, and I don’t have to pack a thing. Deal?` : `The whole table for ${formatCoins(total)}? Go on, love. Say yes.`);
+          return;
+        }
+        const boxes = left();
+        const result = tx.buyTable(boxes.map((b) => b.item), total, where);
+        if (!result.ok) {
+          if (result.reason === 'short') session.refuse(`The lot is ${formatCoins(total)} and you have ${formatCoins(ctx.money.wallet.coins)}.`);
+          else if (result.reason === 'pricing') session.react('They are still pricing the last boxes. In a moment.');
+          else if (result.reason === 'owned') session.react('You have one of these already: buy the others one by one.');
+          return;
+        }
+        arming.reset();
+        for (const box of boxes) {
+          classifieds.book.recordBought(ad.id, box.item.game.id);
+          box.onSold?.();
+        }
+        playCoins(purchaseClinks(total));
+        session.slip({ title: `The whole table: ${result.games.length} games`, detail: 'Into the parcel in the hall.', coins: -total });
+        this.placed.delete(card);
+        zone.remove(card);
+        disposeTree(card);
+      },
+    });
+    const [x, z] = PLAN.lotCardAt;
+    this.place(zone.place(card, zone.toLocal(hosts.table.localToWorld(new THREE.Vector3(x, hosts.table.topHeight, z))), hosts.table.rotation.y));
   }
 
   /** The seller's broken console on the box of spares: a click buys it (it goes home, to the kitchen). */
   private placeConsole(ad: Ad, offer: ConsoleOffer, seller: Seller): void {
     const { zone, classifieds, hosts } = this;
     const platform = getPlatform(offer.platform);
-    const fault = FAULTS[offer.fault];
+    const fault = faultOf({ platform: offer.platform, fault: offer.fault, paid: offer.price });
     const talk = SELLER_TALK[ad.kind];
     let pitched = false;
     const prop: ConsoleProp = new ConsoleProp({

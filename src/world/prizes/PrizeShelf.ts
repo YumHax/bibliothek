@@ -8,6 +8,7 @@ import { isShared } from '../materials/sharedResources';
 import { WALL, decal } from '../surface/layers';
 import { PROUD } from '../props/joinery';
 import { prizeModel } from './prizeModel';
+import { SHELF_TOYS, ShelfToy } from './ShelfToy';
 
 interface PrizeShelfOptions {
   /** The prizes taken home, and a way to hear about new ones. */
@@ -44,6 +45,8 @@ const MAX_STUDS = 6;
 export class PrizeShelf extends Prop {
   private readonly options: Required<PrizeShelfOptions>;
   private readonly shown = new THREE.Group();
+  /** Where each prize on the row stands now (shelf-local), for the toys made to be played with (`ShelfToy`). */
+  private readonly spots = new Map<string, THREE.Vector3>();
   private readonly unsubscribe: () => void;
 
   constructor(options: PrizeShelfOptions) {
@@ -64,6 +67,11 @@ export class PrizeShelf extends Prop {
   /** Shelf-local spot of the lava lamp: on the bottom board, at its right end. */
   get lavaSpot(): THREE.Vector3 {
     return new THREE.Vector3(this.options.width / 2 - 0.02 - SLOT / 2, 0, DEPTH * 0.5);
+  }
+
+  /** The toys on the row made to be played with (the snow globe, the jukebox tape, the mini cabinet): placed with the shelf at its origin. */
+  toys(): ShelfToy[] {
+    return SHELF_TOYS.map((kind) => new ShelfToy({ kind, spot: () => this.spots.get(kind) ?? null }));
   }
 
   /** Shelf-local points under the bottom board where the yo-yo (left) and the keyring (right) hang. */
@@ -90,6 +98,7 @@ export class PrizeShelf extends Prop {
         }
       });
     }
+    this.spots.clear();
     const counts = new Map<string, number>();
     for (const { id } of this.options.prizes.owned) counts.set(id, (counts.get(id) ?? 0) + 1);
     const won = [...counts.keys()].map((id) => getPrize(id)).filter((p): p is Prize => !!p && onTrophyRow(p));
@@ -109,6 +118,7 @@ export class PrizeShelf extends Prop {
       const x = -width / 2 + 0.02 + SLOT * (slot + 0.5);
       model.position.set(x, tier * gap + PROUD, DEPTH * 0.45);
       this.shown.add(model);
+      this.spots.set(prize.id, model.position.clone());
       this.studs(x, tier * gap, (counts.get(prize.id) ?? 1) - 1);
     });
     pennants.forEach((prize, i) => this.shown.add(this.pennant(prize, i, (counts.get(prize.id) ?? 1) - 1)));

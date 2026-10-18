@@ -21,7 +21,7 @@ export interface TrailFile {
 
 export interface JournalPanelOptions {
   /** Today's arcade challenge, if the arcade is wired: which machine, the score, the bonus, whether it is beaten. */
-  challenge?: () => { gameId: string; target: number; reward: number; done: boolean; kind?: string };
+  challenge?: () => { gameId: string; target: number; reward: number; done: boolean; kind?: string; ask: string };
   /** A machine's name for the challenge line (default: its id in capitals). */
   titleOf?: (gameId: string) => string;
   /** What is coming (tomorrow's market day, an event this week, a favour owed): the market, the calendar and the people say. */

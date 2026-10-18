@@ -9,14 +9,15 @@ import type { PhoneAds } from './PhonePanel';
  */
 export function phoneAds(book: Classifieds): PhoneAds {
   return {
-    hint: 'Nothing to ring yet: the Gaming Weekly at the newsstand on Front Street has small ads, people round the corner selling their old games.',
+    hint: 'The Gaming Weekly at the newsstand on Front Street has small ads: people round the corner selling their old games. Their numbers end up here once you have read them.',
     list: () => {
       const booking = book.booking;
       return book.seenAds().map((ad) => ({
         id: ad.id,
-        who: `${ad.name}, ${ad.flat}`,
+        name: ad.name,
+        flat: ad.flat,
         text: ad.text,
-        booked: booking?.ad.id === ad.id ? `${booking.day === book.today ? 'today' : 'tomorrow'} ${formatClock(ad.hours[0])}–${formatClock(ad.hours[1])}` : null,
+        booked: booking?.ad.id === ad.id ? `${booking.day === book.today ? 'today' : 'tomorrow'}, ${formatClock(ad.hours[0])}–${formatClock(ad.hours[1])}` : null,
       }));
     },
     ring: (id) => {
@@ -24,7 +25,7 @@ export function phoneAds(book: Classifieds): PhoneAds {
       if (!ad) return 'The number rings and rings. They must have sold everything.';
       const before = book.booking;
       const line = book.book(ad);
-      return before && before.ad.id !== ad.id ? `${line}\n(Your visit to ${before.ad.name} is off: no harm, ring them again if you like.)` : `${line}\n${SELLERS_BUILDING} is on Front Street, over PARK FRUIT & VEG, by Park Street’s corner.`;
+      return before && before.ad.id !== ad.id ? `${line}\nYour visit to ${before.ad.name} is off: no harm, ring them again if you like.` : `${line}\n${SELLERS_BUILDING} is on Front Street, over PARK FRUIT & VEG, by Park Street’s corner.`;
     },
   };
 }

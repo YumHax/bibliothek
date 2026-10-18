@@ -1,50 +1,53 @@
-/* A friend asks to borrow a game: a small card over the view (`.ui-modal--centre`); the card shell is the kit's. */
+/*
+ * A friend asks to borrow a game: a small card over the view (`.ui-modal--centre`). The friend asks at the top
+ * (`panel/speaker`); under them the box, tilted as if held out, and a tear-off calendar leaf with the days till
+ * it comes back.
+ */
 @layer tokens, base, components, panels;
 @layer panels {
-  .borrow-panel__card { --card-w: var(--card-w-sm); }
-  .borrow-panel__card h2 {
-    margin: 0 0 0.8rem;
-    font-family: var(--ui-font-display);
-    font-weight: 400;
-    font-size: var(--fs-t2);
-  }
+  .borrow-panel__card { --card-w: var(--card-w-md); }
   .borrow-panel__game {
     display: flex;
-    gap: 0.8rem;
+    gap: var(--sp-4);
     align-items: center;
+    padding: var(--sp-2) var(--sp-1) 0;
   }
-  .borrow-panel__cover {
-    width: 4.5rem;
-    border-radius: var(--ui-radius-sm);
-    box-shadow: var(--ui-shadow);
-  }
-  .borrow-panel__title {
-    margin: 0;
-    font-size: var(--fs-8);
-    font-weight: 600;
-  }
-  .borrow-panel__detail,
-  .borrow-panel__terms {
-    margin: 0.2rem 0 0;
-    font-size: var(--fs-4);
-    color: var(--ui-text-dim);
-  }
-  .borrow-panel__terms {
-    margin-top: 0.9rem;
-  }
-  .borrow-panel__card footer {
-    display: flex;
-    flex-wrap: wrap;
-    gap: var(--sp-2);
-    margin-top: var(--sp-4);
-  }
+  .borrow-panel__box { flex: none; display: grid; place-items: center; width: 6rem; min-height: 7.5rem; }
   /* The shared thumbnail class (for the placeholder swap) must not shrink the card's cover. */
-  .borrow-panel .borrow-panel__cover.catalogue__cover {
-    width: 4.5rem;
-    height: auto;
-  }
+  .borrow-panel .borrow-panel__cover.catalogue__cover,
   .borrow-panel .catalogue__cover--placeholder {
-    width: 4.5rem;
-    height: 5.4rem;
+    width: 6rem;
+    height: auto;
+    border-radius: var(--ui-radius-xs);
+    box-shadow: 4px 6px 0 var(--shade-45);
+    transform: rotate(-3deg);
   }
+  .borrow-panel .catalogue__cover--placeholder { height: 7.5rem; }
+  .borrow-panel__cover--none { width: 6rem; height: 7.5rem; border-radius: var(--ui-radius-xs); background: var(--ui-fill); transform: rotate(-3deg); }
+  .borrow-panel__about { min-width: 0; }
+  .borrow-panel__title { margin: 0; font-size: var(--fs-t1); font-weight: 600; line-height: 1.2; }
+  .borrow-panel__detail { margin: var(--sp-1) 0 0; font-size: var(--fs-4); color: var(--ui-text-dim); }
+  .borrow-panel__back {
+    display: flex;
+    align-items: center;
+    gap: var(--sp-2);
+    margin: var(--sp-3) 0 0;
+    font-family: var(--ui-font-hand);
+    font-size: var(--fs-t1);
+  }
+  /* A tear-off calendar leaf: a red band, the number big, the unit under it. */
+  .borrow-panel__leaf {
+    display: grid;
+    justify-items: center;
+    width: 2.6rem;
+    padding-bottom: 0.15rem;
+    border-radius: var(--ui-radius-xs);
+    background: linear-gradient(var(--ink-red) 0 0.45rem, var(--paper-note) 0.45rem);
+    color: var(--ink-letter);
+    box-shadow: 2px 2px 0 var(--shade-45);
+    font-family: var(--ui-font-body);
+    line-height: 1;
+  }
+  .borrow-panel__leaf-days { margin-top: 0.6rem; font-size: var(--fs-t2); font-weight: 700; }
+  .borrow-panel__leaf-unit { font-size: var(--fs-tiny); text-transform: uppercase; letter-spacing: 0.06em; }
 }

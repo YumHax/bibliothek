@@ -27,9 +27,12 @@ export function addExtras(provider: ExtrasProvider): () => void {
   return () => providers.delete(provider);
 }
 
-/** Everything the registered features offer in this conversation. */
+/** What needs hands: nothing is handed over or bought down the phone (as gifts are not, `socialPlan` `notAt`). */
+const HANDS: ReadonlySet<TalkExtra['group']> = new Set(['give', 'trade']);
+
+/** Everything the registered features offer in this conversation (on a call, what needs no hands). */
 export function extrasFor(ctx: ExtrasContext): TalkExtra[] {
   const out: TalkExtra[] = [];
   for (const provider of providers) out.push(...provider(ctx));
-  return out;
+  return ctx.place === 'phone' ? out.filter((extra) => !HANDS.has(extra.group)) : out;
 }

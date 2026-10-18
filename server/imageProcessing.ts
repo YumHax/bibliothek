@@ -2,8 +2,11 @@ import type { StoredArt } from './artStore';
 
 /** Longest side of a served cover; box faces are a few hundred pixels on screen at most. */
 const MAX_ART_SIZE = 512;
-/** A front cover asked `?size=large`: the box in hand, held up to the eye, fills more than 512 px of the screen. */
-export const LARGE_ART_SIZE = 1024;
+/**
+ * What the box in hand asks (`?size=xl`: its front cover, its scanned back, cartridge and disc): held up to the eye and
+ * brought close enough to read (the loupe), a face fills the view, well past 512 px.
+ */
+export const XL_ART_SIZE = 2048;
 const WEBP_QUALITY = 82;
 
 type Sharp = typeof import('sharp');

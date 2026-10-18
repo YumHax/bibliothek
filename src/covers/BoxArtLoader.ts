@@ -31,7 +31,7 @@ export interface BoxArt {
  * its disc's printed side (alpha kept round the disc, square, the print's top up).
  */
 export interface BoxDetails {
-  /** The front cover at twice the shelf's size (`?size=large` on the art proxy), for the box held up to the eye. */
+  /** The front cover at four times the shelf's size (`?size=xl` on the art proxy), for the box held up to the eye. */
   front: THREE.Texture | null;
   back: THREE.Texture | null;
   screenshot: CanvasImageSource | null;
@@ -74,8 +74,11 @@ const SCAN_CONCURRENCY = 2;
 /** A front that failed (not missing) is asked again after these waits (ms): a busy server, a dropped connection. */
 const FRONT_RETRY_MS = [0, 8_000, 50_000];
 const NO_DETAILS: BoxDetails = { front: null, back: null, screenshot: null, cart: null, disc: null };
-/** The art proxy keeps a front cover large on this query (`server/artCache`): only its own addresses take it. */
-const LARGE_FRONT = '?size=large';
+/**
+ * The art proxy and the scan proxy serve the box in hand's images large on this query (`server/artCache`, `server/scanCache`:
+ * a face filling the view to be read): only their own addresses take it.
+ */
+const XL = '?size=xl';
 
 interface Entry {
   readonly game: Game;
@@ -215,6 +218,17 @@ export class BoxArtLoader {
     return entry.details;
   }
 
+  /**
+   * The box is put down: its details are not kept (they are large: `?size=xl`, and only the box in hand holds them);
+   * a next `details()` fetches them again, from the browser's cache. Its downloads stop jumping the queue.
+   */
+  forgetDetails(game: Game): void {
+    const entry = this.entries.get(game.id) ?? this.idle.get(game.id);
+    if (!entry) return;
+    entry.details = null;
+    entry.urgent = false;
+  }
+
   private async loadDetails(entry: Entry): Promise<BoxDetails> {
     const [urls, scans] = await Promise.all([this.urlsOf(entry), this.scansOf(entry)]);
     const urgent = () => URGENT;
@@ -223,21 +237,21 @@ export class BoxArtLoader {
       this.queue.run(async () => {
         // Only through the proxy (straight from GitHub, or a baked cover, the shelf's is all there is).
         if (!urls.front?.startsWith('/api/art/')) return null;
-        const large = await this.fetch.texture(urls.front + LARGE_FRONT, anisotropy);
+        const large = await this.fetch.texture(urls.front + XL, anisotropy);
         return large && caseOf(entry.game).kind === 'jewel' ? jewelFront(large, anisotropy) : large;
       }, urgent),
       this.queue.run(async () => {
         // One at a time: a scanned back makes the screenshots useless, a snap the title screen.
-        const back = await this.fetch.texture(scans.back ?? urls.back, anisotropy);
+        const back = await this.fetch.texture(xl(scans.back) ?? urls.back, anisotropy);
         const screenshot = back ? null : ((await this.fetch.image(urls.snap)) ?? (await this.fetch.image(urls.title)));
         return { back, screenshot };
       }, urgent),
       this.queue.run(async () => {
-        const image = await this.fetch.image(scans.cart ?? urls.cart);
+        const image = await this.fetch.image(xl(scans.cart) ?? urls.cart);
         return image ? cartFromScan(image, anisotropy) : null;
       }, urgent),
       this.queue.run(async () => {
-        const image = await this.fetch.image(scans.disc ?? urls.disc);
+        const image = await this.fetch.image(xl(scans.disc) ?? urls.disc);
         return image ? discFromScan(image, anisotropy) : null;
       }, urgent),
     ]);
@@ -382,4 +396,9 @@ export class BoxArtLoader {
       return {};
     }
   }
+}
+
+/** A scan through the proxy, asked at the size the box in hand reads (`XL`); a baked file or another source as it is. */
+function xl(url: string | undefined): string | undefined {
+  return url?.startsWith('/api/scan/') ? url + XL : url;
 }

@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import type { SeatLike } from '@/game/SessionActions';
 import type { HomeUpgrade } from '@/economy/HomeUpgrades';
 import type { CoatKind } from '../cat/types';
 import { Seat } from '../Seat';
@@ -44,6 +45,8 @@ export interface DisplayPiece {
   object: THREE.Object3D;
   update?(dt: number): void;
   setSold?(sold: boolean): void;
+  /** A piece one may sit in to try it before buying (the armchair): where the eye goes. */
+  seat?: SeatLike;
 }
 
 /** What a display's `variant` picks: the houseplants' kinds, the prints' motifs, the armchairs' cushions. */
@@ -104,7 +107,7 @@ const PIECES: Partial<Record<HomeUpgrade, PieceBuilder>> = {
   armchair: (variant) => {
     const seat = new Seat();
     seat.mountCushion(new Cushion({ color: CUSHIONS[variant % CUSHIONS.length], tilt: 0.2 }));
-    return still(seat);
+    return { ...still(seat), seat };
   },
   floorLamp: () => still(new FloorLamp()),
   sideTable: () => still(new SideTable()),

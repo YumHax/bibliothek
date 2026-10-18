@@ -28,6 +28,7 @@ import { KITCHEN_PLAN } from './kitchenPlan';
 import { tellOutcome } from '@/household/tellOutcome';
 import { readMs } from '@/notices';
 import { HOUSEHOLD } from '@/household/rules';
+import { random } from '@/random';
 import { boxJob } from '../build/boxJob';
 import { playCleaning, playJarRattle, playOven, playPaperRustle, playWhisk } from '@/audio/householdSounds';
 import { playCoins } from '@/audio/coins';
@@ -39,6 +40,11 @@ import { rummageIn } from '../build/rummage';
 import { furnishMemeRecipes } from './memeRecipes';
 import { Corkboard } from './Corkboard';
 import { furnishKeepsakes } from './fridgeKeepsakes';
+import { FlowerVase } from '../props/FlowerVase';
+import { vase } from '@/errands/vase';
+import { pocket } from '@/errands/pocket';
+import { SEASON_FLOWERS } from '@/errands/errands';
+import { seasonOf } from '@/time/season';
 
 /** The chronicle's card comes up this long after the jingle starts (ms). */
 const CHRONICLE_AFTER_MS = 1500;
@@ -109,7 +115,7 @@ export function furnishKitchen(zone: Zone, ctx: KitchenBuild): ZoneHandle {
   const toaster = appliances.placeAt(new Toaster(), plan.toaster);
   appliances.placeWith(toaster, pointSound(ctx, toaster.sound), new THREE.Vector3(0, 0.12, 0));
   const tuner = placerFor(zone, upgrades, plan.upgrades.radio);
-  const radio = tuner.placeAt(new Radio(), plan.radio);
+  const radio = tuner.placeAt(new Radio({ tunable: true }), plan.radio);
   tuner.placeWith(radio, pointSound(ctx, radio.sound, { maxDistance: 9 }), new THREE.Vector3(-0.05, 0.08, 0.04));
   // On late, downstairs hears it (`building/noiseComplaints`).
   zone.onUnload(addFlatNoise('radio', () => (radio.sound.isOn ? RADIO_NOISE : 0)));
@@ -136,7 +142,7 @@ export function furnishKitchen(zone: Zone, ctx: KitchenBuild): ZoneHandle {
   placerFor(zone, upgrades, plan.upgrades.crt).place(crt, zone.toLocal(fridge.localToWorld(top)), fridge.rotation.y);
 
   // 8. What the kitchen is used for (docs/household.md): the cleaning kit, a cake, the cat's treats, the radio's chronicle.
-  if (household) furnishKitchenLife(zone, ctx, household, { table, furnished, catThings, radio });
+  if (household) furnishKitchenLife(zone, ctx, household, { table, furnished, catThings, radio, kettle, toaster });
   // Friends' keepsakes: the fridge door's eight, the corkboard's twenty once it is bought (docs/social.md "Keepsakes").
   if (household) {
     const pinboard = placerFor(zone, upgrades, plan.upgrades.corkboard);
@@ -169,11 +175,21 @@ export function furnishKitchen(zone: Zone, ctx: KitchenBuild): ZoneHandle {
  * it lasts), the treat jar and whatever the cat leaves by its bowl the next day, and Radio Brocante's
  * chronicle when the radio is switched on in the morning.
  */
-function furnishKitchenLife(zone: Zone, ctx: KitchenBuild, householdCtx: HouseholdContext, parts: { table: KitchenTable; furnished: Placer; catThings: Placer; radio: Radio }): void {
-  const { life, notices, catName, callCat, pastimes } = householdCtx;
+function furnishKitchenLife(zone: Zone, ctx: KitchenBuild, householdCtx: HouseholdContext, parts: { table: KitchenTable; furnished: Placer; catThings: Placer; radio: Radio; kettle: Kettle; toaster: Toaster }): void {
+  const { life, notices, catName, callCat, pastimes, smellToast } = householdCtx;
   const plan = KITCHEN_PLAN.household;
   const { household } = life;
-  const { table, furnished, catThings, radio } = parts;
+  const { table, furnished, catThings, radio, kettle, toaster } = parts;
+  // The kettle boiled: a pot of tea, offered to the next friend in while it is hot (docs/household.md "The kitchen").
+  kettle.onBoiled = () => {
+    household.brewTea();
+    notices.react('Click. A pot of tea, for whoever comes round.');
+  };
+  // The toast up: its smell goes round the flat, and the cat comes to see.
+  toaster.onToast = () => {
+    if (!smellToast || random() >= HOUSEHOLD.toast.catChance) return;
+    if (smellToast()) notices.react(`${catName()} pads into the kitchen, nose up: toast.`);
+  };
   // Without the table, the kit stays in the bathroom cabinet and no cake is baked (nowhere to put either).
   life.setKitchenTable(() => isOwned(ctx.home.upgrades, KITCHEN_PLAN.upgrades.table));
   // The household's changes and the clock's (a cake goes stale, a gift turns up the next day).
@@ -212,6 +228,17 @@ function furnishKitchenLife(zone: Zone, ctx: KitchenBuild, householdCtx: Househo
     presentWhile(zone, kit, () => household.hasKit, (cb) => household.subscribe(cb));
     placeWith(zone, table, cake, onTable(plan.cake.at));
     presentWhile(zone, cake, () => household.cakeOut, follow);
+    // The vase by the wall: the florist's flowers for a few days (`errands/vase`).
+    placeWith(zone, table, new FlowerVase({
+      flowers: () => vase.on(ctx.today.gameDay),
+      name: (season) => SEASON_FLOWERS[season],
+      carried: () => pocket.count('bunch') > 0,
+      fill: () => {
+        if (pocket.take('bunch') !== 'bunch') return false;
+        vase.fill(seasonOf(new Date()).name, ctx.today.gameDay);
+        return true;
+      },
+    }), onTable(plan.vase.at));
   });
   zone.placeAt(new MixingBowl({ label: () => life.bakeLabel, use: () => bake() }), plan.mixingBowl);
   // Forty minutes in the oven, in a beat: the whisk as the view goes, the oven door in the dark, its timer on the way back.
@@ -265,7 +292,7 @@ function furnishKitchenLife(zone: Zone, ctx: KitchenBuild, householdCtx: Househo
   const radioAt = new THREE.Vector3();
   const earAt = new THREE.Vector3();
   const inEarshot = (): boolean => radio.getWorldPosition(radioAt).distanceTo(ctx.listener.getWorldPosition(earAt)) < KITCHEN_PLAN.household.chronicleEarshot;
-  onRise(zone, () => radio.sound.isOn && life.chronicleDue && inEarshot(), () => {
+  onRise(zone, () => radio.sound.isOn && radio.sound.station === 'lounge' && life.chronicleDue && inEarshot(), () => {
     const lines = life.chronicle();
     if (!lines) return;
     // A caller about a story the player follows (the lost prototype), when the trail has reached the radio.

@@ -47,7 +47,8 @@ local clamp / lerp / smoothstep / easing / angle helper, `atan2(sin, cos)` wrap 
 outside `src/text/`. `audio.mjs`: no local burst / ping / bed helper, no second `AudioContext`, no gesture listener in
 `src/audio`, no loudness curve written in place outside `audio/hearing`. `ui.mjs`: no `innerHTML`, `escapeHtml`, raw keydown
 listener, `title=` tooltip, hand-made status line, press-twice timer or second search debounce in a panel (the kit does
-these, docs/ui.md). `time.mjs`: no `setTimeout` / `setInterval` / `performance.now()` in zone or game code (`zone.after`,
+these, docs/ui.md), and no bare price in `ui/` or `notices/` (`${row.price}` printed as a figure: `formatCoins` in words,
+`priceHtml` in a price column; a line drawing the coin, `__coin` / `ui-coin`, names the unit by picture). `time.mjs`: no `setTimeout` / `setInterval` / `performance.now()` in zone or game code (`zone.after`,
 a phase fed by `dt`; audio and loading say why), no `location.search` outside `settings/flags`, no hand-made hour window
 (`time/clock` `inHours`) or hand-rolled daily marker (`time/OncePerDay`). `css.mjs`: below. A new shared module lands
 with its rule module.
@@ -61,7 +62,9 @@ panel's sheet comes last, in `@layer panels`, and only lays them out. A sheet wr
 or duration: it names a token, or sets a slot variable in its theme block (`--pz-hot` on the prize counter, `--shop-ink`
 per shop, `--focus` for a theme's ring) and reads it with `var()`. A time TypeScript waits for is a slot beside the rule
 (`--search-fade: 140ms`). `!important` is for the few overrides that say why (`/* convention-ok: <why> */`): `[hidden]`,
-the renderer's inline style, the reduce-motion clamp, pad-mode cursor, the photo dim. A legacy class listed beside a
+the renderer's inline style, the reduce-motion clamp, pad-mode cursor, the photo dim. Reduced motion is the game's
+setting, never `@media (prefers-reduced-motion)`: a sheet prefixes its rule with `.reduce-motion `, code reads
+`reduceMotion()` (`settings/motion`, the one place the system's query is read; both flagged). A legacy class listed beside a
 `.ui-*` selector in components.css goes when its template says `.ui-*`.
 
 ## Contrast and text size (`scripts/check-contrast.mjs`)
@@ -182,7 +185,14 @@ trades move them). It prints each person's warmth, trust, tier and perks in forc
   costs a little, its face showed it; a dip on the way is a note);
 - the coverage: a deep person with fewer than four topics or none obvious, a topic without an answer or words, a
   topic teaching or opening on a fact the card does not have, a choice the engine offers that gets no answer or a number
-  asked that is not given (each choice said from every warm tier), a place entry with no words.
+  asked that is not given (each choice said from every warm tier), a place entry with no words;
+- down the phone: a line a call can show (for everyone with a number: their topics as `topicHere` gives them on a call,
+  their facts, their own lines as `voiced(id, key, 'phone')` finds them, a phone intro for a friend from the start, and
+  the shared pools as `socialPool` / `newsPool` / `playerPool` and the `PHONE_*` lines give them) holding words that
+  need the player there (`IN_PERSON` in `src/headless/social.ts`: a request at the start of a sentence, "Sit, sit.",
+  "Taste."; "pass me", "you look…", "come here", "mind the step", "good to see you"). The list is kept tight (a story
+  told, "I had to sit down", passes); a line it flags gets its words for a call (docs/social.md "The phone"). A
+  person's `call` lines are written for the phone and not read.
 
 `--days`, `--seed`. Each person draws from their own stream (the seed and their id), so a newcomer to the cast leaves
 everyone else's results as they were.

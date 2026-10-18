@@ -47,7 +47,8 @@ src/player/             FirstPersonController (yaw/pitch, sliding collisions aga
 src/input/              actions (ACTIONS: every keyed action -> codes, gamepad alias, touch button, Settings row, context; `isAction`,
                         markup / alias / touch-bar derivations), padButtons, Gamepad (standard mapping -> virtual keys + synthetic mouse),
                         GameInput (a mini-game's stick and fire with the press edge worked out once: `FireEdge`, `GameInput.read`, `KeyEdges`),
-                        TouchControls (the bar shows what works where the hands are: `setContext`), SyntheticMouse, deviceDetect,
+                        TouchControls (one fixed-height row, a pictogram over each word from touchIcons, the hands' main action lit,
+                        what works where the hands are: `setContext`; a program's pad A/B/Start/Select or a cabinet's Fire on the glass), SyntheticMouse, deviceDetect,
                         lastDevice (the device last used, whatever the room's entry mode: key caps, "click / press A / tap", hints)
 src/game/               Session (thin router: builds the controllers, key route order, SessionActions facade), SessionHost (what a
                         controller may ask of the Session + KeyRoute), SessionParts (structural interfaces + CoreParts + the union of every
@@ -275,7 +276,7 @@ src/journal/            Journal (the day's lines and sums per local date, 60 day
                         the co-owners' meeting, the estate sale, the party, a seller expecting the player, holds and orders, what waits
                         at home, a list one game short; today's lines first). A line's `data` carries what the panel pastes beside it
                         (`id` a game's cover, `who` a person's face, `price`, `platform`). The notebook is `world/hallway/Notebook`.
-src/onboarding/         FirstDay (the guided first day: steps ticked by the stores and the zones, one tip per step and zone, persisted,
+src/onboarding/         FirstDay (the guided first day: steps ticked by the stores and the zones, one tip per step and place, persisted,
                         off for a save that predates it), firstDaySteps (the steps, the to-do lines, the tips per zone), ToDoNote (the
                         folded card on the hall console), StickyNote ("KEYS!" on the front door's leaf, `Door.attachToLeaf`), context
                         (`HomeNotesContext`: what the hallway reads).
@@ -323,7 +324,7 @@ src/headless/           What each headless script imports from the game (data, s
 src/time/               Today (the one "today": `gameDay`, the market calendar's count, and `realDay`; `clock` (a `GameClock`), `weekday(kind)`,
                         `moment`, `onNewRealDay`; in BuildContext), clock (`HourSpan`, `inHours` with the one wrap rule, `nightOf`,
                         `GameClock`), schedule (`Schedule`, `realDays` / `gameDays`, `keptAway`, the `SCHEDULES` book: what is on and
-                        when, declared once per feature), gameDateLabel ("Sat · day 12 · 18:40"), OncePerDay (`oncePerDay`: done today, by name, in `daily.v1`), daily
+                        when, declared once per feature), gameDateLabel ("Saturday, 18:40"), OncePerDay (`oncePerDay`: done today, by name, in `daily.v1`), daily
                         (`dailySeed` / `isEventDay` / `dailyRandom` / `gameDayRandom`, `dayStream` / `dayLcg` for what was always drawn
                         so: every day-seeded draw, the only place a day seeds a stream), DailyList and DailyTally
                         (per-real-day saved lists and counts), season (the real calendar's season and holidays), wakefulness (how busy the
@@ -374,6 +375,7 @@ src/onscreen/           Programs on the flat's screens instead of a longplay (do
                         `padToControls`, chip sounds into the set; pad two is a second controller), programs (`registerProgram` /
                         `programFor`, asked by `game/Screens.playOn`),
                         ProgramRunner (one at a time: the feed on the glass, the set's level and pan, the pads, pause; ticked by the engine);
+                        programOsd (the set's warm-up while a program loads, PAUSED over the frozen frame, the cart's SAVED mark);
                         `game/ProgramPlay` is the Session's route while the player holds the pad
 src/emulator/           NesProgram (jsnes, Apache-2.0, as a ScreenProgram), homebrew (HOMEBREW_CARTS: freely licensed NES homebrew,
                         ROMs + licences in `public/roms/`), register (`registerHomebrew`, from `bootstrap/session`)

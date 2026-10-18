@@ -10,6 +10,7 @@ import type { Furniture } from '../../Furniture';
 import { ForSaleBox } from '../../market/ForSaleBox';
 import { invisibleHitbox } from '../../meshUtils';
 import type { HalloweenDoor } from '../streetPlacesPlan';
+import type { StepAnswerer } from '../life/StepAnswerer';
 
 interface DoorKnockOptions {
   door: HalloweenDoor;
@@ -25,11 +26,13 @@ interface DoorKnockOptions {
   host: { place<F extends Furniture>(item: F, position: THREE.Vector3, rotationY?: number): F; remove(item: Furniture): void; toLocal(point: THREE.Vector3): THREE.Vector3 };
   covers: BoxArtLoader;
   wallet: { readonly coins: number; subscribe(cb: () => void): () => void };
+  /** Whoever lives there, coming to the door with the treat (`life/StepAnswerer`); none: a voice from inside. */
+  answerer?: StepAnswerer;
 }
 
 /** The door's size, as a click target. */
 const DOOR = { width: 1.1, height: 2.3 };
-const ANSWERS = ['“Trick or treat? Go on then, take a handful.”', '“Oh, you gave me a fright! Here, sweets.”', '“We’ve run out of the good ones. Have a toffee.”'];
+const ANSWERS = ['Trick or treat? Go on then, take a handful.', 'Oh, you gave me a fright! Here, sweets.', 'We’ve run out of the good ones. Have a toffee.'];
 const KNOCKED = ['Nobody comes: they gave you their sweets already.', 'The pumpkin grins. You have had your treat here.'];
 /** A treat in coin: how many. */
 const TREAT_COINS = 2;
@@ -86,24 +89,45 @@ export class DoorKnock extends THREE.Group implements Furniture, Interactable {
     trickOrTreat.knock(door.id, year());
     const random = lcg(fnv1a(`trick:${door.id}:${year()}`));
     if (this.options.givesGame) {
-      session.say('“Trick or treat? I’ve something better than sweets. My son’s, from the loft. Go on, it’s on the step.”', door.who);
-      void this.options.game().then((item) => (item ? this.leave(item) : undefined));
+      this.speak(session, 'Trick or treat? I’ve something better than sweets. My son’s, from the loft. Go on, it’s on the step.');
+      trickOrTreat.leaveGift(door.id, year());
+      this.layGift();
       return;
     }
     if (random() < 0.35 && this.options.purse) {
       this.options.purse.earnCoins(TREAT_COINS);
-      session.say('“No sweets left, I’m afraid. Here, for the arcade.”', door.who);
+      this.speak(session, 'No sweets left, I’m afraid. Here, for the arcade.');
       session.reward({ title: 'Trick or treat', detail: `${door.who} had no sweets left.`, coins: TREAT_COINS });
       return;
     }
-    session.say(ANSWERS[Math.floor(random() * ANSWERS.length)]!, door.who);
+    this.speak(session, ANSWERS[Math.floor(random() * ANSWERS.length)]!);
+  }
+
+  /** The answer at the door: whoever lives there comes out on the step with it, else a voice from inside. */
+  private speak(session: SessionActions, line: string): void {
+    if (this.options.answerer) this.options.answerer.answer(line);
+    else session.say(line, this.options.door.who);
+  }
+
+  /**
+   * The year's old game on the step, when it was left there and not taken yet (a reload in between: laid again, the
+   * same game, drawn from the year's seed). Called by the builder once the door is placed.
+   */
+  relay(): void {
+    if (this.options.givesGame && trickOrTreat.giftLying(this.options.door.id, this.options.year())) this.layGift();
+  }
+
+  private layGift(): void {
+    if (this.gift) return;
+    void this.options.game().then((item) => (item && !this.gift ? this.leave(item) : undefined));
   }
 
   /** The old game, left lying on the step for the player to take. */
   private leave(item: StockItem): void {
     const { host, covers, wallet } = this.options;
-    const box = new ForSaleBox(item, covers, { pose: { kind: 'flat' }, tag: false, wallet, where: 'a Halloween door on Front Street', free: true, thanks: () => '“Happy Halloween!”' });
+    const box = new ForSaleBox(item, covers, { pose: { kind: 'flat' }, tag: false, wallet, where: 'a Halloween door on Front Street', free: true, thanks: () => 'Happy Halloween!' });
     box.onSold = () => {
+      trickOrTreat.takeGift();
       host.remove(box);
       box.dispose();
       this.gift = null;

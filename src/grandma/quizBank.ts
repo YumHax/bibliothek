@@ -1,10 +1,11 @@
 /*
  * THE AFTERNOON QUIZ on Mémé's set (docs/grandma.md "Things to do with her"): the show's questions. General knowledge
- * and the old television she knows, more or less; the video games she never does (she guesses anyway).
+ * and the old television she knows, more or less; the video games she never does (she guesses anyway). Between the
+ * show's, her own: the family (she asks, and lets the player answer), and the player's shelves (`collectionQuestion`).
  */
 
 /** What a question is about: what she knows of it. */
-type QuizKind = 'general' | 'telly' | 'games';
+type QuizKind = 'general' | 'telly' | 'games' | 'family' | 'shelves';
 
 export interface QuizQuestion {
   id: string;
@@ -13,6 +14,10 @@ export interface QuizQuestion {
   /** The answers in the order the show gives them; `right` is the good one's index. */
   answers: readonly string[];
   right: number;
+  /** A family question: asked only once this memory of her album has been seen. */
+  after?: string;
+  /** A family question: asked only once she has told this story of hers (`GRANDMA_STORIES`). */
+  told?: string;
 }
 
 /** Questions a round asks. */
@@ -53,4 +58,35 @@ export const QUIZ_BANK: readonly QuizQuestion[] = [
   { id: 'gamesZelda', kind: 'games', question: 'In The Legend of Zelda, the hero in green is called…', answers: ['Zelda', 'Link', 'Ganon', 'Navi'], right: 1 },
   { id: 'gamesGameBoy', kind: 'games', question: 'The Game Boy came with which game in the box?', answers: ['Pong', 'Tetris', 'Pac-Man', 'Snake'], right: 1 },
   { id: 'gamesPikachu', kind: 'games', question: 'Pikachu is what kind of Pokémon?', answers: ['Fire', 'Water', 'Electric', 'Grass'], right: 2 },
+  { id: 'gamesSega', kind: 'games', question: 'The Mega Drive was made by…', answers: ['Nintendo', 'Sony', 'Sega', 'Atari'], right: 2 },
+  { id: 'gamesCartridge', kind: 'games', question: 'Why did people blow into cartridges?', answers: ['To cool them', 'To get the dust out', 'For luck', 'All three, honestly'], right: 3 },
 ];
+
+/** Her own questions, slipped in between the show's: about the family, once she has told the memory behind each. */
+export const FAMILY_QUIZ: readonly QuizQuestion[] = [
+  { id: 'famTortoise', kind: 'family', question: 'Mémé’s question! Félix’s tortoise was called…', answers: ['Flash', 'Speedy', 'Napoleon', 'Turbo'], right: 1, told: 'tortoise' },
+  { id: 'famGeorges', kind: 'family', question: 'Mémé’s question! Your grandfather Georges mended…', answers: ['Shoes', 'Bicycles', 'Clocks', 'Radios'], right: 2, told: 'georges' },
+  { id: 'famSeaside', kind: 'family', question: 'Mémé’s question! At Le Crotoy in fifty-nine, Georges hired a…', answers: ['Rowing boat', 'Tandem', 'Donkey', 'Caravan'], right: 1, told: 'seaside' },
+  { id: 'famWrap', kind: 'family', question: 'Mémé’s question! What did Félix wrap your Game Boy in?', answers: ['Brown paper', 'The sports pages', 'A tea towel', 'Gold foil'], right: 1, after: 'christmas95' },
+  { id: 'famCushion', kind: 'family', question: 'Mémé’s question! On your Wednesdays at Félix’s, you sat…', answers: ['In his armchair', 'On a cushion on the floor', 'On the windowsill', 'On his knee'], right: 1, after: 'wednesdays' },
+  { id: 'famLetters', kind: 'family', question: 'Mémé’s question! Your first high score: how many letters did you type?', answers: ['Two', 'Three', 'Four', 'Your whole name'], right: 1, after: 'arcade' },
+  { id: 'famMoney', kind: 'family', question: 'Mémé’s question! Gaspard called Félix’s cartridges…', answers: ['Plastic toys', 'Money asleep', 'A waste of a life', 'Dust traps'], right: 1, after: 'row' },
+  { id: 'famLots', kind: 'family', question: 'Mémé’s question! How many lots were in Félix’s sale?', answers: ['112', '298', '412', 'A thousand'], right: 2, after: 'sale' },
+];
+
+/**
+ * A question about the player's own shelves (`owned`: titles in the collection, `others`: games it does not hold):
+ * which of four is theirs. Null with too few of either.
+ */
+export function collectionQuestion(owned: readonly string[], others: readonly string[], rng: () => number): QuizQuestion | null {
+  if (!owned.length || others.length < 3) return null;
+  const mine = owned[Math.floor(rng() * owned.length)]!;
+  const pool = [...others].filter((t) => t !== mine);
+  const wrong: string[] = [];
+  while (wrong.length < 3 && pool.length) wrong.push(pool.splice(Math.floor(rng() * pool.length), 1)[0]!);
+  if (wrong.length < 3) return null;
+  const right = Math.floor(rng() * 4);
+  const answers = [...wrong];
+  answers.splice(right, 0, mine);
+  return { id: `shelves:${mine}`, kind: 'shelves', question: 'Mémé’s question! Which of these is on your shelves?', answers, right };
+}

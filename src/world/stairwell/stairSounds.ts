@@ -319,9 +319,26 @@ function throughDoor(ctx: AudioContext, out: AudioNode, cutoff = 600): AudioNode
   return door;
 }
 
+/**
+ * A phrase on a neighbour's piano in the room with it (the player at the keys): the scale steps above middle C
+ * (`steps`), `gap` seconds apart, a wrong note now and then. False when the audio is not running.
+ */
+export function playPianoPhrase(steps: readonly number[], gap = 0.34, level = 0.5): boolean {
+  const ctx = startedAudioContext();
+  if (!ctx) return false;
+  const out = ctx.createGain();
+  out.gain.value = level;
+  out.connect(audioBus(ctx, 'world'));
+  steps.forEach((step, i) => {
+    const wrong = random() < 0.1 ? (random() < 0.5 ? 1 : -1) : 0;
+    pianoNote(ctx, out, 261.6 * Math.pow(2, (step + wrong) / 12), ctx.currentTime + i * gap);
+  });
+  return true;
+}
+
 /** A piano's note: a few harmonics struck and decaying, the higher ones sooner. */
-function pianoNote(ctx: AudioContext, out: AudioNode, frequency: number): void {
-  const now = ctx.currentTime;
+function pianoNote(ctx: AudioContext, out: AudioNode, frequency: number, at = ctx.currentTime): void {
+  const now = at;
   [1, 2, 3, 4].forEach((harmonic, i) => {
     const osc = ctx.createOscillator();
     osc.type = 'sine';

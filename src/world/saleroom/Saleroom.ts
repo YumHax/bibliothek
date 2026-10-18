@@ -4,7 +4,9 @@ import type { SessionActions } from '@/game/SessionActions';
 import type { TxResult } from '@/economy/Transactions';
 import { AUCTION } from '@/economy/pricing';
 import { LotRun, RIVAL_BIDDER, YOU, bidderById, drawInterest, type LotEvent } from '@/economy/auction';
-import { isAuctionDay, nextAuctionDay, type AuctionLot } from '@/economy/AuctionHouse';
+import { isAuctionDay, lotSeed, nextAuctionDay, type AuctionLot } from '@/economy/AuctionHouse';
+import { settleConsignment } from '@/economy/consignments';
+import type { NoticeActions } from '@/notices';
 import { RIVAL_COLLECTOR, RIVAL_PERSON } from '@/economy/rivalCollector';
 import { has } from '@/social/perks';
 import { nudge } from '@/social/standing';
@@ -19,6 +21,11 @@ import type { Rostrum } from './Rostrum';
 import type { LotStand } from './LotStand';
 import type { SaleBoard } from './SaleBoard';
 import { formatCoins } from '@/text/money';
+import { random } from '@/random';
+import { Arming, armedLine } from '@/ui/confirmTwice';
+
+/** What a bidder near their limit lets slip as they bid (a tell: one more and they are out). */
+const NEAR_LIMIT = ['…and that’s me, nearly.', 'Hmm. Steady.', 'Getting dear, this.', '*a long breath*'];
 
 /** How the receipts of what is bought here name the place. */
 const SALEROOM_WHERE = 'the saleroom';
@@ -39,6 +46,10 @@ interface SaleroomOptions {
   auctioneer: Walker;
   /** The room's bidders' bodies, by id (`SALEROOM_BIDDERS`). */
   bidders: ReadonlyMap<string, Walker>;
+  /** Entering a copy of the player's for the next sale (the consignment sheet: `WorldPanels.consign`); none: the house takes none. */
+  openConsign?: (session: SessionActions) => void;
+  /** How the player hears of their own copy's hammer, whoever clicked last. */
+  notices?: Pick<NoticeActions, 'slip'>;
 }
 
 type State =
@@ -79,6 +90,8 @@ export class Saleroom extends THREE.Object3D implements Furniture, Updatable {
   private readonly wonToday = new Map<string, { lot: AuctionLot; price: number; day: number }>();
   /** The game day a lot was last split with Victor (once a sale day). */
   private splitDay = -1;
+  /** A jump bid takes a second press while leading. */
+  private readonly jumpArming = new Arming<string>(() => {});
 
   constructor(private readonly options: SaleroomOptions) {
     super();
@@ -115,8 +128,12 @@ export class Saleroom extends THREE.Object3D implements Furniture, Updatable {
   /** The caption on the rostrum and the stand: what a click does now. */
   caption(): string | null {
     const s = this.state;
-    if (s.kind !== 'calling' || !s.run.open) return s.kind === 'between' ? `Lot ${s.lot.number}: ${s.lot.title} · coming up` : 'The rostrum';
+    if (s.kind !== 'calling' || !s.run.open) {
+      if (s.kind === 'between') return `Lot ${s.lot.number}: ${s.lot.title} · coming up`;
+      return this.options.openConsign ? 'The rostrum · enter a copy for a sale' : 'The rostrum';
+    }
     const { run, lot } = s;
+    if (lot.consigned) return run.leader ? `Your ${lot.title} · ${formatCoins(run.amount)} bid` : `Your ${lot.title} · up now`;
     if (lot.game && this.options.owns(lot.game.id)) return `${lot.title}: you have it already`;
     if (run.leader === YOU) return `You lead at ${formatCoins(run.amount)}`;
     return `${lot.title} · bid ${formatCoins(run.ask)}`;
@@ -126,16 +143,32 @@ export class Saleroom extends THREE.Object3D implements Furniture, Updatable {
   bid(session: SessionActions): void {
     const s = this.state;
     if (s.kind !== 'calling' || !s.run.open) {
-      session.react(s.kind === 'between' ? 'The next lot is coming up.' : 'Nothing is being sold just now.');
+      if (s.kind !== 'between' && this.options.openConsign) this.options.openConsign(session);
+      else session.react(s.kind === 'between' ? 'The next lot is coming up.' : 'Nothing is being sold just now.');
       return;
     }
     const { run, lot } = s;
+    if (lot.consigned) {
+      session.react('That one is yours: sit tight and let the room do the bidding.');
+      return;
+    }
     if (lot.game && this.options.owns(lot.game.id)) {
       session.refuse(`You have ${lot.title} already.`);
       return;
     }
     if (run.leader === YOU) {
-      session.react(`Your paddle is up at ${formatCoins(run.amount)}.`);
+      // Leading, a second press jumps the bid a step ("make it seventy"): whoever that prices out lets it go.
+      const jumpTo = run.ask;
+      if (this.options.wallet.coins < jumpTo) {
+        session.react(`Your paddle is up at ${formatCoins(run.amount)}.`);
+        return;
+      }
+      if (!this.jumpArming.press(`${lot.number}:${run.amount}`)) {
+        session.react(`Your paddle is up at ${formatCoins(run.amount)}. ${armedLine(`jump to ${formatCoins(jumpTo)}`)}`);
+        return;
+      }
+      this.session = session;
+      this.handle(s, run.jump(YOU));
       return;
     }
     const ask = run.ask;
@@ -171,6 +204,7 @@ export class Saleroom extends THREE.Object3D implements Furniture, Updatable {
   canSplit(): string | null {
     const s = this.state;
     if (s.kind !== 'calling' || !s.run.open) return 'Wait for a lot to be called';
+    if (s.lot.consigned) return 'That lot is yours';
     if (s.split) return 'Agreed already';
     if (this.splitDay === this.options.day()) return 'Once a sale';
     if (s.lot.game && this.options.owns(s.lot.game.id)) return 'You have it already';
@@ -266,7 +300,7 @@ export class Saleroom extends THREE.Object3D implements Furniture, Updatable {
   /** The lot is called: who wants it is drawn, the auctioneer asks for the opening bid. */
   private call(lot: AuctionLot): void {
     const day = this.options.day();
-    const rng = gameDayRandom(`auction:${lot.number}`, day);
+    const rng = gameDayRandom(lotSeed(lot), day);
     const interest = drawInterest({ estimate: lot.estimate, reserve: lot.reserve, ...(lot.platform ? { platform: lot.platform } : {}), star: lot.star }, rng, this.options.lots.rival.keenness);
     const run = new LotRun(lot.reserve, interest);
     this.biddersOnLot.clear();
@@ -275,6 +309,8 @@ export class Saleroom extends THREE.Object3D implements Furniture, Updatable {
     // On the star lot the rival says so first: fair warning.
     if (lot.star && interest.some((i) => i.bidder === RIVAL_BIDDER)) this.options.bidders.get(RIVAL_BIDDER)?.speak(`The ${lot.title}. That one's coming home with me.`);
     this.options.auctioneer.speak(`Lot ${lot.number}: ${lot.title}. ${lot.blurb} Who'll start me at ${run.ask}?`);
+    // The player's own copy: the room's eyes on them a moment.
+    if (lot.consigned) this.options.notices?.slip({ title: `Your ${lot.title} is up`, detail: `Lot ${lot.number}, estimate ${formatCoins(lot.estimate)}.` });
     this.handle(state, run.start());
   }
 
@@ -288,6 +324,8 @@ export class Saleroom extends THREE.Object3D implements Furniture, Updatable {
           if (event.by !== YOU) this.biddersOnLot.add(event.by);
           const body = bidders.get(event.by);
           body?.gesture('wave');
+          // Near their limit, a bidder's face gives it away.
+          if (event.by !== YOU && run.near(event.by)) body?.say(NEAR_LIMIT[Math.floor(random() * NEAR_LIMIT.length)]!);
           auctioneer.say(event.by === YOU ? `${event.amount}, by the door. Thank you.` : `${event.amount}, ${nameOf(event.by)}.`, 1.6);
           break;
         }
@@ -308,6 +346,7 @@ export class Saleroom extends THREE.Object3D implements Furniture, Updatable {
           return;
         case 'passed':
           auctioneer.speak('No interest? Then it’s passed.');
+          if (lot.consigned) this.consignmentSettled(lot, null);
           this.settle(lot, { to: 'passed', price: 0 });
           return;
         case 'open':
@@ -358,7 +397,7 @@ export class Saleroom extends THREE.Object3D implements Furniture, Updatable {
     if (state.rivalBid) services.rival.beatenOnce(today);
     outbidBy(this.biddersOnLot, today);
     if (state.split) this.payRivalHalf(lot, price, today);
-    auctioneer.speak(`Sold! To the bidder by the door, for ${price}.`);
+    auctioneer.speak(`Sold! To the bidder by the door, for ${formatCoins(price)}.`);
     for (const [, body] of bidders) body.gesture('clap');
     this.session?.slip({ title: `Sold: ${lot.title}`, detail: lot.sealed ? 'The carton waits in the hallway at home.' : 'In the parcel in the hall.', coins: -price });
     this.options.board.show({ kind: 'lot', number: lot.number, of: this.lots?.length ?? lot.number, title: lot.title, estimate: lot.estimate, bid: price, leader: 'you', status: 'SOLD', you: true });
@@ -385,7 +424,15 @@ export class Saleroom extends THREE.Object3D implements Furniture, Updatable {
   private soldToRoom(state: Extract<State, { kind: 'calling' }>, to: string, price: number, today: number): void {
     const { lot } = state;
     const { lots: services, auctioneer, bidders } = this.options;
-    auctioneer.speak(`Sold! To ${nameOf(to)}, for ${price}.`);
+    auctioneer.speak(`Sold! To ${nameOf(to)}, for ${formatCoins(price)}.`);
+    if (lot.consigned) {
+      // The player's copy: the house's cheque (the rival keeps his win, `settleConsignment`), nothing to sell on after.
+      this.consignmentSettled(lot, { to, price });
+      bidders.get(to)?.gesture(to === RIVAL_BIDDER ? 'fistPump' : 'clap');
+      this.options.board.show({ kind: 'lot', number: lot.number, of: this.lots?.length ?? lot.number, title: lot.title, estimate: lot.estimate, bid: price, leader: nameOf(to), status: 'SOLD', you: false });
+      this.settle(lot, { to, price });
+      return;
+    }
     if (to !== RIVAL_BIDDER && lot.game) this.wonToday.set(to, { lot, price, day: today });
     const winner = bidders.get(to);
     winner?.gesture(to === RIVAL_BIDDER ? 'fistPump' : 'clap');
@@ -412,6 +459,16 @@ export class Saleroom extends THREE.Object3D implements Furniture, Updatable {
       });
     }
     return { ok: false, reason: 'unavailable' };
+  }
+
+  /** The player's consigned copy went (or was passed): their cheque, or the copy home, and a word of it. */
+  private consignmentSettled(lot: AuctionLot, hammer: { to: string; price: number } | null): void {
+    const { auction, tx, rival } = this.options.lots;
+    const day = this.options.day();
+    const entry = auction.consignedFor(day);
+    if (!entry || entry.game.id !== lot.game?.id) return;
+    const news = settleConsignment(auction, tx, entry, hammer, lot.reserve, rival);
+    this.options.notices?.slip({ title: news.title, detail: news.detail, ...(news.coins ? { coins: news.coins } : {}) });
   }
 
   private settle(lot: AuctionLot, result: { to: string; price: number }): void {
@@ -445,7 +502,7 @@ export class Saleroom extends THREE.Object3D implements Furniture, Updatable {
       title: 'TODAY’S RESULTS',
       lines: (this.lots ?? []).map((l) => {
         const r = auction.resultOf(day, l.number);
-        return `${l.number}. ${l.title}: ${!r || r.to === 'passed' ? 'passed' : `${r.price} (${nameOf(r.to)})`}`;
+        return `${l.number}. ${l.title}: ${!r || r.to === 'passed' ? 'passed' : `${formatCoins(r.price)} (${nameOf(r.to)})`}`;
       }),
     });
   }

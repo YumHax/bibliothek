@@ -1,28 +1,75 @@
-import { ROOT_PREFIX, onCorruptSave, onOtherTab, onWriteFailure } from '@/persistence';
+import { KEYS, ROOT_PREFIX, onCorruptSave, onOtherTab, onWriteFailure } from '@/persistence';
 import { capitalise } from '@/text/strings';
 
 /** A repeated warning (every save fails once storage is full) is shown at most this often. */
 const REPEAT_MS = 60_000;
 const SHOW_MS = 9000;
 
-/** What each save is, in the player's words (the key's name, without its prefix and version). */
-const SAVE_NAMES: Readonly<Record<string, string>> = {
-  settings: 'your settings', quality: 'the graphics level', cat: 'the cat’s settings',
-  collection: 'your collection', deliveries: 'the parcels on their way', wallet: 'your wallet', prizes: 'your prizes',
-  home: 'your flat’s furniture', market: 'the flea market', standing: 'your name at the market', notices: 'the market’s notice board',
-  calendar: 'the market calendar', arcade: 'your arcade scores', arcadeDaily: 'the arcade’s daily challenge', arcadeMedals: 'your arcade medals',
-  arcadeLeague: 'the arcade league', arcadeJackpot: 'the arcade jackpot', arcadeTournament: 'the arcade tournament',
-  arcadeReplays: 'your arcade replays', arcadeHabits: 'the arcade’s tips and the claw’s luck', payoutStats: 'the arcade’s payout figures', position: 'where you stood',
-  moodLamp: 'the mood lamp', busker: 'the busker', finds: 'your finds', giveaway: 'the giveaway box', garageSale: 'the garage sale',
-  trader: 'the travelling trader', scratch: 'your scratch cards', scratchCard: 'your scratch card', visitors: 'your friends’ visits',
-  journal: 'your journal', milestones: 'your milestones', valueHistory: 'your collection’s value history', firstDay: 'the first day’s to-do list',
-  post: 'your mail', neighbourTrades: 'the neighbours’ swaps', household: 'the flat’s household',
+/**
+ * What each save is, in the player's words, by its `KEYS` name: every key has one (a key added without a name fails
+ * the typecheck), grouped as the player thinks of them.
+ */
+const SAVE_NAMES: Readonly<Record<keyof typeof KEYS, string>> = {
+  // Preferences.
+  settings: 'your settings', quality: 'the graphics level', cat: 'the cat’s name and coat', marketRadio: 'the market radio’s station',
+  // The collection and the flat.
+  collection: 'your collection', deliveries: 'the parcels on their way', home: 'your flat’s furniture', furniture: 'where you moved the furniture',
+  shelves: 'your shelves’ order', showcases: 'your display cases', shelfLabels: 'your shelf labels', household: 'the flat’s household',
+  strayLaid: 'the boxes left out on tables', turntable: 'the record on the turntable', moodLamp: 'the mood lamp', vase: 'the flowers in the vase',
+  position: 'where you stood', workshop: 'the consoles on your repair bench', homeArcade: 'your home arcade’s scores',
+  longplayPlaces: 'where each longplay was left off', nesBattery: 'your NES carts’ saved games', catOutings: 'the cat’s outings',
+  // Money and prizes.
+  wallet: 'your wallet', prizes: 'your prizes', prizeGoal: 'the prize you are saving for', prizeSets: 'the prize sets you completed',
+  valueHistory: 'your collection’s value history', milestones: 'your milestones', honours: 'the sets and consoles you completed',
+  // The flea market and its people.
+  market: 'the flea market', standing: 'your name at the market', notices: 'the market’s notice board', calendar: 'the market calendar',
+  finds: 'your finds', giveaway: 'the giveaway box', garageSale: 'the garage sale', trader: 'the travelling trader',
+  marketCredit: 'what a stallholder lent you', rival: 'the rival collector', rivalWager: 'your wager with Victor',
+  auction: 'the saleroom', consignments: 'your copies entered at the saleroom', sealedLots: 'your sealed lots',
+  classifieds: 'the small ads', lindenDepot: 'the dépôt-vente on Linden Avenue',
+  // The arcade.
+  arcadeScores: 'your arcade scores', arcadeScoresLegacy: 'your old arcade scores', arcadeDaily: 'the arcade’s daily challenge',
+  arcadeMedals: 'your arcade medals', arcadeLeague: 'the arcade league', arcadeJackpot: 'the arcade jackpot',
+  arcadeTournament: 'the arcade tournament', arcadeReplays: 'your arcade replays', arcadeHabits: 'the arcade’s tips and the claw’s luck',
+  arcadeVisits: 'your arcade visits', payoutStats: 'the arcade’s payout figures', scratch: 'your scratch cards', scratchCard: 'your scratch card',
+  // Front Street.
+  busker: 'the busker', buskerRequests: 'your requests to the busker', streetShops: 'Front Street’s shops', pocket: 'what is in your pockets',
+  strayCat: 'the stray cat', streetMarks: 'Front Street’s moments', streetLeads: 'the passers-by’s tips', plushGiven: 'the plush toys you gave',
+  mansionBells: 'Park Corner Mansions’ doorbells', gameDayFinds: 'the coins found on Front Street', parkVisits: 'your visits to the park',
+  fairRaffle: 'the fair’s raffle', trickOrTreat: 'Halloween’s doors', giftWrap: 'your wrapped presents', postCards: 'the cards you posted',
+  // The building.
+  neighbourTrades: 'the neighbours’ swaps', neighbourFriendship: 'how you stand with the neighbours', neighbourVisits: 'your visits to the neighbours',
+  estateSale: 'the estate sale', neighboursParty: 'the neighbours’ party', bulkyWaste: 'bulky-waste day', yardKids: 'the courtyard’s kids',
+  yardCinema: 'the film nights', buildingKeys: 'the building’s keys', blackout: 'the power cuts', cellar: 'the cellar',
+  copro: 'the co-owners’ votes', concierge: 'the concierge', rouxMove: 'Mrs Roux’s move', attic: 'the attic', endlessDoor: 'the stairs’ strange door',
+  felixShoebox: 'Félix’s shoebox', aerial: 'the roof’s aerial', buildingHunt: 'the treasure hunt', buildingPerks: 'the neighbours’ gifts',
+  // Friends and people.
+  visitors: 'your friends’ visits', gatherings: 'your games nights and open houses', social: 'how you stand with everyone',
+  socialLife: 'favours and birthdays', socialSellers: 'the sellers you met', socialDigest: 'the People book’s week',
+  socialNoticed: 'what people offered you', socialMood: 'people’s moods', socialNews: 'your news', socialKeepsakes: 'the keepsakes on your fridge',
+  socialConflicts: 'the building’s quarrels', phoneCalls: 'your phone calls and messages', peopleBookSeen: 'what the People book showed last',
+  friendsLife: 'your friends’ loans and postcards',
+  // The story and Mémé.
+  journal: 'your journal', journalRead: 'where you stopped reading the journal', firstDay: 'the first day’s to-do list',
+  firstWelcome: 'the first day’s welcome', intro: 'the opening', post: 'your mail', daily: 'what was done today',
+  prototypeStory: 'the lost prototype’s trail', felixNotebook: 'Félix’s notebook', familyStory: 'the family’s story', grandma: 'your visits to Mémé',
+  grandmaRituals: 'Mémé’s lunches and favours', keepsakes: 'Mémé’s keepsakes', grandmaHints: 'Mémé’s hints', grandmaPresence: 'what Mémé remembers of you',
+  playerInitials: 'your initials', albumFinds: 'Mémé’s album', albumPrints: 'your photos in Mémé’s album', memoryStills: 'the album’s memory photos',
+  photoRoll: 'your last photos', grandmaPastimes: 'your afternoons with Mémé', grandmaBread: 'Mémé’s bread', sharedRide: 'your bus rides with Mémé',
+  // Notices.
+  tipsSeen: 'the tips you have seen', saidLog: 'what was said', debugProgress: 'the debug switches',
+  // Caches (not progress, named all the same).
+  longplayCache: 'the longplay search', fameCache: 'the games’ fame', scanCache: 'the box scans found', artMisses: 'the missing box art',
+  reviewsCache: 'the press reviews', loadTimesCache: 'the loading times', travelCardsCache: 'the travel cards’ photos',
 };
+
+/** Each key's storage name, with no save's prefix: `bibliothek.debug.wallet.v1` and `bibliothek.wallet.v1` are both `wallet.v1`. */
+const bare = (key: string): string => key.replace(ROOT_PREFIX, '').replace(/^debug\./, '');
+const NAME_BY_KEY = new Map(Object.entries(KEYS).map(([id, key]) => [bare(key), SAVE_NAMES[id as keyof typeof KEYS]]));
 
 /** `bibliothek.wallet.v1` → "your wallet" (the debug save's keys too); an unknown key is "part of your progress". */
 function saveName(key: string): string {
-  const name = key.replace(ROOT_PREFIX, '').replace(/^debug\./, '').replace(/\.v\d+$/, '');
-  return SAVE_NAMES[name] ?? 'part of your progress';
+  return NAME_BY_KEY.get(bare(key)) ?? 'part of your progress';
 }
 
 interface Notifier {

@@ -25,18 +25,20 @@ export const PET_SHOP: ShopPlan = {
   clerk: {
     seed: 97,
     lines: [
-      '“She’s a rescue. She needs a quiet flat. Full of games, you say? Perfect.”',
-      '“Her bowls and her bed go with her. You only need to love her.”',
-      '“The fish aren’t for sale. They’re the shop’s. They know it, too.”',
-      '“A scratching post saves an armchair. Ask anyone.”',
-      '“That’s Biscuit in the window. She came for a week, six years ago.”',
-      '“The tortoise is called Sprint. He’s older than the shop.”',
-      '“The hamster runs at night mostly. And whenever I’m on the phone.”',
+      'She’s a rescue. She needs a quiet flat. Full of games, you say? Perfect.',
+      'Her bowls and her bed go with her. You only need to love her.',
+      'The fish aren’t for sale. They’re the shop’s. They know it, too.',
+      'A scratching post saves an armchair. Ask anyone.',
+      'That’s Biscuit in the window. She came for a week, six years ago.',
+      'The tortoise is called Sprint. He’s older than the shop.',
+      'The hamster runs at night mostly. And whenever I’m on the phone.',
     ],
+    callOuts: ['Mind the cat, she bites the ankles of people she likes.', 'Fresh treats in!'],
+    greetings: { first: ['Hello! Shut the door behind you, the budgies are plotting.'], met: ['Oh, it’s you! She’s been asking after you. Well, she meowed.', 'Back again? Treats are by the till.'] },
     thanks: [
-      '“Thank you! She’ll be so happy. Well, she’ll pretend not to be.”',
-      '“Good choice. It’ll be up at yours by tonight.”',
-      '“Lovely. Tell her the fish say hello.”',
+      'Thank you! She’ll be so happy. Well, she’ll pretend not to be.',
+      'Good choice. It’ll be up at yours by tonight.',
+      'Lovely. Tell her the fish say hello.',
     ],
     chores: [
       // Feeding the fish: a pinch of flakes over the tanks. Round the counter's end (x 1.72..2.28, from z -1.65) and
@@ -55,9 +57,9 @@ export const PET_SHOP: ShopPlan = {
       { at: [-2.2, 0.6], yaw: -Math.PI / 2 },
     ],
     lines: [
-      '“I only came for the fish food. I always leave with a toy.”',
-      '“Look at that one, asleep in her basket. I’d take her if I could.”',
-      '“My daughter drew the fish. The one with the teeth is me.”',
+      'I only came for the fish food. I always leave with a toy.',
+      'Look at that one, asleep in her basket. I’d take her if I could.',
+      'My daughter drew the fish. The one with the teeth is me.',
     ],
   },
   window: { along: 1.6, width: 1.4, height: 1.7 },

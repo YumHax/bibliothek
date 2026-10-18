@@ -62,8 +62,10 @@ Read this only when changing the cat's look, behaviour or belongings.
 - Belongings: `FoodBowl` (clickable, kibble InstancedMesh level, refill), `WaterBowl`, `CatBed`, `Scratcher`, `CatToy`
   (rolling ball, bounces off colliders). A second `WaterBowl` stands in the kitchen's inside corner (`KITCHEN_PLAN.catWater`,
   returned as `catWaters`): `drink` goes to the nearest bowl it can reach (`CatOptions.waters`). The food stays home.
-- `catSettings.ts`: name + coat in localStorage `bibliothek.cat.v1`; form in `src/ui/CatSettings.ts`, a section of the
-  menu's Settings screen (`Overlay.addSetting('game', …)`).
+- `catSettings.ts`: name + coat in localStorage `bibliothek.cat.v1`. The name is given at the pet shop on adoption
+  (`HomeShopPanel`'s naming card after "Adopt", the letters on screen for a controller); the coat is the rescue's own and
+  never changes. Settings > Game > "Your cat" (`src/ui/CatSettings.ts`) shows only once a cat lives in the flat: her
+  name (it can be changed) and her coat in words.
 - `index.ts`: `furnishCat(world, { settings, player, clock, seats, windows, tv, flat })` places everything in the shelf-free
   corner (bowls between the fig and the door, bed under the left wall's back window, scratcher by the front wall, ball on the
   rug). Called from `bootstrap/world.ts` after the player exists and after every room of the flat is built; `flat` gives the rooms'
@@ -141,7 +143,14 @@ under a pixel the shells dither away instead of sparkling.
 
 - `Seat` exposes `approachPoint` / `restingSpot` (on top of the mounted cushion, probed at `mountCushion`) / `lapSpot`; `RoomWindow` exposes `lookoutSpot` / `sunSpotOnFloor`.
 - The Session reaches it through the `CatLike` part: `C` calls it, `sit()` / `stand()` report the seat.
-- It watches the TV through a tiny adapter built in `furnishCat` (`isPlaying`, `watchingSpot`, `screenPoint`).
+- It watches the TV through a tiny adapter built in `furnishCat` (`isPlaying`, `watchingSpot`, `screenPoint`), and
+  while a game plays a drowsy cat lies down against the warm console stand (activity `consoleNap`, `warmSpot`).
+- The unpacked parcel's carton stands open and empty in the hall most of a day (`Parcel`, `EMPTY_STAYS_S`; a click
+  flattens it): a `CatPerch` the cat likes best of all (`catWeight` 6 by day), so it naps in the box.
+- Now and then (activity `pawBox`, state `pawBox`) it crouches before a low box on the living room's shelves and swats it
+  half out of its row (`GameBox.setTipped`, the boxes from `furnishCat`'s `boxes`); it stays out until the player picks
+  it up or tips it back (Q held, let go).
+- `?debug`: the panel's "The cat hungry now" (`Cat.makeHungry`) and "The cat slips out now" (`forceCatOut`).
 
 ## Headless check (no browser)
 

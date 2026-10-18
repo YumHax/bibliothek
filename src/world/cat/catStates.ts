@@ -35,7 +35,8 @@ export type CatState =
   | 'petted'
   | 'lap'
   | 'called'
-  | 'treat';
+  | 'treat'
+  | 'pawBox';
 
 /**
  * One state of the cat, all in one place. `M` is the state's own scratch data (a countdown to
@@ -150,6 +151,8 @@ export const CAT_TIMING = {
   rugStroke: [0.6, 0.9],
   toyStalk: [1, 2],
   toyWatch: 4,
+  /** In front of a low box: a crouch, a look, then the swat that pulls it out of its row (s). */
+  pawBox: [1.2, 2],
   flyStalk: [0.9, 1.6],
   startle: 0.25,
   startleCooldown: 6,
@@ -646,6 +649,33 @@ export const STATES: Record<CatState, StateDef> = {
     },
     describe: PLAYING,
   },
+  pawBox: withMemo({
+    memo: () => ({ swatted: false }),
+    enter(mind) {
+      mind.ctx.body.setPose('crouch');
+      mind.ctx.body.prick();
+      mind.timer = span(CAT_TIMING.pawBox);
+    },
+    tick(mind, _dt, memo) {
+      const box = mind.pawing;
+      if (box) {
+        box.getWorldPosition(mind.gazeTarget);
+        mind.hasGaze = true;
+      }
+      if (!memo.swatted && mind.timer <= 0.4) {
+        memo.swatted = true;
+        mind.ctx.body.setPose('pounce');
+        // Still on its shelf (not taken meanwhile): out of its row it comes.
+        if (box?.parent) box.setTipped(true);
+      }
+      if (mind.timer <= 0) {
+        mind.pawing = null;
+        if (chance(random, 0.4)) mind.ctx.voice?.meow('chirp');
+        mind.enter('lookAround');
+      }
+    },
+    describe: 'is pawing at a box · pet',
+  }),
   toyWatch: {
     enter(mind) {
       mind.ctx.body.setPose('stand');

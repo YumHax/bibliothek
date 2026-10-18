@@ -96,6 +96,10 @@ export function rowReel(present: Present): MemoryReel {
           last = t;
           if (!cast) return;
           const { gaspard, felix, felixUp, meme, child, childHead, felixHead } = cast;
+          // The quoted lines are theirs: the mouth on them (the narration's own times, `plan.lines`).
+          const [, , said, , answer] = plan.lines;
+          if (said) beat.at(t, said.at, 'saysMoney', () => gaspard.talkAlong(said.seconds));
+          if (answer) beat.at(t, answer.at, 'saysKid', () => felixUp.talkAlong(answer.seconds));
           beat.at(t, plan.gaspardPointAt, 'point', () => gaspard.gesture('point'));
           beat.at(t, plan.gaspardRubAt, 'rub', () => gaspard.gesture('rubHands'));
           beat.at(t, plan.felixStandAt, 'stand', () => {

@@ -36,10 +36,10 @@ const CALL = {
   sunday: 'It’s Sunday, I’ve laid your place. Don’t make me eat alone.',
   nightie: 'Mémé picks up on the fifth ring: “It’s late, dear, I’m in my nightie. Ring me tomorrow.”',
   smallTalk: [
-    'Hello? Oh, it’s you! I was just watching my programme.',
+    'Allô? Oh, it’s you! I was just watching my programme. Wait, I’ll turn it down.',
     'You rang! Nobody rings any more. Gaspard sends messages.',
-    'Hello, hello! Are you eating properly?',
-    'There you are. The bus driver asked after you, you know.',
+    'Allô, allô! Speak up, darling. Are you eating properly?',
+    'There you are, finally! The bus driver asked after you, you know.',
   ],
 } as const;
 

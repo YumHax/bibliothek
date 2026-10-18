@@ -77,6 +77,15 @@ export const WALKABLE: Area = { minX: -39.5, maxX: WORKS.front - 0.4, minZ: FRON
  */
 export const PARK_WALK: Area = { minX: -85, maxX: PARK_STREET.hedge - 0.5, minZ: -90, maxZ: -8 };
 /**
+ * The walk out to the bandstand (zone-local, the bandstand's middle at -100.7, 38.7: `city/park` `BANDSTAND`): a lane
+ * from the gardens' far corner north along their west fence, then the round of lawn about the bandstand, both closed
+ * by the same hoop fence (`StreetParkFeatures`). World x 33..59, z -8..46: clear of the arcade's and the market's zones.
+ */
+export const BANDSTAND_WALK: readonly Area[] = [
+  { minX: PARK_WALK.minX, maxX: -81, minZ: PARK_WALK.maxZ, maxZ: 31 },
+  { minX: -108, maxX: -81, minZ: 31, maxZ: 46 },
+];
+/**
  * Everywhere the player can walk: Front Street, Park Street down to its roadworks, the corner bay, the park's gardens.
  * Nothing invisible stands on the edges: facades, the railings, the hoardings and barriers
  * (`StreetBounds`, `StreetDetails`), the park's fences, and in the road's gap at the works a roadworker (`Flagger`).
@@ -87,6 +96,7 @@ export const WALKABLE_AREAS: readonly Area[] = [
   { minX: WALKABLE.minX, maxX: PARK_STREET.line - 0.1, minZ: WORKS.park + 0.4, maxZ: WALKABLE.minZ },
   { minX: CORNER_BAY.x0, maxX: CORNER_BAY.x1 - 0.1, minZ: CORNER_BAY.z0 + 0.1, maxZ: WALKABLE.minZ },
   PARK_WALK,
+  ...BANDSTAND_WALK,
 ];
 
 /** Where Front Street's closure stands on market day `gameDay` (x): `WORKS.front`, then `WORKS_LIFT.front` once the works moved on. */

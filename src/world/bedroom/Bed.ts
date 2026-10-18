@@ -4,8 +4,7 @@ import type { Interactable } from '@/interaction/Interactable';
 import type { PlayerState, SessionActions } from '@/game/SessionActions';
 import { FACING_OUT, eyePoseAt, invisibleHitbox } from '../meshUtils';
 import { part } from '../props/Prop';
-import { actionKeyLabel } from '@/ui/keys';
-import { useCap } from '@/ui/verb';
+import { actionCap, useCap } from '@/ui/verb';
 import { timber, cloth as paletteCloth } from '@/world/materials/palette';
 import { HoverGlint } from '../props/hoverGlint';
 import { softPart } from '../props/softBlock';
@@ -271,6 +270,7 @@ export class Bed extends THREE.Group implements Furniture, Interactable {
     }
     if (session.seated) session.stand();
     session.sit(this);
-    session.prompt(`[${useCap()}] sleep till morning · [${actionKeyLabel('standUp')}] get up`, { id: 'seated', until: () => session.seatedIn !== this });
+    // Sleep offered only at bedtime, like the caption; by day the bed is somewhere to lie (the caps follow the device in hand).
+    session.prompt(() => (session.sleepy ? `[${useCap()}] sleep till morning · [${actionCap('standUp')}] get up` : `[${actionCap('standUp')}] get up · or move`), { id: 'seated', until: () => session.seatedIn !== this });
   }
 }

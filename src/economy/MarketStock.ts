@@ -15,7 +15,7 @@ import { MarketOrders } from './MarketOrders';
 import { gameFrom } from './stockDraws';
 import { drawDay, type DrawContext } from './dayDraw';
 import { frozenRng, unit01 } from '@/random';
-import { boughtAtStall, insultedAtStall, noHaggleLine, refusesHaggle, stallLoyalty } from '@/social/market';
+import { boughtAtStall, insultedAtStall, noHaggleLine, refusesHaggle } from '@/social/market';
 import { formatCoins } from '@/text/money';
 
 export type { JobLot } from './JobLot';
@@ -191,7 +191,7 @@ export class MarketStock {
     return new Negotiation(item, {
       day,
       soured,
-      loyalty: stallLoyalty(platform, standing.loyalty(platform)),
+      loyalty: standing.loyalty(platform),
       coffee,
       rain: this.deps.raining?.() ?? false,
     });

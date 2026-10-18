@@ -4,7 +4,11 @@ import type { SessionActions } from '@/game/SessionActions';
 import type { Game } from '@/catalog/types';
 import type { SealedLots } from '@/economy/SealedLots';
 import type { Transactions } from '@/economy/Transactions';
-import { shareOf } from '@/economy/boxLots';
+import { BARE_CART_JUNK, BROKEN_CONSOLE_JUNK, MANUALS_JUNK, shareOf } from '@/economy/boxLots';
+import { HOMEBREW_CARTS } from '@/emulator/homebrew';
+import type { Workshop } from '@/repair/Workshop';
+import { brokenOf } from '@/repair/consoles';
+import { random } from '@/random';
 import { SEALED_LOT, SEALED_WHERE } from '@/economy/pricing';
 import { playBoxClack } from '@/audio/boxClack';
 import type { Furniture } from '../Furniture';
@@ -16,6 +20,12 @@ import { plural } from '@/text/count';
 interface CartonAtHomeOptions {
   sealed: SealedLots;
   tx: Transactions;
+  /** The consoles to mend at the kitchen table: a broken one found in a carton goes there. */
+  workshop?: Workshop;
+  /** Whether the kitchen table is bought (where a console is mended): without one a broken console waits in the hall. */
+  bench?: () => boolean;
+  /** The copies the player has (a manual out of the carton may be the one a copy of theirs lacks). */
+  games?: () => readonly Game[];
 }
 
 /**
@@ -71,8 +81,14 @@ export class CartonAtHome extends THREE.Group implements Furniture, Interactable
     const { item, left } = taken;
     const end = left ? '' : ' The carton is empty now.';
     if (item.kind === 'junk') {
-      session.read({ title: item.name, text: item.line, ...(left ? {} : { effect: 'The carton is empty.' }) });
-      if (coins) session.reward({ title: `${coins} loose ${plural(coins, 'coin')}`, detail: 'Found at the bottom of the carton.', coins });
+      // A broken console is a job for the kitchen table: it goes there with the others to mend.
+      const toMend = item.name === BROKEN_CONSOLE_JUNK && this.options.workshop;
+      if (toMend) this.options.workshop!.add({ platform: 'megadrive', fault: brokenOf('megadrive', random(), random()).fault, paid: 0, from: 'a sealed carton' });
+      const found = this.oddFind(item.name);
+      const mendHere = toMend && (this.options.bench?.() ?? true);
+      const effect = toMend ? (mendHere ? 'It goes on the kitchen table, to mend.' : 'It waits by the kitchen door until there’s a table to mend it on.') : found?.effect ?? (left ? undefined : 'The carton is empty.');
+      session.read({ title: item.name, text: found?.text ?? item.line, ...(effect ? { effect } : {}) });
+      if (coins) session.reward({ title: `${coins} ${plural(coins, 'coin')}`, detail: item.name === 'A shoebox of tokens' ? 'What Gus gives for old tokens, as good as in your pocket.' : 'Found at the bottom of the carton.', coins });
       return;
     }
     if (duplicate) {
@@ -83,6 +99,26 @@ export class CartonAtHome extends THREE.Group implements Furniture, Interactable
     const found = { title: game?.title ?? item.game.title, detail: `${gem} Out of the carton, into the parcel.${end}`.trim() };
     if (item.gem === true) session.reward({ ...found, big: true });
     else session.slip(found);
+  }
+
+  /**
+   * Odds and ends that turn out to be something: a manual in the bag for a copy of the player's that lacks one (it
+   * goes in its box), the bare cart a homebrew game someone burnt onto it (the NES plays it). Null: just junk.
+   */
+  private oddFind(name: string): { text: string; effect: string } | null {
+    const { tx, games } = this.options;
+    if (name === MANUALS_JUNK) {
+      const lacking = games?.().filter((g) => g.status !== 'wishlist' && g.condition === 'noManual') ?? [];
+      const copy = lacking[Math.floor(random() * lacking.length)];
+      if (!copy || !tx.fillManual(copy.id).ok) return null;
+      return { text: `Manuals for games nobody has ever heard of, and then, halfway down the pile: ${copy.title}. The very one your copy is missing.`, effect: `${copy.title} has its manual again.` };
+    }
+    if (name === BARE_CART_JUNK) {
+      const brew = HOMEBREW_CARTS.find((c) => !games?.().some((g) => g.id === c.game.id));
+      if (!brew || !tx.keepFound(brew.game, SEALED_WHERE).ok) return null;
+      return { text: `Bare plastic, a bit of tape that says "MIKE". Not a shop cart: someone burnt their own game onto it. ${brew.game.title}, says the scrawl on the back.`, effect: 'Into the parcel: it plays in the NES.' };
+    }
+    return null;
   }
 
   dispose(): void {

@@ -115,6 +115,8 @@ export const LINDEN_PLAN = {
   herDoor: { at: [-8 + HER_DOOR.along, HERS + 0.005] as Vec2, width: HER_DOOR.width, height: HER_DOOR.height, colour: 0x2f4a3c, number: '14' },
   /** The bakery's door and window on her facade (x): the door sells a baguette, the window a croissant. */
   bakery: { door: -5, window: -7.0, name: 'Lebrun’s bakery', hours: [7, 19.5] as [number, number], closedWeekday: 0 },
+  /** LE TILLEUL's window on the far side (its shop on `lindenFar`, x 7.4 to 0.4), faced from the pavement. */
+  tilleul: { at: [3.9, FAR - 0.005] as Vec2, yaw: Math.PI },
   /** The dépôt-vente's trestle out on the pavement before its window, the buyer on the road's side; how many games on it. */
   depot: { table: [5.1, -6.95] as Vec2, yaw: 0, games: 4 },
   /** Mrs Bassot (number 14, first floor) and Biscotte, out on the avenue at their hours: the walk, there and back along her side. */

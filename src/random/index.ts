@@ -5,4 +5,4 @@
  */
 export { fnv1a, unit01, hashInts, unitOf } from './hash';
 export { random, seedLiveRandom, lcg, mulberry32, frozenRng, seededRng, type Rng } from './streams';
-export { pick, pickWeighted, shuffled, between, within, integer, chance } from './draws';
+export { pick, pickWeighted, shuffled, between, within, integer, chance, inTurn } from './draws';

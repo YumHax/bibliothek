@@ -63,6 +63,20 @@ export const BALCONY_PLAN = {
   ] as DecorEntry[],
   /** The little bistro table and its two chairs, facing the street. */
   bistro: { floor: [0.45, 0.15] as [number, number], upgrade: 'bistroSet' as Owned },
+  /**
+   * Sitting on one of its chairs (a `BenchSeat` riding the set): a click seated lets half an hour go by watching the
+   * street, and after a little while something down there is seen (in turn, by the hour: morning, day, evening).
+   */
+  sit: {
+    name: 'A bistro chair',
+    seat: 0.45,
+    wait: { minutes: 30, until: 'a while, watching the street', after: 'Half an hour of Front Street from up here. The coffee went cold. Worth it.' },
+    seen: {
+      morning: ['Down below, the baker sweeps his step and waves his broom at a pigeon.', 'The bus 38 sighs at its stop. Someone runs for it and makes it.', 'The market men are unloading crates. One drops a whole box of oranges.'],
+      day: ['A delivery van double-parks. The warden appears from nowhere, as if summoned.', 'Two kids outside the arcade argue over a high score, loud enough to hear from here.', 'A woman across the street waters her geraniums and nods up at you.'],
+      evening: ['The streetlamps come on one by one, all the way down to the park.', 'Music from a bar. Someone is murdering a song, happily.', 'The arcade’s sign blinks INSERT COIN at the whole street.'],
+    },
+  },
   /** Where the potted plants bought at the florist on Front Street stand, in the order they come home (`HomeUpgrades` 'plant'). */
   boughtPlants: [
     { floor: [-1.02, -0.38] as [number, number], kind: 'small', pot: 'terracotta', seed: 31 },

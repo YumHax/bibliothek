@@ -1,7 +1,8 @@
 import * as THREE from 'three';
 import type { Updatable } from '@/core/Engine';
 import type { Interactable } from '@/interaction/Interactable';
-import type { SessionActions } from '@/game/SessionActions';
+import type { PlayerState, SessionActions } from '@/game/SessionActions';
+import { inTurn, random } from '@/random';
 import type { HomeUpgrades } from '@/economy/HomeUpgrades';
 import { boughtLine, homeGood, refusalFor, type HomeGood, type HomeGoodStatus } from '@/economy/homeGoods';
 import { ARM_ABOVE } from '@/economy/pricing';
@@ -30,6 +31,13 @@ interface ForSaleOptions {
   onBought?: (good: HomeGood) => void;
 }
 
+/** Sat in to try it (the armchair), said in turn. */
+const TRIED = inTurn(random, [
+  'You sink in. The springs have opinions, but good ones.',
+  'Deep, a little worn on the arms. A chair for a long game.',
+  'It fits. The clerk pretends not to watch.',
+]);
+
 /** A piece taller than this gets its tag on a stick rather than a card at its foot. */
 const TALL = 0.6;
 /** A little margin round the piece's bounds for the click. */
@@ -43,7 +51,9 @@ const PAD = 0.03;
  * shows the name, price, blurb and what stands in the way; a piece dearer than `ARM_ABOVE` takes two clicks (the first
  * arms the tag: AGAIN TO BUY, `CONFIRM_MS`), a cheap one one; then it is bought (`SessionActions.buyUpgrade`), and it
  * is at home at once (`HomeUpgrades.add`: the flat's plans place it), the clerk thanking the player (`onBought`). Short of coins, the first click already says so. The display
- * stays (it is the shop's), only its tag changes. Origin and frame are the piece's own. Collides as its bounds unless
+ * stays (it is the shop's), only its tag changes. A piece to sit in (`DisplayPiece.seat`: the armchair) is tried
+ * first: the first click sits the player in it, and sitting there a click is the purchase (a movement key gets up).
+ * Origin and frame are the piece's own. Collides as its bounds unless
  * `collides` is false.
  */
 export class ForSale extends THREE.Group implements Furniture, Interactable {
@@ -110,9 +120,11 @@ export class ForSale extends THREE.Group implements Furniture, Interactable {
     this.tag.setHovered(hovered);
   }
 
-  label(): string {
+  label(player: PlayerState): string {
     const { good } = this;
     const head = `${good.name} · ${formatCoins(good.price)}`;
+    // A piece to sit in is tried first: sitting, the click buys.
+    if (this.piece.seat && !(player.seated && player.seatedIn === this.piece.seat)) return `${head} · ${good.blurb} · try it`;
     const upgrades = this.options.upgrades;
     if (!upgrades) return `${head} · ${good.blurb}`;
     switch (this.status()) {
@@ -123,7 +135,7 @@ export class ForSale extends THREE.Group implements Furniture, Interactable {
       case 'buy': {
         if (this.arming.isArmed('buy')) return `${head} · again to buy`;
         const wallet = this.options.wallet;
-        const short = wallet && wallet.coins < good.price ? ` · you have ${wallet.coins}` : '';
+        const short = wallet && wallet.coins < good.price ? ` · you have ${formatCoins(wallet.coins)}` : '';
         return `${head} · ${good.blurb}${good.max > 1 ? ` (${upgrades.count(good.id)} / ${good.max} at home)` : ''}${short} · buy`;
       }
     }
@@ -131,6 +143,13 @@ export class ForSale extends THREE.Group implements Furniture, Interactable {
 
   activate(session: SessionActions): void {
     const { good } = this;
+    const seat = this.piece.seat;
+    if (seat && !(session.seated && session.seatedIn === seat)) {
+      if (session.seated) return;
+      session.sit(seat);
+      session.react(TRIED());
+      return;
+    }
     const upgrades = this.options.upgrades;
     if (!upgrades) {
       session.refuse('The flat is furnished already.');

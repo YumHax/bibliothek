@@ -25,13 +25,17 @@ export type HtmlValue = Html | string | number | boolean | null | undefined | re
 /**
  * The panels' template tag: `html\`<b>${title}</b>\`` escapes `title`; an `Html` (another template, a widget) is
  * inserted whole; an array is joined (so `${games.map((g) => html\`...\`)}` lists them); `null`, `undefined`
- * and booleans print nothing (so `${cond && html\`...\`}` reads as a conditional).
+ * and booleans print nothing (so `${cond && html\`...\`}` reads as a conditional), but for a boolean that is a whole
+ * attribute value (`aria-checked="${on}"`): that prints `true` or `false`.
  */
 export function html(strings: TemplateStringsArray, ...values: HtmlValue[]): Html {
   let out = '';
   strings.forEach((part, i) => {
     out += part;
-    if (i < values.length) out += render(values[i]);
+    if (i >= values.length) return;
+    const value = values[i];
+    // Inside an attribute's quotes (`aria-disabled="${!can}"`) a boolean is its word, not nothing.
+    out += typeof value === 'boolean' && part.endsWith('="') ? String(value) : render(value);
   });
   return new Html(out);
 }

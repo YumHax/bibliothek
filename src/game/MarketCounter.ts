@@ -1,6 +1,6 @@
 import type { Game } from '@/catalog/types';
 import { grailById } from '@/economy/grails';
-import { UNDO_PURCHASE, describeEdition } from '@/economy/pricing';
+import { ARM_ABOVE, UNDO_PURCHASE, describeEdition } from '@/economy/pricing';
 import { Transactions } from '@/economy/Transactions';
 import type { ForSaleLike, SaleReaction } from './SessionActions';
 import type { CollectionLike, CoreParts, HagglePanelLike, MarketLike, ModalLike, PerksLike, StandingLike, TradePanelLike, WalletLike } from './SessionParts';
@@ -8,9 +8,11 @@ import type { NoticeActions } from '@/notices';
 import type { KeyRoute, SessionHost } from './SessionHost';
 import { isAction, keyMarkup } from '@/input/actions';
 import { actionKeyLabel, renderKeys } from '@/ui/keys';
+import { actionCap } from '@/ui/verb';
 import { Arming } from '@/ui/confirmTwice';
 import { formatCoins } from '@/text/money';
 import { capitalise } from '@/text/strings';
+import { inTurn, random } from '@/random';
 
 /** What the counter works with: the hands and the panel, the money, the market, its two panels. */
 export interface MarketCounterParts extends Pick<CoreParts, 'inspector' | 'panel'> {
@@ -33,6 +35,13 @@ interface MarketCounterHost extends Pick<SessionHost, 'pickUp' | 'putBack'> {
   /** Opens a DOM panel over the room, the copy staying in hand. */
   showModal(modal: ModalLike): void;
 }
+
+/** Asked for a copy whose price is still being looked up: the stallholder says so (a wait, not a refusal), in turn. */
+const STILL_PRICING = inTurn(random, [
+  'Hang on, let me look that one up…',
+  'One second, I’m checking what it goes for.',
+  'Give me a moment, I’m looking it up in the guide.',
+]);
 
 /** The last purchase, while it can still be undone. */
 interface LastPurchase {
@@ -58,6 +67,8 @@ interface LastPurchase {
  */
 export class MarketCounter implements KeyRoute {
   private sale: { item: ForSaleLike; unwatch: () => void } | null = null;
+  /** Buy was pressed while this copy's price was still being looked up: it goes through once the price is in. */
+  private buyWhenPriced: ForSaleLike['item'] | null = null;
   private last: LastPurchase | null = null;
   /** A hold puts coins down: the first R arms it, the second (in time) pays the deposit, as every other spending press. */
   private readonly holdArming = new Arming<string>(() => {});
@@ -95,16 +106,30 @@ export class MarketCounter implements KeyRoute {
     sale.react?.('locked');
     this.speak(sale, 'Collectors only, friend. The case stays shut.');
     this.host.notices.refuse('The stallholder doesn’t know you well enough yet to open the case.');
-    this.host.notices.tip('Buy, sell and haggle here: the case opens once the market knows you.', { id: 'glass-case' });
+    this.host.notices.tip('Buy, sell and haggle here: the case opens once the market knows you.', { id: 'glass-case', head: 'The glass case', times: 3 });
     return false;
   }
 
   /** The copy was just taken in hand. */
   private begin(sale: ForSaleLike): void {
     this.end();
-    this.sale = { item: sale, unwatch: sale.item.subscribe(() => this.show()) };
+    this.sale = { item: sale, unwatch: sale.item.subscribe(() => this.priced()) };
     sale.react?.('pickUp');
     this.show();
+  }
+
+  /**
+   * The copy in hand changed (its price came back from the guide, a haggle settled): the panel again. Asked to buy while
+   * it was still being priced, the purchase goes through now, unless the price turned out dear (past `ARM_ABOVE`, the
+   * press-twice line): then the stallholder names it and the next press buys.
+   */
+  private priced(): void {
+    this.show();
+    const sale = this.sale?.item;
+    if (!sale || this.buyWhenPriced !== sale.item || !sale.item.priced) return;
+    this.buyWhenPriced = null;
+    if (sale.item.due > ARM_ABOVE) this.speak(sale, `There. ${formatCoins(sale.item.due)} for that one.`);
+    else this.buy();
   }
 
   /** The copy left the hand (put back, bought, swapped). */
@@ -113,11 +138,13 @@ export class MarketCounter implements KeyRoute {
     if (putBack) this.sale.item.react?.('putBack');
     this.sale.unwatch();
     this.sale = null;
+    this.buyWhenPriced = null;
   }
 
   /** Routes a key while a copy is in hand (or just after a purchase). True when it was the market's. */
   onKey(code: string): boolean {
-    if (isAction(code, 'handBack') && this.undo()) return true;
+    // LT hands back only with empty hands: a copy in hand, it haggles (its own alias, KeyH, comes next).
+    if (isAction(code, 'handBack') && !(this.sale && code === 'GamepadLT') && this.undo()) return true;
     if (!this.sale) return false;
     if (isAction(code, 'lookInside')) {
       this.inspectInside();
@@ -160,11 +187,19 @@ export class MarketCounter implements KeyRoute {
     const { game } = item;
     const result = this.txFor(sale).buyCopy(item, sale.where);
     if (!result.ok) {
-      if (result.reason === 'pricing') this.host.notices.refuse('The stallholder is still working out the price. Give it a moment.');
-      else if (result.reason === 'owned') this.host.notices.refuse(`You already own ${game.title}`);
+      if (result.reason === 'pricing') {
+        this.speak(sale, STILL_PRICING());
+        // Bought as soon as the price is in (`priced`).
+        this.buyWhenPriced = item;
+      } else if (result.reason === 'owned') this.host.notices.refuse(`You already own ${game.title}`);
       else if (result.reason === 'short') {
-        this.host.notices.refuse(`${game.title} costs ${formatCoins(result.needed ?? 0)} and you have ${result.have}.`);
-        this.host.notices.tip('Short of coins? Tickets become coins at the arcade’s prize counter.', { id: 'short-of-coins', until: () => !this.sale });
+        // The seller says it, and offers the hold when there is one to offer.
+        const short = formatCoins(Math.max(1, (result.needed ?? 0) - (result.have ?? 0)));
+        const holdable = !sale.dealer && item.source !== 'bin' && item.source !== 'ordered' && !item.reserved;
+        this.speak(sale, holdable ? `${short} short? Say the word and I’ll keep it under the table for a small deposit.` : `It’s ${formatCoins(result.needed ?? 0)}, I’m afraid. You’re ${short} short.`);
+        // The word is the hold's key, on the prompt line (never a key name in a stallholder's mouth).
+        if (holdable) this.host.notices.prompt(() => `[${actionCap('holdCopy')}] keep it under the table`, { id: 'hold-offer', until: () => this.sale?.item !== sale });
+        this.host.notices.tip('Short of coins? Tickets become coins at the arcade’s prize counter.', { id: 'short-of-coins', head: 'Coins', until: () => !this.sale, times: 3 });
       }
       return;
     }
@@ -182,7 +217,9 @@ export class MarketCounter implements KeyRoute {
     this.host.notices.slip({ title: `Bought ${game.title}`, detail: item.deposit ? `${home} ${formatCoins(item.price)} in all, deposit included.` : home, coins: -due });
     if (undoable) {
       const last = this.last;
-      this.host.notices.prompt(`[${actionKeyLabel('handBack')}] hand it back · ${UNDO_PURCHASE.seconds} s`, { id: 'hand-back', until: () => this.last !== last || performance.now() > (last?.until ?? 0) });
+      // The seconds left count down on the line (written again each second), the cap follows the device in hand.
+      const left = (): number => Math.max(1, Math.ceil(((last?.until ?? 0) - performance.now()) / 1000));
+      this.host.notices.prompt(() => `[${actionCap('handBack')}] hand it back · ${left()} s`, { id: 'hand-back', until: () => this.last !== last || performance.now() > (last?.until ?? 0) });
     }
   }
 
@@ -223,7 +260,7 @@ export class MarketCounter implements KeyRoute {
     last.sale.restock();
     this.speak(last.sale, 'Changed your mind? No harm done.');
     const held = hold ? ` Still on hold for you: ${formatCoins(last.sale.item.due)} to go.` : '';
-    this.host.notices.react(`${last.game.title} is back on the table: ${refund} of your ${formatCoins(last.paid)} back.${held}`);
+    this.host.notices.react(`${last.game.title} is back on the table: ${formatCoins(refund)} of your ${formatCoins(last.paid)} back.${held}`);
     return true;
   }
 
@@ -252,12 +289,15 @@ export class MarketCounter implements KeyRoute {
       item: sale.item,
       negotiation: opened,
       stall: sale.where,
-      onClose: ({ insults, outcome }) => {
+      seller: sale.seller,
+      onClose: ({ insults, outcome, pay }) => {
         if (outcome === 'none') return;
         market.settle(sale.item, opened, insults);
         const reaction: SaleReaction = outcome === 'deal' ? 'haggleWon' : outcome === 'walk' ? 'haggleLost' : 'haggleStopped';
         sale.react?.(insults ? 'insult' : reaction);
         this.show();
+        // Paid on the handshake (pressed twice in the panel when dear): bought now, at the price shaken on.
+        if (pay && this.sale?.item === sale) this.buy();
       },
     });
     this.host.showModal(haggle);
@@ -292,8 +332,8 @@ export class MarketCounter implements KeyRoute {
     }
     const result = this.transactions.holdCopy(item);
     if (!result.ok) {
-      if (result.reason === 'pricing') this.host.notices.refuse('The stallholder is still working out the price. Give it a moment.');
-      else if (result.reason === 'short') this.host.notices.refuse(`A hold costs a ${result.needed}-coin deposit and you have ${result.have}.`);
+      if (result.reason === 'pricing') this.speak(sale, STILL_PRICING());
+      else if (result.reason === 'short') this.host.notices.refuse(`A hold costs a deposit of ${formatCoins(result.needed ?? 0)} and you have ${formatCoins(result.have ?? 0)}.`);
       return;
     }
     const { deposit } = result;
@@ -317,27 +357,27 @@ export class MarketCounter implements KeyRoute {
       return;
     }
     if (!item.priced) {
-      this.host.notices.refuse('The stallholder is still working out the price. Give it a moment.');
+      this.speak(sale, STILL_PRICING());
       return;
     }
-    trade.start({ item, stall: sale.where, onSwap: (mine, value) => this.completeSwap(sale, mine, value) });
+    trade.start({ item, stall: sale.where, seller: sale.seller, onSwap: (mine, value) => this.completeSwap(sale, mine, value) });
     this.host.showModal(trade);
   }
 
-  /** The swap is agreed: `mine` goes to the stall, the copy in hand comes home; the difference is paid (no change given). */
+  /** The swap is agreed: `mine` goes to the stall, the copy in hand comes home; the difference is paid, or made up in coins (`swapChange`). */
   private completeSwap(sale: ForSaleLike, mine: Game, value: number): string | null {
     const { panel, inspector } = this.host.parts;
     const { item } = sale;
     const result = this.transactions.swap(item, mine, value, sale.where);
-    if (!result.ok) return result.reason === 'short' ? `You need ${formatCoins(result.needed ?? 0)} on top and you have ${result.have}.` : 'The swap fell through.';
-    const { topUp } = result;
+    if (!result.ok) return result.reason === 'short' ? `You need ${formatCoins(result.needed ?? 0)} on top and you have ${formatCoins(result.have ?? 0)}.` : 'The swap fell through.';
+    const { topUp, change } = result;
     sale.thanks();
     sale.react?.('bought');
     this.end();
     panel.hide();
     inspector.stow(() => sale.sold());
     this.last = null;
-    this.host.notices.slip({ title: `Swapped for ${item.game.title}`, detail: `${mine.title} stays on the stall. In the parcel in the hall.`, coins: topUp ? -topUp : undefined });
+    this.host.notices.slip({ title: `Swapped for ${item.game.title}`, detail: `${mine.title} stays on the stall${change ? ', and a few coins come back with the change' : ''}. In the parcel in the hall.`, coins: topUp ? -topUp : change || undefined });
     return null;
   }
 

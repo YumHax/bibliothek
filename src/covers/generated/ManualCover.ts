@@ -1,16 +1,19 @@
 import type * as THREE from 'three';
 import type { Game } from '@/catalog/types';
 import { getPlatform } from '@/catalog/platforms';
-import { createCanvas, drawImageCover, fitFontSize, toTexture, wrapLines, FONT } from './canvasUtils';
+import { drawImageCover, fitFontSize, layoutCanvas, toTexture, wrapLines, FONT } from './canvasUtils';
 import { contrastText, css } from './palette';
 
+/** Layout width: every size below is in these units. */
 const WIDTH_PX = 256;
+/** The canvas's longest side (px): sharp with the box held up to the eye (only the box in hand draws one). */
+const LONG_PX = 1024;
 
 /** Cover of the instruction booklet: cream paper, accent header, a framed miniature of the cover art and the title. */
 export function createManualCoverTexture(game: Game, accent: THREE.Color, art: CanvasImageSource | null, anisotropy: number, aspect: number): THREE.CanvasTexture {
   const w = WIDTH_PX;
   const h = Math.round(w / aspect);
-  const [canvas, ctx] = createCanvas(w, h);
+  const [canvas, ctx] = layoutCanvas(w, h, LONG_PX);
   const platform = getPlatform(game.platform);
 
   ctx.fillStyle = '#f3efe4';

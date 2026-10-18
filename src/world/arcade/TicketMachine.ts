@@ -29,6 +29,8 @@ export interface TicketMachineWiring {
   scores?: ScoreTable;
   /** Whether it is out of order today. */
   outOfOrder?: () => boolean;
+  /** Tried while out of order: the attendant's answer (`MachineRun`). */
+  brokenClick?: () => string;
 }
 
 const REGULAR_PAUSE = 3;
@@ -96,6 +98,7 @@ export abstract class TicketMachine extends RunMachine implements Furniture, Int
       strip: this.strip,
       ...(this.wiring.scores ? { scores: this.wiring.scores } : {}),
       ...(this.wiring.outOfOrder ? { outOfOrder: this.wiring.outOfOrder } : {}),
+      ...(this.wiring.brokenClick ? { brokenClick: this.wiring.brokenClick } : {}),
       ...(this.note ? { note: this.note } : {}),
       ...this.runOptions(),
     });

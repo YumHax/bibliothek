@@ -2,6 +2,8 @@ import './BusRide.css';
 import { playBusRide, type RideSound } from '@/audio/busRideSounds';
 import { clamp, ramp, smooth } from '@/math/scalar';
 import { actionKeyLabel } from '@/ui/keys';
+import { isAction } from '@/input/actions';
+import { lastDevice } from '@/input/lastDevice';
 import { BusRideScene } from './busRideScene';
 import type { Rider } from './busRiders';
 
@@ -9,16 +11,17 @@ import type { Rider } from './busRiders';
  * THE BUS RIDE (docs/story.md "Mémé"): the trip on line 38 between Front Street and Mémé's, played while the travel
  * curtain is down (`Travel`'s interlude) and the far zone builds behind it. The player is on a seat by the window,
  * the town goes past (`busRideScene`), someone presses the STOP button, the bus pulls in, the doors open: the black
- * comes back and the curtain lifts on the other end. Any of the skip keys or a click cuts it short; with reduced
- * motion there is no ride, only the curtain (the caller asks `reduceMotion` first).
+ * comes back and the curtain lifts on the other end. Any of the skip keys, a click, a tap or a controller's button
+ * (one pressed after the ride began) cuts it short; with reduced motion there is no ride, only the curtain (the
+ * caller asks `reduceMotion` first).
  */
 
 /** The ride's clock (s): its length, the fade in and out, how long the bus takes to get going and to pull in, the bell, the doors. */
 const RIDE = { seconds: 10.5, fade: 0.7, pullAway: 2.2, pullIn: 3.2, bellAt: 5.2, doorsAt: 9.4 } as const;
 /** Cruising speed (m/s): how fast the town goes past at full speed. */
 const CRUISE = 11;
-/** The keys that cut it short (physical codes, docs: never `event.key`). */
-const SKIP_KEYS = new Set(['KeyE', 'Escape', 'Space', 'Enter']);
+/** Keys that cut it short besides the put-back key the hint names (rebindable: `isAction`; physical codes, never `event.key`). */
+const SKIP_KEYS = new Set(['Escape', 'Space', 'Enter']);
 /** A skip's fade to black (s). */
 const SKIP_FADE = 0.3;
 
@@ -66,6 +69,8 @@ class BusRide {
   /** The ride's clock when a skip was asked (it fades out from there), or null. */
   private skippedAt: number | null = null;
   private done = false;
+  /** Controller buttons down (`pad:button`): the press that boarded the bus is still held as the ride starts, so only a new one skips. */
+  private readonly padDown = new Set<string>();
 
   constructor(container: HTMLElement, private readonly options: RideOptions, private readonly resolve: () => void) {
     this.root = document.createElement('div');
@@ -75,10 +80,15 @@ class BusRide {
     this.ctx = this.canvas.getContext('2d');
     const skip = document.createElement('p');
     skip.className = 'bus-ride__skip';
-    const key = document.createElement('kbd');
-    // E, not Esc: under the pointer lock Esc also lets the mouse go, and the curtain would lift on the pause menu.
-    key.textContent = actionKeyLabel('putBack');
-    skip.append('Skip ', key);
+    // The device in hand: a key (E, not Esc: under the pointer lock Esc also lets the mouse go, and the curtain would
+    // lift on the pause menu), the controller's A, a tap.
+    const device = lastDevice();
+    if (device === 'touch') skip.append('Tap to skip');
+    else {
+      const key = document.createElement('kbd');
+      key.textContent = device === 'gamepad' ? 'A' : actionKeyLabel('putBack');
+      skip.append('Skip ', key);
+    }
     this.root.append(this.canvas, skip);
     container.appendChild(this.root);
     this.scene = new BusRideScene(options.seed, options.riders);
@@ -86,8 +96,10 @@ class BusRide {
     // In the capture phase, ahead of the game's own keys and clicks: nothing else acts while the ride plays.
     window.addEventListener('keydown', this.onKey, { capture: true }); // convention-ok: not a panel (the ride plays over the travel curtain, ahead of the game's keys)
     window.addEventListener('mousedown', this.onClick, { capture: true });
+    window.addEventListener('touchstart', this.onClick, { capture: true, passive: false });
     window.addEventListener('resize', this.onResize);
     this.onResize();
+    this.readPad(false);
     this.frame = requestAnimationFrame(this.tick);
   }
 
@@ -96,10 +108,10 @@ class BusRide {
     // The browser's own shortcuts (reload, quit, tabs) still reach it; only the game is kept out.
     if (event.metaKey || event.ctrlKey) return;
     event.preventDefault();
-    if (SKIP_KEYS.has(event.code) && !event.repeat) this.skip();
+    if ((SKIP_KEYS.has(event.code) || isAction(event.code, 'putBack')) && !event.repeat) this.skip();
   };
 
-  private readonly onClick = (event: MouseEvent): void => {
+  private readonly onClick = (event: MouseEvent | TouchEvent): void => {
     event.stopImmediatePropagation();
     event.preventDefault();
     this.skip();
@@ -110,6 +122,21 @@ class BusRide {
     this.canvas.width = Math.round(window.innerWidth * ratio);
     this.canvas.height = Math.round(window.innerHeight * ratio);
   };
+
+  /** The controllers' buttons: one newly pressed skips (`skips` false: only noted, at the start). */
+  private readPad(skips: boolean): void {
+    for (const pad of navigator.getGamepads?.() ?? []) {
+      if (!pad) continue;
+      pad.buttons.forEach((button, i) => {
+        const id = `${pad.index}:${i}`;
+        if (!button.pressed) this.padDown.delete(id);
+        else if (!this.padDown.has(id)) {
+          this.padDown.add(id);
+          if (skips) this.skip();
+        }
+      });
+    }
+  }
 
   private skip(): void {
     if (this.skippedAt !== null || this.done) return;
@@ -124,6 +151,7 @@ class BusRide {
   private readonly tick = (): void => {
     if (this.done) return;
     const t = this.clock();
+    this.readPad(true);
     const dt = Math.min(0.1, t - this.last);
     this.last = t;
     const speed = speedAt(t);
@@ -157,6 +185,7 @@ class BusRide {
     cancelAnimationFrame(this.frame);
     window.removeEventListener('keydown', this.onKey, { capture: true });
     window.removeEventListener('mousedown', this.onClick, { capture: true });
+    window.removeEventListener('touchstart', this.onClick, { capture: true });
     window.removeEventListener('resize', this.onResize);
     this.root.remove();
     this.resolve();

@@ -56,7 +56,7 @@ export const BUILDING_PEOPLE: readonly PersonCard[] = withVotes([
       { key: 'stories', at: 'friendly', text: 'Tells you the building’s old stories (clues for the hunt and the prototype)' },
       { key: 'lucienGames', at: 'friend', trust: 30, text: 'Gives you Lucien’s box of games before she moves' },
       { key: 'annexDiscount', at: 'close', value: 0.8, text: 'Sells you her flat for less (0.8 of the price)' },
-      { key: 'curtAtDoor', at: 'cold', down: true, text: 'No more chats at her door' },
+      { key: 'curtAtDoor', at: 'cold', down: true, text: 'No longer asks you in' },
     ],
     lines: {
       leaving: ['I mustn’t keep you, dear. Off you go.', 'My soup! I’ve left my soup on.'],
@@ -65,6 +65,11 @@ export const BUILDING_PEOPLE: readonly PersonCard[] = withVotes([
       chat: ['In 1971 the stairs were waxed every Friday. You could skate down them.', 'The light on our landing goes out too fast. It never used to.', 'A cat sat outside my door this morning. We had a little talk.'],
       cold: ['Hm.', 'Good day.'],
       hostile: ['I have nothing to say to you.'],
+    },
+    phoneLines: {
+      hello: ['Hello? Hélène Roux speaking. Oh, it’s you, dear!', 'Hello? Oh, the young one from across the landing! What a nice surprise.'],
+      leaving: ['I mustn’t keep you on the telephone, dear. Off you go.', 'My soup! I’ve left my soup on. Goodbye, dear!'],
+      bye: ['Goodbye, dear.', 'Thank you for ringing, dear.'],
     },
     startWarmth: 5,
   },
@@ -168,7 +173,7 @@ export const BUILDING_PEOPLE: readonly PersonCard[] = withVotes([
     depth: 'deep',
     topics: [
       { id: 'twins', say: 'The twins seem lively!', again: 'The twins seem lively today!', name: 'The twins', icon: 'family', fit: 'loves', obvious: true, teaches: 'twins', answers: ['Lively! That’s the polite word. Thank you for choosing the polite word.', 'One controller, two children. It’s like a nature documentary.'] },
-      { id: 'restaurant', say: 'How’s the restaurant?', name: 'Bao’s restaurant', icon: 'cooking', fit: 'loves', teaches: 'restaurant', memory: 'you asked about the restaurant', answers: ['Full every night! Bao’s exhausted and happy. Come in, say my name.', 'We added mango sticky rice. People cry. Good crying.'] },
+      { id: 'restaurant', say: 'How’s the restaurant?', name: 'Bao’s restaurant', icon: 'cooking', fit: 'loves', teaches: 'restaurant', memory: 'you asked about the restaurant', answers: ['Full every night! Bao’s exhausted and happy. Come in, say my name.', 'We added mango sticky rice. People cry. Good crying.'], phone: { answers: ['Full every night! Bao’s exhausted and happy. Come by, say my name.', 'We added mango sticky rice. People cry. Good crying.'] } },
       { id: 'sleep', say: 'Getting any sleep?', name: 'Sleep', icon: 'moon', fit: 'likes', answers: ['Sleep? I remember sleep. It was nice.', 'Four hours. Five on Sundays. I’m thriving!'] },
       { id: 'share', say: 'Do the twins share nicely?', name: 'The one controller', icon: 'games', fit: 'likes', from: 'friendly', teaches: 'pad', answers: ['Share? They broke a controller fighting over it. We have a spare nobody uses.', 'We tried a timer. They fought over the timer.'] },
       { id: 'third', say: 'Thinking of a third?', name: 'A third child', icon: 'baby', fit: 'dislikes', answers: ['Who said that? Mrs Dubois? Of course. No. No comment.', 'Two is plenty, thank you. Who’s spreading that?'] },
@@ -196,7 +201,7 @@ export const BUILDING_PEOPLE: readonly PersonCard[] = withVotes([
       { id: 'pad', text: 'They have a spare pad nobody uses', says: 'We have a spare controller, the twins broke the other one fighting over it.', from: 'friendly' },
     ],
     effects: [
-      { key: 'lendsPad', at: 'friend', text: 'Lends you a second pad for games nights' },
+      { key: 'lendsPad', at: 'friend', text: 'Lends their spare pad: at games night everyone gets a go' },
       { key: 'familyDinner', at: 'close', text: 'Dinner at theirs, the twins against you' },
     ],
   },
@@ -237,7 +242,7 @@ export const BUILDING_PEOPLE: readonly PersonCard[] = withVotes([
       { id: 'record', text: 'Runs the stairs to the third in eleven seconds', says: 'Ground floor to the third, eleven seconds flat. I time it. Every day.' },
     ],
     effects: [
-      { key: 'helpsCarry', at: 'friend', text: 'Helps you carry heavy furniture (moved in one go)' },
+      { key: 'helpsCarry', at: 'friend', text: 'Carries the furniture shop’s pieces up for you: no delivery to pay' },
       { key: 'stairsRace', at: 'friendly', text: 'Races you up the stairs (and pays up when he loses)' },
     ],
   },
@@ -252,7 +257,7 @@ export const BUILDING_PEOPLE: readonly PersonCard[] = withVotes([
       { id: 'sega', say: 'A Sega fan, aren’t you?', again: 'Sega for life, eh?', name: 'Sega', icon: 'games', fit: 'loves', obvious: true, teaches: 'sega', memory: 'you talked Sega with me', answers: ['A fan? A believer. Blast processing changed my life.', 'Sega does what the others don’t. I had it on a T-shirt. I still do.'] },
       { id: 'swaps', say: 'Got anything to swap?', name: 'Her swaps', icon: 'cards', fit: 'likes', answers: ['Always. But I know what things are worth, so don’t try anything.', 'Come by my door. Bring something good. Not a sports game.'] },
       { id: 'lina', say: 'That niece of yours loves Sega!', name: 'Lina', icon: 'family', fit: 'loves', teaches: 'lina', memory: 'you said nice things about Lina', answers: ['My Lina? Raised right. “Nintendo is for babies,” she says. My girl.', 'She can name every Sonic zone. Backwards.'] },
-      { id: 'vasseur', say: 'Who had the attic before Théo?', name: 'Old Vasseur', icon: 'history', fit: 'likes', from: 'friendly', teaches: 'vasseur', answers: ['Old Vasseur. Strange man. He scratched something in the lift, they say.', 'He sat on the stairs drawing maps. Of what, nobody knew.'] },
+      { id: 'vasseur', say: 'Who had the attic before Théo?', name: 'Old Vasseur', icon: 'history', fit: 'likes', from: 'friendly', teaches: 'vasseur', answers: ['Old Vasseur. Strange man. He rode the lift up and down for hours, they say, as if it were a piano.', 'He sat on the stairs drawing maps. Of what, nobody knew.'] },
       { id: 'victor', say: 'Seen Victor Crane lately?', name: 'Victor Crane', icon: 'money', fit: 'dislikes', answers: ['Don’t. He outbid me on a sealed Sonic in 2009. I still see it in my sleep.', 'Victor Crane can choke on his duplicates.'] },
     ],
     moods: { good: ['a swap she won', 'a rare find online'], low: ['a lost auction', 'her back from the boxes'] },
@@ -275,7 +280,7 @@ export const BUILDING_PEOPLE: readonly PersonCard[] = withVotes([
     ties: { dubois: 0.7, martin: 0.5, victor: -0.5 },
     facts: [
       { id: 'sega', text: 'A Sega collector', says: 'Sega, always Sega. Nintendo was for children who did their homework.' },
-      { id: 'vasseur', text: 'Knew old Vasseur, who lived in the attic', says: 'Old Vasseur lived in the attic before the student. He scratched something in the lift, they say.', from: 'friendly' },
+      { id: 'vasseur', text: 'Knew old Vasseur, who lived in the attic', says: 'Old Vasseur lived in the attic before the student. He rode the lift up and down for hours, they say.', from: 'friendly' },
       { id: 'victor', text: 'Cannot stand Victor Crane', says: 'Victor Crane outbid me on a sealed Sonic in 2009. I have not forgiven him.', from: 'friend' },
       { id: 'lina', text: 'Raising her niece Lina on Sega games', says: 'Lina’s with me Wednesdays and weekends. I’m raising her properly. On Sega.', from: 'acquaintance' },
     ],
@@ -294,7 +299,7 @@ export const BUILDING_PEOPLE: readonly PersonCard[] = withVotes([
     depth: 'deep',
     topics: [
       { id: 'everything', say: 'You know everything, don’t you?', again: 'Nothing gets past you, does it?', name: 'The building’s news', icon: 'chat', fit: 'loves', obvious: true, teaches: 'knows', memory: 'you let me tell you all the news', answers: ['Everything, dear. It’s a gift. And a burden. Mostly a gift.', 'I keep my ears open. And my door. And my window.'] },
-      { id: 'plants', say: 'Your plants look lovely.', name: 'Her plants', icon: 'flower', fit: 'loves', teaches: 'plants', answers: ['Don’t they? I talk to them. Better listeners than Mrs Pereira.', 'I watered hers once, you know. Once! She still goes on about it.'] },
+      { id: 'plants', say: 'Your plants look lovely.', name: 'Her plants', icon: 'flower', fit: 'loves', teaches: 'plants', answers: ['Don’t they? I talk to them. Better listeners than Mrs Pereira.', 'I watered hers once, you know. Once! She still goes on about it.'], phone: { say: 'How are your plants?', answers: ['Thriving. I talk to them. Better listeners than Mrs Pereira.', 'I watered hers once, you know. Once! She still goes on about it.'] } },
       { id: 'romance', say: 'Any romance in the building?', name: 'Love in the building', icon: 'heart', fit: 'loves', from: 'friendly', answers: ['Oh! Well. Mr Martin plays cards very late with somebody. I only say.', 'Love is everywhere, dear. Mostly on the third floor.'] },
       { id: 'dancing', say: 'Did you ever dance?', name: 'Her dancing days', icon: 'music', fit: 'loves', from: 'friend', teaches: 'dancer', memory: 'you asked about my dancing days', answers: ['Did I! 1968, the Moulin Rouge. The things I saw. The things I did!', 'I still have the shoes. They still fit. Nearly.'] },
       { id: 'rumours', say: 'You shouldn’t spread rumours.', name: 'Being called a gossip', icon: 'chat', fit: 'dislikes', answers: ['Rumours? I share news, dear. There’s a difference.', 'Well! I never. I thought you were nice.'] },
@@ -323,7 +328,7 @@ export const BUILDING_PEOPLE: readonly PersonCard[] = withVotes([
     ],
     effects: [
       { key: 'gossipBoard', at: 'friendly', text: 'Tells you the building’s news, and other residents’ secrets' },
-      { key: 'watersPlants', at: 'friend', trust: 30, text: 'Waters your plants while you are out' },
+      { key: 'leavesCake', at: 'friend', trust: 30, text: 'Leaves a slice of her cake on your mat now and then, while you are out' },
       { key: 'badMouths', at: 'hostile', down: true, text: 'Tells the whole building about you' },
     ],
   },
@@ -418,7 +423,7 @@ export const BUILDING_PEOPLE: readonly PersonCard[] = withVotes([
     group: 'building',
     depth: 'deep',
     topics: [
-      { id: 'hall', say: 'The hall looks spotless.', again: 'The hall’s gleaming again.', name: 'Her clean hall', icon: 'building', fit: 'loves', obvious: true, teaches: 'mop', memory: 'you noticed my hall', answers: ['Of course it does. I did it at six. Wipe your feet.', 'Somebody keeps this building standing. It’s me.'] },
+      { id: 'hall', say: 'The hall looks spotless.', again: 'The hall’s gleaming again.', name: 'Her clean hall', icon: 'building', fit: 'loves', obvious: true, teaches: 'mop', memory: 'you noticed my hall', answers: ['Of course it does. I did it at six. Wipe your feet.', 'Somebody keeps this building standing. It’s me.'], phone: { say: 'The hall was spotless this morning.', again: 'The hall was gleaming again today.', answers: ['Of course it was. I did it at six. You wiped your feet, I hope.', 'Somebody keeps this building standing. It’s me.'] } },
       { id: 'parcels', say: 'Anything heavy come in today?', name: 'The parcels', icon: 'stamp', fit: 'likes', answers: ['Always something heavy. Always for the fifth floor. Funny, that.', 'A box for you yesterday. I signed. You’re welcome.'] },
       { id: 'porto', say: 'Do you miss Porto?', name: 'Porto', icon: 'travel', fit: 'loves', from: 'friendly', teaches: 'porto', memory: 'you asked me about Porto', answers: ['Every day. The river, the bread. In August I go home and nobody needs me. Bliss.', 'My mother still sets a place for me every Sunday.'] },
       { id: 'keys', say: 'Do you really have every key?', name: 'The keys', icon: 'tools', fit: 'likes', from: 'friend', teaches: 'keys', answers: ['Every one. I use none of them. Mostly.', 'Keys are trust. I don’t lend trust.'] },
@@ -450,6 +455,12 @@ export const BUILDING_PEOPLE: readonly PersonCard[] = withVotes([
       leaving: ['The lodge doesn’t run itself. Good day.', 'There’s the postman. Excuse me.'],
       bye: ['Good day.', 'Wipe your feet on the way out.'],
       chat: ['Parcels go to your door now. The postman takes the lift, the lazy thing.', 'The light on the stairs is on a timer. Press the button, it stays on for a while.', 'Mrs Dubois watered my plants once. Once.', 'Wipe your feet. I have just done the hall.'],
+    },
+    phoneLines: {
+      hello: ['The lodge, Pereira speaking. …Ah, the fifth floor.', 'Lodge. Yes? Oh, it’s you.'],
+      leaving: ['The lodge doesn’t run itself. Good day.', 'There’s the postman at the window. I must go.'],
+      bye: ['Good day.', 'Goodbye. Wipe your feet when you come in.'],
+      chat: ['Parcels go to your door now. The postman takes the lift, the lazy thing.', 'The light on the stairs is on a timer. Press the button, it stays on for a while.', 'Mrs Dubois watered my plants once. Once.', 'I have just done the hall. Tell the others to wipe their feet.'],
     },
   },
   {
@@ -540,7 +551,7 @@ export const BUILDING_PEOPLE: readonly PersonCard[] = withVotes([
     look: { seed: 77, role: 'shopper', sex: 'man' },
     ties: { rossi: 0.3, pereira: -0.1 },
     facts: [{ id: 'dog', text: 'Afraid of the dog on the 3rd floor', says: 'The dog on the third. Every day he waits for me. Every day.' }],
-    effects: [{ key: 'carriesUp', at: 'friend', text: 'Brings big parcels right up to your door' }],
+    effects: [{ key: 'carriesUp', at: 'friend', text: 'Brings your parcels up himself, a round sooner, whatever the lodge thinks' }],
   },
   {
     id: 'claire',
@@ -564,5 +575,32 @@ export const BUILDING_PEOPLE: readonly PersonCard[] = withVotes([
       { id: 'henri', text: 'Her uncle Henri left clues all over the building', says: 'Uncle Henri loved puzzles. He hid things. We keep finding notes.', from: 'acquaintance' },
     ],
     effects: [{ key: 'claireReturns', at: 'friendly', text: 'Comes back with one of Henri’s games she kept for you' }],
+    // Her trade's words are the stairwell's ("Press it"): on a call, her own.
+    phoneLines: {
+      chat: ['The building keeps its secrets. Some of them.', 'Henri’s flat is so quiet now. I go and sit in it sometimes.', 'It’s a good building. Old, but good.', 'People come and go. The building stays.'],
+      leaving: ['I… should let you go. Thank you for ringing.', 'Oh, someone’s at the door. Sorry. Bye.'],
+      bye: ['Bye. Thank you.', 'Speak soon, maybe.'],
+    },
+  },
+  {
+    id: 'legoff',
+    name: 'Yann Le Goff',
+    short: 'Yann',
+    role: 'the new neighbour, in Mr Lambert’s old flat',
+    group: 'building',
+    trade: 'neighbour',
+    topics: [
+      { id: 'show', say: 'You work nights?', again: 'Late show tonight?', name: 'His radio show', icon: 'radio', fit: 'loves', obvious: true, teaches: 'show', memory: 'you asked about my show', answers: ['Radio Brocante, the night slot. The 8-bit hour is mine. Two listeners and a cat.', 'Game music after midnight. The station manager thinks it is jazz. I let him.'] },
+      { id: 'flat', say: 'Settling in?', name: 'Mr Lambert’s flat', icon: 'building', fit: 'likes', answers: ['Boxes everywhere. And notes! Mr Lambert hid little puzzles behind the skirting boards.', 'Claire left me his armchair. It hums when you sit in it. I have decided that is fine.'] },
+    ],
+    whereabouts: 'Some evenings at the mailboxes in the hall, once he has moved in',
+    intro: 'Yann, from the third, the courtyard flat. Mr Lambert’s, yes. I do the night show on Radio Brocante.',
+    traits: ['chatty', 'nostalgic'],
+    likes: ['record', 'coffee'],
+    birthday: 12,
+    look: { seed: 177, role: 'shopper', sex: 'man' },
+    ties: { claire: 0.3, student: 0.3 },
+    facts: [{ id: 'show', text: 'Hosts the 8-bit hour on Radio Brocante', says: 'The 8-bit hour on your kitchen radio? That is me. Hello, listener.', from: 'acquaintance' }],
+    effects: [],
   },
 ]);

@@ -24,6 +24,7 @@ import { RoofTop } from './RoofTop';
 import { Roofscape } from './Roofscape';
 import { RoofHatch } from './RoofHatch';
 import { Aerial } from './Aerial';
+import { BenchSeat } from '../street/details/BenchSeats';
 import { RoofPigeons } from './RoofPigeons';
 import { Fireworks } from './Fireworks';
 import { RoofWind } from './RoofWind';
@@ -41,8 +42,8 @@ const ANISOTROPY = anisotropyFor('grazing');
  * (`StreetLighting`: one sun shadow, a hemisphere while the player is up here), the rain and snow,
  * the wind. A zone reached by travel only (the attic's ladder).
  */
-export function furnishRoof(zone: Zone, ctx: Pick<BuildContext, 'sky' | 'listener' | 'acoustics' | 'today'>): ZoneHandle {
-  const { sky, listener, acoustics, today } = ctx;
+export function furnishRoof(zone: Zone, ctx: Pick<BuildContext, 'sky' | 'listener' | 'acoustics' | 'today' | 'home' | 'notices'>): ZoneHandle {
+  const { sky, listener, acoustics, today, home, notices } = ctx;
   const { dayNight } = sky;
   const origin = new THREE.Vector3();
   const street = new THREE.Vector3(...plan.street);
@@ -75,6 +76,30 @@ export function furnishRoof(zone: Zone, ctx: Pick<BuildContext, 'sky' | 'listene
     new THREE.Vector3(hx, 0, hz),
   );
   zone.place(new Aerial(plan.aerial.height), new THREE.Vector3(plan.aerial.at[0], 0, plan.aerial.at[1]));
+  // A seat at the foot of a chimney stack, facing the street: an hour of the city by day, of the stars by night.
+  const { sit } = plan;
+  const stack = plan.chimneys[sit.chimney]!;
+  const night = (): boolean => dayNight.state.daylight < 0.25;
+  let seen = 0;
+  zone.place(
+    new BenchSeat({
+      at: [stack.at[0], stack.at[1]],
+      yaw: 0,
+      seat: sit.seat,
+      length: Math.min(1.2, stack.size[0]),
+      name: sit.name,
+      viewer: listener,
+      ...(home.household?.pastimes ? { pastimes: home.household.pastimes, wait: () => (night() ? sit.wait.night : sit.wait.day) } : {}),
+      overhear: () => {
+        const lines = night() ? sit.seen.night : sit.seen.day;
+        return lines[seen++ % lines.length] ?? null;
+      },
+      tell: (line) => notices.react(line),
+    }),
+    // On the stack's Front Street side (+z), facing out over it (the seat looks along its local +z).
+    new THREE.Vector3(stack.at[0], 0, stack.at[1] + stack.size[1] / 2 + 0.35),
+    0,
+  );
   zone.place(new RoofPigeons(plan.pigeons, dayNight, listener), origin);
   const show = zone.place(new Fireworks(dayNight, () => today.realDate(), plan.fireworks.spread, Math.hypot(...plan.fireworks.at)), new THREE.Vector3(...plan.fireworks.at));
   zone.place(new Precipitation(dayNight, { splashes: false }), origin);

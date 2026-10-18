@@ -22,21 +22,23 @@ interface LabelMakerOptions {
   /** The player is in one of the flat's rooms (not the stairwell). */
   atHome: () => boolean;
   notices: Pick<NoticeActions, 'react' | 'tip'>;
+  /** Where on the view it aims from (normalised device coordinates, read live: the crosshair, or the bookcase view's cursor); the middle without it. */
+  aim?: THREE.Vector2;
 }
 
 /**
  * The label maker as the session's K uses it (`game/Labelling`): owned once bought at SECOND HOME (a tip says how it
- * works, the first time), aimed from the crosshair at the flat's bookcases, its panel dealt for the edge aimed at.
+ * works, the first time), aimed from the crosshair (or the bookcase view's cursor) at the flat's bookcases, its panel dealt for the edge aimed at.
  */
 export function labelMaker(options: LabelMakerOptions): LabelMakerLike<LabelSpot> {
   const { labels, panel, shelves, camera, blocked, upgrades, notices } = options;
   const raycaster = new THREE.Raycaster();
-  const centre = new THREE.Vector2(0, 0);
+  const aim = options.aim ?? new THREE.Vector2(0, 0);
   let owned = upgrades.has('labelMaker');
   upgrades.subscribe(() => {
     if (owned || !upgrades.has('labelMaker')) return;
     owned = true;
-    notices.tip(`Label maker: aim at a shelf’s front edge, [${actionKeyLabel('labelShelf')}] prints a label.`, { id: 'label-maker' });
+    notices.tip(`Aim at a shelf’s front edge: [${actionKeyLabel('labelShelf')}] prints a label.`, { id: 'label-maker', head: 'Label maker' });
   });
   return {
     get owned() {
@@ -46,7 +48,7 @@ export function labelMaker(options: LabelMakerOptions): LabelMakerLike<LabelSpot
       return options.atHome();
     },
     aim: () => {
-      raycaster.setFromCamera(centre, camera);
+      raycaster.setFromCamera(aim, camera);
       const ray = raycaster.ray;
       const spot = labels.aim(ray, shelves.bookcaseList(), REACH);
       // A bookcase behind a wall (the next room's) is out of reach.

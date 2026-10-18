@@ -71,12 +71,22 @@ editor's "add" pane). Games are bought with coins; coins are won at the arcade:
    it (spends what is due, adds the game with its receipt to the `CollectionStore`, the box drops into the bag via
    `Inspector.stow` and leaves a gap on the table), **H** haggles (the `HagglePanel`, see below), **R** twice holds it
    (the first press says the deposit, as every spending press), **X** swaps, **U** hands a purchase back, E or a click elsewhere puts it back. So a stray click never spends
-   anything. The **bargain bin** (`BargainBin`, by the way in) holds worn copies of any platform at `BARGAIN_PRICE`,
+   anything. B pressed while the stallholder is still looking the price up is kept: the copy is bought as soon as the
+   price is in, unless it turned out past `ARM_ABOVE` (they name it; the next press buys). On a controller (the walk is
+   frozen with a copy in hand): RT buys, LT haggles, D-pad ← holds, D-pad → swaps, and with empty hands just after a
+   buy LT hands it back; LT held in the aisle reads the stalls (at home it tips the box looked at), `input/actions`. The **bargain bin** (`BargainBin`, by the way in) holds worn copies of any platform at `BARGAIN_PRICE`,
    no haggling. The `OrderCounter` opens the `CataloguePanel`: any game in the libretro index, new, at `shopPrice`
    (two clicks: the first arms the row, "N coins?"; a posted copy cannot be handed back; it counts as a buy for the
    reputation), with a cover thumbnail and a badge when one of today's stalls has a copy (`MarketStock.peekToday`); "Used…"
-   orders a second-hand copy instead. The **WE BUY** desk (`BuyBackDesk`) opens the `SellPanel`: the collection with an offer
-   per game (`buyBackPrice`), two clicks to sell; lent-out games cannot be sold. A sold game goes to the
+   orders a second-hand copy instead (two clicks too, "N down?"). Its second tab is the **wishlist** (opened on it when
+   there are wishes and nothing typed): every wish as a row with the same price and buttons, those on a stall today first,
+   then those on order (when it waits on its stall), a head counting them; the platform select narrows it. "Want it" is a
+   toggle ("Wanted", "Not wanted" under the pointer); a wish dropped stays in place, faded, until the tab is read again.
+   The collection's binder shows wishes as dashed slips with today's market news (a stall, the bin, on order), a
+   "Wishlist only" filter, and a dropped wish's card stays struck through with "Want it again" until the sheet closes. The **WE BUY** desk (`BuyBackDesk`) opens the `SellPanel`: the collection with an offer
+   per game (`buyBackPrice`), two clicks to sell; lent-out games cannot be sold. Raymond's face and balloon sit at
+   the top of the pad (`panel/speaker`; the party's table has Mrs Moreau, the saleroom's consignment its clerk:
+   `who`/`greeting` on the buyer), and the rows can be ordered A to Z, best offers first or doubles first. A sold game goes to the
    `MarketLedger` and is on its stall from the next market day for `CONSIGNMENT_DAYS`. Prices are never charged
    before they settle: a stock item and a catalogue or sell row start at the ordinary price (tag "…", button
    "Pricing…") and can only be bought once the game's fame arrived (`StockItem.priced`; the tag and the row repaint).
@@ -104,8 +114,9 @@ finer market" (editions, fakes, holds, orders, lots, swaps, cards, coffee, rival
 stall copy can go, deepest discount x Flea Fair x `lowestWorn` or a clearance, against the top desk share; it logs
 `[pricing]` when a retune breaks it, the margin being thin; the job lot, a private seller's card and a mail order are
 checked the same way, and a stickered copy's haggle; no clearance stall carries a sticker, since the two cuts together
-would go under the desk once peeled). A swap counts a copy for no more than it was bought for, and a WANTED card
-pays at most `WANTED_AD.premium` (1.15) times what the copy cost (a swap's receipt, a gift or a prize: no cap), so a
+would go under the desk once peeled). A swap and the WE BUY desk count a copy for no more than it was bought for (a
+private seller's table goes under the desk's share), and a WANTED card pays at most `WANTED_AD.premium` (1.15) times
+what the copy cost (a swapped-in copy's receipt keeps its whole cost as `worth`; a gift or a prize: no cap), so a
 copy bought off a stall that morning is never a sure profit at noon. The job lot is priced as a legend for a game
 whose fame is unknown (offline), and asked again next time. A price is `BASE_PRICE[platform] x
 fameFactor(views) x jitter(id)`: no real price source exists key-less, so fame stands in for value (see below).
@@ -206,19 +217,29 @@ file to re-match a game). Matching a free-text title to an article is the fragil
 
 ## Haggling
 
-H with a stall copy in hand opens the `HagglePanel`: a short exchange with the stallholder, one per copy per market
-day (`MarketLedger` remembers the outcome across reloads). The player offers cheeky, fair or polite (keys 1-3,
-`NEGOTIATION.offers`, shares of the tag) or takes the standing counter-offer (Enter). The stallholder
+H with a stall copy in hand opens the `HagglePanel`: a short exchange face to face with the seller (their painted
+face, name and stall at the top, smiling at a deal and frowning as patience wears thin; what was said as comic
+balloons; `ForSaleLike.seller` names them: the stallholders, a private seller, the estate sale's niece), one per copy
+per market day (`MarketLedger` remembers the outcome across reloads). The seller speaks in their own voice
+(`economy/haggleLines`, picked from their traits by `ui/market/haggleVoice`: warm, proud, gruff, shy or plain). The
+player offers cheeky, fair or polite as their own words (keys 1-3, `NEGOTIATION.offers`, shares of the tag), argues
+once each (keys 4-5, `Negotiation.argue`, `NEGOTIATION.argument`): the copy's flaw (no manual, a worn box) lowers the
+lowest price a little, "I'll think about it till Sunday" brings the asking price halfway down, or, to a seller set on
+their price (a showpiece, a lowest share in the top half), costs a point of patience; or takes the standing
+counter-offer or, before any, the tag ("Fine, N it is", Enter). Every line keeps its slot: one said, or one at or over
+what they ask now, stays in place struck through and its press says why, so nothing moves under the pointer. A
+seller with no card gets a drawn silhouette. A deal closes on a handshake's slap, a walk-off or an insult on the
+seller's huff (`audio/dealSounds`); shaken on, "Pay N" (Enter; pressed twice past `ARM_ABOVE`) closes the panel with
+`pay` and `MarketCounter` buys the copy at the price agreed, "Not now" leaves the price standing for the day. Nothing
+on screen says odds or percentages. The stallholder
 (`economy/haggle.ts`, `Negotiation`, pure) has a secret lowest price, drawn per copy and day (so it cannot be
 rerolled) by kind of copy (`NEGOTIATION.floor`: a showpiece rarely moves, a worn copy easily), lowered by loyalty,
 a coffee, the rain and the player's perks (together `NEGOTIATION.maxSway` 0.1 at most, so each still counts and cheeky
-is not always taken; the panel says how much is in the player's favour today), raised by the stall's soured mood, never under `NEGOTIATION.lowest` (0.7; `lowestWorn` 0.66
+is not always taken), raised by the stall's soured mood, never under `NEGOTIATION.lowest` (0.7; `lowestWorn` 0.66
 for a worn copy, still over the desk at the Flea Fair's deepest discount; on a copy with a price sticker both divided
 by `STICKER.factor`, so the haggle stops where an unstickered copy's would and buying, peeling and selling back never
-pays); and a patience of a few offers. The offers are cheeky 0.72 (the panel warns it "might offend": under a high
-floor it is an insult; on a showpiece, an estate copy or a grail the panel says cheeky is "sure to offend" and fair
-"might"), fair 0.8, polite 0.9; an offer at or over what they ask now is greyed ("= asking": Enter takes their
-price). An offer at or over the lowest price is taken; under it, a counter-offer halfway down; far under it
+pays); and a patience of a few offers. The offers are cheeky 0.72 (under a high floor it is an insult), fair 0.8,
+polite 0.9; an offer at or over what they ask now is struck through (Enter takes their price). An offer at or over the lowest price is taken; under it, a counter-offer halfway down; far under it
 (`insult`) costs two patience and sours the stall for the day. Out of patience ("take it or leave it") and walking
 off mid-haggle both keep their last counter for the day (the tag if none was made), so walking off never beats
 playing on; closing without an offer costs nothing. A stall soured so far that it would walk at the first offer
@@ -303,9 +324,11 @@ the job lot. Orders, upgrades, grails and the shop stay plain. A new seller call
   list) and the next market day gives the deposit back (`Transactions.refundLapsedHolds`, at boot and on every new
   day: `bootstrap/session`, a "Deposit back" reward). "Used…" at the catalogue quotes a second-hand copy
   (`MARKET_ORDER`), takes the deposit and puts it on its stall `days` later (tag PUT BY FOR YOU) until bought.
-- **Swaps**: X opens the `TradePanel`: a game from the collection counts for `tradeValue` (`TRADE_SHARE`), the
-  rest in coins, no change given (a game worth more says so on its button: "Swap (−12 value)"); the game given goes
-  out on its stall like a sale.
+- **Swaps**: X opens the `TradePanel` (the stall's kraft swap tag, the stallholder's face and balloon above it, their copy tied on at the top with its state and asking price stamped; values looked up together, one repaint when they land; a first press ties a game on and the keeper says what they make of it, the second shakes on it): a game from the collection counts for `tradeValue` (`TRADE_SHARE`), the
+  rest in coins; a game worth more brings the difference back in coins at the WE BUY desk's rate (`swapChange`,
+  `BUY_BACK_SHARE / TRADE_SHARE` of the value over: never more than selling the excess at the desk), its button says
+  so ("Swap, 6 coins back"); the game given goes out on its stall like a sale. Short at a stall, the stallholder says
+  so and offers the hold (`MarketCounter.buy`).
 - **Handing back**: U within `UNDO_PURCHASE.seconds` of a purchase (even with another copy in hand) gives the money
   back less `1 - UNDO_PURCHASE.refund` of the full price (rounded: a 1-coin copy comes back whole) and a fresh box of
   the same copy goes back where it stood (`ForSaleBox.restock`); a copy that was held goes back on hold with its
@@ -316,19 +339,34 @@ the job lot. Orders, upgrades, grails and the shop stay plain. A new seller call
   owns up and the WE BUY desk pays `REPRO_BUY_BACK`. Tags carry a band for first prints, budget lines
   (`BUDGET_LABEL`), imports, holds, orders, kept-aside copies and upgrades. An upgrade bought replaces the owned
   copy (`CollectionStore.update`), the old one going to the stall.
-- **Job lot** (`LotCrate` + `JobLotPanel`): a crate of `JOB_LOT` games from anywhere at a share of their worth,
-  once a day. A game the player has bought elsewhere since the crate was drawn comes out of it, and its part out of
+- **Job lot** (`LotCrate` + `JobLotPanel`: Bernard's face and balloon (`panel/speaker`), the crate's slats, the packing list clipped to them with the games already home struck through, the count and price chalked on the end, SOLD across it once bought): a crate of `JOB_LOT` games from anywhere at a share of their worth,
+  once a day, pitched by Bernard, who does the house clearances (a line naming the best-known game in it, what it
+  would all come to one by one, the games he crossed off); dearer than `ARM_ABOVE`, "Buy the lot" takes a second
+  press ("Shake on it?"); out of reach the button says how many coins short and Bernard says so. A game the player has bought elsewhere since the crate was drawn comes out of it, and its part out of
   the price (`lotOffer`: each game's share by what it would fetch alone).
 - **Notice board** (`NoticeBoard` + `NoticeBoardPanel`, cards in `MarketNotices`, persisted): WANTED cards
   (`WANTED_AD`, up several days: one from the collection, the rest from the day's stalls, paying well over the WE
   BUY desk for a complete copy; less for a worse one: `wantedPay`, the copy's state, printing and import as the desk
   counts them, `REPRO_BUY_BACK` for a fake, never over a flat-price receipt; the card says what the player's copy
-  fetches), FOR SALE cards (`FOR_SALE_AD`, today only, to the parcel), the **collectors' club**
-  (`collectorSets.ts`: complete a set, claim its coins once) and **you & the market**: reputation, loyalty, the week.
+  fetches), FOR SALE cards (`FOR_SALE_AD`, today only, to the parcel), each card with the game's polaroid; one answered
+  turns into the other side's thank-you note pinned in its place till the board closes. Then the **collectors' club**
+  (`collectorSets.ts`: a membership card per set, a pocket per piece, the copy's cover or its name pencilled in an
+  empty pocket; Claim once complete, then PAID stamped with what the club paid, never shown before), **the
+  stallholders** (a polaroid each: face, stall, how they take the player in a few words, a ribbon with the standing's
+  name; no points, no shares; what the market calls the player as a newspaper clipping) and **this week** (the
+  market's printed programme, a day a column, today ringed). All on cork (`market.css`); selling to a WANTED card and
+  buying a FOR SALE one past `ARM_ABOVE` are pressed twice; a lent game says who has it till when
+  (`collection/loans.loanOf`); what is out of reach stays pressable and says why.
+- **The WE BUY desk** (`SellPanel`, on the buyer's receipt pad) is Raymond's (`marketPlan.clerks`), who says a word
+  over each copy (`economy/deskTalk`: a first print pleases him, a reproduction does not); the mail-order counter is
+  Sylvie's. The day's stock not coming (the lookup failed), the stallholders say the van is late and look again in
+  `STOCK_RETRY_S`. A copy another shopper buys leaves in their carrier bag (Victor's too); one off the wishlist is a
+  slip ("… has gone").
 - **Reputation and loyalty** (`MarketStanding`, lifetime): `REPUTATION.points` per deed (buy, sell, a deal, a swap, a
   lot, a wanted card, a set); levels open the glass case, raise the WE BUY desk's offers, and (`earlyAccessLevel`)
-  keep an estate-sale copy back. Loyalty per stall (`LOYALTY.tiers`, copies bought there): a regular gets wishlist
-  finds more often, better haggles, a friend a copy kept aside every day. Stallholders greet them accordingly.
+  keep an estate-sale copy back. Loyalty per stall (`LOYALTY.tiers`, copies bought there, or the stallholder's tier as
+  a person if warmer: `MarketStanding.loyalty` is the one ladder every reader uses): a regular gets wishlist finds
+  more often, better haggles, a friend a copy kept aside every day. Stallholders greet them accordingly.
 - **Stallholders are people** (docs/social.md "The market"): the market's loyalty at a stall is the warmer of the
   copies counted and the stallholder's tier (`social/market.stallLoyalty`); a cold one won't haggle, a hostile one keeps
   the showpiece back and prices 5% dearer for the player, a close one gives credit. Discounts stay inside the haggle's
@@ -427,7 +465,7 @@ saved days); a day seeds a stream in `time/daily` only (`dayStream`). A feature 
 that day (the busker, the garage sale, the giveaway, the scratch cards, the dropped coins), the game day for the market's
 calendar and the game's week (the fair, the saleroom's Sunday sale, the arcade's Saturday tournament, the collector on
 Front Street, the counters' daily limits, the stray's trust: one clock for what the player meets every day, the one the
-wallet chip shows, "Sat · day 12 · 18:40", `time/gameDateLabel`); "done today" is `oncePerDay` (`time/OncePerDay`, one `daily.v1` store).
+wallet chip shows, "Saturday, 18:40", `time/gameDateLabel`); "done today" is `oncePerDay` (`time/OncePerDay`, one `daily.v1` store).
 
 **Persisting something new**: (1) add its key to `KEYS` in `persistence/keys.ts` (`save(...)` for progress, which
 "New game" wipes and `?debug` keeps apart; `pref(...)` for a preference, then also in `PREFERENCE_KEYS`); (2) keep it in a
@@ -471,7 +509,10 @@ its level following what the screen does; only the six original cabinets keep a 
   sheet painted for every cabinet, shown at a random offset) only repaint while the glass faces the camera. It sings a jingle now and then. Each carries its **medal lamps**
   (`MedalRow`) under the marquee (a medal won there and then blinks white in a swelling halo and the cabinet plays its
   win sting), a printed **instruction card** on the panel (`InstructionCard`, from the game's
-  hint, printed again when the keys are rebound; the HUD spells a machine's controls out only on its first play ever) and its **wear** (`wear`: stickers, some peeling, on the side art; cigarette burns and scratches on the
+  hint, printed again when the keys are rebound; the HUD spells a machine's controls out only on its first play ever;
+  a click on it reads it up close, `CardReading`: the eye glides square in front of the print as into an armchair,
+  no card or panel, and E, a movement key or a click steps back; picked through the cabinet's hitbox by
+  `Interactable.within`, out of the way mid-play; the physical machines' cards too) and its **wear** (`wear`: stickers, some peeling, on the side art; cigarette burns and scratches on the
   panel; scuffs on the base). A two-player game (`setOpponent`) gets a second stick and a `partner` spot; an
   `attachment` changes how it is played: the `LightGun` (a toy pistol on a cable in a holster on the side, held low
   and right of the eye while playing, pointing at the aim, kicking back on each shot; the cabinet aims the game
@@ -496,8 +537,10 @@ its level following what the screen does; only the six original cabinets keep a 
   carry one-sheets for the hall's own games (`GamePoster`, `posterArt`, also the prize poster's printer) and an
   airbrushed PLAYER ONE panel (`ArcadeMural`).
 - **LexiPunk** (`games/LexiPunk`, the user's own word game at lexipunk.com): a coin opens the big frame
-  (`ui/ArcadeScreenPanel`, a modal: the page in an iframe inside a bezel, the live score, Done; Esc only reaches it
-  from outside the page, which keeps the keyboard) and the glass
+  (`ui/ArcadeScreenPanel`, a modal: the page in an iframe on the cabinet's glass, the lit marquee with the score in
+  LED digits and a DONE push button; a self-test screen while the page loads, NO SIGNAL and "Step back" if it has not
+  answered in 12 s, the coin refunded as for any game that reported nothing; Esc only reaches it from outside the
+  page, which keeps the keyboard) and the glass
   says where the game is. The page reports its score with `window.parent.postMessage({ type: 'lexipunk:score',
   score, final }, '*')` or `{ type: 'lexipunk:over', score }` (origins lexipunk.com / www.lexipunk.com only); the
   play is over when the page says so or the frame is shut, and pays the last score reported; a play that reported
@@ -551,7 +594,8 @@ its level following what the screen does; only the six original cabinets keep a 
   a little before it drops; six misses in a row buy one honest grip that never slips (the count is kept across
   visits: `ArcadeHabits.clawMisses`). Every plush rests on what is under it (`restingY`); one left with nothing
   under it settles. A plush down the chute is its prize (`clawPrizeFor(color)`); a new one takes its place on top of
-  the heap. A miss's tickets count up on the display and feed out of a `TicketStrip` on the front. Regulars win one
+  the heap, in a colour not yet on the bed at home while one is left; a colour won twice is swapped for
+  `CLAW_DUPLICATE_TICKETS` (more than a miss's). A miss's tickets count up on the display and feed out of a `TicketStrip` on the front. Regulars win one
   now and then (`REGULAR_GRIP` of the player's odds), and cheer.
 - Every machine holds a `MachineRun` (the coin, the keys from `arcadeKeys`, the initials, the end card's count-up
   with its ticks and the strip, the labels from `machineLines`, a regular's results, out-of-order days); the pinball,
@@ -561,8 +605,10 @@ its level following what the screen does; only the six original cabinets keep a 
   gives the `InstructionCard`, the medal lamps (with `table`), a glow pool, the watch spot, a regular at the start.
 - **Change machine**: out of order most days; `ArcadeDaily` makes it work about one game day in four
   (`CHANGE_MACHINE`): then its note is gone and a click pays a few coins once (`Session.collectChange`: the flap's
-  clunk and the coins' rattle), after which its caption reads "empty today" (`ArcadeDaily.changeWaiting`). It looks at
-  the day again every few seconds (`working` is a function), so the note comes and goes at midnight.
+  clunk and the coins' rattle), after which its caption reads "empty today" (`ArcadeDaily.changeWaiting`); on a dead
+  day a click thumps it, and once a day a coin falls out (`ArcadeDaily.thump`). It looks at the day again every few
+  seconds (`working` is a function), so the note comes and goes at midnight. **The broken machine**: tried, Gus rings
+  Didier the repair man (`ArcadeHall.brokenClick`, `ArcadeDaily.askRepair`), who has it going `REPAIR_HOURS` later.
 - **Hall of fame** (`ScoreBoard`): the top five of every machine that keeps a table (`ArcadeScores.table`, rivals
   from `rivals.ts` until beaten), four games a page, the player's entries in green with YOU beside them. A score that beats the fifth
   asks for initials on the machine's own screen (`InitialsEntry`: up / down letter, left / right move, fire next;
@@ -592,9 +638,12 @@ its level following what the screen does; only the six original cabinets keep a 
   machine with its four medal dots lit as they are won, and turns gold with the player's initials once the tour is done.
 - **Daily challenge** (`ArcadeDaily.challenge()`, drawn once a game day and kept with its progress): a game, a kind
   (`CHALLENGE_KINDS`: `score` one play reaching the target, `twice` two plays each reaching a lower one, `total` the
-  day's plays on it adding up), a target in its `CHALLENGE_BAND` (or, once the player holds that machine's gold, a
+  day's plays on it adding up, `feat` one of the game's feats in a play: a PERFECT WAVE, ALL HOME, a RALLY OF 8,
+STAGE 3 CLEAN… `CHALLENGE_KINDS.feats`, the captions its bonuses show, `ArcadeGame.feats` into `ArcadeResult.feats`),
+a target in its `CHALLENGE_BAND` (or, once the player holds that machine's gold, a
   `score` set from their own best: `personal`), `CHALLENGE_REWARD` tickets on top, paid once by the Session
-  (`advance` counts each play, `claimChallenge` pays). Its `line` ("SCORE 3,000 TWICE") is what the `ChallengeBoard`
+  (`advance` counts each play, `claimChallenge` pays). Its `line` ("SCORE 3,000 TWICE") and its `ask` in a sentence's
+words ("score 3,000 twice") is what the `ChallengeBoard`
   (two lamps for a twice, a filling bar for a total), the attract screen, the street's bills and paper and the journal
   say; the attendant tells it in words.
 - **Weekly league and the regular's card** (`economy/ArcadeLeague`, the `LeagueBoard` by the way in): every ticket won
@@ -639,7 +688,8 @@ its level following what the screen does; only the six original cabinets keep a 
   the league's pennants pinned flat on the wall above, the `LavaLampPrize` lighting them at the bottom board's end
   (baked glows, no light). **Sets** (`PRIZE_SETS`, `PrizeSets`): every claw bunny, the whole glass case, every limited
   edition, each pays `PRIZE_SET_TICKETS` once, the moment it is complete (`bootstrap/uiPanels` `wireHud`). The
-  **mystery game** (`Prize.game`) is a random seed game the collection lacks, never a grail and never one whose shop
+  **mystery game** (`Prize.game`) is a random seed game the collection lacks (or one of thirty of the index's drawn as
+  the counter opens, `MysteryGameSource.more`, so the box does not run dry), never a grail and never one whose shop
   price is over `MYSTERY_GAME_MAX_PRICE` (160: no fallback, an empty box says so), added to it with a receipt
   (`PRIZE_WHERE`, 0 coins) so it waits in the parcel at home; the WE BUY desk, a swap and a wanted card never count it
   for more than its tickets' worth (`MYSTERY_GAME_VALUE`, 90: `receiptCap`). The counter says where a prize goes, and
@@ -653,14 +703,16 @@ its level following what the screen does; only the six original cabinets keep a 
 - **The back room** (the panel's last shelf, `Prize.special`; not in the case nor on the pegboard): what keeps the
   tickets worth earning once the flat is done, at `PRIZE_TICKETS` (half an hour to an hour and a half of play each).
   **This week's limited edition** (`limitedOnOffer(gameDay)`: the golden token, the snow globe, the gold joystick, the
-  marquee light box, the jukebox tape, the pixel pal, one a week in turn, each sold once, for the trophy row). **The
+  marquee light box, the jukebox tape, the pixel pal, one a week in turn, each sold once, for the trophy row; once all
+  are home the slot is not shown). The snow globe, the jukebox tape and the mini cabinet answer a click on the trophy
+  row (`prizes/ShelfToy`: confetti, a bar of side B, the attract jingle). **The
   rare cartridge** (`rareGame`): a game the collection lacks priced over the mystery game's ceiling and at most
   `RARE_GAME.maxPrice` (450), never a grail; its receipt (`RARE_PRIZE_WHERE`) caps what a desk pays at its tickets'
   worth (`RARE_GAME.value`). **The sponsor's plate** (`sponsor`): the player picks a hall cabinet (`hallCabinets`) and
   a brass plate with their initials goes on its base (`SponsorPlate`, `OwnedPrize.game`), one per cabinet. **The
   retired cabinet** (`hallCabinet`): the hall retires one of `RETIRED_CABINETS` a week (`retiredOnOffer`); bought, that
   very upright stands in the living room's front-left corner running its one game for fun (`homeArcade/placeRetiredCabinet`,
-  `atHome`, the home table; not movable).
+  `atHome`, the home table; not movable). Another week's can be bought too: it takes the corner, the old one goes back.
 - **Jukebox** (`Jukebox` + `audio/JukeboxTune`): a bubbler by the front wall playing generated music on four
   stations (synthwave, chiptune, funk, italo disco; a made-up song title every sixteen bars on its card), louder up
   close; a click moves to the next station, then silence. Plays while the player is in the hall.
@@ -781,9 +833,16 @@ one shut since lands there too (`PositionMemory`'s `instead`, `outsideIfShut`).
   Mondays and the bookshops open after lunch; a day may have its own line at the door (`shopPlan.WEEKDAY_LOOKS`: the
   market mornings, Wednesday and Saturday, when the greengrocer's basket is cheaper; the launderette's Monday; the
   bakery's Friday).
+- **Each shop its own** (`city/facades` names every door past the works, `shopPlan.SHOP_OWN_LOOKS` gives each its
+  lines; `counters.ts` keeps the basket, the tart, the board and the guides to the near shops). Some counters have a
+  person behind them (`townsfolk/shopkeeperTalk` `SHOPKEEPERS`, by kind then fascia name or facade id): Stan at the
+  butcher's across from us (f1), Josette at the bakery by SUNNY SIDE CAFE (f3), Mr Lagarde at the pharmacy by
+  SECOND HOME (f4), Agnès at CORNER BOOKS. A second florist's door (GREEN FINGERS) is a plain shop's.
 - **The counters** (`src/streetShops/`: numbers in `rules.ts` `STREET_SHOPS`, memory in `store.ts`,
   `bibliothek.streetShops.v1`; the doors' side in `shops/counters.ts` `StreetCounters`, the panels in `ui/streetShops/`):
-  what a door does beyond its plain offer, its click (or its entry in the shopkeeper's conversation).
+  what a door does beyond its plain offer, its click (or its entry in the shopkeeper's conversation). The counter
+  (`CounterPanel`) prints on the shop's own paper with the keeper on top (a `Speaker`: Agnès' portrait, the others
+  painted from a fixed look seed, `CounterDeal.keeper.seed`); a dear row asks twice ("Buy · 45 coins?").
   - **CORNER BOOKS**: a box of loose manuals (`bookshop.manualsInBox`, by game week): one for a copy on the shelves
     without its manual turns up now and then (6 coins, a disc's insert 4, Agnès' discount or markup on it); bought,
     the copy is complete (`HomeLife.completeWithManual`). One not in the box is ordered (2 more, in two game days,
@@ -798,8 +857,22 @@ one shut since lands there too (`PositionMemory`'s `instead`, `outsideIfShut`).
     23:30 (3 at the door, a 75-minute beat through `Pastimes`, Lou's warmth); THE LOCAL's quiz on Tuesdays 19:30 to
     22:30 (2 a head, six questions from `quizBank` in `PubQuizPanel`; beating THE USUAL SUSPECTS pays 6, 12 or 20 by
     the answers right) and its dartboard every evening outside the quiz (1 for three darts in `DartsPanel`, three goes a
-    night; beating tonight's chalked best, `boardBest`, pays 6 once). Both nights are schedules (`ANCHOR_GIG`,
-    `LOCAL_QUIZ`) the news and the bills can read.
+    night): tonight's checkout on the chalkboard (`tonightsCheckout`, 50 to 100) taken to nought exactly, the last dart in
+    a double or the bull, else bust (`darts.ts` `afterDart`; each dart called with the usual way out, `checkoutRoute`). The
+    throw is a skill: a press draws the arm back and sets the aim, the gauge fills and empties, letting go on its mark
+    flies true (early drops, late climbs), the hand sways round the aim and tires after 2.5 s. Checked out pays 6, 9 or
+    14 by the checkout (`checkoutPrize`), once a night; a decent player checks out 60 about 2 goes in 5, 100 about 1 in 7. Both nights are schedules (`ANCHOR_GIG`,
+    `LOCAL_QUIZ`) the news and the bills can read. Both panels sit on the pub's wall with THE LOCAL's staff painted
+    like the town's faces though they keep no card (`ui/streetShops/barFace`: Dennis the quizmaster, Sean the barman,
+    fixed look seeds). The quiz: a chalkboard with both teams' scores (THE USUAL SUSPECTS' night, `rivalsRight`, is
+    dealt with the round as `QuizNight.rivals` and spread over the questions so their score climbs as the answers are
+    read), Dennis reading each question in a balloon, the team sheet clipped on the table with the four answers in pencil
+    (A to D, keys 1 to 4), the pick ringed in pencil and the right one in red, a tick or cross down the margin; at the end
+    the sheet comes back marked and, only when won, the kitty's pint glass is set down (`QuizVerdict`: says, aside,
+    won). The darts: Sean calls each dart in a balloon, a chalkboard beside the board keeps the checkout, a line per dart
+    and what is left (GAME SHOT or BUST chalked in at the end), each dart flies in, sticks and shivers with its number;
+    the stick or the D-pad aims and A held draws the arm back (the arrows aim too: `onMove` is asked for the arrow keys
+    as for the D-pad), "Another go" carries the fee (`DartsGo.fee`).
   - **CONTINUE?** (`popUp.ts`): from market day 21 the empty shop by the butcher (facade `n5`) is a pop-up, 11:00 to
     20:00, not Mondays, its A-board out (`PopUpBoard`): four complete copies a week, some first prints, now and then one
     sealed, at the full shop price by edition and variant (`shopPrice`; never a bargain to sell back), bought through
@@ -812,14 +885,18 @@ one shut since lands there too (`PositionMemory`'s `instead`, `outsideIfShut`).
   `bibliothek.pocket.v1`; prices `STREET_TREATS`, daily limits `STREET_TREATS_PER_DAY`, by game day: `pocket.followGameDay`): the bakery's croissant, the
   butcher's scrap, the pet shop's pouch of treats (three portions, on its counter: `CounterErrand`, `ShopPlan.errands`),
   the florist's season's flowers, three bunches for two (`SEASON_FLOWERS`, the chalk board outside says which). A
-  croissant or a bunch buys the busker's request; the scrap and the treats are for the stray cat.
+  croissant or a bunch buys the busker's request; the scrap and the treats are for the stray cat. A bunch also goes in
+  the vase on the kitchen table (`errands/vase`, `bibliothek.vase.v1`, `props/FlowerVase`, `KITCHEN_PLAN.household.vase`):
+  the season's flowers for `VASE_DAYS` (4) game days, drooping on the last, a fresh bunch replacing them; decoration only.
 - **The sunny side cafés** (SUNNY SIDE CAFE, PARKSIDE CAFE): a coffee (`COFFEE_PRICE`, 2 coins) *is* the flea market's coffee of the day (`market.drinkCoffee`:
   the stallholders go easier on the haggle), with the barista's tip: a wishlisted game on a stall today, a gem in the
   bin, or the day's theme. Had already, the barista still talks. At the two named cafés the counter is a conversation
   with the barista: their standing gives a second tip, a free coffee, or none (docs/social.md "Front Street and the arcade").
 - **The tabac** (kind `tabac`): PIXEL SCRATCH cards (`scratchCard.ts`, the numbers `SCRATCH` in pricing.ts), 2 coins, five a game day (`bibliothek.scratch.v1`):
   three alike of six cells win 2, 3, 5, 10 or 25 coins; drawn outcome first, 38 % win, 1.35 coins paid out on average
-  (the house wins). Scratched in `ui/ScratchCardPanel`; walking off scratches the rest and pays.
+  (the house wins). Scratched in `ui/ScratchCardPanel`, printed as a ticket: the logo band and serial, the symbols drawn
+  (cherries, pad, cartridge, star, seven; no emoji), the "match 3" prize table, a WINNER stamp or "Not a winner",
+  "Another card" with its price; walking off scratches the rest and pays.
 - **The florist** is walked into (see "The bare flat"): the houseplants for every room and the balcony's pots
   (`HomeUpgrades` 'plant', `BALCONY_PLAN.boughtPlants` then two `decor` pots), and the bunches on the counter. The bar's
   lemonade (2, three a game day) comes with the regulars' gossip: what is on along the street (`shops/streetNews`: the
@@ -912,6 +989,18 @@ Numbers: `AUCTION`, `SEALED_LOT`, `RIVAL` in pricing.ts. Stores: `services.lots`
   `Transactions.winAuctionLot` (a game: into the parcel) or `buySealedLot` (a carton: to the hallway), the lot's result
   in the same save (`bibliothek.auction.v1`); short, the lot goes to the underbidder (`LotRun.fallBack`). The room is
   ticked only while the player is in it: a lot left half called is called again on the way back.
+- **Consigning a copy** (`AuctionHouse.consign`, `bibliothek.consignments.v1`; `economy/consignments.ts`): between
+  lots, a click on the rostrum opens the consignment sheet (the WE BUY desk's panel with `consignBuyer`, on the
+  `.sell` receipt pad; `WorldPanels.consign`): each owned copy at the room's estimate (`AuctionHouse.estimateFor`,
+  `AUCTION.consign.estimate` of its price), taken from `consign.min` coins of estimate, one copy a sale, never a lent
+  one, a keepsake or a reproduction. Entered (`Transactions.consignToSale`), it leaves the collection at once and closes
+  the next sale after today as its last lot (`consigned: true`: the player cannot bid on it nor split it; the room's
+  interest is seeded by the copy, `lotSeed`). Sold, the house's cheque is the hammer less `consign.commission` (0.15),
+  capped like a WANTED card at a finder's premium over what the copy cost and by a flat-price receipt (`consignNet`: so
+  a cheap buy entered for Sunday is never a sure profit); passed, it comes home in the parcel. A sale the player misses
+  (or leaves before the lot) is settled the morning after as the room would have taken it (`auction.unseenHammer`:
+  the keenest bidder a step over the next one's ceiling), its result a reward card (`settleConsignmentsDaily`). What
+  Victor takes goes into his suitcase.
 - **Sealed cartons** (`economy/boxLots.ts`, `SealedLots`, `bibliothek.sealedLots.v1`): `drawSealedLot(seed, pool)`:
   `SEALED_LOT.items` things, each a game (`gameOdds`; now and then a bootleg, `bootlegOdds`; dressed `kind: 'bin'`) or
   junk (flavour, sometimes loose coins), a gem (`SEED_GAMES`) in `gemOdds` of cartons; priced by weight (`perItem` a
@@ -919,7 +1008,10 @@ Numbers: `AUCTION`, `SEALED_LOT`, `RIVAL` in pricing.ts. Stores: `services.lots`
   `furnishCarton`; two clicks), two in each sale. At home it waits on the hallway floor (`CartonAtHome`,
   `HALLWAY_PLAN.carton`): each click takes one thing out (`Transactions.unpackCarton`): a game into the collection (the
   parcel), receipt `SEALED_WHERE` at its share of what was paid (a flat-price receipt: the WE BUY desk caps at it), one
-  already owned sold on for `duplicateShare` of its share, junk read as a card, coins pocketed.
+  already owned sold on for `duplicateShare` of its share, junk read as a card, coins pocketed. Some junk is something:
+  the tokens pay coins, the broken console goes to the kitchen table, the bag of manuals holds the manual a copy of the
+  player's lacks (`Transactions.fillManual`: `noManual` to `complete`, a random one), the bare cartridge is a homebrew
+  game someone burnt onto it (a `HOMEBREW_CARTS` cart the player lacks, `Transactions.keepFound`); with none to match, just junk.
 - **The rival collector** (`economy/rivalCollector.ts`, `bibliothek.rival.v1`): Victor Crane, one look (`seed` 911)
   everywhere. Read API for anything showing him: `RIVAL_COLLECTOR`, `rivalOnFrontStreet(day)` (the trader's game days),
   `rivalAtMarket(day)`, `RivalCollector.view()` (beaten / took / mood / met), `haulOn(day)`. At the flea market
@@ -963,6 +1055,14 @@ Numbers: `AUCTION`, `SEALED_LOT`, `RIVAL` in pricing.ts. Stores: `services.lots`
   "Repairing a console"). What was bought, haggled and soured is kept per ad (`KEYS.classifieds`, forgotten 14 days on).
 - **Scripted ads** (`Classifieds.inject(ScriptedAd)`, idempotent by id): another feature's ad from a day on, its own
   lot of seed game ids, a greeting, and a note on the sideboard (`clue`, read as a letter); `onVisit` hears the seller met.
+- **The lot for N** (`TABLE_LOT` in `rules.ts`): a parent clearing out and someone moving away price the whole table, a
+  card propped between the rows (`sellerFlat/LotCard`, `SELLER_FLAT_PLAN.lotCardAt`) whose caption is `TABLE_LOT.share`
+  (0.9) of what is left on it one by one (haggles included). A first press has the seller pitch it (above `ARM_ABOVE`),
+  the second buys it all (`Transactions.buyTable`: into the parcel, each receipt its share of the total).
+- **Other estates** (`classifieds/estates.ts`, `scheduleEstateAds` from `bootstrap/session`): once Mr Lambert's sale is
+  over, `ESTATE_ADS.after` game days later and then every `every` (21) days, another family clears a late relative's
+  games through the small ads (a projectionist, a schoolteacher's games club, a landlord's cupboard, a TV repairman's
+  finds, in turn): a scripted `loft` ad with the family's own greeting, the flat in Park Corner Mansions as usual.
 
 ## Coming home: the parcel and the bookcase
 
@@ -980,7 +1080,8 @@ Numbers: `AUCTION`, `SEALED_LOT`, `RIVAL` in pricing.ts. Stores: `services.lots`
 - **Swaps with the neighbours** (`economy/NeighbourTrades.ts`, `bibliothek.neighbourTrades.v1`): some market days
   (`NEIGHBOUR_SWAPS.odds` in pricing.ts, seeded per day) a resident wants one of the player's games (owned, not lent) and offers one of theirs worth
   about as much (`shopPrice` with fame, within `FAIR`) for three days: a note under the flat's door (`Doorstep.slipNote`),
-  a word on the stairs, and their door on the landing opens the `NeighbourTradePanel` (`Transactions.swapWithNeighbour`:
+  a word on the stairs, and their door on the landing opens the `NeighbourTradePanel` (a card at their door: the neighbour's face asks in a
+  balloon, their box and the player's face each other on the doormat; Swap is pressed twice; `Transactions.swapWithNeighbour`:
   one game out, theirs into the parcel, the offer closed in the same `batch`). A resident who moved away (`present`:
   Mrs Roux once gone, `building/rouxMove.movedOut`) makes no offer, and a standing one goes with them; the day's draw is
   still over everyone, so the other days' draws are unchanged.
@@ -1096,7 +1197,8 @@ bought, and stands at home the moment it is paid for:
 ## Not done yet
 
 - **The saleroom and the cartons**: `AUCTION`'s estimates and the bidders' ceilings, `SEALED_LOT`'s odds and price per
-  thing, `RIVAL`'s timings are first guesses, nothing played in a browser. The saleroom's chairs and people are placed
+  thing, `RIVAL`'s timings, the consignment's commission and minimum are first guesses, nothing played in a browser.
+  A job lot cannot be put down with a deposit: the crate is the day's draw (`JobLotDraw`), gone the next market day. The saleroom's chairs and people are placed
   from sizes, not walked.
 
 - **LexiPunk's side**: the cabinet and its frame are done, but lexipunk.com has to post its score
@@ -1105,15 +1207,17 @@ bought, and stands at home the moment it is paid for:
   in). Its `PAYOUT` and table are guesses until its scores are seen.
 - **Tuning by play**: `PAYOUT` and the rival tables come from simulated people (`npm run balance`), the claw's `GRIP`
   odds, the wheel's slices and the league's rivals are first estimates; `?payout` collects the real spreads to check
-  them against. Two machines pay skill too little in the simulation: STAR RAID (a good player nets about 1.1 times a
-  first-timer: nobody clears the first wave of 32 in fifteen seconds, so the PERFECT WAVE never comes and holding fire
-  and sweeping is as good as aiming; a smaller first wave or a longer clock would open it) and LEAP FROG (about 1.5).
+  them against. Two machines pay skill too little in the simulation: STAR RAID (its first wave is now two rows, 16
+  aliens, growing a row a wave to four, so a steady hand clears it on the opening clock and earns the PERFECT WAVE; the
+  simulated people still net about the same as a first-timer, their lagged aim missing the divers; rate 36 for 60 a
+  minute) and LEAP FROG (about 1.5). PADDLE WARS plays each set on its own court and serves on the move power up;
+  NEON SNAKE lights each stage in its own colours and opens a pair of warp holes from the second.
 - The arcade never closes: an empty hall late at night was considered, a shutter was not (it would dead-end the loop).
 - **Front Street's shops**: their prices, the flat's (`HOME_GOOD_PRICES`) and the scratch card's odds are first guesses.
   The walk-in shops' layouts (`SHOP_PLANS`) were placed from the pieces' sizes, not yet walked: check nothing overlaps
   and every tag faces the aisle (the counter errands and the home arcade at TV REPAIR are new). The stray's trust steps
   and the errands' limits are guesses.
-- The bunches have no use in the flat. The counters' numbers (`STREET_SHOPS`: manuals, guides, the basket, the bars'
+- The counters' numbers (`STREET_SHOPS`: manuals, guides, the basket, the bars'
   fees and prizes, the pop-up's day, the paper) are first guesses.
 - **Front Street's pace**: the works moving on at market day `WORKS_LIFT.afterGameDay` (14), the bus fare to
   Mémé's (`busRide.fare`, 2) and her Sunday envelope (`GRANDMA.sundayCoins`, 10), the park's hours and the extra coin a game day are first guesses.

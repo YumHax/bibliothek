@@ -41,6 +41,11 @@ export function setCloseUpRig(r: CloseUpRig): void {
   rig = r;
 }
 
+/** The camera the close looks frame (null before the rig is handed over): what holds a pad in view follows it too. */
+export function closeUpCamera(): THREE.PerspectiveCamera | null {
+  return rig?.camera ?? null;
+}
+
 /** Whether a close look is on. */
 export function closeUpOn(): boolean {
   return release !== null;

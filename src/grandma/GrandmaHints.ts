@@ -2,7 +2,7 @@ import { KEYS, PersistedStore, safeStorage } from '@/persistence';
 import { inHours } from '@/time/clock';
 import { MEMORIES, type Memory } from './memories';
 import type { GrandmaVisits } from './GrandmaVisits';
-import { CALL_LINES, HINTS, JOURNAL_DUE, JOURNAL_HINT, LETTER, LETTERS, MISSED, hintLines, type HintFacts } from './hintLines';
+import { CALL_LINES, HINTS, INVITATION, JOURNAL_DUE, JOURNAL_HINT, LETTER, LETTERS, MISSED, hintLines, type HintFacts } from './hintLines';
 
 /*
  * MÉMÉ'S HINTS (docs/grandma.md "Hints toward the next memory"): what points the player at the next photo of her album
@@ -34,6 +34,8 @@ interface HintState {
 const CALL_HOURS: [number, number] = [9, 20];
 /** Days without a visit before she posts a letter about a memory waiting. */
 const LETTER_AFTER = 3;
+/** Her first letter, the invitation (never been to hers yet): from this game day, kept in `posted` under this id. */
+const INVITE = { from: 2, id: 'invite' } as const;
 /** Visits between two hints on the way in about the same thing (a clearer one is said at once). */
 const HINT_EVERY = 3;
 
@@ -123,6 +125,11 @@ export class GrandmaHints {
 
   /** Her letter in game day `day`'s post (asked once, as the post is collected): a memory waits, days without a visit. */
   mail(day: number): HintLetter | null {
+    // Never been to hers: her invitation first, once, from the second day (the bus, the album, Sunday lunch).
+    if (this.grandma.facts().visits === 0 && day >= INVITE.from && !this.state.posted.includes(INVITE.id)) {
+      this.commit({ ...this.state, posted: [...this.state.posted, INVITE.id] });
+      return { title: LETTER.title, lines: [...INVITATION], accent: LETTER.accent, look: 'letter', from: LETTER.from, hand: 'pen' };
+    }
     const due = this.grandma.due;
     const letter = due ? LETTERS[due.id] : undefined;
     if (!due || !letter || this.state.posted.includes(due.id)) return null;

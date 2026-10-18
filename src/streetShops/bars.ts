@@ -2,7 +2,7 @@ import { inHours } from '@/time/clock';
 import { gameDays, SCHEDULES, type Schedule } from '@/time/schedule';
 import { weekdayOf } from '@/time/wakefulness';
 import { gameDayRandom } from '@/time/daily';
-import { integer } from '@/random';
+import { pick } from '@/random';
 import { STREET_SHOPS } from './rules';
 
 /*
@@ -56,9 +56,15 @@ export function dartsOpen(day: number, hours: number): boolean {
   return inHours(hours, [STREET_SHOPS.darts.from, 24]) && !quizOn(day, hours);
 }
 
-/** Tonight's best on THE LOCAL's chalkboard (three darts): what a go has to beat to be paid, the same all night. */
-export function boardBest(day: number): number {
-  return integer(gameDayRandom('darts.best', day), 61, 110);
+/** Tonight's checkout on THE LOCAL's chalkboard: what a go of three darts has to take to nought, the same all night. */
+export function tonightsCheckout(day: number): number {
+  return pick(gameDayRandom('darts.checkout', day), STREET_SHOPS.darts.checkouts);
+}
+
+/** What checking `checkout` out pays: the longer the finish, the more. */
+export function checkoutPrize(checkout: number): number {
+  const { prizes } = STREET_SHOPS.darts;
+  return (prizes.find((p) => checkout <= p.upTo) ?? prizes[prizes.length - 1]!).coins;
 }
 
 /** The set Lou's band plays, a few songs a night, and what the night was like. */

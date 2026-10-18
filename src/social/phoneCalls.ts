@@ -4,10 +4,12 @@ import { gameDayRandom } from '@/time/daily';
 import { everyone, findPerson, shortName } from './people';
 import { MEME_ID } from './people/family';
 import { phoneRefusal } from './phoneHours';
+import { memoryToRecall } from './recall';
 import { hasNumber, isMet, standing } from './standing';
 import { threadsOf } from './threads';
 import { atLeast, tierOf } from './tiers';
 import type { PersonId } from './types';
+import { voiced } from './voices';
 import { whereNow } from './whereNow';
 
 /*
@@ -121,13 +123,16 @@ export function phoneCaller(day: number, hour: number): { id: PersonId; late: bo
   return { id: callers[Math.floor(rand() * callers.length)]!.id, late: hour - s.hour > RING_LATE };
 }
 
-/** Their first word on the phone when the player picks up: a need they have, else a hello. */
+/** The shared first words of a call, for someone without their own (`LineKey` 'call'). */
+const CALL_LINES: readonly string[] = ['Hello? It’s {name}! I was just thinking of you. How are things?', 'Hey, it’s {name}! Have you got a minute?', 'It’s {name}! Nothing urgent, I just felt like a chat.'];
+
+/** Their first word on the phone when the player picks up, in their voice: a need they have, else a hello. */
 export function callerOpening(id: PersonId, day: number): string {
   const name = shortName(id);
+  const lines = voiced(id, 'call') ?? CALL_LINES;
+  const hello = lines[Math.floor(gameDayRandom(`callOpening:${id}`, day)() * lines.length)]!.replaceAll('{name}', name);
   const need = threadsOf(id, day).find((t) => t.kind !== 'promise');
-  if (need) return `Hello? It’s ${name}! Listen, I wanted to ask you something. ${need.text}`;
-  const lines = [`Hello? It’s ${name}! I was just thinking of you. How are things?`, `Hey, it’s ${name}! Have you got a minute?`, `It’s ${name}! Nothing urgent, I just felt like a chat.`];
-  return lines[Math.floor(gameDayRandom(`callOpening:${id}`, day)() * lines.length)]!;
+  return need ? `${hello} Listen, I wanted to ask you something. ${need.text}` : hello;
 }
 
 /** The message `id` leaves when nobody picks up. */
@@ -135,7 +140,8 @@ function messageOf(id: PersonId, day: number): string {
   const name = shortName(id);
   const need = threadsOf(id, day).find((t) => t.kind !== 'promise');
   if (need) return `Hi, it’s ${name}. ${need.text} Call me back when you can!`;
-  const memory = standing(id).memories.find((m) => m.weight > 0 && day - m.day >= 1);
+  // Something particular they keep, the least called back (never a talk like any other).
+  const memory = memoryToRecall(id, day, true);
   if (memory) return `Hi, it’s ${name}. I was just thinking about when ${memory.text}. Call me when you can!`;
   return `Hi, it’s ${name}! Nothing urgent, I just wanted to hear how you are. Call me back!`;
 }

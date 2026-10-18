@@ -1,23 +1,36 @@
+import { has } from '@/social/perks';
 import { nudge } from '@/social/standing';
 import * as THREE from 'three';
 import type { Game } from '@/catalog/types';
 import type { SessionActions } from '@/game/SessionActions';
 import { ChipSpeaker } from '@/audio/ChipSpeaker';
 import { ROOM_PLAN } from '../../roomPlan'; // imports-ok: friends and guests walk the flat and the stairwell: the visit reads the rooms it crosses
-import { FRIENDS, VISIT_RULES } from '../friendsPlan';
+import { FRIENDS, VISIT_RULES, type FriendPlan } from '../friendsPlan';
 import { fill, tasteScore } from '../friendLines';
 import type { GatheringDeps } from './deps';
-import { GATHERING_LINES, GATHERING_RULES } from './gatheringPlan';
+import { GATHERING_LINES, GATHERING_RULES, NIGHT_VOICES } from './gatheringPlan';
 import { PaddleWarsProgram } from './PaddleWarsProgram';
 import { Party, type PartyMember } from './Party';
 import { dayStream } from '@/time/daily';
 import { together } from '@/social/life/introductions';
 import { random as liveRandom } from '@/random';
+import { giverFace } from '../giverFace';
 
 /** The match as the program runner knows it (no box: it is the evening's, not the collection's). */
 const MATCH_GAME: Game = { id: 'games-night:paddle-wars', title: 'PADDLE WARS', platform: 'nes' };
 /** Seconds between two friends heading for the door once the evening winds down. */
 const LEAVE_STAGGER = 4;
+
+/** Who comes to a games night: the old friends but one gone cold (`stopsVisiting`), who says no on the phone. */
+export function nightGuests(): { coming: FriendPlan[]; away: FriendPlan[] } {
+  const coming = FRIENDS.filter((f) => !has(f.id, 'stopsVisiting'));
+  return { coming, away: FRIENDS.filter((f) => !coming.includes(f)) };
+}
+
+/** The Nguyens' spare pad lent (`lendsPad`): winner stays on, the others take turns as player two. */
+function padLent(): boolean {
+  return has('nguyen', 'lendsPad');
+}
 
 /**
  * A games night (docs/visitors.md "Gatherings"): the three friends, asked round on the bedroom's phone, come up the
@@ -45,6 +58,8 @@ export class GamesNight {
   private unlisten: (() => void) | null = null;
   private finished = false;
   private readonly spots: { at: THREE.Vector3; yaw: number }[];
+  /** Player two's place in the party (the one who rang, then, with the Nguyens' pad, the next one's turn). */
+  private p2Index = 0;
 
   constructor(private readonly deps: GatheringDeps, private readonly day: number) {
     const { host } = deps;
@@ -73,9 +88,10 @@ export class GamesNight {
       },
     });
     // The one who rings first, the others up the stairs behind; who leads changes with the day.
-    const lead = Math.floor(dayStream(`night:${day}`)() * FRIENDS.length);
-    FRIENDS.forEach((_, i) => {
-      const plan = FRIENDS[(lead + i) % FRIENDS.length]!;
+    const guests = nightGuests().coming;
+    const lead = Math.floor(dayStream(`night:${day}`)() * guests.length);
+    guests.forEach((_, i) => {
+      const plan = guests[(lead + i) % guests.length]!;
       const [min, max] = this.rules.stagger;
       this.party.add(plan, i === 0 ? 0 : min + liveRandom() * (max - min), i > 0);
     });
@@ -85,9 +101,20 @@ export class GamesNight {
     return this.party.done;
   }
 
-  /** Player two: the one who rang. */
+  /** Player two: the one who rang, or whose turn it is. */
   private get p2(): PartyMember | undefined {
-    return this.party.members[0];
+    return this.party.members[this.p2Index];
+  }
+
+  /** Matches in an evening: one more when the Nguyens' pad gives everyone a go. */
+  private get matchesTonight(): number {
+    return this.rules.matches + (padLent() ? 1 : 0);
+  }
+
+  /** `bucket`'s line for player two in their own voice (`NIGHT_VOICES`), else the evening's shared one. */
+  private p2Line(p2: PartyMember, bucket: 'offer' | 'won' | 'lost' | 'goalAgainst'): string {
+    const own = NIGHT_VOICES[p2.plan.id]?.[bucket];
+    return own?.length ? this.deps.host.line(`${p2.plan.id}:${bucket}`, own) : this.deps.host.line(bucket, GATHERING_LINES[bucket]);
   }
 
   update(dt: number): void {
@@ -108,7 +135,7 @@ export class GamesNight {
     }
     if (this.settledAt < 0 && inFlat.length && this.party.members.every((m) => m.gone || m.settled)) this.settledAt = t;
     if (this.windDownAt < 0 && this.firstInAt >= 0 && !this.matchOn) {
-      const played = this.matches >= this.rules.matches && this.settledAt >= 0 && t - this.settledAt > this.rules.minStay;
+      const played = this.matches >= this.matchesTonight && this.settledAt >= 0 && t - this.settledAt > this.rules.minStay;
       if (played || t - this.firstInAt > this.rules.stay) this.windDownAt = t;
     }
     this.offer(t);
@@ -125,7 +152,7 @@ export class GamesNight {
   private offer(t: number): void {
     const p2 = this.p2;
     const { host } = this.deps;
-    if (!p2?.settled || p2.gone || this.matchOn || this.windDownAt >= 0 || this.matches > this.rules.matches) return;
+    if (!p2?.settled || p2.gone || this.matchOn || this.windDownAt >= 0 || this.matches > this.matchesTonight) return;
     if (this.p2At < 0) this.p2At = t;
     // Asked three times without an answer: they stop asking (the request stays up for a click).
     if (this.unanswered >= 3) return;
@@ -133,9 +160,10 @@ export class GamesNight {
     if (t - (this.offeredAt < 0 ? this.p2At : this.offeredAt) < wait) return;
     this.offeredAt = t;
     this.unanswered += 1;
-    host.say(p2.plan, host.line('offer', GATHERING_LINES.offer), 'ask', true);
+    host.say(p2.plan, this.p2Line(p2, 'offer'), 'ask', true);
     p2.friend.request = {
       label: `${p2.plan.name} · play PADDLE WARS (they are player two)`,
+      say: 'Fancy a match? You’re on player two.',
       answer: (session: SessionActions) => this.startMatch(session),
     };
   }
@@ -151,7 +179,8 @@ export class GamesNight {
     p2.friend.request = null;
     this.unanswered = 0;
     this.speaker ??= new ChipSpeaker(tv, this.deps.host.options.viewer, { volume: 0.2, refDistance: 1.6 });
-    const program = new PaddleWarsProgram(p2.plan.name.toUpperCase(), this.speaker, {
+    const skill = this.rules.skill[p2.plan.id] ?? this.rules.skill.anyone ?? 0.6;
+    const program = new PaddleWarsProgram(p2.plan.name.toUpperCase(), skill, this.speaker, {
       goal: (forPlayer) => this.goal(forPlayer),
       over: (tally) => this.over(tally),
     });
@@ -179,7 +208,9 @@ export class GamesNight {
     const talker = watchers[Math.floor(liveRandom() * watchers.length)];
     if (talker && p2 && liveRandom() < 0.5) {
       const bucket = forPlayer ? 'goalFor' : 'goalAgainst';
-      host.say(talker.plan, fill(host.line(bucket, GATHERING_LINES[bucket]), { name: p2.plan.name }), forPlayer ? 'yay' : 'ooh');
+      const own = bucket === 'goalAgainst' ? NIGHT_VOICES[talker.plan.id]?.goalAgainst : undefined;
+      const line = own?.length ? host.line(`${talker.plan.id}:goalAgainst`, own) : host.line(bucket, GATHERING_LINES[bucket]);
+      host.say(talker.plan, fill(line, { name: p2.plan.name }), forPlayer ? 'yay' : 'ooh');
     }
   }
 
@@ -190,7 +221,8 @@ export class GamesNight {
     this.lastScore = `${tally.you}–${tally.them}`;
     const result = tally.you > tally.them ? 'won' : tally.you < tally.them ? 'lost' : 'drew';
     if (p2) {
-      host.say(p2.plan, fill(host.line(result, GATHERING_LINES[result]), { you: tally.you, them: tally.them }), result === 'lost' ? 'yay' : 'ok', true);
+      const line = result === 'drew' ? host.line('drew', GATHERING_LINES.drew) : this.p2Line(p2, result);
+      host.say(p2.plan, fill(line, { you: tally.you, them: tally.them }), result === 'lost' ? 'yay' : 'ok', true);
       p2.friend.react(result === 'lost' ? 'record' : 'over');
     }
     for (const m of this.watchers()) m.friend.react(result === 'won' ? 'record' : 'good');
@@ -201,11 +233,23 @@ export class GamesNight {
     this.matchOn = null;
     this.offeredAt = this.party.time;
     this.p2?.friend.setPose('pockets');
+    // With the Nguyens' pad, the next friend in the flat takes player two.
+    if (!padLent()) return;
+    // The next one along from the last player two (in turn, so everyone gets a go, not the first two by turns).
+    const members = this.party.members;
+    const next = members.map((_, k) => members[(this.p2Index + 1 + k) % members.length]!).find((m) => m !== this.p2 && m.cameIn && !m.gone);
+    if (!next) return;
+    if (this.p2) this.p2.friend.request = null;
+    this.p2Index = this.party.members.indexOf(next);
+    this.p2At = -1;
+    this.offeredAt = -1;
+    this.deps.host.say(next.plan, this.deps.host.line('padTurn', GATHERING_LINES.padTurn), 'yay');
   }
 
   /** The friends in the flat but player two. */
   private watchers(): PartyMember[] {
-    return this.party.members.filter((m) => m.index !== 0 && m.cameIn && !m.gone);
+    const p2 = this.p2;
+    return this.party.members.filter((m) => m !== p2 && m.cameIn && !m.gone);
   }
 
   private stopMatch(): void {
@@ -239,7 +283,7 @@ export class GamesNight {
     const gift = random() < this.rules.giftChance ? unowned[Math.floor(random() * unowned.length)] : undefined;
     if (gift) {
       collection.add({ ...gift, status: 'owned', condition: 'noManual', acquired: { price: 0, where: `a gift from ${giver.name}`, day: this.day } });
-      notices?.reward({ title: `A gift: ${gift.title}`, detail: `${giver.name} left it after games night. In the parcel in the hall.` });
+      notices?.reward({ title: `A gift: ${gift.title}`, detail: `${giver.name} left it after games night. In the parcel in the hall.`, ...giverFace(giver.id) });
       return;
     }
     const [min, max] = this.rules.tip;

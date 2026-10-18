@@ -47,6 +47,16 @@ export const PRESENCE_TALK = {
     ],
     back: ['Your uncle. He says hello. He didn’t, but I’m saying it for him.', 'Gaspard. He wants me in a home with a view of a car park.', 'That man. Where did I go wrong? Don’t answer that.'],
   },
+  /** Gaspard on the phone once he has said sorry at her table: a son ringing his mother. */
+  gaspardMended: {
+    pickUp: 'Hello? … Gaspard! Twice in a week, are you ill?',
+    side: [
+      ['Yes, I’ve had my lunch.', 'No, the boiler’s fine. Your plumber came, thank you.', 'Sunday? Yes. Bring bread. Not that sliced rubbish.'],
+      ['I’m watching my programme, Gaspard.', 'Yes, the one with the antiques. A man paid a fortune for a teapot.', 'No, I won’t sell mine. Goodnight, love.'],
+      ['My grandchild is here, as it happens.', 'Yes. Yes, I’ll tell them. Goodbye, love.'],
+    ],
+    back: ['Gaspard. He rings now. Just to ring. Imagine.', 'Your uncle says hello. He did, this time.', 'He asked after you. Don’t look so surprised, I was.'],
+  },
 
   /** What she remembers of the player's life, asked on the way in (each now and then). */
   remember: {
@@ -64,7 +74,7 @@ export const PRESENCE_TALK = {
     shown: ['Did you ever play that {title} you showed me? Was it any good?', 'That {title}: have you finished it? Or do they not finish, those games?'],
     scarf: 'You’re wearing my scarf! There’s a dropped stitch on the left. Don’t look.',
     noScarf: 'Where’s my scarf? Don’t tell me it’s in a drawer.',
-    missedSunday: ['You didn’t come on Sunday. I made blanquette for two and ate it for three days.', 'No visit on Sunday? I kept a plate warm till four. It’s fine. It’s fine.'],
+    missedSunday: ['You didn’t come on Sunday. I cooked for two and ate it for three days.', 'No visit on Sunday? I kept a plate warm till four. It’s fine. It’s fine.'],
   },
 
   /** The player's news: the entry (the player's words), then her answer by kind (`{x}` the thing, `{who}` someone). */

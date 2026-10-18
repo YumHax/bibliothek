@@ -67,8 +67,8 @@ export const HINTS: Readonly<Record<string, readonly [Tier, Tier, Tier]>> = {
         ? ['There’s one more photo. Sit down when you’re ready.']
         : [
             f.trailStarted
-              ? 'Find his grey cartridge, love, or fill those shelves the way he had them: a hundred and twenty boxes, he counted. Then the last photo.'
-              : 'Fill those shelves the way he had them, love. A hundred and twenty boxes, he counted every one. Then the last photo.',
+              ? 'Find his grey cartridge, love, or put his room back the way he had it: his armchairs, his lamps, the shelves full. Then the last photo.'
+              : 'Put his room back the way he had it, love: his armchairs, his lamps, his plants, the shelves full. Then the last photo.',
           ],
   ],
 };
@@ -142,6 +142,15 @@ export const LETTERS: Readonly<Record<string, { lines: string[] }>> = {
 
 /** The letter's title on the mat and on the card, and its signature. */
 export const LETTER = { title: 'A letter from Mémé', from: 'Mémé', accent: 0x8a5a7a };
+
+/** Her first letter, on the mat from the second day while the player has never been round: come for lunch. */
+export const INVITATION: readonly string[] = [
+  'My dear,',
+  'Your mother tells me you’re in Félix’s flat now. Good. It shouldn’t stand empty, and neither should you.',
+  'Come for Sunday lunch. I’ve got the album out, the one with him in it, and you in it too, smaller.',
+  'Number 14, Linden Avenue, as ever, by the pharmacy. Mind the dog on the stairs, he’s all bark.',
+  'P.S. The 38 stops in Front Street. Two coins, and the driver waits for nobody.',
+];
 
 /** The journal's line while a memory waits for a visit, once she has rung or written about it. */
 export const JOURNAL_DUE = { rang: 'Mémé rang: more photos on her table', wrote: 'Mémé wrote: more photos on her table' };

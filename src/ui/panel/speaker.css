@@ -1,0 +1,69 @@
+/* The person a panel deals with (`panel/speaker`): face and name tag on the left, their words in a comic balloon
+ * (the speech notices' paper, ink and face) whose tail points at the face. Two lines' height, always. */
+@layer components {
+  .ui-speaker {
+    --speaker-face: 56px;
+    display: flex;
+    align-items: center;
+    gap: var(--sp-3);
+    min-height: calc(var(--speaker-face) + 1.4rem);
+    margin-bottom: var(--sp-2);
+  }
+  .ui-speaker__who { flex: none; display: flex; flex-direction: column; align-items: center; gap: 0.15rem; margin: 0; width: calc(var(--speaker-face) + 1rem); }
+  .ui-speaker__face {
+    display: grid;
+    place-items: center;
+    width: var(--speaker-face);
+    height: var(--speaker-face);
+    overflow: hidden;
+    border: 2.5px solid var(--ink-speech);
+    border-radius: 50%;
+    background: var(--speaker-tint, var(--paper-speech));
+    box-shadow: 3px 3px 0 var(--shade-45);
+  }
+  .ui-speaker__face .social-portrait, .ui-speaker__face .stranger-face { display: block; width: 100%; height: 100%; }
+  .ui-speaker__silhouette { width: 82%; height: 82%; margin-top: 18%; fill: var(--paper-speech); opacity: 0.9; }
+  .ui-speaker__name {
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: var(--fs-2);
+    font-weight: 600;
+    letter-spacing: 0.04em;
+  }
+  .ui-speaker__balloon {
+    position: relative;
+    flex: 1;
+    min-width: 0;
+    margin: 0 0 0 0.6rem;
+    /* Two lines kept: a short line and a long one take the same room. */
+    min-height: calc(2 * 1.25em + 1.1rem);
+    display: flex;
+    align-items: center;
+    padding: 0.5rem 0.9rem;
+    border: 2.5px solid var(--ink-speech);
+    border-radius: 1.2rem;
+    background: var(--paper-speech);
+    color: var(--ink-speech);
+    box-shadow: 4px 4px 0 var(--shade-45);
+    font-family: var(--ui-font-comic);
+    font-size: max(1.05rem, 16px);
+    line-height: 1.25;
+    color-scheme: light;
+  }
+  /* Nothing said yet: the balloon keeps its room, unseen. */
+  .ui-speaker__balloon--quiet { visibility: hidden; }
+  /* The tail, pointing left at the face: an ink wedge with the paper inside. */
+  .ui-speaker__balloon::before,
+  .ui-speaker__balloon::after { content: ''; position: absolute; top: 50%; translate: 0 -50%; }
+  .ui-speaker__balloon::before { left: -0.95rem; width: 0.95rem; height: 1.1rem; background: var(--ink-speech); clip-path: polygon(100% 0, 100% 100%, 0 30%); }
+  .ui-speaker__balloon::after { left: -0.55rem; width: 0.62rem; height: 0.7rem; background: var(--paper-speech); clip-path: polygon(100% 0, 100% 100%, 0 32%); }
+  .ui-speaker__balloon--pop { animation: ui-speaker-pop var(--dur-quick) var(--ui-ease-pop); transform-origin: 0 50%; }
+  @keyframes ui-speaker-pop {
+    from { opacity: 0; scale: 0.85; }
+    to { opacity: 1; scale: 1; }
+  }
+  /* Reduced motion: the game's setting (`.reduce-motion` on <html>, settings/motion), never the media query alone. */
+  .reduce-motion .ui-speaker__balloon--pop { animation: none; }
+}

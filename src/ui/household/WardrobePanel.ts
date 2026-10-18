@@ -102,8 +102,8 @@ export class WardrobePanel extends CardPanel {
       const open = outfit.unlocked(facts);
       const isWorn = open && outfit.id === worn;
       const classes = ['wardrobe__item', isWorn && 'wardrobe__item--worn', !open && 'wardrobe__item--bagged', outfit.id === this.justWorn && 'wardrobe__item--swing'].filter(Boolean).join(' ');
-      return html`<li><button type="button" class="${classes}" data-id="${outfit.id}"${open ? html` data-action="wear"` : ''}${attr('data-autofocus', isWorn)}
-        aria-pressed="${isWorn ? 'true' : 'false'}"${attr('aria-disabled', !open)} aria-label="${open ? outfit.name : 'A garment bag, zipped'}">
+      return html`<li><button type="button" class="${classes}" data-id="${outfit.id}"${html` data-action="${open ? 'wear' : 'bagged'}"`}${attr('data-autofocus', isWorn)}
+        aria-pressed="${isWorn ? 'true' : 'false'}"${open ? '' : html` aria-disabled="true"`} aria-label="${open ? outfit.name : 'A garment bag, zipped'}">
         ${garmentSvg(outfit.id, open)}
         <span class="wardrobe__label">${open ? outfit.name : 'In its bag'}</span>
         <span class="wardrobe__worn ui-chip ui-chip--accent">Wearing</span>
@@ -136,7 +136,14 @@ export class WardrobePanel extends CardPanel {
 
   protected override onAction(action: string, el: HTMLElement): void {
     const id = el.dataset.id as OutfitId | undefined;
+    // A bag pressed: its tag's note comes up below the rail, and the line says it is still to be earned.
+    if (action === 'bagged' && id) {
+      this.show(id);
+      this.setStatus(`Still zipped in its bag: ${outfitById(id).earn.charAt(0).toLowerCase()}${outfitById(id).earn.slice(1)}`);
+      return;
+    }
     if (action !== 'wear' || !id || id === this.deps.worn()) return;
+    this.setStatus('');
     this.deps.wear(id);
     this.justWorn = id;
     this.refresh();

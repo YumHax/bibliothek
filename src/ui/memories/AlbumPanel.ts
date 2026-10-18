@@ -168,7 +168,7 @@ export class AlbumPanel extends CardPanel {
     const spreads = Math.max(1, Math.ceil(this.slots.length / PER_SPREAD));
     const pages = [this.slots.slice(from, from + PER_PAGE), this.slots.slice(from + PER_PAGE, from + PER_SPREAD)];
     return html`<div class="album__spread">${pages.map(
-        (page, i) => html`<div class="album__page album__page--${i ? 'right' : 'left'}">${page.map((slot) => this.slotHtml(slot))}</div>`,
+        (page, i) => html`<div class="album__page album__page--${i ? 'right' : 'left'}">${page.map((slot) => this.slotHtml(slot))}<span class="album__folio" aria-label="Page ${this.spread * 2 + i + 1}">${this.spread * 2 + i + 1}</span></div>`,
       )}</div>
       <div class="album__nav">
         <button type="button" class="album__turn ${this.spread === 0 ? 'album__turn--away' : ''}" data-action="turn" data-by="-1" ${attr('disabled', this.spread === 0)}>Back a page</button>
@@ -199,7 +199,9 @@ export class AlbumPanel extends CardPanel {
           <button type="button" class="album__big ${this.flipped ? 'album__big--back' : ''}" data-action="flip" aria-label="${this.flipped ? 'Turn it back' : 'Turn it over'}">
             <img class="album__big-print" src="${this.printOf(slot)}" alt="" />
             <span class="album__big-back">
-              ${back ? html`<span class="album__back-date">${back.date}</span><span class="album__back-place">${back.place}</span><span class="album__back-line">${back.line}</span>` : ''}
+              ${back
+                ? html`<span class="album__back-date">${back.date}</span><span class="album__back-place">${back.place}</span><span class="album__back-line">${back.line}</span>`
+                : html`<span class="album__back-stamp">Photo service · 24 h</span><span class="album__back-initials">O. A.</span>`}
             </span>
           </button>
         </div>

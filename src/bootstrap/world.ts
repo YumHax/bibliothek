@@ -7,6 +7,9 @@ import { FirstPersonController } from '@/player/FirstPersonController';
 import { World } from '@/world/World';
 import type { GameBox } from '@/world/GameBox';
 import { airlockLink } from '@/world/airlock';
+import { holdPowerCutsWhile } from '@/building/blackout';
+import { isConversing } from '@/notices';
+import { panelOpen } from '@/ui/menu/MenuNav';
 import { FLAT } from '@/world/zoneIds';
 import type { ZoneId } from '@/world/zoneIds';
 import type { ZoneHandleById } from '@/world/layout';
@@ -34,6 +37,9 @@ import { makeBuildContext, makeBuilding, type FlatPanels } from './worldContext'
 import { wireHearing, wireStreetSound } from './worldSound';
 import { declareZones, streamZones, wirePlayerGround } from './worldZones';
 import { makeCat, wireBuildingLife, wireGatherings, wireVisitors } from './worldLife';
+import { watchForTheEnd } from '@/world/grandma/closingWiring';
+import { ReadingLight } from '@/world/box/ReadingLight';
+import { PaperReader } from '@/world/box/papers/PaperReader';
 
 /** The world of zones, every zone id typed with what its builder returns. */
 export type GameWorld = World<ZoneHandleById>;
@@ -56,6 +62,8 @@ export interface BuiltWorld {
   graphics: Graphics;
   /** The box in hand, ticked with the interaction. */
   inspector: Inspector<GameBox>;
+  /** The box's papers read in front of the eye (its booklet, a card, a leaflet, a poster). */
+  papers: PaperReader;
   cat: Cat;
   /** The shelves of every zone of the flat as one. */
   shelves: ShelvingGroup;
@@ -110,14 +118,22 @@ export async function buildWorld(services: Services, parts: WorldParts, loading:
     filming: () => film.playing(),
   });
 
+  // A storm's power cut never lands mid-scene: in a fade, a night, a memory, a conversation, a panel, the opening film.
+  holdPowerCutsWhile(() => activity.busy || isConversing() || panelOpen() || document.body.classList.contains('intro-playing'));
+
   const acoustics = wireHearing(engine, world);
   wireStreetSound(engine, sky, acoustics, zones, market);
   // The box in hand: the view focuses on it (ticked with the interaction, `bootstrap/interaction`).
   const inspector = new Inspector<GameBox>(engine.camera, engine.scene, () => world.occluders);
+  // Its booklet and papers taken out of the open box and read in front of the eye (docs/media.md "The papers in the box").
+  const papers = new PaperReader(engine.camera, engine.scene, inspector, () => world.occluders);
+  engine.addUpdatable(papers);
+  // Examined up close (or a paper of it read), the box reads as if under a lamp and the room goes into shade round it (docs/media.md).
+  engine.addUpdatable(new ReadingLight(inspector, engine.camera, papers));
   // Post-processing, reflections and haze (see docs/graphics.md), set up before anything compiles; the
   // grade and the air follow the player's zone. The callbacks are only read once the loop runs.
   const graphics = setupGraphics(engine, {
-    focus: () => inspector.focusDistance,
+    focus: () => papers.focusDistance ?? inspector.focusDistance,
     lightLevel: () => lightLevelOf(zones.get().current),
     daylight: () => sky.dayNight.state.daylight,
     videoLayer: cssLayer,
@@ -191,7 +207,17 @@ export async function buildWorld(services: Services, parts: WorldParts, loading:
   const shelves = late<ShelvingGroup>('the shelves');
   const visitors = wireVisitors(services, engine, world, { home, cat: cat.get(), building, flat, context, activity, flatZones, shelves });
   const programs = late<ProgramRunner>('the program runner');
-  wireGatherings(services, world, { visitors, home, flat, programs });
+  const gatherings = wireGatherings(services, world, { visitors, home, flat, programs });
+  // The end of the story (docs/story.md "The end"): once Mémé's photo is in her album, the closing reel at home.
+  engine.addUpdatable(
+    watchForTheEnd({
+      memories,
+      session: () => (session.isSet ? session.get() : null),
+      family: services.family,
+      facts: () => ({ prototype: services.story.stage === 'ended' }),
+      quiet: () => (FLAT as readonly string[]).includes(manager.current.id) && !visitors.host.visiting && !gatherings.underWay,
+    }),
+  );
 
   // The whole flat is active (every room neighbours the others) and furnished: compiled and drawn once
   // now, so crossing a doorway costs nothing. The driver links the programs while the bar moves on.
@@ -211,7 +237,7 @@ export async function buildWorld(services: Services, parts: WorldParts, loading:
     return box;
   };
 
-  return { zones: manager, graphics, inspector, cat: cat.get(), shelves: shelves.get(), pastimes, programs, activity };
+  return { zones: manager, graphics, inspector, papers, cat: cat.get(), shelves: shelves.get(), pastimes, programs, activity };
 }
 
 /**

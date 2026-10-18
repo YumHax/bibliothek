@@ -7,7 +7,6 @@ import { paint } from '../materials/palette';
 import { additive } from '../materials/blend';
 import { radialGlow } from '../materials/glowTextures';
 import { GROUND, onSurface } from '../surface/layers';
-import { inHours } from '@/time/clock';
 
 const IRON = paint(0x1d1c1a, 0.55);
 const WARM = new THREE.Color(0xffc68a);
@@ -16,18 +15,15 @@ const REACH = 0.26;
 const BODY = 0.18;
 /** The bracket's back plate on the wall (its thickness). */
 const PLATE = 0.012;
-/** The real light: candela when lit, and how far it reaches (shadowless). */
-const INTENSITY = 3.2;
-const DISTANCE = 8;
-/** The timer: lit from dusk until half past midnight, and again from half past five until it is light. */
-const OFF_AT = 0.5;
-const ON_AT = 5.5;
+/** The real light: candela when lit, and how far it reaches (shadowless): enough to see the yard by, a fifth of a street lamp's. */
+const INTENSITY = 14;
+const DISTANCE = 11;
 /** Seconds the bulb takes to come up or go out (an old filament, not a switch). */
 const WARM_S = 0.6;
 
 /**
- * The lantern over our back door in the courtyard: an iron box lantern on a bracket, its glass lit warm on the
- * building's timer at dusk, a shadowless light over the door and the setts and a soft pool of it on the ground
+ * A lantern on a wall of the courtyard (over our back door, the rear building's, the bins): an iron box lantern on a
+ * bracket, its glass lit warm from dusk until it is light, a shadowless light over the setts and a soft pool of it on the ground
  * (`ground`: the setts' height under it, local y). Local frame: the wall's face at z = 0, the yard towards -z, the
  * lantern's foot of glass at y 0. Never collides.
  */
@@ -81,8 +77,8 @@ export class YardLantern extends THREE.Group implements Furniture, Updatable {
 
   update(dt: number): void {
     const s = this.dayNight.state;
-    const timer = inHours(s.hours, { from: ON_AT, to: 24 + OFF_AT });
-    const wanted = s.daylight < 0.3 && timer ? 1 : 0;
+    // Lit all night: the yard has no other light to cross it by.
+    const wanted = s.daylight < 0.3 ? 1 : 0;
     this.level = THREE.MathUtils.clamp(this.level + Math.sign(wanted - this.level) * (dt / WARM_S), 0, 1);
     const dusk = THREE.MathUtils.smoothstep(0.3 - s.daylight, 0, 0.25);
     const lit = this.level * (0.4 + 0.6 * dusk);

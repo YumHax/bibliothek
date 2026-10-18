@@ -1,0 +1,132 @@
+/*
+ * The Christmas stall's gift wrapping (`WrapPanel`): the catalogue's sheet (CataloguePanel.css) laid out as the stall's
+ * table under a roll of wrapping paper, the keeper's balloon at the top, the player's games standing on it as boxes.
+ * A wrapped box wears the paper, a ribbon both ways and a bow; wrapping folds the paper down over the cover.
+ */
+@layer tokens, base, components, panels;
+@layer panels {
+  .wrap-panel {
+    --wrap-paper: #a8242c;
+    --wrap-paper-dark: #7c1a22;
+    --wrap-star: rgba(255, 214, 120, 0.55);
+    --wrap-ribbon: #f2c84a;
+    --wrap-ribbon-dark: #b88a1e;
+    --wrap-table: #e9dcc0;
+    --wrap-table-ink: #3a2a1a;
+    --wrap-table-soft: #6e5a40;
+    --wrap-box: #3a3f52;
+    --wrap-box-dark: #1d2030;
+  }
+  .wrap-panel .catalogue__header h2 { color: var(--wrap-ribbon); text-shadow: 0 2px 0 var(--wrap-paper-dark); }
+  .wrap-panel__keeper { margin-bottom: 0; }
+  /* The table: kraft paper with the roll's red edge along the top. */
+  .wrap-panel .ui-panel__body {
+    background:
+      repeating-linear-gradient(-45deg, var(--wrap-paper) 0 10px, var(--wrap-paper-dark) 10px 12px) top / 100% 0.55rem no-repeat,
+      var(--wrap-table);
+    color: var(--wrap-table-ink);
+    padding-top: 1.2rem;
+  }
+  .wrap-panel .ui-empty-block { color: var(--wrap-table-soft); }
+  .wrap-panel__grid {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(7.5rem, 1fr));
+    gap: var(--sp-4) var(--sp-3);
+  }
+  .wrap-panel__tile {
+    width: 100%;
+    display: grid;
+    justify-items: center;
+    gap: 0.2rem;
+    padding: var(--sp-2) var(--sp-1);
+    border: 2px solid transparent;
+    border-radius: var(--ui-radius-sm);
+    background: none;
+    color: inherit;
+    font: inherit;
+    text-align: center;
+    cursor: pointer;
+    transition: border-color var(--dur-hover), background var(--dur-hover);
+  }
+  .wrap-panel__tile:hover,
+  .wrap-panel__tile:focus-visible { border-color: var(--wrap-paper); background: color-mix(in srgb, var(--wrap-paper) 8%, transparent); outline: none; }
+  .wrap-panel__tile:hover .wrap-panel__box,
+  .wrap-panel__tile:focus-visible .wrap-panel__box { translate: 0 -3px; box-shadow: 0 6px 10px var(--shade-45); }
+  /* The box: its cover at a box's proportions, standing on the table. */
+  .wrap-panel__box {
+    position: relative;
+    width: 5.2rem;
+    height: 7rem;
+    overflow: hidden;
+    border-radius: var(--ui-radius-2xs);
+    box-shadow: 0 3px 6px var(--shade-45);
+    transition: translate var(--dur-hover) var(--ui-ease), box-shadow var(--dur-hover);
+  }
+  .wrap-panel__cover { display: block; width: 100%; height: 100%; object-fit: cover; }
+  .wrap-panel__cover--plain {
+    display: grid;
+    place-items: center;
+    padding: var(--sp-1);
+    background: linear-gradient(160deg, var(--wrap-box), var(--wrap-box-dark));
+    color: var(--tint-90);
+    font-size: var(--fs-2);
+    font-weight: 600;
+    line-height: 1.15;
+  }
+  /* The paper: red with gold stars, a ribbon each way, a bow where they cross. Up out of sight until wrapped. */
+  .wrap-panel__paper {
+    position: absolute;
+    inset: 0;
+    background:
+      radial-gradient(circle, var(--wrap-star) 0 1.4px, transparent 1.6px) 0 0 / 12px 12px,
+      radial-gradient(circle, var(--wrap-star) 0 1px, transparent 1.2px) 6px 6px / 12px 12px,
+      linear-gradient(160deg, var(--wrap-paper), var(--wrap-paper-dark));
+    translate: 0 -101%;
+  }
+  .wrap-panel__ribbon {
+    position: absolute;
+    inset: 0;
+    background:
+      linear-gradient(90deg, transparent calc(50% - 5px), var(--wrap-ribbon) calc(50% - 5px) calc(50% + 5px), transparent calc(50% + 5px)),
+      linear-gradient(0deg, transparent calc(50% - 5px), var(--wrap-ribbon) calc(50% - 5px) calc(50% + 5px), transparent calc(50% + 5px));
+  }
+  .wrap-panel__bow {
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    width: 2.2rem;
+    height: 1.3rem;
+    translate: -50% -50%;
+    background:
+      radial-gradient(circle at 50% 50%, var(--wrap-ribbon-dark) 0 0.28rem, transparent 0.3rem),
+      radial-gradient(ellipse 0.62rem 0.5rem at 28% 50%, var(--wrap-ribbon) 92%, transparent 100%),
+      radial-gradient(ellipse 0.62rem 0.5rem at 72% 50%, var(--wrap-ribbon) 92%, transparent 100%);
+    filter: drop-shadow(0 1px 1px var(--shade-45));
+    scale: 0;
+  }
+  .wrap-panel__tile.is-wrapped .wrap-panel__paper { translate: 0 0; }
+  .wrap-panel__tile.is-wrapped .wrap-panel__bow { scale: 1; }
+  /* Wrapping: the paper comes down over the box, then the bow pops on. */
+  .wrap-panel__tile.is-folding .wrap-panel__paper { animation: wrap-fold var(--dur-long) var(--ui-ease) both; }
+  .wrap-panel__tile.is-folding .wrap-panel__bow { animation: wrap-bow var(--dur-slow) var(--ui-ease-pop) var(--dur-long) both; }
+  @keyframes wrap-fold { from { translate: 0 -101%; } }
+  @keyframes wrap-bow { from { scale: 0; rotate: -30deg; } }
+  .wrap-panel__title {
+    max-width: 100%;
+    overflow: hidden;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    min-height: 2.3em;
+    font-size: var(--fs-3);
+    font-weight: 600;
+    line-height: 1.15;
+  }
+  .wrap-panel__state { font-size: var(--fs-2); color: var(--wrap-table-soft); }
+  .wrap-panel__tile.is-wrapped .wrap-panel__state { color: var(--wrap-paper); font-weight: 600; }
+  .reduce-motion .wrap-panel__tile.is-folding .wrap-panel__paper,
+  .reduce-motion .wrap-panel__tile.is-folding .wrap-panel__bow { animation: none; }
+}

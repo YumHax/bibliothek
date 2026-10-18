@@ -15,6 +15,10 @@ const LABEL_LIFT = 0.00015;
 const PHOTO_LIFT = 0.00025;
 /** A photo whose outline differs more than this in proportion from the shell is not stretched over it. */
 const PHOTO_ASPECT_SLACK = 0.18;
+/** The back's sticker: at most this big (m), this far clear of the grip ribs and the shell's ends; none where less room is left. */
+const STICKER_MAX = { width: 0.045, height: 0.024 };
+const STICKER_CLEAR = 0.003;
+const STICKER_MIN_H = 0.008;
 
 /**
  * A cartridge at real size: the shell extruded from its outline (`outline.ts`) with a moulded
@@ -35,6 +39,10 @@ export class CartridgeModel extends THREE.Group implements MediaModel {
   private readonly skinMaterial: THREE.MeshStandardMaterial;
   private readonly aspect: number;
   private readonly foldDepth: number;
+  /** The sticker on the back (where it was made, the code, a serial): hidden until it is printed. */
+  private readonly sticker: THREE.Mesh | null;
+  private readonly stickerMaterial: THREE.MeshStandardMaterial;
+  readonly backPrintAspect: number | undefined;
 
   constructor(readonly spec: MediaSpec) {
     super();
@@ -97,10 +105,24 @@ export class CartridgeModel extends THREE.Group implements MediaModel {
     this.skin.position.z = d / 2 + PHOTO_LIFT;
     this.skin.visible = false;
 
+    // The back's sticker, in the widest band the grip ribs leave, facing out of the back.
+    this.stickerMaterial = onSurface(new THREE.MeshStandardMaterial({ color: 0xd7d8d6, roughness: 0.5 }), WALL.print);
+    const band = stickerBand(shape.ribs.filter((r) => r.face === 'back'), h / 2);
+    const sw = Math.min(STICKER_MAX.width, w * 0.55);
+    const sh = band ? Math.min(STICKER_MAX.height, band.y1 - band.y0) : 0;
+    this.sticker = band && sh >= STICKER_MIN_H ? new THREE.Mesh(new THREE.PlaneGeometry(sw, sh), this.stickerMaterial) : null;
+    this.backPrintAspect = this.sticker ? sw / sh : undefined;
+    if (this.sticker && band) {
+      this.sticker.rotation.y = Math.PI;
+      this.sticker.position.set(0, (band.y0 + band.y1) / 2, -d / 2 - LABEL_LIFT);
+      this.sticker.visible = false;
+    }
+
     this.add(this.body, this.label, mouthMesh, this.skin);
+    if (this.sticker) this.add(this.sticker);
     if (this.frontRibs) this.add(this.frontRibs);
     if (this.fold) this.add(this.fold);
-    this.materials = [plastic, mouth, this.labelMaterial, this.skinMaterial];
+    this.materials = [plastic, mouth, this.labelMaterial, this.skinMaterial, this.stickerMaterial];
     this.traverse((obj) => {
       if ((obj as THREE.Mesh).isMesh) {
         obj.castShadow = obj === this.body;
@@ -120,6 +142,15 @@ export class CartridgeModel extends THREE.Group implements MediaModel {
 
   setPrint(texture: THREE.Texture | null): void {
     swapMap(this.labelMaterial, texture, 0xd8d8d8);
+  }
+
+  setBackPrint(texture: THREE.Texture | null): void {
+    if (!this.sticker) {
+      texture?.dispose();
+      return;
+    }
+    swapMap(this.stickerMaterial, texture, 0xd7d8d6);
+    this.sticker.visible = texture !== null;
   }
 
   /** The real cartridge's front, trimmed to its outline; refused (false) when its proportions are not this shell's. */
@@ -148,6 +179,17 @@ export class CartridgeModel extends THREE.Group implements MediaModel {
       m.dispose();
     }
   }
+}
+
+/** The widest band of the back the grip ribs leave free (above them or below), clear of them and of the ends; null when none is. */
+function stickerBand(ribs: readonly Ribs[], hh: number): { y0: number; y1: number } | null {
+  if (!ribs.length) return { y0: -hh * 0.45, y1: hh * 0.45 };
+  const low = Math.min(...ribs.map((r) => r.y0));
+  const high = Math.max(...ribs.map((r) => r.y1));
+  const below = { y0: -hh + STICKER_CLEAR * 2, y1: low - STICKER_CLEAR };
+  const above = { y0: high + STICKER_CLEAR, y1: hh - STICKER_CLEAR * 2 };
+  const best = below.y1 - below.y0 >= above.y1 - above.y0 ? below : above;
+  return best.y1 - best.y0 > 0 ? best : null;
 }
 
 /** Raised ribs spread across a band, on the face at `z` (outwards along its sign). */

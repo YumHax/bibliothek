@@ -28,6 +28,10 @@ const ROOF = { wider: 0.5, deeper: 0.6, thick: 0.12, forward: 0.1 };
 export const NEWSSTAND_ROOF = { width: SIZE.width + ROOF.wider, depth: SIZE.depth + ROOF.deeper, height: SIZE.height + ROOF.thick } as const;
 /** The hatch in the kiosk's front: from and to (m up), and the posts either side of it (wide, with the hitbox's margin). */
 const HATCH = { from: 1.0, to: 1.9, post: 0.3 };
+/** The hatch's counter ledge: its middle's height and depth out (kiosk-local): what is handed over lies on it. */
+const LEDGE = { y: 0.92, thick: 0.05, z: SIZE.depth / 2 + 0.1 };
+/** The top of the ledge, kiosk-local: where a thing left for the player waits (the raffle's unclaimed prize). */
+export const KIOSK_LEDGE_TOP = { y: LEDGE.y + LEDGE.thick / 2, z: LEDGE.z } as const;
 /** Where the newsagent stands behind the hatch, kiosk-local (on the pavement's level: the shell hides the legs). */
 export const NEWSAGENT_AT = { x: 0, z: 0.5 } as const;
 /** The kiosk's edges, rounded. */
@@ -62,7 +66,7 @@ export class Newsstand extends THREE.Group implements Furniture, Interactable {
     const green = snowStandard({ color: GREEN, roughness: 0.5 });
     const shell = new THREE.Mesh(body, green);
     const roof = new THREE.Mesh(rounded(NEWSSTAND_ROOF.width, ROOF.thick, NEWSSTAND_ROOF.depth, 0, height + ROOF.thick / 2, ROOF.forward), snowPaint(0x1f2a26, 0.6));
-    const counter = new THREE.Mesh(rounded(width - 0.3, 0.05, 0.45, 0, 0.92, depth / 2 + 0.1), snowPaint(0x6a4a32, 0.7));
+    const counter = new THREE.Mesh(rounded(width - 0.3, LEDGE.thick, 0.45, 0, LEDGE.y, LEDGE.z), snowPaint(0x6a4a32, 0.7));
     for (const mesh of [shell, roof, counter]) {
       mesh.castShadow = true;
       mesh.receiveShadow = true;

@@ -16,6 +16,15 @@ export interface CatScreen {
   watchingSpot(out: THREE.Vector3): THREE.Vector3;
   /** Optional: a point on the picture; without it the cat faces away from the room centre. */
   screenPoint?(out: THREE.Vector3): THREE.Vector3;
+  /** Optional: a floor point against the console stand under the set, warm while a game plays (`consoleNap`). */
+  warmSpot?(out: THREE.Vector3): THREE.Vector3;
+}
+
+/** A game box on a shelf the cat can paw half out of its row (`pawBox`); the player pushes it back or takes it. */
+export interface CatBoxLike {
+  readonly parent: THREE.Object3D | null;
+  getWorldPosition(out: THREE.Vector3): THREE.Vector3;
+  setTipped(tipped: boolean): void;
 }
 
 export interface CatBrainContext {
@@ -41,6 +50,8 @@ export interface CatBrainContext {
   visits?: readonly THREE.Vector3[];
   /** Places to nap elsewhere in the flat (the bedroom's bed). */
   perches?: readonly CatPerch[];
+  /** The boxes on the shelves of its room: a low one gets pawed out of its row now and then (`pawBox`). */
+  boxes?: () => Iterable<CatBoxLike>;
 }
 
 type PetOutcome = 'purr' | 'woke' | 'annoyed' | 'busy';
@@ -119,6 +130,11 @@ export class CatBrain {
 
   get state(): CatState {
     return this.mind.state;
+  }
+
+  /** `?debug`: the bowl's call at once (hunger full: it goes to the bowl, then asks). */
+  makeHungry(): void {
+    this.mind.hunger = 1;
   }
 
   update(dt: number): void {

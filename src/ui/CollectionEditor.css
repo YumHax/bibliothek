@@ -80,3 +80,88 @@
 
   .collection-editor__hint { font-size: var(--fs-3); opacity: var(--ui-faint); margin: var(--sp-2) 0 0; }
 }
+
+/*
+ * The game proper's list: a ring binder, a paper page per console (its tab in the console's colour, the punched holes
+ * down the left), each game a card in its pocket: cover, title, the copy's state as small tags, the receipt in pen,
+ * what it is worth.
+ */
+@layer panels {
+  .collection-editor__page {
+    --paper: var(--paper-journal);
+    --ink: var(--ink-journal);
+    position: relative;
+    margin: 0 0 var(--sp-5);
+    padding: var(--sp-3) var(--sp-4) var(--sp-3) 2.6rem;
+    border-radius: var(--ui-radius-sm);
+    box-shadow: var(--ui-shadow-raised);
+    background:
+      radial-gradient(circle at 1.1rem 2.2rem, var(--ui-panel-solid) 0.32rem, transparent 0.36rem),
+      radial-gradient(circle at 1.1rem calc(100% - 2.2rem), var(--ui-panel-solid) 0.32rem, transparent 0.36rem),
+      linear-gradient(90deg, transparent 2rem, var(--paper-margin) 2rem, var(--paper-margin) calc(2rem + 1px), transparent calc(2rem + 1px)),
+      var(--paper);
+  }
+  .collection-editor__page-tab {
+    display: inline-flex;
+    align-items: baseline;
+    gap: var(--sp-3);
+    margin: calc(-1 * var(--sp-3)) 0 var(--sp-2);
+    padding: 0.25rem 0.8rem 0.3rem;
+    border-radius: 0 0 var(--ui-radius-sm) var(--ui-radius-sm);
+    background: var(--tab, var(--ui-accent));
+    color: var(--ui-text);
+    font-family: var(--ui-font-display);
+    font-weight: 400;
+    font-size: var(--fs-5);
+    letter-spacing: 0.05em;
+    text-shadow: var(--ui-shadow-text);
+  }
+  .collection-editor__page-count { font-family: var(--ui-font-body); font-size: var(--fs-3); letter-spacing: 0; opacity: 0.9; }
+  .collection-editor__sets { display: flex; flex-wrap: wrap; gap: var(--sp-1) var(--sp-3); margin: 0 0 var(--sp-2); padding: 0; list-style: none; font-family: var(--ui-font-hand); font-size: var(--fs-5); }
+  .collection-editor__sets li.is-done { color: var(--ink-green); }
+
+  .collection-editor__card {
+    display: grid;
+    grid-template-columns: auto 1fr auto auto;
+    align-items: center;
+    gap: var(--sp-3);
+    padding: 0.45rem 0.4rem;
+    border-bottom: 1px solid var(--rule-reading);
+  }
+  .collection-editor__card:last-child { border-bottom: 0; }
+  .collection-editor__card:hover,
+  .collection-editor__card:focus-within { background: var(--rule-reading); }
+  .collection-editor__card-cover { width: 2.4rem; height: auto; box-shadow: var(--ui-shadow-raised); }
+  .collection-editor__card--wishlist .collection-editor__card-cover { opacity: 0.45; }
+  .collection-editor__card-text { display: flex; flex-direction: column; gap: 0.15rem; min-width: 0; }
+  .collection-editor__card-title { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .collection-editor__card-title small { font-weight: 400; opacity: 0.65; }
+  .collection-editor__card-tags { display: flex; flex-wrap: wrap; gap: 0.25rem; }
+  .collection-editor__tag,
+  .collection-editor__where {
+    font-size: var(--fs-2);
+    padding: 0.05rem 0.4rem;
+    border: 1px solid var(--rule-reading);
+    border-radius: var(--ui-radius-2xs);
+  }
+  .collection-editor__where { border-color: currentColor; color: var(--ink-red); }
+  .collection-editor__card--wishlist .collection-editor__where { color: var(--ink-note); }
+  /* A wish: the cover faded behind a dashed edge (the slip in its gap on the shelf), the market's news in red pen. */
+  .collection-editor__card--wishlist .collection-editor__card-cover { outline: 1px dashed var(--ink-note); outline-offset: 2px; box-shadow: none; }
+  .collection-editor__card--wishlist .collection-editor__card-title { font-weight: 500; }
+  .collection-editor__wish-news { color: var(--ink-red); opacity: 1; }
+  .collection-editor__card--dropped .collection-editor__card-cover,
+  .collection-editor__card--dropped .collection-editor__card-text { opacity: 0.45; transition: opacity var(--dur-slow) var(--ui-ease); }
+  .collection-editor__card--dropped .collection-editor__card-title { text-decoration: line-through; }
+  .collection-editor__wish-filter { margin-left: auto; margin-bottom: var(--sp-3); }
+  .collection-editor__wish-filter[aria-pressed='true'] { border-color: var(--ui-danger-line); background: var(--ui-danger-soft); color: var(--ui-danger-text); }
+  .collection-editor__receipt { font-family: var(--ui-font-hand); font-size: var(--fs-5); line-height: 1.1; opacity: 0.85; }
+  .collection-editor__worth { font-size: var(--fs-3); white-space: nowrap; opacity: 0.8; }
+  .collection-editor__card-actions { display: flex; gap: var(--sp-1); }
+  .collection-editor__card .ui-btn { padding: 0.2rem 0.55rem; font-size: var(--fs-3); }
+  @media (max-width: 640px) {
+    .collection-editor__card { grid-template-columns: auto 1fr; }
+    .collection-editor__worth,
+    .collection-editor__card-actions { grid-column: 2; }
+  }
+}

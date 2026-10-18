@@ -1,5 +1,5 @@
 import type { PayoutStats } from '@/economy/PayoutStats';
-import { escapeHtml } from './html';
+import { html, paint } from './panel/html';
 import { formatNumber } from '@/text/count';
 import './PayoutOverlay.css';
 
@@ -19,10 +19,12 @@ export class PayoutOverlay {
   ) {
     this.root = document.createElement('aside');
     this.root.className = 'payout-overlay';
-    this.root.innerHTML = `
-      <header><strong>Arcade payout</strong><button type="button" data-action="reset">Reset</button></header>
-      <table><thead><tr><th>machine</th><th>plays</th><th>avg score</th><th>avg tix</th><th>tix/min</th></tr></thead><tbody></tbody></table>
-      <p>Retune <code>PAYOUT</code> in pricing.ts when one machine pays far more a minute than the rest.</p>`;
+    paint(
+      this.root,
+      html`<header><strong>Arcade payout</strong><button type="button" data-action="reset">Reset</button></header>
+        <table><thead><tr><th>machine</th><th>plays</th><th>avg score</th><th>avg tix</th><th>tix/min</th></tr></thead><tbody></tbody></table>
+        <p>Retune <code>PAYOUT</code> in pricing.ts when one machine pays far more a minute than the rest.</p>`,
+    );
     container.appendChild(this.root);
     this.body = this.root.querySelector('tbody')!;
     this.root.querySelector('[data-action="reset"]')!.addEventListener('click', () => stats.clear());
@@ -32,10 +34,11 @@ export class PayoutOverlay {
 
   private render(): void {
     const rows = this.stats.rows();
-    this.body.innerHTML = rows.length
-      ? rows
-          .map((r) => `<tr><td>${escapeHtml(r.gameId)}</td><td>${r.plays}</td><td>${formatNumber(Math.round(r.avgScore))}</td><td>${r.avgTickets.toFixed(1)}</td><td>${r.ticketsPerMinute.toFixed(0)}</td></tr>`)
-          .join('')
-      : '<tr><td colspan="5">No plays yet: go and play something.</td></tr>';
+    paint(
+      this.body,
+      rows.length
+        ? html`${rows.map((r) => html`<tr><td>${r.gameId}</td><td>${r.plays}</td><td>${formatNumber(Math.round(r.avgScore))}</td><td>${r.avgTickets.toFixed(1)}</td><td>${r.ticketsPerMinute.toFixed(0)}</td></tr>`)}`
+        : html`<tr><td colspan="5">No plays yet: go and play something.</td></tr>`,
+    );
   }
 }

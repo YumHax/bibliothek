@@ -7,6 +7,7 @@ import { invisibleHitbox } from '../meshUtils';
 import { METAL } from '../materials/palette';
 import { createCanvas, toTexture } from '@/covers/generated/canvasUtils';
 import { playKnock } from '@/audio/doorbell';
+import { markStreet, streetMarked } from '@/social/street/streetMarks';
 
 /** What a knock on Mr Ferrand's door gets, in turn. */
 const ANSWERS = [
@@ -16,12 +17,24 @@ const ANSWERS = [
   'Slippers shuffle up to the door, stop, and shuffle away.',
 ] as const;
 
+/** Knocks before he opens, the once (`OPENED`): his door on its chain, a word about Félix, a racing page. */
+const KNOCKS_BEFORE_OPENING = 4;
+const OPENED = {
+  said: 'The chain rattles. The door opens a hand’s width: a cardigan, a racing paper, a long look. “Félix’s family? Thought so. Same nose.” He pushes a folded page through the gap, and the door shuts.',
+  card: {
+    look: 'note' as const,
+    title: 'A racing page, folded in four',
+    text: 'Le Prix de l’Arc, October 1987. Three horses ringed in pencil, the margin in Félix’s hand: SURE THING. CERTAIN. ABSOLUTELY CERTAIN.\n\nUnder it, in another hand, shaky: “None of them placed. He owes me forty francs. Tell Odette I have forgotten it. — R. F.”',
+  },
+};
+
 /** The brass plate under the peephole: its size and height on the leaf. */
 const PLATE = { width: 0.15, height: 0.04, y: 1.36 };
 
 /**
  * Mr Ferrand's door across Mémé's landing (docs/grandma.md "Around her flat"): an entrance door in its brown with its
- * doormat and his brass plate, knocked on for a line (he never comes to the door; his radio does the talking). Its
+ * doormat and his brass plate, knocked on for a line (his radio does the talking), until, the once, he opens on the chain for Félix's
+ * family and passes a page of the racing through (`streetMarks` 'ferrandOpened': Mémé has the story of it). Its
  * handle glints on hover.
  */
 export class FerrandDoor extends ShutDoor implements Interactable {
@@ -49,7 +62,13 @@ export class FerrandDoor extends ShutDoor implements Interactable {
 
   activate(session: SessionActions): void {
     playKnock(3, 0.35);
-    session.react(ANSWERS[this.knocks++ % ANSWERS.length]!);
+    if (++this.knocks >= KNOCKS_BEFORE_OPENING && !streetMarked('ferrandOpened')) {
+      markStreet('ferrandOpened');
+      session.react(OPENED.said);
+      session.read(OPENED.card);
+      return;
+    }
+    session.react(ANSWERS[(this.knocks - 1) % ANSWERS.length]!);
   }
 }
 

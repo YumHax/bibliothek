@@ -90,7 +90,14 @@ contrast-adaptive sharpen (CAS, 4 taps, skipped across the video cut-out's borde
 per unit the frame is stretched to the screen, `devicePixelRatio / (pixel ratio x adaptive scale)`), white balance
 (the look's `temperature` as a von Kries / Bradford matrix built on the CPU, `graphics/whiteBalance.ts`, applied in
 linear HDR before tone mapping; 60 mireds per unit, luminance kept), exposure, ACES (three.js's fit), sRGB, grade
-(lift / gain, contrast, saturation), vignette, grain, straight to the canvas.
+(lift / gain, contrast, saturation), vignette, the reading dim, grain, straight to the canvas.
+
+- The reading dim (`graphics/readingDim`, set each frame by `world/box/ReadingLight` while the box in hand is
+  examined): the room goes into shade (at most half its brightness) outside a soft disc round the box as it shows on
+  screen (its bounding sphere projected, open or with its cartridge lifted), folded into the vignette's veil so the video
+  cut-out darkens too. On low (no post passes) a CSS veil (`readingDim.css`, at the canvas's level, under the HUD) draws
+  the same disc. The box's own reading lamp is its print lighting itself (`GameBox.setReading`, see docs/media.md): no
+  light is added to the scene.
 
 - The AO has two scales in one pass: the contact crease (`AO_RADIUS` 0.32 m, `AO_INTENSITY` 1.15, the quality's taps)
   and a wider, gentler one (`AO_WIDE_RADIUS` 1.2 m, `AO_WIDE_INTENSITY` 0.6, half the taps, offset half a turn) for a
@@ -384,7 +391,10 @@ to the guide (`frames.cropOf`) and saved as a PNG (and kept small on the photo r
 album: docs/grandma.md); black under the alpha cut-outs (a playing screen is a hole in the
 canvas onto the CSS layer, which a canvas read cannot see). Keys are the action table's (`input/actions`: `photoMode` P to enter and leave,
 the `photo` context while active); the Session's `PhotoControl` route (right after the arcade's) hands every key to
-`handleKey` while it is on; held ones are read each frame. Made in `bootstrap/input`.
+`handleKey` while it is on; held ones are read each frame. Made in `bootstrap/input`. On a touchscreen the stick (left
+half) flies, a drag on the right looks, two fingers zoom (`PhotoMode.pinch`, through `TouchControls.onPinch`), a tap
+takes the photo, and a row of buttons along the bottom does Look, Frame, Reset and Back. The card is the camera's top
+plate: the settings on its LCD in the LED face, the keys grouped under it (Move, Lens, Picture, Shoot).
 
 ## Comparing the image (`?debug`)
 

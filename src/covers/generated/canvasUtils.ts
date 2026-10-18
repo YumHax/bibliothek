@@ -1,8 +1,21 @@
 import type * as THREE from 'three';
 import { fnv1a, lcg } from '@/random';
+import { createCanvas } from '@/graphics/canvas';
 
 // The generic helpers live in `graphics/canvas`; re-exported so every drawing module keeps importing from here.
 export { canvasTexture, createCanvas, repeatTexture, toTexture } from '@/graphics/canvas';
+
+/**
+ * A canvas for a layout drawn in its own units (`width` x `height`), its longest side `longPx` pixels: the context is
+ * scaled so the drawing code keeps its layout sizes (fonts, margins) whatever the pixels. What only the box in hand
+ * shows (its back, booklet cover, label) is drawn this way, sharp enough to hold up to the eye.
+ */
+export function layoutCanvas(width: number, height: number, longPx: number): [HTMLCanvasElement, CanvasRenderingContext2D] {
+  const scale = longPx / Math.max(width, height);
+  const [canvas, ctx] = createCanvas(Math.max(1, Math.round(width * scale)), Math.max(1, Math.round(height * scale)));
+  ctx.scale(scale, scale);
+  return [canvas, ctx];
+}
 
 /** Word-wraps `text` and returns the lines that fit; the last line is ellipsised if `maxLines` is hit. */
 export function wrapLines(ctx: CanvasRenderingContext2D, text: string, maxWidth: number, maxLines = Infinity): string[] {

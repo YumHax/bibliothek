@@ -11,16 +11,17 @@ const LEAN = 0.14;
 /**
  * What stands in a wishlist game's place on the shelf: not the game (the player does not have it)
  * but the gap it will fill, and in it a little cream index card with its title written in pen,
- * leaning back a touch. Built in the box's own frame (centred on where the box would stand, cover
- * towards +z), sized to the gap; its own material (a per-card texture), casts no shadow.
+ * leaning back a touch. A game lent out leaves the same gap, its card headed with who has it
+ * ("lent to Sam") instead of "wanted". Built in the box's own frame (centred on where the box would
+ * stand, cover towards +z), sized to the gap; its own material (a per-card texture), casts no shadow.
  */
 export class WishCard extends THREE.Mesh<THREE.PlaneGeometry, THREE.MeshStandardMaterial> {
-  constructor(title: string, boxWidth: number, boxHeight: number, anisotropy: number) {
+  constructor(title: string, boxWidth: number, boxHeight: number, anisotropy: number, header = 'wanted') {
     const w = Math.min(boxWidth * 0.82, 0.11);
     const h = Math.min(boxHeight * 0.55, w * 1.3);
     super(
       new THREE.PlaneGeometry(w, h),
-      new THREE.MeshStandardMaterial({ map: paintCard(title, h / w, anisotropy), roughness: 0.92, side: THREE.DoubleSide }),
+      new THREE.MeshStandardMaterial({ map: paintCard(title, header, h / w, anisotropy), roughness: 0.92, side: THREE.DoubleSide }),
     );
     this.name = 'WishCard';
     // Standing on the board (the box's bottom), a little back from where its cover would be, its foot held there as it leans.
@@ -36,8 +37,8 @@ export class WishCard extends THREE.Mesh<THREE.PlaneGeometry, THREE.MeshStandard
   }
 }
 
-/** Cream card, a faint ruled line or two, "wanted" in pencil and the title in blue-black ink. */
-function paintCard(title: string, aspect: number, anisotropy: number): THREE.CanvasTexture {
+/** Cream card, a faint ruled line or two, the header ("wanted", "lent to Sam") in pencil and the title in blue-black ink. */
+function paintCard(title: string, header: string, aspect: number, anisotropy: number): THREE.CanvasTexture {
   const W = PX;
   const H = Math.round(PX * aspect);
   const [canvas, ctx] = createCanvas(W, H);
@@ -61,8 +62,10 @@ function paintCard(title: string, aspect: number, anisotropy: number): THREE.Can
   ctx.textAlign = 'center';
   ctx.textBaseline = 'alphabetic';
   ctx.fillStyle = 'rgba(90,90,90,0.8)';
-  ctx.font = `15px ${HAND}`;
-  ctx.fillText('wanted', W / 2, H * 0.24 - 6);
+  let headSize = 15;
+  ctx.font = `${headSize}px ${HAND}`;
+  while (headSize > 9 && ctx.measureText(header).width > W - 10) ctx.font = `${--headSize}px ${HAND}`;
+  ctx.fillText(header, W / 2, H * 0.24 - 6);
 
   // The title, in pen, slightly askew; as big as it fits on three lines.
   ctx.save();

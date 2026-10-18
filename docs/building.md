@@ -49,6 +49,16 @@ stairwell. She holds the cellar key:
 - Asked for it, she sends the player to try the timer buttons of the 1st to the 4th floor (a "To do" tip). The 3rd
   floor's sticks. Back with the answer, the key is the reward.
 - Coins in her Christmas box (`TipBox`, 10) hand it over at once.
+- Told which button sticks, the electrician fits a new one the next game day (`conciergeState.mended`): it no longer
+  sticks, its knob is new and says so once, and her thank-you is on the board for two days.
+
+Her other keys (`building/keys`, handed over by `socialBuilding` at her tier, at boot too for an older save):
+- **The lodge's spare** at Friend (`holdsParcels`): while she is out, the lodge's door (`hall/LodgeDoor`) lets the player in
+  to water her geranium, once a game day (+3 warmth).
+- **The roof key** at Close (`roofKey`): the lift's panel has a little keyhole marked TOIT over the top floor's button
+  (`Lift.turnRoofKey`): turned from inside the car, the old ride climbs past our landing to the roof itself, no code
+  needed (`AtticRide.keyRide`). The roof's chimney stack has a seat facing Front Street (`ROOF_PLAN.sit`): an hour of the
+  city by day, of the stars by night, something seen.
 
 ## Friendship
 
@@ -79,7 +89,10 @@ notes and more: docs/social.md "The building".
   trust) or breaks it (the stamp lost, remembered). Not answering costs nothing.
 - **Voting.** The ballot is open until the meeting's day ends. The ten households vote by nature (`Voter.leans`, shown
   on the ballot) or by a mind of their own drawn per meeting. The player has one vote, two once Mrs Roux's flat is
-  theirs (hers is then no longer cast), plus up to 3 bought votes a resolution at 25 coins each.
+  theirs (hers is then no longer cast), plus up to 3 bought votes a resolution at 25 coins each. The ballot
+  (`ui/CoproPanel`) is a printed paper: crosses drawn in pen, the voters' faces with their names on hover, "Likely to
+  vote with / against you" written over the sway's faces, each bought word ("Put in a word · 25 coins", "Take it
+  back") a stamp on the line, postmarked once paid; "Post my vote" folds it into its envelope.
 - **The day itself.** Six folding chairs and the syndic, M. Bertin, stand in the hall 17-22 (`MeetingSetup`). On a day
   of the estate sale they come only once its tables are cleared (20:00).
 - **The tally** runs on the next game day. A tie keeps what stands. The minutes stay on the board 4 days. Every meeting
@@ -87,7 +100,10 @@ notes and more: docs/social.md "The building".
   ballot and its bought votes always count. A ballot off the meetings' days is voided and its bought votes refunded.
 - **The result** shows at once (`coproLook`): the walls repainted (uniforms), the runner recoloured or taken up (the
   stone's wear then shows), and plants, two bikes, the gilt mirror, the doormat, the fibre box and the lift's overhaul
-  plate shown or hidden. `coproChoice('lift') === 'overhaul'` runs the lift 1.5 times as fast with quiet gates;
+  plate shown or hidden. The landings' plants are clicked (`LandingPlant`): on Mrs Dubois's watering days her can has been
+  round, on the others the player waters them from her jug and she hears of it (+1 once a game day,
+  `stairwellPlan.coproLook.plantTalk`); the doormat wipes the player's feet, and Mrs Pereira, in her lodge, approves (+1
+  once a game day, `doormatTalk`). `coproChoice('lift') === 'overhaul'` runs the lift 1.5 times as fast with quiet gates;
   `coproChoice('fibre') === 'yes'` brings the roof's fibre channel.
 
 ## The quarrels
@@ -120,9 +136,13 @@ went, the loser says their piece and, 5 days on, offers a way back (warmth, a me
   - the residents set off nowhere (`Neighbours.quiet`), and whoever the cut strands in the car is not home meanwhile
     (`DownAndDark.strandedDoor`, through `Neighbours.gone`);
   - the cellars' bulbs are dead (the torch works).
+  - the kitchen's kettle, toaster and radio, the turntable, the home arcade cabinet, the oven (no cake) and the hair
+    dryer (no sticker peeled) stop or refuse; the radio and the turntable's side come back when the power does.
 - **When.** On a `storm` spell, a lightning strike between 17:30 and 23:30 cuts the power on about one stormy evening in
   four (a draw per game day). The syndic's note goes up on the board for that day and the next. There is at most one cut
-  a game day (`bibliothek.blackout.v1`), and never with the player in the lift's car.
+  a game day (`bibliothek.blackout.v1`), never with the player in the lift's car, and never mid-scene
+  (`holdPowerCutsWhile`, wired in `bootstrap/world` and `worldLife`): in a household fade, a night, a memory, a
+  conversation, an open panel, the opening film or a gathering.
 - **The way back.** Reset the main fuse at the meters cupboard on the hall's west wall (`FuseBox`,
   `POWER_CUT_PLAN.fuseBox`) or at the main board in the cellars' boiler room. Within 40 s of the cut it trips again (the
   storm is overhead). After 7 minutes the power comes back by itself. A reload brings it back.
@@ -144,12 +164,15 @@ went, the loser says their piece and, 5 days on, offers a way back (warmth, a me
   This only plays while the player is in the flat and that neighbour is in. In a power cut the TV and the music go
   silent.
 - **Noise after ten** (`noiseComplaints`, `NoiseWatch`). `flatNoise` sums a longplay on a screen (0.7), the kitchen's
-  radio (0.45) and anything else through `addFlatNoise`. At 0.3 or more between 22:00 and 07:00, things escalate:
+  radio (0.45), a record on the turntable (0.5) and anything else through `addFlatNoise`. At 0.3 or more between 22:00 and 07:00, things escalate:
   1. After 40 s, A. Leclerc (under the living room) bangs a broom on his ceiling.
   2. Still loud 45 s later, he comes up and knocks (`DoorVisitor`). Answered: -6 friendship, and a thank-you as he goes
      if it went quiet. Unanswered: a note under the door, -10.
   3. Still loud 90 s after that, the syndic hears of it: a quiet-hours reminder on the board for two days, -12 for him
      and -4 for the Moreaus.
+  Turned down at the broom, the count starts again from nothing. Out of the flat at the broom (the cellar, the yard,
+  the street), the player gets word at once (a slip, `awayWarning`), he waits three times longer before coming up, an
+  unanswered knock costs nothing while they were away, and the syndic only hears of it if they were home to hear him.
   This happens once a night at most. The threshold, the hour it starts and what he does follow his standing with the
   player (docs/social.md "The building"): a close friend comes up to listen instead, a hostile one goes straight to
   the syndic.
@@ -167,7 +190,12 @@ went, the loser says their piece and, 5 days on, offers a way back (warmth, a me
    `NeighbourTrades.present`), a dust sheet hangs over the wall, hammering 8:00-18:00.
 7. `joined` after that: a big reward, her thank-you on the board, and a postcard from Lyon three days later.
 
-The rooms themselves are in docs/zones.md "Mrs Roux's rooms".
+The rooms themselves are in docs/zones.md "Mrs Roux's rooms". Her front room keeps her marble fireplace (the same one her
+flat has when visited, `neighbourFlatPlan`'s `fireplace` dressing) and, on its hearth, Félix's shoebox
+(`annex/FelixShoebox`, `ANNEX_PLAN.shoebox`, docs/story.md Act 3): her note in it, and one of his own copies set out
+beside it, free, until taken (`bibliothek.felixShoebox.v1`). Once the rooms are joined her mantel is a display of two
+boxes face out against the wall (`Fireplace` is a `ShowcaseStand`, registered with `Showcases` under the key "mantel", docs/
+furnishing.md "Displays"); her photo and note stay readable at its ends.
 
 ## The estate sale
 
@@ -184,6 +212,11 @@ the journal's "to watch" names it (`journal/worldWatch`), so a player who runs p
 Copies are bought like a stall's and haggled with the family's own `EstateDealer` (`ForSaleLike.dealer`: no holds, no
 swaps, one haggle a copy). What was bought is not laid out again (`bibliothek.estateSale.v1`). Off its days it places
 nothing. Lambert is also the treasure hunt's Henri.
+
+**The new tenant** (`building/newTenant`): six game days after the sale's last, Yann Le Goff moves into the flat (the
+night show on Radio Brocante: the kitchen radio's 8-bit hour is his). His hello is on the board three days, the mailbox
+says LE GOFF, and some evenings (18-22, one in two) he sorts his post at the mailboxes in the hall, someone to meet
+(`stairwell/NewTenant`, social card `legoff`).
 
 ## The neighbours' party
 
@@ -219,7 +252,9 @@ playground on Front Street instead (`street/events/placeStreetEvents`, the same 
   found) and the lost prototype's trail (by its stage: where it already goes, never a step of its own; the stage is
   handed in by `bootstrap/worldLife`, `tellKidsTheStory`), Victor at the market or outside RETRO GAMES, and two of the
   neighbours' cupboards. One line an ask, a little warmth once a day.
-- **Swap carts?** (`ui/yard/KidSwapPanel`): their pencil case (`kidCarts`: three carts of their platforms drawn from the
+- **Swap carts?** (`ui/yard/KidSwapPanel`, on the yard's asphalt: the kid's face and words in a balloon, their pencil
+  case unzipped with the carts as cartridges, the picked one ringed in felt-tip, the player's own carts below each with
+  "Offer for <theirs>"; a press that can't go through gets the kid's word for why): their pencil case (`kidCarts`: three carts of their platforms drawn from the
   market's index per game week, `MarketStock.randomGames` with `platforms`, sometimes a big hit of the seed's; less what
   they swapped away that week, plus the player's games they got). A kid weighs an offer by fame, never by price
   (`judgeSwap`: monthly page views, a big name hyped, their own cart a bit dearer, another machine's game less, a game
@@ -228,7 +263,9 @@ playground on Front Street instead (`street/events/placeStreetEvents`, the same 
   their head; a handful of offers (`offers`) and they want to play. A swap goes through `Transactions.swapWithNeighbour`
   (the cart to the parcel, its receipt "Hugo, in the courtyard"), warms and trusts the kid (gossiped to their family).
   A friend of theirs swaps more easily (`easySwaps`), one gone cold won't (`noSwaps`: the entry is not offered).
-- **Bet I can beat your score!** (`ui/yard/HandheldPanel`): their handheld held up in front of the player, their game on
+- **Bet I can beat your score!** (`ui/yard/HandheldPanel`; the stick keys and Space, a controller's D-pad or stick and A,
+  or the shell's printed D-pad and buttons under a finger, each lit while held; "Give it back" printed under it, also
+  Esc, E or B): their handheld held up in front of the player, their game on
   it (`KidPlan.game`, an arcade game stepped at the arcade's rate) with their score of the day as its HI (`kidScore`:
   their skill in tickets' worth, grown 12 % a loss to the player up to double: they practise). Beaten, they groan and the
   week's first loss sometimes hands over a cart they are bored of (`beatKid`, `boredCart`, free, into the parcel);
@@ -241,7 +278,9 @@ The yard's side is in docs/zones.md "The courtyard".
 ## The film night
 
 Once the flat has its projector (`HomeUpgrades` `projector`), the sheet rolled up on the workshop's wall in the
-courtyard puts on a film: a click opens `ui/ScreeningPanel` (the player's games; "Show this one" is `putOnFilm`), the
+courtyard puts on a film: a click opens `ui/ScreeningPanel` (a night yard, the bedsheet at the top showing the game pointed at as a poster, the
+player's games as ticket stubs; "Show this one" is `putOnFilm`, the poster flickers up "Tonight, at dusk" before the
+panel goes), the
 game's longplay is the film. The film waits for the first evening that is dark (`CINEMA.dark` daylight), dry
 (`CINEMA.rain`; rain puts it off, said once), before `CINEMA.until` and not a party day
 (`filmNightNow`), with the player in the yard: nothing happens while they are elsewhere. Then the residents who are home
@@ -254,3 +293,29 @@ it stays on for another evening. The board pins the poster while a film is on (`
 and the screenings shown (`bibliothek.yardCinema.v1`). `?debug`: the panel's "A film night in the courtyard now" (or
 `bibliothek.filmNight()`) puts the collection's first game on, the night on now whatever the sky. The yard's side is in
 docs/zones.md "The courtyard".
+
+## Small things about the building
+
+- **The cellar.** Our box (No 5) was Félix's (`CELLAR_PLAN.felixBox`, docs/story.md Act 3): the first time its padlock
+  comes off his note taped inside the carton's lid is read, and the carton holds one of his own copies
+  (`economy/felixLots`). Emptied, the flat's put-away furniture is seen at its back under dust sheets
+  (`Furnishings.storedPieces`, up to four), and a click says so. A box whose game is taken no longer says it has one.
+- **The attic.** The collector's sofa has a blank-label Game Boy cart down its side (a GB game the player lacks, until
+  taken); with his chest open its key ring opens the service stair's wardrobe on his magazines and a spare of his. Once
+  Théo is a friend he answers through the walls for No 5 (his booth) and No 7 (Mr Rossi's Sunday studio) and opens No 6
+  for a listen to his mix (+2, once a game day).
+- **The endless stairs' door.** From the fifth wrap a second knock is answered, once for good: a voice almost known, and
+  a photo slid under the door (`endlessPlan.door`).
+- **The hall.** The co-owners' bikes ring their bells; their mirror shows what the player has on (`household/outfits`).
+- **The neighbours' flats.** Each host has a pastime to do with them (`Dressing` 'habit', `HostHabit`, +4 once a game
+  day): Mrs Roux's budgies, a round with the Nguyen twins, Mr Haddad's reading corner, Mrs Dubois's tarte. A Game Boy
+  mended at the kitchen table can be given to the twins there (`Workshop.give`, +20). The Moreaus' piano plays its
+  phrase (`stairSounds.playPianoPhrase`); Mr Martin's Vectrex goes through its screens. Their TV corners are not all
+  the same way round: `NeighbourHost.layout` picks one of `NEIGHBOUR_FLAT_PLAN.layouts` (the set, its table and the
+  two armchairs moved by `arrange` on the way in, `FlatDressing`; Mr Haddad and Mr Martin have theirs by the window).
+  Mrs Roux's second French window is not shown when visiting: the shell has one window and one outlook pane for every
+  host (each pane a nested render).
+- **The balcony and the yard.** The bistro chairs (riding the set) and the yard's bench are `BenchSeat`s: half an hour
+  watching the street, something seen. The yard's ball is kicked across the lawn (`courtyard/YardBall`).
+- **The roof's tuner** says when a channel is only snow, and in a power cut that the set is dead; its window goes back to
+  "--" when the set is switched off or put on something else (`ChannelDial` follows the TV's state).

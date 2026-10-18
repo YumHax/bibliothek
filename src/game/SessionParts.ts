@@ -1,4 +1,5 @@
 import type { FirstPersonController } from '@/player/FirstPersonController';
+import type { PersonId } from '@/social/types';
 import type { Inspector } from '@/interaction/Inspector';
 import type { Interactor } from '@/interaction/Interactor';
 import type { Overlay } from '@/ui/Overlay';
@@ -26,6 +27,9 @@ import type { PhotoParts } from './PhotoControl';
 import type { RearrangingParts } from './Rearranging';
 import type { LabellingParts } from './Labelling';
 import type { NoticeDismissParts } from './NoticeDismiss';
+import type { ShelfViewingParts } from './ShelfViewing';
+import type { ComparingParts } from './Comparing';
+import type { StackingParts } from './Stacking';
 
 /*
  * Minimal shapes of the optional features the session routes keys to. They are defined here (not
@@ -161,10 +165,15 @@ export interface HagglePanelLike extends ModalLike {
   start(options: {
     item: StockItem;
     negotiation: Negotiation;
-    /** "the NES stall": who the player is haggling with. */
+    /** "the NES stall": where the player is haggling. */
     stall: string;
-    /** The panel closed: how many insulting offers were made, and how it ended ('none': no offer made, nothing to settle). */
-    onClose: (result: { insults: number; outcome: 'deal' | 'walk' | 'stopped' | 'none' }) => void;
+    /** Who with: their card (name, face, voice), if they have one. */
+    seller?: PersonId;
+    /**
+     * The panel closed: how many insulting offers were made, how it ended ('none': no offer made, nothing to settle),
+     * and whether the handshake's price was paid on the spot (`pay`: buy the copy now).
+     */
+    onClose: (result: { insults: number; outcome: 'deal' | 'walk' | 'stopped' | 'none'; pay: boolean }) => void;
   }): void;
 }
 
@@ -173,6 +182,8 @@ export interface TradePanelLike extends ModalLike {
   start(options: {
     item: StockItem;
     stall: string;
+    /** The stall's keeper: their card (name, face), if they have one. */
+    seller?: PersonId;
     /** Makes the swap (`value`: what `mine` counts for); returns why it failed, or null once done. */
     onSwap: (mine: Game, value: number) => string | null;
   }): void;
@@ -181,6 +192,8 @@ export interface TradePanelLike extends ModalLike {
 /** The prizes taken home (the claw's plush goes straight in). */
 export interface PrizesLike {
   add(id: string): void;
+  /** Whether a prize is at home already (a second plush becomes tickets). */
+  owns(id: string): boolean;
 }
 
 /** The medals per arcade machine: what a score earns that was not earned before (paid once). */
@@ -214,10 +227,12 @@ export interface PayoutStatsLike {
 export interface ArcadeDailyLike {
   challenge(): { gameId: string; target: number; reward: number; done: boolean };
   /** A play counts towards the challenge; true when that meets it. */
-  advance(gameId: string, score: number): boolean;
+  advance(gameId: string, score: number, feats?: readonly string[]): boolean;
   claimChallenge(): boolean;
   readonly changeMachineWorks: boolean;
   claimChange(): number;
+  /** The dead change machine thumped: true the first time today (a coin falls out). */
+  thump(): boolean;
 }
 
 /** The teleport: where one can go from here, and going there. */
@@ -252,4 +267,4 @@ export interface CoreParts {
  * part is silently skipped when absent.
  */
 export interface SessionParts
-  extends CoreParts, ModalParts, HandsParts, SeatingParts, ScreenParts, TravelParts, ArcadeParts, ProgramParts, MarketCounterParts, PurchaseParts, BrowseParts, CatParts, PhotoParts, RearrangingParts, LabellingParts, NoticeDismissParts {}
+  extends CoreParts, ModalParts, HandsParts, SeatingParts, ScreenParts, TravelParts, ArcadeParts, ProgramParts, MarketCounterParts, PurchaseParts, BrowseParts, CatParts, PhotoParts, RearrangingParts, LabellingParts, NoticeDismissParts, ShelfViewingParts, ComparingParts, StackingParts {}

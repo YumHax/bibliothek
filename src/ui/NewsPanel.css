@@ -102,9 +102,40 @@
     font-style: italic;
     opacity: var(--ui-muted);
   }
-  /* Ringing a seller from the kiosk's phone: a small button after the ad's words. */
-  .news-panel__ring {
+  .news-panel__ad + .news-panel__ad { margin-top: var(--sp-1); }
+  /* Ringing a seller from the kiosk's phone: the ad's number, in bold print, boxed when pointed at. */
+  .news-panel__paper .news-panel__ring {
     margin-left: var(--sp-1);
-    font-size: var(--fs-0);
+    padding: 0 0.25rem;
+    border: 1px solid transparent;
+    border-radius: var(--ui-radius-2xs);
+    background: transparent;
+    color: inherit;
+    font: inherit;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    white-space: nowrap;
+    cursor: pointer;
   }
+  .news-panel__paper .news-panel__ring:hover,
+  .news-panel__paper .news-panel__ring:focus-visible { border-color: var(--ink); background: var(--paper-news-wash); }
+  /* What the seller said, pencilled in the margin under their ad. */
+  .news-panel__answer {
+    margin: 0.2rem 0 0.5rem var(--sp-3);
+    padding-left: var(--sp-2);
+    border-left: 2px solid var(--ink-note);
+    font-family: var(--ui-font-hand);
+    font-size: var(--fs-t1);
+    line-height: 1.2;
+    color: var(--ink-note);
+    animation: news-pencil var(--dur-settle) var(--ui-ease);
+  }
+  .news-panel__answer-head { font-weight: 700; }
+  .news-panel__answer-note { display: block; font-size: var(--fs-7); opacity: 0.85; }
+  @keyframes news-pencil {
+    from { opacity: 0; clip-path: inset(0 100% 0 0); }
+    to { opacity: 1; clip-path: inset(0 0 0 0); }
+  }
+  /* Reduced motion: the game's setting (`.reduce-motion` on <html>, settings/motion), never the media query alone. */
+  .reduce-motion .news-panel__answer { animation: none; }
 }

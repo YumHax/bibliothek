@@ -11,9 +11,11 @@ import { onLead } from '@/social/street/leads';
 import type { ErrandId } from '@/errands/errands';
 import type { Notices } from '@/notices';
 import { announceTiers } from '@/social/announce';
+import { watchOutfit } from '@/social/outfitRemarks';
 import { setPersonPageOpener } from '@/social/keepsakes';
 import { wireRivalry } from '@/social/rivalry';
 import { wireCraneGameBoy } from '@/family/craneGameBoy';
+import { wireGaspardReturn } from '@/family/gaspardReturn';
 import { startMarketSocial } from '@/social/market';
 import { everyone, shortName } from '@/social/people';
 import { clockShort } from '@/text/clock';
@@ -44,6 +46,7 @@ import { rememberedLook, rememberLook } from '@/social/lookBook';
 import { randomLook } from '@/world/people/looks';
 import { castDress } from '@/world/people/castLook';
 import { giftWrap } from '@/holidays/giftWrap';
+import { daysAgoWords } from '@/time/dayWords';
 import { GASPARD_ID, MEME_ID } from '@/social/people/family';
 import { gaspardLook, memeLook } from '@/world/grandma/familyLooks';
 
@@ -174,6 +177,8 @@ export function createSocial(services: Services, container: HTMLElement, notices
   collection.subscribe(pruneWraps);
   // Lot one, the Christmas Game Boy, asked after and bought back from him once Mémé has told it (docs/grandma.md).
   wireCraneGameBoy({ family: services.family, wallet, collection, pool: SEED_GAMES, notices, day: () => today.gameDay });
+  // Gaspard's Sunday back after his apology: the copy of Félix's he kept back from the sale, into the parcel.
+  wireGaspardReturn({ family: services.family, collection, notices });
   const contacts: PhoneContacts = {
     // Who picks up now first (asleep, at work: said in words), then the warmest.
     list: () =>
@@ -192,7 +197,9 @@ export function createSocial(services: Services, container: HTMLElement, notices
       }
       const why = callRefusal(id, today.gameDay, hour());
       if (why !== null || !session) return why ?? 'The line is dead.';
-      social.open(session(), { person: id, place: 'phone' });
+      // The lost prototype's keeper answers about the grey cart as on a visit (src/story: "ring him from the bedroom").
+      const story = services.story.onPhone(id);
+      social.open(session(), { person: id, place: 'phone', ...(story ? { opening: () => story } : {}) });
       return null;
     },
   };
@@ -200,7 +207,11 @@ export function createSocial(services: Services, container: HTMLElement, notices
   // The messages friends left when nobody picked up (docs/social.md "The phone"), played off the phone.
   const voicemail: PhoneVoicemail = {
     count: () => messages().length,
-    play: () => playMessages().map((m) => ({ id: m.person, name: shortName(m.person), when: `day ${m.day}, ${clockShort(m.hour)}`, text: m.text })),
+    play: () =>
+      playMessages().map((m) => {
+        const day = daysAgoWords(m.day, today.gameDay);
+        return { id: m.person, name: shortName(m.person), when: `${day}, ${clockShort(m.hour)}`, text: m.text };
+      }),
   };
   // Mémé: her face as she is in her flat, and her warmth from the visits, lunches, gifts and the album's memories.
   rememberLook(MEME_ID, memeLook());
@@ -208,6 +219,7 @@ export function createSocial(services: Services, container: HTMLElement, notices
   // Everyone else, until a body of theirs is built: drawn as who they are (their card's sex and age), never a
   // bearded Mme Pereira in the People book.
   for (const card of everyone()) if (!rememberedLook(card.id)) rememberLook(card.id, randomLook(card.look.seed, card.look.role, castDress(card.id)));
+  watchOutfit(() => services.perks.outfit.id);
   watchGrandma(services.grandma, { day: () => today.gameDay, title: (id) => MEMORIES.find((m) => m.id === id)?.title ?? null, scarf: () => services.perks.outfit.id === 'memeScarf' });
   watchGrandmaRituals(services.grandmaRituals, () => today.gameDay);
   // The player's news people can be told (a find, a medal, a Sunday at Mémé's: docs/social.md "Your news").

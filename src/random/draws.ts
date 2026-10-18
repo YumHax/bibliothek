@@ -51,3 +51,12 @@ export function integer(stream: Rng, min: number, max: number): number {
 export function chance(stream: Rng, p: number): boolean {
   return stream() < p;
 }
+
+/**
+ * The lines of `items` one after the other, from a place drawn on `stream` (one draw, at the start): a fixed line the
+ * player hears again and again ("Good morning!") gets its variants in turn, never the same one twice running.
+ */
+export function inTurn<T>(stream: Rng, items: readonly T[]): () => T {
+  let next = Math.floor(stream() * items.length);
+  return () => items[next++ % items.length]!;
+}

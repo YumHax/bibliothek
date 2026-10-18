@@ -17,6 +17,7 @@ import { disposeTree } from '@/world/props/Prop';
 import type { Zone } from '@/world/zone/Zone';
 import type { ZoneId } from '@/world/zoneIds';
 import { MEMORY_LOOK } from './memoryLook';
+import { MemoryStills } from './memoryStills';
 import type { MemoryCue, MemoryReel, MemoryScene, MemorySet, MemoryShot } from './memoryReel';
 import { hideDuring, setPastLight, type WeatherHold } from './pastLight';
 
@@ -102,7 +103,9 @@ const ACT_KEYS = new Set(['Space', 'Enter', 'NumpadEnter']);
  * puts aside while a memory is filmed there (`markModern`).
  */
 export class MemoryProjector {
+  /** The stills taken this session; those of earlier sessions are kept in `saved` (the album's prints after a reload). */
   private readonly stills = new Map<string, string>();
+  private readonly saved = new MemoryStills();
   private readonly modern = new Map<Zone, Set<THREE.Object3D>>();
   private albumPanel: AlbumPanel | null = null;
   private playing = 0;
@@ -114,7 +117,10 @@ export class MemoryProjector {
     return new MemoryFilm(this.deps, reel, {
       seen,
       modernIn: (zone) => this.modern.get(zone) ?? [],
-      still: (url) => this.stills.set(reel.id, url),
+      still: (url) => {
+        this.stills.set(reel.id, url);
+        this.saved.keep(reel.id, url);
+      },
       hasStill: () => this.stills.has(reel.id),
       playing: (on) => (this.playing += on ? 1 : -1),
     });
@@ -139,9 +145,9 @@ export class MemoryProjector {
     for (const obj of objects) set.add(obj);
   }
 
-  /** The still of memory `id` taken this session (a JPEG data URL), or null. */
+  /** The still of memory `id` (a JPEG data URL): taken this session, else kept from an earlier one; null if it never played here. */
   still(id: string): string | null {
-    return this.stills.get(id) ?? null;
+    return this.stills.get(id) ?? this.saved.get(id);
   }
 
   /** The album's pages, as a panel (one, made the first time). */

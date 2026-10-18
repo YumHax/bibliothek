@@ -2,7 +2,7 @@ import type { SettingsStore } from '@/settings';
 import { REBINDABLE_ACTIONS } from '@/input/actions';
 import { rebind } from '@/settings/bindings';
 import { RESERVED_KEYS } from '../controls';
-import { escapeHtml } from '../html';
+import { html, paint } from '../panel/html';
 import { keyLabel, onKeyLabelsChange, physicalKeyLabel } from '../keys';
 import { action, group } from './fields';
 
@@ -21,24 +21,30 @@ export class KeyBindingsForm {
   constructor(private readonly store: SettingsStore) {
     this.list = document.createElement('div');
     this.list.className = 'menu__bindings';
-    this.list.innerHTML = REBINDABLE_ACTIONS.map(
-      (r) => `
-        <div class="menu__field">
-          <span class="menu__field-label">${escapeHtml(r.label)}</span>
+    paint(
+      this.list,
+      html`${REBINDABLE_ACTIONS.map(
+        (r) => html`<div class="menu__field">
+          <span class="menu__field-label">${r.label}</span>
           <button type="button" class="ui-btn menu__key" data-code="${r.code}"></button>
         </div>`,
-    ).join('');
+      )}`,
+    );
     this.note = document.createElement('p');
     this.note.className = 'menu__note';
-    this.note.setAttribute('aria-live', 'polite');
-    this.element = group(this.list, this.note, action('Reset keys', () => this.reset()));
+    this.note.setAttribute('aria-live', 'polite'); // convention-ok: the Settings screen has no frame status line; the key just bound is said
+    // The controller's buttons are set (no remapping): said here, so the player does not hunt for it.
+    const pad = document.createElement('p');
+    pad.className = 'menu__note';
+    pad.textContent = 'A controller’s buttons stay as they are: the Controls screen shows them.';
+    this.element = group(this.list, this.note, pad, action('Reset keys', () => this.reset()));
 
     this.list.addEventListener('click', (e) => {
       const button = (e.target as HTMLElement).closest<HTMLButtonElement>('[data-code]');
       if (button) this.wait(button);
     });
     // Capture phase on the window: the press must reach neither the menu nor the game.
-    window.addEventListener('keydown', (e) => this.onKey(e), true);
+    window.addEventListener('keydown', (e) => this.onKey(e), true); // convention-ok: catching the next key before the menu and the game
     onKeyLabelsChange(() => this.render());
     this.render();
   }
@@ -74,8 +80,9 @@ export class KeyBindingsForm {
     const row = REBINDABLE_ACTIONS.find((r) => r.code === code);
     const displaced = REBINDABLE_ACTIONS.find((r) => r.code !== code && keyLabel(r.code) === newKey);
     this.store.update({ bindings: rebind(this.store.settings.bindings, code, e.code) });
-    const moved = `${row?.label ?? 'It'} → ${newKey}`;
-    this.note.textContent = oldKey === newKey ? `${moved} (unchanged)` : displaced ? `${moved} · ${displaced.label} moved to ${oldKey}` : moved;
+    const what = row?.label ?? 'It';
+    this.note.textContent =
+      oldKey === newKey ? `${what} stays on ${newKey}.` : displaced ? `${what} is on ${newKey} now; ${displaced.label} moved to ${oldKey}.` : `${what} is on ${newKey} now.`;
     button.focus();
   }
 

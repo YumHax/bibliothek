@@ -26,9 +26,11 @@ import { StairwellSounds } from '@/audio/flatSounds';
 import { HALLWAY_PLAN } from './hallwayPlan';
 import { Notebook } from './Notebook';
 import { CartonAtHome } from './CartonAtHome';
+import { coverPicture } from '@/covers/coverPicture';
 import { StickyNote, ToDoNote } from '@/onboarding';
 import { rugsUnderfoot } from '../build/rugsUnderfoot';
 import { useVerbOn } from '@/ui/verb';
+import { hasBench } from '../repair/furnishRepair';
 
 /** Coming home, "keys back in the bowl" is said this many times a session; the keys' jingle says it after that. */
 const KEYS_SAID_TIMES = 2;
@@ -41,7 +43,7 @@ const KEYS_SAID_TIMES = 2;
  * way home, the parcel under the console (there while bought games wait in it), the runner (or the
  * kilim, once bought) and the shop poster (once bought), then the decor.
  */
-export function furnishHallway(zone: Zone, ctx: Pick<BuildContext, 'sky' | 'listener' | 'acoustics' | 'building' | 'collection' | 'market' | 'today' | 'arcade' | 'home' | 'panels' | 'story' | 'memories' | 'grandmaHints'>): ZoneHandle {
+export function furnishHallway(zone: Zone, ctx: Pick<BuildContext, 'sky' | 'listener' | 'acoustics' | 'building' | 'collection' | 'market' | 'today' | 'arcade' | 'home' | 'panels' | 'story' | 'memories' | 'grandmaHints' | 'classifieds' | 'covers' | 'keepsakes'>): ZoneHandle {
   const { sky, listener, building, collection: { deliveries }, market: { stock: market, day: marketDay }, today, arcade: { daily: arcadeDaily }, home: { upgrades } } = ctx;
   const plan = HALLWAY_PLAN;
   const room = furnishShell(zone, sky, plan.room, { leafColor: plan.leafColor });
@@ -49,13 +51,20 @@ export function furnishHallway(zone: Zone, ctx: Pick<BuildContext, 'sky' | 'list
   const hallConsole = zone.placeAt(new HallConsole({ width: 0.8 }), plan.console);
   zone.placeAt(new CoatRack({ shoeRack: false }), plan.coatRack);
   // The first game of a console that comes home is an occasion (the shelves have none of it yet).
-  if (deliveries) zone.placeAt(new Parcel(deliveries, { firstOf: (platform) => !(ctx.collection.shelved ?? ctx.collection.games).games.some((g) => g.platform === platform && g.status !== 'wishlist') }), plan.parcel);
+  const parcel = deliveries ? zone.placeAt(new Parcel(deliveries, { firstOf: (platform) => !(ctx.collection.shelved ?? ctx.collection.games).games.some((g) => g.platform === platform && g.status !== 'wishlist'), cover: (game) => coverPicture(ctx.covers, game) }), plan.parcel) : null;
   // A sealed carton from the flea market or the saleroom, opened here one thing at a time.
-  if (ctx.market.lots) zone.placeAt(new CartonAtHome({ sealed: ctx.market.lots.sealed, tx: ctx.market.lots.tx }), plan.carton);
+  if (ctx.market.lots) zone.placeAt(new CartonAtHome({ sealed: ctx.market.lots.sealed, tx: ctx.market.lots.tx, games: () => ctx.collection.games.games, bench: () => hasBench(ctx), ...(ctx.classifieds ? { workshop: ctx.classifieds.workshop } : {}) }), plan.carton);
 
   // Going out takes the keys from the bowl; coming home (set down on the arrival spot) drops them
   // back in it, and some days a flyer or two waits on the mat (at most one delivery per in-game day).
   const keys = placeWith(zone, hallConsole, new HouseKeys(), hallConsole.bowl);
+  // Mémé's key ring keepsake: the flat's keys hang on Félix's ring from the day she gives it.
+  const keepsakes = ctx.keepsakes;
+  if (keepsakes) {
+    const ring = (): void => keys.setFelixRing(keepsakes.given.includes('keyRing'));
+    ring();
+    zone.onUnload(keepsakes.subscribe(ring));
+  }
   const doormat = zone.placeAt(new Doormat({ width: plan.doormat.width, depth: plan.doormat.depth }), plan.doormat.at);
   const mail = placeWith(zone, doormat, new MailDrop(), new THREE.Vector3(0, DOORMAT_THICKNESS, 0));
   // Notes slipped under the door (a neighbour's swap, the postman's card) land on the mat too.
@@ -79,9 +88,9 @@ export function furnishHallway(zone: Zone, ctx: Pick<BuildContext, 'sky' | 'list
         // A mail order whose round came while the player was out: the concierge took it in.
         const posted = building?.post?.deliver().length ?? 0;
         // Said the first times only (the keys' jingle says it after that), or when something waits in the hall.
-        if (++homecomings <= KEYS_SAID_TIMES || posted || mail.count) session.react('Home: keys back in the bowl');
+        if (++homecomings <= KEYS_SAID_TIMES || posted || mail.count) session.react('Home. Keys back in the bowl.');
         if (posted) session.slip({ title: 'A parcel came', detail: 'The concierge took it in: under the hall console.' });
-        if (mail.count) session.tip(`Mail on the mat: ${useVerbOn()} to read.`, { id: 'mail', until: () => mail.count === 0 });
+        if (mail.count) session.tip(`Mail on the mat: ${useVerbOn()} to read.`, { id: 'mail', head: 'The post', until: () => mail.count === 0 });
       },
     }),
     new THREE.Vector3(),
@@ -135,7 +144,8 @@ export function furnishHallway(zone: Zone, ctx: Pick<BuildContext, 'sky' | 'list
   // The building beyond the front door: the stairs, the lift, the neighbours' doors, now and then.
   const [sx, sy, sz] = plan.stairwell;
   zone.place(pointSound(ctx, new StairwellSounds(), { referenceDistance: 1.5, maxDistance: 9 }), new THREE.Vector3(sx, sy, sz));
-  return { room, catVisits: floorPointsToWorld(zone, plan.catVisits), surfaceAt: rugsUnderfoot(zone) };
+  // The emptied parcel's carton, while it stands: a cat's favourite bed.
+  return { room, catVisits: floorPointsToWorld(zone, plan.catVisits), ...(parcel ? { catPerches: [parcel] } : {}), surfaceAt: rugsUnderfoot(zone) };
 }
 
 /** World-space box of the front door's opening through the right wall (x = `x`, local). */

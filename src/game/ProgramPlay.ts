@@ -3,6 +3,14 @@ import { Arming } from '@/ui/confirmTwice';
 import { actionKeyLabel } from '@/ui/keys';
 import type { ProgramRunner, ScreenProgram } from '@/onscreen';
 import type { KeyRoute, SessionHost } from './SessionHost';
+import type { MediaDeck } from '@/world/media/MediaDeck';
+import type { PlatformId } from '@/catalog/types';
+import * as THREE from 'three';
+import { closeUp } from '@/player/closeUp';
+import { padInView } from '@/player/padInView';
+
+/** The pad picked up: the view turns to the set and draws in a little, and lets go once the player looks or walks away. */
+const PAD_FRAMING = { zoom: 1.18, leaveAngle: 0.9, leaveDistance: 1.2 };
 
 export interface ProgramParts {
   /** Runs the games that are programs on the flat's screens (`src/onscreen`); absent: they play as longplays. */
@@ -34,6 +42,10 @@ const PUT_DOWN_CONFIRM_MS = 1500;
 export class ProgramPlay implements KeyRoute {
   /** Whether the walk and the crosshair were frozen for the pad, to give them back. */
   private frozen = false;
+  /** The framing on the set while the pad is held, let go with it. */
+  private framing: (() => void) | null = null;
+  /** The console's pad lifted into view while held, put back with it. */
+  private padDown: (() => void) | null = null;
   /** Walk-away pressed once: a second press within `PUT_DOWN_CONFIRM_MS` puts the pad down (nothing to repaint, the reaction says it). */
   private readonly arming = new Arming<'putDown'>(() => {}, PUT_DOWN_CONFIRM_MS);
 
@@ -85,10 +97,21 @@ export class ProgramPlay implements KeyRoute {
     this.host.setFrozen(true);
     this.frozen = true;
     this.parts.programs?.setHolding(true);
+    const screen = this.parts.programs?.currentScreen;
+    if (screen instanceof THREE.Object3D) this.framing = closeUp(screen, PAD_FRAMING);
+    // The pad of the game's console (the TV's stand) comes up into the hands.
+    const game = this.parts.programs?.currentGame;
+    const deck = game && screen && 'deckFor' in screen ? (screen as { deckFor(p: PlatformId): MediaDeck | null }).deckFor(game.platform) : null;
+    const model = deck?.padModel?.();
+    if (model) this.padDown = padInView(model.pad, model.cable);
     this.host.prompt(`${padHint(program.hint)} · [${actionKeyLabel('walkAway')}] twice: pad down`, { id: 'program-pad', until: () => !this.holding });
   }
 
   private letGo(): void {
+    this.framing?.();
+    this.framing = null;
+    this.padDown?.();
+    this.padDown = null;
     if (this.frozen) this.host.setFrozen(false);
     this.frozen = false;
     this.arming.reset();

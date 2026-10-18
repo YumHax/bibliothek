@@ -13,6 +13,8 @@ import { PointSound } from '../acoustics/PointSound';
 import type { SoundOcclusion } from '../acoustics/SoundOcclusion';
 import type { ActivityAware } from '../zone/lifecycle';
 import { damp } from '@/math/damp';
+import { poweredAt } from '@/building/mains';
+import { playSleeveSlide } from '@/audio/furnitureSounds';
 
 /** 33⅓ rpm, in radians per second. */
 const SPIN = (33.333 / 60) * Math.PI * 2;
@@ -33,7 +35,15 @@ const LABEL_RADIUS = 0.045;
 interface TurntableFile {
   /** The record last put on (`RECORDS` id), so the next click puts on the one after it. */
   last: string | null;
+  /** Its side, and whether it was played to the end (then the next click turns it over). */
+  side: 'A' | 'B';
+  finished: boolean;
+  /** The record picked out of the pile of sleeves for next (`RecordSleeves`), or null: the one after the last. */
+  chosen: string | null;
 }
+
+/** The record player's share of the flat's noise for the neighbours (`building/flatNoise`: a longplay is 0.7). */
+const RECORD_NOISE = 0.5;
 
 interface RecordPlayerOptions {
   /** The turntable's parts in the host's frame (`Sideboard.turntable`). */
@@ -42,6 +52,8 @@ interface RecordPlayerOptions {
   owned: () => number;
   listener: THREE.Object3D;
   occlusion?: SoundOcclusion;
+  /** The sideboard's pile of sleeves (`Sideboard.sleevePile`): clicked, it picks the next record out. */
+  sleevePile?: { at: THREE.Vector3; size: number; height: number } | null;
 }
 
 /**
@@ -75,7 +87,8 @@ export class RecordPlayer extends Prop implements Interactable, Updatable, Activ
     this.name = 'RecordPlayer';
     const { centre, pivot, plinth, still } = options.turntable;
     for (const piece of still) piece.visible = false;
-    this.store = new PersistedStore<TurntableFile>({ key: KEYS.turntable, version: 1, storage: safeStorage(), defaults: () => ({ last: null }), read: readTurntable });
+    this.store = new PersistedStore<TurntableFile>({ key: KEYS.turntable, version: 1, storage: safeStorage(), defaults: () => ({ last: null, side: 'A', finished: false, chosen: null }), read: readTurntable });
+    this.sleeves = options.sleevePile ? new RecordSleeves(options.sleevePile, this) : null;
 
     // The record: black vinyl, its grooves catching the light a little, the label of whatever is on.
     this.disc.position.copy(centre);
@@ -117,13 +130,51 @@ export class RecordPlayer extends Prop implements Interactable, Updatable, Activ
     return RECORDS.slice(0, Math.max(0, Math.min(RECORDS.length, this.options.owned())));
   }
 
-  /** The record a click puts on: the one after the last played, round the shelf. */
-  private get next(): Soundtrack | null {
+  /** The record after `id` round the shelf (the first when none). */
+  private after(id: string | null): Soundtrack | null {
     const shelf = this.shelf;
     if (!shelf.length) return null;
-    const last = this.store.load().last;
-    const i = shelf.findIndex((r) => r.id === last);
+    const i = shelf.findIndex((r) => r.id === id);
     return shelf[(i + 1) % shelf.length] ?? null;
+  }
+
+  /** What a click puts on: the record picked from the sleeves, else the last one turned over once its side A ran out, else the next. */
+  private get next(): { record: Soundtrack; side: 'A' | 'B' } | null {
+    const file = this.store.load();
+    const owned = (id: string | null): Soundtrack | null => this.shelf.find((r) => r.id === id) ?? null;
+    const chosen = owned(file.chosen);
+    if (chosen) return { record: chosen, side: 'A' };
+    const last = owned(file.last);
+    if (last && file.side === 'A' && file.finished) return { record: last, side: 'B' };
+    const record = this.after(file.last);
+    return record ? { record, side: 'A' } : null;
+  }
+
+  /** The pile of sleeves beside the deck (null without one): placed with it by the builder. */
+  readonly sleeves: RecordSleeves | null;
+
+  /** The sleeves' click: the next record picked out, round the shelf; null with none owned. */
+  pickNext(): Soundtrack | null {
+    const file = this.store.load();
+    const record = this.after(file.chosen ?? this.tune.playing?.id ?? file.last);
+    if (!record) return null;
+    this.store.save({ ...file, chosen: record.id });
+    return record;
+  }
+
+  /** The record picked out for next, if any. */
+  get picked(): Soundtrack | null {
+    const chosen = this.store.load().chosen;
+    return this.shelf.find((r) => r.id === chosen) ?? null;
+  }
+
+  /** How much it adds to the flat's noise, for the neighbours: a record on, nothing off. */
+  get noise(): number {
+    return this.tune.playing ? RECORD_NOISE : 0;
+  }
+
+  get ownsRecords(): boolean {
+    return this.shelf.length > 0;
   }
 
   setHovered(hovered: boolean): void {
@@ -135,16 +186,24 @@ export class RecordPlayer extends Prop implements Interactable, Updatable, Activ
     const on = this.tune.playing;
     if (on) {
       const track = this.tune.trackNow;
-      return `Turntable · ${on.title}${track !== null ? `, ${on.tracks[track]}` : ''} · lift the needle`;
+      const names = this.tune.side === 'A' ? on.tracks : on.sideB;
+      return `Turntable · ${on.title}${track !== null ? `, ${names[track]}` : `, side ${this.tune.side}`} · lift the needle`;
     }
+    if (!poweredAt(this)) return 'Turntable · no power';
     const next = this.next;
-    return next ? `Turntable · put on ${next.title} (${next.artist})` : 'Turntable · no records yet';
+    if (!next) return 'Turntable · no records yet';
+    const { record, side } = next;
+    return side === 'B' ? `Turntable · turn ${record.title} over: side B` : `Turntable · put on ${record.title} (${record.artist})`;
   }
 
   activate(session: SessionActions): void {
     if (session.held) return;
     if (this.tune.playing) {
-      this.tune.stop();
+      this.lift(false);
+      return;
+    }
+    if (!poweredAt(this)) {
+      session.refuse('The platter will not turn: the power is off in the whole building.');
       return;
     }
     const next = this.next;
@@ -152,18 +211,26 @@ export class RecordPlayer extends Prop implements Interactable, Updatable, Activ
       session.refuse('No records yet: the household stall at the flea market has a crate of soundtracks.');
       return;
     }
-    this.store.save({ last: next.id });
+    const { record, side } = next;
+    this.store.save({ last: record.id, side, finished: false, chosen: null });
     this.labelMaterial.map?.dispose();
-    this.labelMaterial.map = paintLabel(next);
+    this.labelMaterial.map = paintLabel(record, side);
     this.labelMaterial.needsUpdate = true;
-    this.tune.play(next);
-    session.react(`${next.title}, ${next.artist}. Side A.`);
+    this.tune.play(record, side);
+    session.react(side === 'B' ? `Turned over: ${record.title}, side B.` : `${record.title}, ${record.artist}. Side A.`);
+  }
+
+  /** The needle up: by a click (`finished` false) or at the side's end (the next click turns it over). */
+  private lift(finished: boolean): void {
+    this.tune.stop();
+    if (finished) this.store.save({ ...this.store.load(), finished: true });
   }
 
   update(dt: number): void {
     const playing = this.tune.playing;
-    // The side played through: the arm comes back by itself.
-    if (playing && this.tune.elapsed > this.tune.sideSeconds) this.tune.stop();
+    // The side played through: the arm comes back by itself. A power cut stops the platter where it is.
+    if (playing && this.tune.elapsed > this.tune.sideSeconds) this.lift(true);
+    else if (playing && !poweredAt(this)) this.lift(false);
     const on = this.tune.playing !== null;
     // The platter spins up and down; the arm follows the groove inwards across the side.
     const speed = on ? SPIN : 0;
@@ -191,7 +258,7 @@ export class RecordPlayer extends Prop implements Interactable, Updatable, Activ
 }
 
 /** The centre label: the record's colour, its title round the top, the label's name under the hole (blank when none). */
-function paintLabel(record: Soundtrack | null): THREE.Texture {
+function paintLabel(record: Soundtrack | null, side: 'A' | 'B' = 'A'): THREE.Texture {
   const S = 128;
   const [canvas, ctx] = createCanvas(S, S);
   const colour = record ? `#${record.sleeve.label.toString(16).padStart(6, '0')}` : '#d9a441';
@@ -206,7 +273,7 @@ function paintLabel(record: Soundtrack | null): THREE.Texture {
     ctx.fillText(record.title.toUpperCase(), S / 2, S * 0.28, S * 0.8);
     ctx.font = '10px sans-serif';
     ctx.fillText(record.label, S / 2, S * 0.74, S * 0.8);
-    ctx.fillText('SIDE A · 33⅓', S / 2, S * 0.86, S * 0.8);
+    ctx.fillText(`SIDE ${side} · 33⅓`, S / 2, S * 0.86, S * 0.8);
   }
   // The spindle hole.
   ctx.fillStyle = '#111';
@@ -235,6 +302,44 @@ function armYawFor(pivot: THREE.Vector3, centre: THREE.Vector3, length: number, 
 
 function readTurntable(data: unknown): TurntableFile | null {
   if (typeof data !== 'object' || data === null) return null;
-  const last = (data as { last?: unknown }).last;
-  return { last: typeof last === 'string' && recordOf(last) ? last : null };
+  const { last, side, finished, chosen } = data as Partial<Record<keyof TurntableFile, unknown>>;
+  const known = (id: unknown): string | null => (typeof id === 'string' && recordOf(id) ? id : null);
+  return { last: known(last), side: side === 'B' ? 'B' : 'A', finished: finished === true, chosen: known(chosen) };
+}
+
+/**
+ * The pile of sleeves on the sideboard beside the deck: a click pulls the next record out of the pile for the turntable
+ * (`RecordPlayer.pickNext`), round the records owned; the deck puts that one on next. An invisible hitbox over the pile.
+ */
+class RecordSleeves extends Prop implements Interactable {
+  readonly hitboxes: THREE.Object3D[];
+  readonly contactShadow = false;
+
+  constructor(pile: { at: THREE.Vector3; size: number; height: number }, private readonly player: RecordPlayer) {
+    super();
+    this.name = 'RecordSleeves';
+    const hitbox = invisibleHitbox(pile.size + 0.02, pile.height + 0.04, pile.size + 0.02, { x: pile.at.x, y: pile.at.y + (pile.height + 0.04) / 2, z: pile.at.z });
+    this.add(hitbox);
+    this.hitboxes = [hitbox];
+  }
+
+  setHovered(): void {}
+
+  label(player: PlayerState): string | null {
+    if (player.held) return null;
+    if (!this.player.ownsRecords) return 'Record sleeves · empty, waiting for records';
+    const picked = this.player.picked;
+    return picked ? `Records · ${picked.title} is out, pick another` : 'Records · pick one out for the turntable';
+  }
+
+  activate(session: SessionActions): void {
+    if (session.held) return;
+    const record = this.player.pickNext();
+    if (!record) {
+      session.refuse('No records yet: the household stall at the flea market has a crate of soundtracks.');
+      return;
+    }
+    playSleeveSlide();
+    session.react(`${record.title} out of its sleeve: on next.`);
+  }
 }

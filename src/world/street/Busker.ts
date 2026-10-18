@@ -188,6 +188,7 @@ export class Busker extends THREE.Group implements Furniture, Updatable, Interac
     this.asking = 0;
     session.pay({
       price: 1,
+      title: 'A coin for the busker',
       paid: () => {
         this.recordTip();
         playCoins();
@@ -254,6 +255,7 @@ export class Busker extends THREE.Group implements Furniture, Updatable, Interac
           }
           session.pay({
             price: 1,
+            title: 'A coin for the busker',
             paid: () => {
               this.recordTip();
               playCoins();

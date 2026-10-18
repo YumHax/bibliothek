@@ -120,6 +120,8 @@ export interface ShopPlan {
     seed: number;
     lines: readonly string[];
     callOuts?: readonly string[];
+    /** A hello as the player comes in: `first` to a stranger, `met` once the clerk knows them (docs/social.md). */
+    greetings?: { first: readonly string[]; met: readonly string[] };
     /** After a sale, one of these. */
     thanks: readonly string[];
     /** What they go and do when the shop is quiet: paths start behind the counter. */

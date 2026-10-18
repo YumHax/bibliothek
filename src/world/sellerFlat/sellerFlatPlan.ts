@@ -51,6 +51,8 @@ export const SELLER_FLAT_PLAN = {
     [-0.48, 0.17], [-0.16, 0.17], [0.16, 0.17], [0.48, 0.17],
     [-0.48, -0.19], [-0.16, -0.19], [0.16, -0.19], [0.48, -0.19],
   ] as [number, number][],
+  /** "THE LOT" card of a seller who prices the whole table (`TABLE_LOT`), table-local [x, z]: between the two rows. */
+  lotCardAt: [0, -0.01] as [number, number],
   /** Behind the table, facing the player across it. */
   seller: { at: [0.9, 0.78] as [number, number], yaw: Math.PI },
   /** The box of spares by the window, the console on its lid when it is for sale. */

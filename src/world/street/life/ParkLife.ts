@@ -244,7 +244,7 @@ export class ParkLife extends THREE.Group implements Furniture, Updatable {
 
   /** A swing nobody is on. */
   private freeSwing(): PlaygroundSwing | undefined {
-    return this.options.swings?.find((s) => !this.kids.some((k) => k.ride?.kind === 'swing' && k.ride.swing === s));
+    return this.options.swings?.find((s) => !s.player && !this.kids.some((k) => k.ride?.kind === 'swing' && k.ride.swing === s));
   }
 
   /**

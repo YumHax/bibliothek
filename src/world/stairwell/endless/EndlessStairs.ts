@@ -82,6 +82,14 @@ export class EndlessStairs extends Prop implements Updatable, OccupancyAware {
       this.plates.push({ mesh, material, text: '' });
     }
     this.door = new StrangeDoor(plan.door.label, plan.door.knock);
+    const { door } = plan;
+    this.door.answering = {
+      wraps: () => this.wraps,
+      from: door.answerFrom,
+      line: door.answer,
+      after: door.after,
+      answered: () => this.options.notices?.read({ title: door.card.title, text: door.card.text, from: door.card.from, look: 'postcard', place: 'The landing, years ago' }),
+    };
   }
 
   /** Where the nameless door stands (zone-local), and its yaw: on the lower landing's north wall, facing the landing. */

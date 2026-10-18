@@ -129,6 +129,8 @@ export const GRANDMA_FLAT_PLAN = {
         { at: [0.05, -0.24], toward: 'z', side: -1 },
         { at: [0.52, -0.02], toward: 'x', side: 1 },
       ],
+      /** Gaspard's, at the door end (his chair, `gaspardPlan`), clear of the bread: laid when he stays to lunch. */
+      guest: { at: [-0.55, 0.06], toward: 'x', side: -1 },
       pot: [0.2, 0.2],
       bread: [-0.45, -0.25],
       fruit: [0.25, 0.1],

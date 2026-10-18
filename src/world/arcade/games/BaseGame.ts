@@ -58,6 +58,7 @@ export abstract class BaseGame implements ArcadeGame {
   private bestBanner = 0;
   private readonly sounds = new SoundQueue();
   private rng: () => number = liveRandom;
+  private readonly featsDone = new Set<string>();
 
   /**
    * `timeLimit` in seconds, or null for a play that only ends by the game's own rules; `comboMax`
@@ -82,6 +83,7 @@ export abstract class BaseGame implements ArcadeGame {
   reset(run: RunContext): void {
     this.score = 0;
     this.over = false;
+    this.featsDone.clear();
     this.best = run.best;
     this.scoreGoals = [...(run.goals ?? [])].filter((g) => g.score > 0).sort((a, b) => a.score - b.score);
     this.goalsPassed = 0;
@@ -206,8 +208,19 @@ export abstract class BaseGame implements ArcadeGame {
     }
   }
 
-  /** A bare bonus: fixed points (no combo), announced with a caption. */
+  /** The feats pulled off this play (every bonus's caption, and the game's own `feat`s). */
+  get feats(): readonly string[] {
+    return [...this.featsDone];
+  }
+
+  /** A feat pulled off this play, for a feat challenge (`economy/ArcadeDaily`): its caption, as a bonus names it. */
+  protected feat(caption: string): void {
+    this.featsDone.add(caption);
+  }
+
+  /** A bare bonus: fixed points (no combo), announced with a caption (a feat too). */
   protected bonus(points: number, caption: string, x = SCREEN_W / 2, y = SCREEN_H / 2): void {
+    this.feat(caption);
     this.addFlat(points);
     this.sound('score');
     this.fx.pop(`${caption} +${points}`, x, y, '#ffe066', 10);

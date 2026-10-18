@@ -18,8 +18,9 @@ export interface ShopCatOptions {
   card?: string[];
 }
 
-/** How deep the cat breathes, and how fast. */
+/** How deep the cat breathes, and how fast; how long a stroke stirs her (s). */
 const BREATH = { depth: 0.035, rate: 1.6 };
+const STIR_SECONDS = 4;
 
 /**
  * The shop's own cat, asleep in the window: curled nose to tail in a round bed (`cat/CatBed`), a simple low-poly
@@ -30,6 +31,8 @@ const BREATH = { depth: 0.035, rate: 1.6 };
 export class ShopCat extends Prop implements Updatable {
   private readonly body: THREE.Group;
   private time = random() * 10;
+  /** 1 just stroked, easing back to 0 (asleep again). */
+  private stirring = 0;
 
   constructor(options: ShopCatOptions = {}) {
     super();
@@ -97,10 +100,17 @@ export class ShopCat extends Prop implements Updatable {
     if (options.card?.length) this.add(tentCard(options.card));
   }
 
+  /** Stroked (`shop/shopTouches`): a long stretch of a breath and a stir in the bed, then back to sleep. */
+  stir(): void {
+    this.stirring = 1;
+  }
+
   update(dt: number): void {
     this.time += dt;
-    const breath = 1 + BREATH.depth * Math.sin(this.time * BREATH.rate);
+    this.stirring = Math.max(0, this.stirring - dt / STIR_SECONDS);
+    const breath = 1 + BREATH.depth * (1 + this.stirring * 2) * Math.sin(this.time * BREATH.rate * (1 - this.stirring * 0.4));
     this.body.scale.set(1, breath, 1 + (breath - 1) * 0.4);
+    this.body.rotation.y = 0.5 + Math.sin(this.stirring * Math.PI) * 0.12;
   }
 }
 

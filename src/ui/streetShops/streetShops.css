@@ -1,39 +1,41 @@
-/* Front Street's counters (`ui/streetShops/`): the bookshops', the kiosk's and the pop-up's counter, THE LOCAL's quiz and darts. */
+/* Front Street's counters (`ui/streetShops/`): the bookshops', the kiosk's and the pop-up's counter. THE LOCAL's quiz and darts have their own sheets (pubQuiz.css, darts.css). */
 @layer tokens, base, components, panels;
 @layer panels {
-  .street-counter, .street-quiz, .street-darts {
-    --sc-chalk: #2b3a33;
-    --sc-chalk-ink: #f2ead6;
-  }
-  .street-counter .ui-panel__card { width: min(var(--card-w-lg), 100%); max-height: 100%; overflow-y: auto; }
-  /* The shopkeeper's words: a fixed height, so a longer line never pushes the rows. */
-  .street-counter__says { min-height: 3.2em; margin: 0 0 var(--sp-2); font-family: var(--ui-font-hand); font-size: var(--fs-6); line-height: 1.35; }
-  .street-counter__wallet { margin: 0 0 var(--sp-3); color: var(--ui-text-dim); font-size: var(--fs-3); }
-  .street-counter__section h3 { margin: var(--sp-3) 0 var(--sp-2); font-size: var(--fs-4); letter-spacing: 0.06em; text-transform: uppercase; color: var(--ui-text-dim); }
+  .street-counter .ui-panel__card { --card-w: var(--card-w-lg); }
+  /* The coins in hand: a small chip, right, over the shelves (the market sheets' wallet line, on the counter's paper). */
+  .street-counter__purse { display: flex; align-items: center; justify-content: flex-end; gap: var(--sp-1); margin: 0 0 var(--sp-1); color: var(--ui-text-dim); font-size: var(--fs-3); font-variant-numeric: tabular-nums; }
+  .street-counter__purse .ui-coin { width: 0.9em; height: 0.9em; }
+  .street-counter__section { padding-top: var(--sp-3); margin-top: var(--sp-3); border-top: 1px solid var(--ui-border); }
+  .street-counter__section h3 { margin: 0 0 var(--sp-2); font-size: var(--fs-3); letter-spacing: 0.08em; text-transform: uppercase; color: var(--ui-text-dim); }
   .street-counter__rows { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: var(--sp-2); }
-  .street-counter__row { display: flex; align-items: center; gap: var(--sp-2); }
+  .street-counter__row { display: flex; align-items: center; gap: var(--sp-3); }
   .street-counter__cover { width: 2.4em; height: 3.2em; object-fit: cover; border-radius: var(--ui-radius-xs); flex: none; }
   .street-counter__what { display: flex; flex-direction: column; flex: 1; min-width: 0; }
   .street-counter__what small { color: var(--ui-text-dim); font-size: var(--fs-3); }
-  .street-counter__empty { margin: 0; color: var(--ui-text-dim); font-style: italic; }
+  /* The buttons one width, so the prices stand in a column whatever the verb. */
+  .street-counter__row .ui-btn { min-width: 7.5em; }
+  .street-counter__empty { color: var(--ui-text-dim); }
+}
 
-  /* The quiz: the question chalked up on the pub's board. */
-  .street-quiz .ui-panel__card { width: min(var(--card-w-md), 100%); }
-  .street-quiz .ui-panel__body { background: var(--sc-chalk); color: var(--sc-chalk-ink); border-radius: var(--ui-radius-sm); padding: var(--sp-3); }
-  .street-quiz__count { margin: 0; font-size: var(--fs-4); letter-spacing: 0.08em; text-transform: uppercase; opacity: 0.8; }
-  .street-quiz__question { margin: var(--sp-2) 0 var(--sp-3); font-family: var(--ui-font-hand); font-size: var(--fs-7); min-height: 2.6em; }
-  .street-quiz__answers { display: grid; grid-template-columns: 1fr 1fr; gap: var(--sp-2); }
-  .street-quiz__answer { min-height: 2.8em; text-align: left; }
-  .street-quiz__answer--right { border-color: var(--ui-success); background: var(--ui-success-soft); }
-  .street-quiz__answer--wrong { border-color: var(--ui-danger); background: var(--ui-danger-soft); }
-  .street-quiz__answer:disabled { opacity: 1; }
-  .street-quiz__said { min-height: 3.2em; margin: var(--sp-3) 0 0; font-family: var(--ui-font-hand); font-size: var(--fs-6); line-height: 1.35; }
-
-  /* The darts: the board, the chalkboard's best over it, each dart called under it. */
-  .street-darts { padding: var(--sp-4); }
-  .street-darts__card { width: min(var(--card-w-sm), 100%); }
-  .street-darts__chalk { margin: 0 0 var(--sp-2); padding: var(--sp-1) var(--sp-2); border-radius: var(--ui-radius-xs); background: var(--sc-chalk); color: var(--sc-chalk-ink); font-family: var(--ui-font-hand); font-size: var(--fs-5); text-align: center; }
-  .street-darts__board { display: grid; place-items: center; }
-  .street-darts__canvas { display: block; width: 100%; max-width: 20rem; height: auto; aspect-ratio: 1; cursor: crosshair; touch-action: none; }
-  .street-darts__call { min-height: 2.6em; margin: var(--sp-2) 0 0; font-family: var(--ui-font-hand); font-size: var(--fs-6); text-align: center; }
+/*
+ * The counter's keeper (`panel/speaker`: face, name tag, comic balloon) and each shop's own paper on the card
+ * (`data-shop`): CORNER BOOKS' cream, the comics shop's bright newsprint, the kiosk's grey, the pop-up's arcade night.
+ */
+@layer panels {
+  .street-counter__keeper { margin-bottom: var(--sp-1); }
+  .street-counter__keeper .ui-speaker__name { color: var(--counter-ink, var(--ui-text)); }
+  .street-counter[data-shop] .ui-panel__card { color: var(--counter-ink); background: var(--counter-paper); --ui-text-dim: var(--counter-ink-soft); --ui-border: var(--counter-rule); --ui-accent: var(--counter-accent); }
+  .street-counter[data-shop='bookshop'] { --counter-paper: #f3ead6; --counter-ink: #2a2118; --counter-ink-soft: #5e5141; --counter-rule: rgba(42, 33, 24, 0.22); --counter-accent: #7a3b22; --counter-balloon: #fffaf0; }
+  .street-counter[data-shop='comics'] { --counter-paper: #fdf6d8; --counter-ink: #1b1d2a; --counter-ink-soft: #4b4f66; --counter-rule: rgba(27, 29, 42, 0.25); --counter-accent: #c4271f; --counter-balloon: #ffffff; }
+  .street-counter[data-shop='kiosk'] { --counter-paper: #e9e8e2; --counter-ink: #1e2422; --counter-ink-soft: #4f5753; --counter-rule: rgba(30, 36, 34, 0.22); --counter-accent: #2f5a44; --counter-balloon: #f8f8f4; }
+  .street-counter[data-shop='popup'] { --counter-paper: #17142a; --counter-ink: #f3eefe; --counter-ink-soft: #b9b0d6; --counter-rule: rgba(243, 238, 254, 0.2); --counter-accent: #ff4fa8; --counter-balloon: #241f3d; }
+  .street-counter[data-shop='popup'] .ui-panel__header h2 { font-family: var(--ui-font-display); letter-spacing: 0.06em; color: var(--counter-accent); }
+  .street-counter[data-shop='bookshop'] .ui-panel__header h2, .street-counter[data-shop='kiosk'] .ui-panel__header h2 { font-family: var(--ui-font-print); }
+  /* The comics shop's masthead: a speech-burst title in the comic hand, red on the newsprint. */
+  .street-counter[data-shop='comics'] .ui-panel__header h2 { font-family: var(--ui-font-comic); font-size: var(--fs-t3); letter-spacing: 0.06em; color: var(--counter-accent); text-shadow: 2px 2px 0 var(--counter-ink); }
+  /* The kit's dark buttons on a light paper: the paper's ink, outlined, so they read as the shop's own. */
+  .street-counter[data-shop]:not([data-shop='popup']) .street-counter__row .ui-btn { background: var(--counter-balloon); color: var(--counter-ink); border-color: var(--counter-rule); }
+  .street-counter[data-shop]:not([data-shop='popup']) .street-counter__row .ui-btn:hover:not([aria-disabled='true']),
+  .street-counter[data-shop]:not([data-shop='popup']) .street-counter__row .ui-btn:focus-visible { border-color: var(--counter-accent); color: var(--counter-accent); }
+  .street-counter[data-shop]:not([data-shop='popup']) .street-counter__row .ui-btn--armed { background: var(--counter-accent); color: var(--counter-balloon); border-color: var(--counter-accent); }
 }

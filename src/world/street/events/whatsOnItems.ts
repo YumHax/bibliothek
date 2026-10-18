@@ -12,7 +12,7 @@ import { STREET_PLACES } from '../streetPlacesPlan';
 import type { ArcadeDaily } from '@/economy/ArcadeDaily';
 import type { ArcadeTournament } from '@/economy/ArcadeTournament';
 import { arcadeTitle } from '../arcadeTitles';
-import { formatCount, formatNumber } from '@/text/count';
+import { formatCount } from '@/text/count';
 import { capitalise } from '@/text/strings';
 import { weekdayOf } from '@/time/wakefulness';
 
@@ -56,7 +56,7 @@ export function whatsOn({ day, daily, tournament, jackpot }: WhatsOnSources): Wh
   });
   if (daily) {
     const c = daily.challenge();
-    const ask = c.kind === 'twice' ? `score ${formatNumber(c.target)} twice` : c.kind === 'total' ? `${formatNumber(c.target)} in all today` : `score ${formatNumber(c.target)}`;
+    const ask = c.ask;
     items.push({ title: 'ARCADE CHALLENGE', line: c.done ? `${arcadeTitle(c.gameId)}: beaten today. Back tomorrow for the next.` : `${arcadeTitle(c.gameId)}: ${ask} for ${formatCount(c.reward, 'bonus ticket')}.`, today: !c.done });
   }
   if (tournament) {

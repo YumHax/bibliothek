@@ -27,8 +27,23 @@ How handled a box looks is painted into its closed atlas (`BoxAtlas.paintWear`):
 and its corners scuff with its state (none sealed, a little complete, more without its manual, most worn), a worn
 one gets a crease or two; a plastic case's sleeve gets a thin light rim (the case's rounded edge). A third of the
 boxes, by the game, have a film of dust on their tops (`dust`, seen on a high shelf). The shelf's atlas keeps the
-front at 512 px; a box in hand asks the art proxy for its front at 1024 (`?size=large`, `server/artCache`, fronts
-only, stored apart) with its back and scans (`BoxDetails.front`).
+front at 512 px (about 1.5 MB of GPU memory a box, mipmaps included; a spine's column is as tall as the front, already
+more pixels than a spine covers on screen from the bookcase view). A generated spine's title fills the spine's
+thickness and is condensed to fit its length (down to 62 % of the face's width) before it is set smaller
+(`SpineTexture`), as the real logos are: the letters' height is what reads along a row.
+
+The box in hand is read held up to the eye, a face filling the view: it asks the proxies for its front, scanned back,
+cartridge and disc at `?size=xl` (2048 px, the cartridge and disc 1024: `server/artCache` fronts, `server/scanCache`,
+stored apart; LaunchBox's back chosen from 2100 px up, `server/launchbox`), and draws its generated back at 2048 px on its
+long side, its booklet cover, label and disc print at 1024 (`layoutCanvas`: the layout keeps its units, the pixels
+follow). All of it is the box in hand's only: put down, the textures leave the GPU and the large images are let go
+(`GameBox.dropDetails`, `BoxArtLoader.forgetDetails`), asked again (from the browser's cache) the next time; one box's
+worth at most, some 40 MB of GPU memory with its mipmaps at worst. The baked files (`public/boxart`) stay at 1024.
+
+Examined (`Inspector.examining`), the box reads as if held under a lamp (`world/box/ReadingLight`): its printed faces
+light their own print, warm, by 1.4 x the scene luminance the eye reads as middle grey (`graphics/framing` `frameKey`:
+the same soft lift at night as at noon), and the room round it goes into shade (docs/graphics.md "The frame"). Nothing
+is added to the scene.
 
 ## Media (mm)
 
@@ -69,8 +84,84 @@ Sizes checked (all fit their boxes, entry poses clear the stand's shelf above, 1
 A Japanese copy is refused by a console, a direct-play TV and the projector until its converter is bought
 (`regionLock`, set by the room builders: docs/economy.md "Copies"). A copy's variant shows on its box
 (`box/copyLook`): a sealed one under its shrink-wrap (its own clearcoat turned up, no new map or program; `unseal`
-takes it off), a crushed one with a corner pushed in (the closed box's and the shell's own geometry, dented at the
-closed pose before the manual rides on the lid).
+takes it off), a crushed one with a top front corner pushed in (the closed box's and the shell's own geometry, dented
+alike at the closed pose before the manual rides on the lid, and never further than the cartridge and booklet inside
+allow: `dentRoom`, or the media would show through the card once open).
+
+## Longplays and the box in hand
+
+- A longplay plays on from where its game was last switched off (`game/longplayPlaces`, `KEYS.longplayPlaces`: the
+  video and the second, per game; a fresh one, a different video or a spot near an edge starts at a random point past
+  the intro). The remote (`VideoScreen.remote`, `VideoSurface`'s `LongplayRemote`, routed by `game/ScreenRemote`):
+  Space holds and runs it on, the arrows a minute back or on, Backspace another video of the game (the search is told
+  not to offer that one again); its keys show on the prompt line a few seconds when one comes on and after a press.
+- The projector off, empty hands: on again with the game it last showed, as the TV does with the last one put in.
+- The card beside the box in hand (`ui/GamePanel`) is an index card: the console, year and region on one line, the
+  copy's state as stamps, the facts, what was found in it, the receipt in pen with the day in words
+  (`time/dayWords`), a few lines of blurb (R turns the box over: the whole blurb, `setBackShown`); the press's clipping
+  has its place kept from the start, so nothing above moves when it lands.
+- The box open: V takes its booklet and papers out to read (below, "The papers in the box"). Handling sounds follow the case: a plastic case clacks and snaps, a card box
+  pats and its flap knocks softly (`playBoxClack`'s `cardboard`); a seal torn crackles (`playWrapTear`) and the film
+  swings off the front and fades, a crumpled scrap of it left in the box (`box/FilmPeel`, shown with the contents).
+- The box open: T lifts its cartridge (or disc) out towards the eye, tipped to show its label, and brings the box close
+  (`GameBox.liftMedia`, `Hands`); again, back in its tray. The way out (`liftOffset`) goes on out of the opening until
+  clear of the box, then forward, then up and tipped: never through a wall. Shut, or the media in a console, a word says so.
+  Lifted, the mouse turns it rather than the box (`Carriable.turnLifted`, a trackball about the view's axes, applied in
+  the box's frame on top of its lifted pose), the arrows a quarter at a time and Backspace its label back to the eye
+  (`squareLifted`); it squares up again on its way back in. A cartridge's back carries a sticker in the widest band its
+  grip ribs leave (`CartridgeModel.setBackPrint`, `covers/generated/CartridgeBack`: where it was made, the product
+  code of `catalog/productCode`, a serial, the patents; drawn with the box's details, freed with them); a disc shows its
+  dark read side.
+- Closer to read: the wheel, the right trigger held at home (`Inspector.holdClose`), two fingers pinched (`TouchControls.onPinch`,
+  `Inspector.pinch`: a full spread goes from the hand into the loupe, as the trigger's full travel does). On a controller
+  the d-pad turns the box looked at a face at a time (the walk lets go of it meanwhile, `GamepadInput`'s `dpadWalks`).
+- A second box beside it to compare (C), more boxes in the arms (Y), held while seated: docs/furnishing.md.
+  One `closeness` runs 0 (the hand, low left, the right button held turns it, tipped no further than 80°) → 1 *looked
+  at* (`Inspector.examining`, `onExamineChange`, `examine(on)`; the box in the middle of the view, the whole of it in
+  view, never nearer than 26 cm) → 2 the loupe (`magnifying`, `loupe`). The first wheel notch from the hand goes straight
+  to looked at and the rest of that roll stops there (one roll is the events less than 250 ms apart); back out, a roll
+  stops there too before the hand. Looked at, the view holds still (`onLookEnabledChange`, as for the right button) and
+  plain mouse movement turns the box as a trackball (about the view's vertical and horizontal, never inverted); the
+  stick and a finger feed the same deltas (`SyntheticMouse`), so the pad and the touchscreen need nothing of their own.
+  ←/→ turn it a quarter about the vertical, ↑/↓ its top or bottom to the eye, R the half turn, Backspace its front
+  upright (`turnFace`, `squareUp`; eased, these keys are the box's only while it is looked at, the longplay remote's
+  otherwise). Left still 0.25 s within 10° of a face square to the eye, it settles onto it (one of the 24 square
+  turns). Past 1.4 the face squared to the eye fills the view (the near plane permitting), then the camera's own zoom
+  magnifies it up to 3× (restored exactly when it lets go); the mouse then looks across the face as far as its edges
+  instead of turning it. A step (a movement key) puts it back low in the hand and walks on; E puts it back on its shelf.
+  The card shows the whole blurb while the back faces the eye (`facingBack`). The prompt line follows: closer, open,
+  put back in the hand; closer, the faces, put back looked at (`Hands.keysLine`); a right-click tap shelves nothing then.
+- A cart that would not boot leaves snow and a word ("a blow on the contacts"), never a dark set (`ProgramRunner`'s
+  `failed`). The pad picked up, the view turns to the set and draws in a little (`player/closeUp`), letting go when
+  the player looks away; the console's own pad (`consoleStyles` names it, `Console.padModel`, the TV's `deckFor`) rises
+  off the stand into the lower view, its cable hidden, until the pad goes down (`player/padInView`).
+
+## The papers in the box (`world/box/papers/`)
+
+- What a box holds besides its media (`paperContents.papersOf`, drawn from the game id: the same copy, the same
+  papers): the booklet (8 pages: cover, the health notice, getting started, the controls with the pad drawn, the story,
+  hints, the lined notes page with a previous owner's pencil when the copy has some, the back cover with its code and
+  barcode) and, for a copy that kept it, maybe a registration card (filled in by a child's hand one time in three), a
+  leaflet (the publisher's other games of the platform from `SEED_GAMES`, adverts) and a folded poster or map. A copy
+  without its booklet (`noManual`, `worn`) lost the lot. In the box they stand behind the booklet as thin slabs
+  (`paperStack`, taking at most 40 % of the booklet's room, which is that much thinner), their tops showing over it in
+  a card box that opens at the top.
+- V with the box open: the booklet flies from where it lies to the middle of the view (`PaperReader`, eased between
+  the booklet's pose in the box and the reading pose each frame), opens at its first spread; the box goes down low in
+  the hand (`Inspector.setAside`: the view held still, the mouse, the wheel, the trigger and the pinch handed to the
+  reader as an `AsideReader`; `examining` stays true, so the lamp and the dim of `box/ReadingLight` follow the paper).
+  ←/→ turn a page (a card or a poster turned over), ↑/↓ the other papers (the one held drops out of the view and the
+  next comes up), a click turns on (the right button back; neither goes on to the room), a quick sweep of the mouse,
+  the stick or a finger turns too; the wheel, the trigger or a pinch is the loupe (the camera's zoom up to 3.5x, the
+  mouse looking across the page, clamped at its edges). V or E puts it back in the box (shut on the way), a step puts
+  it back and walks on, O shuts the box on it; the box put back, sold or rebuilt takes it back at once (`closeNow`).
+- The model (`PaperModel`): a bound paper lies open at a spread, each side the thickness of its leaves, a page turning
+  over the spine as a strip of 20 columns that curls behind its free edge; a sheet turns over about its middle, a
+  folded one opens out across then down. Every face keeps a map (a white pixel tinted by the stock until its page is
+  drawn: no second program), with the print glow the reading lamp lights. Pages (`pageArt`) are canvases 1536 px on
+  their long side (a sheet 2048), drawn one a frame as they come into reach (the spread shown and the next either way),
+  freed when they go out of it and when the paper goes back; the cover is the booklet's own (`ManualCover`).
+- Sounds (`audio/paperSounds`): a page's swish and soft landing, a sheet's flick, a paper sliding out or back in.
 
 ## Programs on the screen (`src/onscreen/`)
 
@@ -88,7 +179,12 @@ the `ProgramRunner` (made in `bootstrap/session`, ticked by the engine, `Session
   (the armchair, or standing: the walk and the crosshair frozen, `setFrozen`); every key is the program's (the arcade stick's keys are the d-pad, A
   `K` / Space, B `J` / Shift, Start Enter, Select `H` / Backspace, `input/actions` padA..padSelect; a controller's d-pad and
   stick, bottom button B, right button A, Y Start, LB Select, since its own Start pauses the room and X walks away);
-  walk-away twice puts the pad down and switches it off; the pointer unlocked holds it still, a dormant zone too;
+  walk-away twice puts the pad down and switches it off; the pointer unlocked holds it still (PAUSED blinks over the
+  frozen frame, CLICK TO PLAY ON under it, the cabinets' look), a dormant zone too; on a touchscreen the left half's
+  stick is the d-pad and A, B, Start, Select come on the glass bottom right (`TouchControls`, while
+  `ProgramRunner.isHolding`; at an arcade cabinet, a Fire button);
+- while it loads (the emulator's chunk, the ROM) the set warms up instead of staying black: the beam opening, then the
+  title and LOADING on a faint raster (`onscreen/programOsd`);
 - pad two is a second connected controller (`ProgramRunner.readPad(1)`); a CPU opponent is the game's own
   (`Duel.setOpponent(name, skill)`);
 - an arcade game on the TV (PADDLE WARS, STARFALL, the home cabinet's games) runs through `onscreen/ArcadeProgram`: the
@@ -105,7 +201,14 @@ to each (`<file>.LICENSE.txt`: author, release, source, licence). One is on the 
 (`HOMEBREW` in pricing: odds, a flat price; `economy/MarketStock`); `?debug` owns them all. Put in the NES (or played
 on a set without a console) it boots instead of a longplay (`registerHomebrew`, from `bootstrap/session`). Putting the
 pad down keeps where the cart was (`NesProgram`'s `resumeAt`, jsnes `toJSON` / `fromJSON`, for the page's life: a whole
-machine state is too big for the save), and picking it up again carries on from there. The pad's controls line names
+machine state is too big for the save), and picking it up again carries on from there. A cart with a battery (its
+header's flag: Nova) keeps its 8 KB of save RAM in the save file (`emulator/nesBattery`, `KEYS.nesBattery`), written
+when the pad goes down after the cart wrote to it, put back after the ROM loads; once the game has run a few seconds, a
+burst of writes followed by a quiet quarter second shows "SAVED" in the picture's corner (`programOsd.paintSavedMark`). Homebrew and bootleg boxes have a front
+of their own when no scan exists (`covers/PlaceholderCover`: plain card, a pixel motif from the name, the title on label
+tape, the maker, a stamp), and a homebrew game knows its players (`Game.players`, on the back). The emulator's sound
+still goes through a `ScriptProcessorNode`: an `AudioWorklet` needs its own module, and a secure context (https or
+localhost) the self-hosted server on plain http does not give, so the old node would stay as the fallback anyway. The pad's controls line names
 the keys next to the buttons ("A [K] jumps", `ProgramPlay`'s `padHint`, rebound keys included).
 
 Credits (each checked against its repository's licence, 2026-10-01):

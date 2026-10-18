@@ -1,4 +1,6 @@
 import { lastDevice } from '@/input/lastDevice';
+import { padMarkup, touchMarkup, type ActionId } from '@/input/actions';
+import { actionKeyLabel } from './keys';
 import { capitalise } from '@/text/strings';
 
 /**
@@ -47,4 +49,15 @@ export function grabCap(): string {
 /** `useVerbOn(what)` at the start of a sentence: "Click a machine", "Press A on a machine", "Tap a machine". */
 export function useVerbOnCap(what = 'it'): string {
   return capitalise(useVerbOn(what));
+}
+
+/**
+ * The cap for action `id` with the device in hand, to go inside `[...]`: the controller button that presses its key on
+ * a pad (`B`, `X`), the on-screen button on a touchscreen, else (and when neither has one) the keyboard key. Read when
+ * the line is written: a prompt built by a function (`PromptLine`) writes it again when the device changes.
+ */
+export function actionCap(id: ActionId): string {
+  const device = lastDevice();
+  const markup = device === 'gamepad' ? padMarkup(id) : device === 'touch' ? touchMarkup(id) : undefined;
+  return markup ? markup.slice(1, -1) : actionKeyLabel(id);
 }

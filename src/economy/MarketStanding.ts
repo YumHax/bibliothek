@@ -2,6 +2,7 @@ import type { PlatformId } from '@/catalog/types';
 import { PLATFORMS } from '@/catalog/platforms';
 import { KEYS, PersistedStore, safeStorage } from '@/persistence';
 import { LOYALTY, REPUTATION } from './pricing';
+import { stallLoyalty } from '@/social/market';
 
 const STANDING_STORAGE_KEY = KEYS.standing;
 
@@ -89,10 +90,13 @@ export class MarketStanding {
     return this.state.stallBuys[platform] ?? 0;
   }
 
-  /** 0 (a stranger) to 3 (best customer) at `platform`'s stall. */
+  /**
+   * 0 (a stranger) to 3 (best customer) at `platform`'s stall: one ladder for the market's rules and for what the
+   * player reads, the warmer of the copies bought there and the stallholder's tier as a person (`social/market`).
+   */
   loyalty(platform: PlatformId): number {
     const buys = this.buysAt(platform);
-    return LOYALTY.tiers.filter((at) => buys >= at).length;
+    return stallLoyalty(platform, LOYALTY.tiers.filter((at) => buys >= at).length);
   }
 
   /** The name of the player's standing at a stall ('' for a stranger). */

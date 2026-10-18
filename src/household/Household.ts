@@ -139,6 +139,28 @@ export class Household {
     if (this.state.soaked) this.commit({ soaked: false });
   }
 
+  // --- the tea -------------------------------------------------------------------------------
+
+  /** When the kettle last boiled (`performance.now()`), and whether a friend has had the cup since. Not saved: a pot goes cold. */
+  private teaAt = -Infinity;
+  private teaPoured = true;
+
+  /** The kettle boiled: a pot of tea, hot for a while. */
+  brewTea(): void {
+    this.teaAt = performance.now();
+    this.teaPoured = false;
+  }
+
+  /** A pot of tea still hot, nobody served yet. */
+  get teaReady(): boolean {
+    return !this.teaPoured && performance.now() - this.teaAt < HOUSEHOLD.tea.freshMs;
+  }
+
+  /** A friend had the cup. */
+  pourTea(): void {
+    this.teaPoured = true;
+  }
+
   // --- the cake ------------------------------------------------------------------------------
 
   /** A cake on the kitchen table, not finished and not stale. */

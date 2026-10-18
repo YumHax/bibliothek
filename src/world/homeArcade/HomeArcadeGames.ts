@@ -14,6 +14,8 @@ const MENU_ID = 'home-menu';
 export const HOME_TITLE = 'ARCADE 7-IN-1';
 /** How long a demo hesitates on the menu before it picks (s). */
 const DEMO_PICK_S = 1.6;
+/** Left on the menu this long (s), the board starts calling for a choice. */
+const IDLE_CALL_S = 4;
 
 /**
  * A multi-game board for a home cabinet ("7-IN-1"): each play starts on a menu of the hall's own games (up / down
@@ -33,6 +35,8 @@ export class HomeArcadeGames implements ArcadeGame {
   private run: RunContext = { best: 0, pointsPerTicket: 0 };
   private readonly keys = new KeyEdges({ fire: true });
   private menuClock = 0;
+  /** Time on the menu since the last move (s): long enough, the board calls for a choice. */
+  private idleClock = 0;
   private readonly sounds = new SoundQueue();
   private opponent: { name: string; skill: number } = { name: 'CPU', skill: 0.7 };
 
@@ -63,6 +67,7 @@ export class HomeArcadeGames implements ArcadeGame {
     this.run = run;
     this.current = null;
     this.menuClock = 0;
+    this.idleClock = 0;
     this.keys.reset();
     this.sounds.clear();
   }
@@ -70,6 +75,7 @@ export class HomeArcadeGames implements ArcadeGame {
   update(dt: number, controls: ArcadeControls): void {
     if (this.current) return this.current.update(dt, controls);
     this.menuClock += dt;
+    this.idleClock += dt;
     const n = this.games.length;
     if (this.keys.pressed(controls, 'up')) this.move(-1, n);
     if (this.keys.pressed(controls, 'down')) this.move(1, n);
@@ -90,19 +96,26 @@ export class HomeArcadeGames implements ArcadeGame {
     drawText(ctx, 'PICK A GAME', SCREEN_W / 2, 40, 7, '#9ad6ff');
     const top = 58;
     const row = 21;
+    // The cursor blinks like a real board's; the row's band breathes a little (the clock is the menu's: replay-exact).
+    const blink = Math.floor(this.menuClock * 3) % 2 === 0;
+    const breathe = 0.12 + 0.06 * Math.sin(this.menuClock * 4);
     this.games.forEach((game, i) => {
       const y = top + i * row;
       const on = i === this.choice;
       if (on) {
-        ctx.fillStyle = 'rgba(255,210,58,0.16)';
+        ctx.fillStyle = `rgba(255,210,58,${breathe.toFixed(3)})`;
         ctx.fillRect(18, y - 9, SCREEN_W - 36, 18);
       }
-      drawText(ctx, `${on ? '>' : ' '} ${game.title}`, 26, y, 9, on ? '#ffd23a' : '#c9c4ff', 'left');
+      drawText(ctx, `${on && blink ? '>' : ' '} ${game.title}`, 26, y, 9, on ? '#ffd23a' : '#c9c4ff', 'left');
+      // A game for two says so beside its name.
+      if (game.setOpponent) drawText(ctx, '2P', SCREEN_W - 74, y, 7, on ? '#ff8a80' : '#8a5a60', 'right');
       const best = this.bestOf(game.id);
       drawText(ctx, best > 0 ? formatNumber(best) : '-', SCREEN_W - 26, y, 8, on ? '#ffffff' : '#7a7a90', 'right');
     });
     const picked = this.games[this.choice];
-    if (picked) drawText(ctx, picked.summary, SCREEN_W / 2, SCREEN_H - 14, 6, '#7a7a90');
+    // Left on the menu a while: the board calls for a choice, between the picked game's line.
+    if (this.idleClock > IDLE_CALL_S && Math.floor(this.menuClock * 1.5) % 2 === 0) drawText(ctx, 'UP / DOWN · FIRE TO PLAY', SCREEN_W / 2, SCREEN_H - 14, 7, '#fff2a8');
+    else if (picked) drawText(ctx, picked.summary, SCREEN_W / 2, SCREEN_H - 14, 7, '#7a7a90');
   }
 
   takeSounds(): SfxEvent[] {
@@ -128,6 +141,8 @@ export class HomeArcadeGames implements ArcadeGame {
 
   private move(step: number, n: number): void {
     this.choice = (this.choice + step + n) % n;
+    // A choice made: the board stops calling for one.
+    this.idleClock = 0;
     this.sounds.push('blip');
   }
 }

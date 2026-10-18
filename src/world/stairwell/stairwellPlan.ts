@@ -186,9 +186,9 @@ export const STAIRWELL_PLAN = {
   residents: [
     {
       k: 0, i: 0, out: 9.5, back: 17, lift: true, seed: 11, voice: { pitch: 0.12 },
-      hello: ['Ah, hello, young man.', 'Good day to you.', 'There you are.'],
+      hello: ['Ah, hello, dear.', 'Good day to you.', 'There you are.'],
       lines: [
-        'The lift is a blessing at my age, young man.',
+        'The lift is a blessing at my age, dear.',
         { text: 'Your cat was on the landing again. Charming creature.', needsCat: true },
         'All those little boxes you carry up! Games, is it?',
       ],
@@ -206,17 +206,17 @@ export const STAIRWELL_PLAN = {
     {
       k: 2, i: 1, out: 7.5, back: 19, lift: false, seed: 37, voice: { pitch: 0.45 },
       hello: ['Hey!', 'Morning, or whatever it is.', 'Up and down, up and down.'],
-      lines: ['Stairs are my gym.', 'There is a new arcade machine down the street, I hear.', 'You collect games? I had a Game Boy once. No idea where it went.'],
+      lines: ['Stairs are my gym.', 'The arcade down the street was packed last night, I hear.', 'You collect games? I had a Game Boy once. No idea where it went.'],
     },
     {
       k: 3, i: 0, out: 10, back: 20, lift: false, seed: 41, voice: { pitch: 0.28 },
       hello: ['Hello, neighbour.', 'Ah, the collector.', 'Hello again.'],
-      lines: ['Hello, neighbour.', 'The flea market had a lot of cartridges this week.', 'If you ever want to swap games, knock on my door.', 'Old Vasseur used to say the lift went higher than the 5th, if you asked it nicely. He scratched something in the car, I think.'],
+      lines: ['A Mega-CD came up at the market. I am thinking about it. Very hard.', 'The flea market had a lot of cartridges this week.', 'If you ever want to swap games, knock on my door.', 'My mother used to watch old Vasseur ride the lift for an hour on end. Up, down, up, down. Playing it like a piano, she said.'],
     },
     {
       k: 4, i: 1, out: 8.5, back: 18, lift: false, seed: 59, voice: { pitch: 0.86 },
       hello: ['Hi there!', 'Hey hey!', 'Oh, hello!'],
-      lines: ['Hi there!', 'The postman came by earlier, he looked lost.', 'I am on the first floor: I never take the lift.'],
+      lines: ['Someone on the fourth gets a seed catalogue every week. Who needs that many seeds?', 'The postman came by earlier, he looked lost.', 'I’m on the first floor and I never take the lift. Never.'],
     },
   ] as ResidentOnStairs[],
   /** The postman on our landing, waiting by the front door clear of its leaf's swing (local x, z; yaw towards the door). */
@@ -290,6 +290,22 @@ export const STAIRWELL_PLAN = {
     tipThanks: 'For the Christmas box? You are a dear.',
     tipKey: 'Oh, you are a dear. Here, take your cellar key, and do not tell the syndic.',
     closed: { lunch: 'Back at 3 pm', night: 'Closed', stairs: 'On the stairs' },
+    /** The sticky button, told: the electrician fits a new one the next day, and her thank-you goes on the hall's board for two days. */
+    mended: {
+      line: 'A new button, still shiny. It springs back clean.',
+      note: { id: 'timer-mended', title: 'THE 3RD FLOOR’S LIGHT', lines: ['The timer button is new.', 'Thank you to the 5th floor', 'for finding the sticky one.'], signed: 'F. Pereira', paper: 0xfdf6e3, weight: 1, days: 2 },
+    },
+    /**
+     * Her lodge's spare key, given at Friend (`building/keys`, 'lodge'): while she is out, the player may let themself
+     * in to water her geranium, once a game day, as she asked; she is warmer for it.
+     */
+    lodgeKey: {
+      label: { in: 'The lodge · she is behind the glass', key: 'The lodge · let yourself in, water her geranium', watered: 'The lodge · her geranium is watered', locked: 'The lodge · locked' },
+      inLine: 'She is in: knock on her window instead.',
+      lockedLine: 'Locked. The concierge keeps the only key.',
+      watered: ['You let yourself in, as she asked: a jug of water for the geranium on her table, and out again.', 'The geranium drinks it up. Her TV murmurs to itself. You lock up behind you.', 'Watered. A note on her table: “Thank you, 5th. There are biscuits in the tin.” You take one.'],
+      warmth: 3,
+    },
   },
   /** The timer buttons: on every floor landing's north wall at this x (clear of the doors), this high. */
   timerButton: { x: 0.15, y: 1.2 },
@@ -301,6 +317,22 @@ export const STAIRWELL_PLAN = {
   coproLook: {
     runner: { width: 0.72 },
     plant: { x: 2.65, z: -5.45 },
+    /**
+     * A landing's plant, clicked: on her watering days (every third, offset by the floor) Mrs Dubois has been round
+     * with her can; on the others the player gives it the jug she leaves by the pot, and she hears of it (a little
+     * warmth, once a game day).
+     */
+    plantTalk: {
+      watered: ['The saucer is still full: Mrs Dubois has been round with her can this morning.', 'A note tucked in the pot, in her round hand: “NOT TOO MUCH. — D.”', 'The soil is dark and wet. Mrs Dubois, clearly, before anyone was up.'],
+      yours: ['You give it what is left in the jug she keeps by the pot. A leaf seems to stand up a little.', 'A splash from her jug. She will know: she always knows.', 'You water it. Somewhere upstairs, a door opens a crack, then shuts, satisfied.'],
+      why: 'heard you watered the landing plants',
+    },
+    /** The doormat voted in, clicked: feet wiped, and the concierge, in her lodge, approves (a little warmth, once a game day). */
+    doormatTalk: {
+      lines: ['You wipe your feet properly, both of them, twice.', 'Feet wiped. The coir does its job, loudly.', 'You wipe your feet. Habit, now.'],
+      seen: '“Thank you!” from the lodge’s window. Mrs Pereira misses nothing.',
+      why: 'saw you wipe your feet on the new mat',
+    },
     /** Along the hall's east wall, before the lodge's door: each bike's middle (x, z). */
     bikes: [
       [3.32, 0.45],

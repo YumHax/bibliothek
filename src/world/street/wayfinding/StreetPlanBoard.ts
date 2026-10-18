@@ -12,6 +12,7 @@ import { clockShort } from '@/text/clock';
 import type { ShopKind, Vec2 } from '../streetPlan';
 import { FACADES } from '@/world/city/facades';
 import { FRONT, PARK_STREET, PARK_WALK, WALKABLE_AREAS } from '@/world/measures/street';
+import { PRINT } from '../../shop/common/lettering';
 
 /** A place on the plan: its name, where its door is (zone-local), and its kind of shop for the hours. */
 interface PlanPlace {
@@ -35,6 +36,8 @@ const VIEW = { x0: -44, x1: 42, z0: -50, z1: 15 };
 const CANVAS = { w: 640, h: 484 };
 /** The key (zone-local x where it starts): over the blocks behind our row, where the plan has nothing to show. */
 const KEY_AT = 6;
+/** The key's printed panel: its row height and inner padding (canvas px). */
+const KEY = { row: 23, pad: 10, head: 26 };
 /** The plaque's case: how deep it stands off the wall, its frame round the plan. */
 const CASE = { depth: 0.05, frame: 0.035 };
 
@@ -159,28 +162,66 @@ function drawPlan({ at, places, far }: StreetPlanBoardOptions): HTMLCanvasElemen
     ctx.closePath();
     ctx.fill();
   }
-  // The places: a numbered dot each, the key down the side.
-  ctx.font = 'bold 13px sans-serif';
+  // The places: a numbered dot each on the plan, and the same dot in the key.
   ctx.textBaseline = 'middle';
-  places.forEach((place, i) => {
-    const [x, z] = place.to;
+  const dot = (x: number, y: number, n: number): void => {
     ctx.fillStyle = '#1f3a2c';
     ctx.beginPath();
-    ctx.arc(sx(x), sy(z), 9, 0, Math.PI * 2);
+    ctx.arc(x, y, 9, 0, Math.PI * 2);
     ctx.fill();
     ctx.fillStyle = '#f2ecd8';
+    ctx.font = `bold 12px ${PRINT}`;
     ctx.textAlign = 'center';
-    ctx.fillText(String(i + 1), sx(x), sy(z) + 1);
+    ctx.fillText(String(n), x, y + 1);
+  };
+  // The key: a printed panel over the blocks behind our row, a dark rule round it, the works' hatching explained.
+  const works = !far();
+  const kx = sx(KEY_AT) - KEY.pad;
+  const kw = CANVAS.w - kx - 8;
+  const kh = KEY.head + places.length * KEY.row + (works ? KEY.row : 0) + KEY.pad;
+  ctx.fillStyle = '#f8f4e8';
+  ctx.fillRect(kx, 8, kw, kh);
+  ctx.strokeStyle = '#1f3a2c';
+  ctx.lineWidth = 2;
+  ctx.strokeRect(kx + 1, 9, kw - 2, kh - 2);
+  ctx.fillStyle = '#1f3a2c';
+  ctx.font = `bold 13px ${PRINT}`;
+  ctx.textAlign = 'left';
+  ctx.fillText('WHERE TO FIND', kx + KEY.pad, 8 + KEY.head / 2 + 2);
+  places.forEach((place, i) => {
+    const y = 8 + KEY.head + i * KEY.row + KEY.row / 2;
+    dot(kx + KEY.pad + 9, y, i + 1);
     ctx.fillStyle = '#1a1a1a';
+    ctx.font = `600 16px ${PRINT}`;
     ctx.textAlign = 'left';
-    ctx.fillText(`${i + 1}  ${place.text}`, sx(KEY_AT), 22 + i * 19, CANVAS.w - sx(KEY_AT) - 10);
+    ctx.fillText(place.text, kx + KEY.pad + 26, y + 1, kw - KEY.pad * 2 - 26);
   });
+  if (works) {
+    const y = 8 + KEY.head + places.length * KEY.row + KEY.row / 2;
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(kx + KEY.pad, y - 8, 18, 16);
+    ctx.clip();
+    ctx.strokeStyle = '#c8281e';
+    for (let x = kx + KEY.pad - 12; x < kx + KEY.pad + 18; x += 6) {
+      ctx.beginPath();
+      ctx.moveTo(x, y + 8);
+      ctx.lineTo(x + 12, y - 8);
+      ctx.stroke();
+    }
+    ctx.restore();
+    ctx.fillStyle = '#1a1a1a';
+    ctx.font = `600 16px ${PRINT}`;
+    ctx.fillText('Roadworks: no way through', kx + KEY.pad + 26, y + 1, kw - KEY.pad * 2 - 26);
+  }
+  // The plan's dots last: never under the key.
+  places.forEach((place, i) => dot(sx(place.to[0]), sy(place.to[1]), i + 1));
   // You are here.
   ctx.fillStyle = '#d82020';
   ctx.beginPath();
   ctx.arc(sx(at[0]), sy(at[1] + 0.8), 8, 0, Math.PI * 2);
   ctx.fill();
-  ctx.font = 'bold 14px sans-serif';
+  ctx.font = `bold 15px ${PRINT}`;
   ctx.textAlign = 'center';
   ctx.fillText('YOU ARE HERE', sx(at[0]), sy(at[1] + 0.8) - 18);
   ctx.fillStyle = '#1f3a2c';

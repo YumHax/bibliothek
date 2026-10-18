@@ -13,24 +13,29 @@ import type { ShopKind } from '../streetPlan';
 
 /*
  * The counters that used to be only a look in, as a conversation with whoever serves there (docs/social.md "Front
- * Street and the arcade"): Stan the butcher, Agnès at CORNER BOOKS. A voice over the counter (`voiceBody`), the shop's
+ * Street and the arcade"): Stan the butcher, Josette the baker, Agnès at CORNER BOOKS. A voice over the counter (`voiceBody`), the shop's
  * own business as before as the first entry (`counter`: what a click on the door did, the conversation closed
  * first), a look round, and their perks: Stan's scrap for the stray on the house (`freeScrap`), none at all for a
  * cold customer (`noScrap`); Agnès' guide with Félix's maps (`felixGuide`, once).
  */
 
-/** Who serves behind which counter: by kind, or by the shop's name where one kind has several (two bookshops). */
-const SHOPKEEPERS: Partial<Record<ShopKind, PersonId | Readonly<Record<string, PersonId>>>> = {
-  butcher: 'butcher',
+/**
+ * Who serves behind which counter, by kind, then by the shop's name on its fascia or, for an unnamed one, its facade's
+ * id (`city/facades`): one kind has several shops along the street (two butchers, three bakeries), each its own keeper
+ * or a plain counter. Stan keeps the butcher's across from us (f1), Josette the bakery by SUNNY SIDE CAFE (f3),
+ * Mr Lagarde the pharmacy by SECOND HOME (f4).
+ */
+const SHOPKEEPERS: Partial<Record<ShopKind, Readonly<Record<string, PersonId>>>> = {
+  butcher: { f1: 'butcher' },
+  bakery: { f3: 'baker' },
+  pharmacy: { f4: 'pharmacist' },
   books: { 'CORNER BOOKS': 'bookseller' },
 };
 
-/** The person behind the counter of the shop of `kind` named `name`, or null (a plain counter). */
-export function shopkeeperOf(kind: ShopKind, name: string | undefined): PersonId | null {
-  const keeper = SHOPKEEPERS[kind];
-  if (!keeper) return null;
-  if (typeof keeper === 'string') return keeper;
-  return keeper[name ?? ''] ?? null;
+/** The person behind the counter of the shop of `kind` named `name` on facade `facade`, or null (a plain counter). */
+export function shopkeeperOf(kind: ShopKind, name: string | undefined, facade: string): PersonId | null {
+  const keepers = SHOPKEEPERS[kind];
+  return keepers?.[name ?? facade] ?? null;
 }
 
 interface ShopkeeperTalkOptions {

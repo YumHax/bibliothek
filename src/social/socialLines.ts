@@ -32,9 +32,9 @@ export const SOCIAL_LINES: Record<'chat' | 'joke' | 'tease' | 'apologise' | 'ask
   },
   askNumber: {
     loves: ['Of course! Here, I’ll write it down.', 'Finally, you asked! Here.', 'I was going to ask you for yours! Here.', 'Here. Ring me any time, I mean it.'],
-    likes: ['Of course. Here, I’ll write it down. Ring any time, not after ten.', 'Sure! Text first, though, I never pick up.', 'Here. Don’t give it to the syndic.', 'Go on, then. Here.'],
+    likes: ['Of course. Here, I’ll write it down. Ring any time, not after ten.', 'Sure! Text first, though, I never pick up.', 'Here. Don’t give it to just anyone.', 'Go on, then. Here.'],
     meh: ['I suppose. Here.', 'All right. For emergencies.', 'Fine. Don’t ring at dinner.'],
-    dislikes: ['Maybe when we know each other better.', 'I’m not much of a phone person.', 'Let’s… see.'],
+    dislikes: ['Maybe another day. Not today.', 'Ask me when I’m in a better mood.', 'Let’s… see. Another time.'],
   },
   insult: {
     loves: ['I beg your pardon?!'],
@@ -92,6 +92,9 @@ export const HELD_LINES: readonly string[] = [
 /** A good memory of theirs called back as they open the conversation ({memory}: "you lent me Zelda"). */
 export const CALLBACK_LINES: readonly string[] = ['Remember when {memory}? Made my week.', 'I was just thinking about when {memory}.', 'You know, I still smile about when {memory}.', 'I was telling someone about when {memory}. Made me smile.'];
 
+/** Someone whose keepsake is on the fridge, now and then ({keepsake}: "photo of the two of you"). */
+export const KEEPSAKE_LINES: readonly string[] = ['Is my {keepsake} still on your fridge? It had better be.', 'I told someone you keep my {keepsake} on your fridge. They were jealous.', 'Every time I think of your fridge I think of my {keepsake}. Is that strange?'];
+
 /** A bad one, by someone still sore. */
 export const GRUDGE_LINES: readonly string[] = ['I haven’t forgotten when {memory}.', 'Don’t think I’ve forgotten when {memory}.', 'After {memory}? You’ve a nerve.'];
 
@@ -110,8 +113,17 @@ export const FAREWELL_LINES: Record<'warm' | 'even' | 'cold' | 'hostile', readon
   hostile: ['Good riddance.', 'Finally.', 'Don’t come back.'],
 };
 
-/** A topic or small talk said again in the same conversation: it falls flat, and they let it show. */
-export const REPEAT_LINES: readonly string[] = ['Ha, you said that already.', 'We’ve been over that, haven’t we?', 'Yes, yes. You told me.', 'Again? You’re repeating yourself.', 'Are you all right? You asked me that.'];
+/**
+ * A topic brought up again within `TALK.repeatDays` (`today`: the same day): they notice, and say so before their
+ * answer, or instead of it when it has gone flat.
+ */
+export const REPEAT_LINES: Record<'today' | 'lately', readonly string[]> = {
+  today: ['Ha, you asked me that this morning.', 'We’ve been over that today, haven’t we?', 'Yes, yes. You asked me earlier.', 'Again? Twice in a day!'],
+  lately: ['You asked me that only the other day!','We talked about that the other day, remember?', 'You’re repeating yourself. Not that I mind.', 'Again? All right.'],
+};
+
+/** Their first word in a second conversation the same day (the first one counted; this one is talk, no more). */
+export const TWICE_LINES: readonly string[] = ['Twice in one day! Hello again.', 'You again! Forgotten something?', 'Back so soon?', 'Hello again!'];
 
 /**
  * What the player says choosing something without words of its own (a topic and a piece of news carry theirs): the
@@ -121,7 +133,14 @@ export const PLAYER_LINES: Record<InteractionId, readonly string[]> = {
   topic: ['…'],
   news: ['…'],
   chat: ['How are things?', 'Busy week?', 'Nice to see you.', 'All well with you?', 'How’s life treating you?'],
-  joke: ['Want to hear a terrible joke?', 'I’ve got one for you…', 'Stop me if you’ve heard this one.', 'Why did the cartridge blush?', 'Knock knock.'],
+  joke: [
+    'Why did the cartridge see a doctor? It had a bad case of the glitches.',
+    'I bought a cheap memory card. Can’t remember where I put it.',
+    'Why was the controller so calm? Nobody pushed its buttons.',
+    'What’s a ghost’s favourite game? Pac-Boo. …I’ll see myself out.',
+    'My console and I broke up. It kept asking me to save.',
+    'Why don’t skeletons play games? They’ve no body to play with.',
+  ],
   apologise: ['I’m sorry about before.', 'I was out of line. Sorry.', 'Can we start again?', 'I owe you an apology.'],
   askNumber: ['Shall we swap numbers?', 'Can I have your number?'],
   tease: ['Is that your best shirt?', 'Still telling the same old stories?', 'You look like you slept in a hedge.', 'Did you get dressed in the dark?', 'Lost your touch, have you?'],
@@ -183,6 +202,11 @@ export const TRADE_LINES: Record<string, Partial<Record<LineKey, readonly string
     chat: ['I’m nearly at the end. Nearly. Like, three levels.', 'Do you have ALL the games? Like, all of them?', 'Mum says I can play until the streetlights come on.', 'I found a coin in the sandpit. It’s mine now.'],
     leaving: ['I have to go, it’s dinner!', 'My mum’s calling. Bye!', 'Wait, I have to save!'],
     bye: ['Bye!', 'See you!', 'Bye bye!'],
+    thanks: ['Whoa! For me? Thanks!', 'Cool! Thank you!', 'Is it really mine? Thanks!'],
+    news: ['Whoa! Really?', 'No way! Cool!', 'That’s SO cool.'],
+    birthday: ['It’s my birthday! There’s going to be cake!', 'It’s my birthday today! I’m older now. A lot older.'],
+    hurt: ['That’s mean.', 'I’m telling.'],
+    twice: ['You again! Hi again!', 'Hi! Again!'],
   },
   bidder: {
     hello: ['Ah. Hello.', 'Here for the sale?', 'Good day.', 'Sit down, it’s about to start.'],
@@ -202,6 +226,66 @@ export const TRADE_LINES: Record<string, Partial<Record<LineKey, readonly string
     leaving: ['Change machine’s jammed again. Excuse me.', 'Someone’s winning a prize, I need to watch this.', 'Back to the counter!'],
     bye: ['Good luck out there!', 'See you on the high scores!', 'Bye!'],
   },
+};
+
+/**
+ * A light person's trade on a call (docs/social.md "The phone"), in place of `TRADE_LINES` where those need the
+ * player in front of them: picking up at the stall, letting them go for a customer.
+ */
+export const TRADE_PHONE_LINES: Record<string, Partial<Record<LineKey, readonly string[]>>> = {
+  stall: {
+    hello: ['Hello? Oh, it’s you! What are we hunting?', 'Yes? Ah, my regular! Ringing about a game?', 'Hello hello! Make it quick, I’m pricing a box.'],
+    leaving: ['Hang on, someone’s at the door with a box. Talk soon!', 'I’ve a crate of cartridges to price. Got to go!', 'Right, I’ll let you go. See you at the market!'],
+    bye: ['Happy hunting!', 'See you next market!', 'Good luck out there!'],
+  },
+  barista: {
+    leaving: ['Queue’s building, I have to go. Talk later?', 'Oh, the milk! I have to go.', 'Orders are piling up. Ring you back!'],
+    bye: ['Enjoy your day!', 'Come by for a coffee!', 'Don’t work too hard!'],
+  },
+};
+
+/*
+ * The shared lines down the phone (docs/social.md "The phone"): what the ones above say standing in front of someone
+ * ("Sit down a minute", "Good to see you!"), said as on a call. Only what differs; the rest is said the same way.
+ */
+
+/** Picking up when the player rings (their `hello` on a call). */
+export const PHONE_HELLO_LINES: readonly string[] = ['Hello? Oh, it’s you!', 'Hello? Ah, hello!', 'Hello? Oh, good, it’s you.', 'Yes, hello? Oh, hi!'];
+/** Their talk done on a call: they let the player go. */
+export const PHONE_LEAVING_LINES: readonly string[] = ['Right, I’ll let you go. Lovely to hear from you!', 'Oh, look at the time. I must get off the phone.', 'Let’s pick this up another day, shall we?', 'I’d better get on. Thanks for ringing!', 'Goodness, this must be costing you. I’ll let you go.'];
+/** Hanging up, by how warm they are. */
+export const PHONE_FAREWELL_LINES: Record<'warm' | 'even' | 'cold' | 'hostile', readonly string[]> = {
+  warm: ['Speak soon!', 'Take care, now.', 'Ring any time.', 'Lovely to hear from you!', 'Don’t be a stranger!'],
+  even: ['Bye, then.', 'Speak soon.', 'Bye now.'],
+  cold: ['Right.', 'Hm. Bye.', 'Goodbye.'],
+  hostile: ['Don’t ring again.', 'Finally.', 'Goodbye.'],
+};
+/** A second call the same day. */
+export const PHONE_TWICE_LINES: readonly string[] = ['Twice in one day! Hello again.', 'You again! Forgotten something?', 'Ringing again already?', 'Hello again!'];
+/** `SOCIAL_LINES` on a call, by fit, where they differ. */
+export const PHONE_SOCIAL_LINES: Partial<Record<keyof typeof SOCIAL_LINES, Partial<Record<Fit, readonly string[]>>>> = {
+  chat: {
+    loves: ['Oh, don’t get me started! Actually, do. Have you got a minute?', 'You know, you’re easy to talk to. Nobody rings any more.', 'We should do this more often, really.', 'Ha! I was hoping someone would ring.', 'Now you’ve made my day. Well, my minute.'],
+    dislikes: ['Not now, please.', 'I really have to go, sorry.', 'Do I sound like I want to chat?', 'Another time. Really.', 'Hm. No.'],
+  },
+  apologise: {
+    loves: ['Oh, you. It’s forgotten. All of it.', 'That means a lot. Thank you. Really.', 'Well! Water under the bridge.', 'Thank you. I’ve been hoping you’d ring and say that.'],
+  },
+  insult: {
+    dislikes: ['I beg your pardon?!', 'How dare you.', 'Well. Now I know what you are.', 'I won’t forget that.', 'Don’t ring me again.'],
+  },
+};
+/** `NEWS_LINES` on a call, where they differ. */
+export const PHONE_NEWS_LINES: Partial<Record<keyof typeof NEWS_LINES, Partial<Record<Fit, readonly string[]>>>> = {
+  any: {
+    loves: ['No! Really? Tell me everything!', 'Oh, that’s wonderful news!', 'Well, listen to you! I’m so pleased.', 'Ha! That’s the best thing I’ve heard all week.', 'You don’t say! Start again, slowly.'],
+    likes: ['Oh, nice! Good for you.', 'Well, well. Good for you.', 'Ha! Not bad at all.', 'That’s good to hear.', 'Listen to that. Well done.'],
+  },
+};
+/** The player's own lines on a call, where they differ (nobody says "Nice to see you" into a receiver). */
+export const PHONE_PLAYER_LINES: Partial<Record<InteractionId, readonly string[]>> = {
+  chat: ['How are things?', 'Busy week?', 'Nice to hear your voice.', 'All well with you?', 'How’s life treating you?'],
+  tease: ['Still in your dressing gown, I bet?', 'Still telling the same old stories?', 'You sound like you slept in a hedge.', 'Did I wake you? You sound it.', 'Lost your touch, have you?'],
 };
 
 /** On their birthday, a word of it once. */

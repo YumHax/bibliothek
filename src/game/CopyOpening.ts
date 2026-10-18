@@ -44,7 +44,7 @@ export class CopyOpening implements KeyRoute {
     if (sale.item.sealed) {
       sale.react?.('locked');
       sale.speak?.('Not that one, it’s sealed. You open it once it’s yours.');
-      this.parts.notices.refuse('Factory sealed: no opening it at the stall');
+      this.parts.notices.refuse('Factory sealed: no opening it at the stall.');
       return true;
     }
     const past = sale.item.game.past;

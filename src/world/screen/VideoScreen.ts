@@ -2,6 +2,24 @@ import type * as THREE from 'three';
 import type { VideoInfo } from '@/video/VideoProvider';
 
 export type ScreenState = 'off' | 'searching' | 'playing' | 'error';
+
+/**
+ * The longplay's remote (docs/media.md "Longplays"): held, run on, a minute back or on, another video of the game.
+ * Only while a longplay plays (not a program's feed); the screens that show one have it.
+ */
+export interface LongplayRemote {
+  /** A longplay is on (not searching, not a program): the remote works. */
+  readonly active: boolean;
+  readonly paused: boolean;
+  /** The video on and how far into it (s), or null when none is. */
+  readonly place: { videoId: string; seconds: number } | null;
+  pause(): void;
+  resume(): void;
+  /** A jump of `seconds` (back when negative), kept inside the video. */
+  seekBy(seconds: number): void;
+  /** Not this video: the next hit of the search, or "no signal" (the search is told not to offer it again). */
+  another(): void;
+}
 export type ScreenStateListener = (state: ScreenState) => void;
 
 /**
@@ -46,4 +64,6 @@ export interface VideoScreen {
    * `stop`. Absent on a screen that cannot (docs/media.md "Programs on the screen").
    */
   showFeed?(feed: THREE.Texture): ScreenFeed;
+  /** The longplay's remote; absent on a screen that only shows programs. */
+  readonly remote?: LongplayRemote;
 }

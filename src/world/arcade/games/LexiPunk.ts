@@ -7,7 +7,8 @@ import { formatNumber } from '@/text/count';
  * reports each score the page sends (`final` at its end), and `onClose` once when it shuts.
  */
 export interface RemoteScreen {
-  open(options: { title: string; url: string; origins: readonly string[]; onScore: (score: number, final: boolean) => void; onClose: () => void }): void;
+  /** `freePlay`: the score pays nothing, and the frame's foot says so. */
+  open(options: { title: string; url: string; origins: readonly string[]; freePlay: boolean; onScore: (score: number, final: boolean) => void; onClose: () => void }): void;
 }
 
 /** Where the game lives, and the origins its score messages may come from. */
@@ -20,13 +21,14 @@ const ORIGINS = ['https://lexipunk.com', 'https://www.lexipunk.com'];
  * the page reports its score by `postMessage` (see `ArcadeScreenPanel`) and the play is over when
  * the page says so or the frame is shut, paying the last score it reported (nothing if it never
  * reported one). Meanwhile the cabinet's glass says where the game is. It cannot play itself: no
- * demo, no replay, no regular (`demoable: false`). Without a screen wired in, a play ends at once.
+ * demo, no replay, no regular (`demoable: false`). Without a screen wired in, a play ends at once. On a free-play
+ * cabinet (until the page reports scores: `ArcadePlan`'s `freePlay`) nothing it says promises tickets.
  */
 export class LexiPunk implements ArcadeGame {
   readonly id = 'lexipunk';
   readonly title = 'LEXIPUNK';
   readonly hint = 'Play in the big frame · Done when you are finished';
-  readonly summary = 'WORDS · PUNK · YOUR SCORE PAYS TICKETS';
+  readonly summary: string;
   readonly demoable = false;
   score = 0;
   over = false;
@@ -35,7 +37,9 @@ export class LexiPunk implements ArcadeGame {
   private reported = false;
   private sounds: SfxEvent[] = [];
 
-  constructor(private readonly screen: RemoteScreen | null) {}
+  constructor(private readonly screen: RemoteScreen | null, private readonly freePlay = false) {
+    this.summary = freePlay ? 'WORDS · PUNK · FREE PLAY, ON THE HOUSE' : 'WORDS · PUNK · YOUR SCORE PAYS TICKETS';
+  }
 
   /** Over without a single score from the page (it never loaded, or does not speak to the frame yet): the coin is refunded. */
   get unreported(): boolean {
@@ -56,6 +60,7 @@ export class LexiPunk implements ArcadeGame {
       title: this.title,
       url: URL,
       origins: ORIGINS,
+      freePlay: this.freePlay,
       onScore: (score, final) => {
         this.score = score;
         if (!this.reported) this.sounds.push({ sfx: 'blip' });
@@ -85,7 +90,7 @@ export class LexiPunk implements ArcadeGame {
     drawText(ctx, 'LEXIPUNK', SCREEN_W / 2, 70, 26, '#ff2fa0');
     drawText(ctx, 'NOW PLAYING ON THE BIG SCREEN', SCREEN_W / 2, 110, 8, '#33e0ff');
     drawText(ctx, this.reported ? `SCORE ${formatNumber(this.score)}` : 'SCORE —', SCREEN_W / 2, 146, 14, '#ffd23a');
-    if (Math.floor(this.clock * 2) % 2 === 0) drawText(ctx, 'PRESS DONE TO CASH IN', SCREEN_W / 2, 190, 8, '#ff8a80');
+    if (Math.floor(this.clock * 2) % 2 === 0) drawText(ctx, this.freePlay ? 'FREE PLAY · PRESS DONE WHEN FINISHED' : 'PRESS DONE TO CASH IN', SCREEN_W / 2, 190, 8, '#ff8a80');
   }
 
   takeSounds(): SfxEvent[] {

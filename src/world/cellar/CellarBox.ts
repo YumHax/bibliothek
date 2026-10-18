@@ -9,7 +9,7 @@ import { METAL, paint, timber } from '../materials/palette';
 import { boxMesh, invisibleHitbox } from '../meshUtils';
 import { Prop } from '../props/Prop';
 import { CELL, SPRING, type StorageBox } from './cellarPlan';
-import { isOpened, markOpened } from './cellarFinds';
+import { isOpened, isTaken, markOpened } from './cellarFinds';
 import { lcg } from '@/random';
 
 /** The slats of a front (m): their width, the gap between, their thickness. */
@@ -35,6 +35,12 @@ export class CellarBox extends Prop implements Interactable, Updatable {
   private readonly door = new THREE.Group();
   private angle = 0;
   private target = 0;
+  /** Pieces of the flat's furniture put away, shown in our box under dust sheets (`showStored`). */
+  private stored = 0;
+  /** Heard once, the first time the padlock comes off (our box: Félix's note in the carton). */
+  onFirstOpen: (() => void) | null = null;
+  /** What a click on our box says once it is open (the carton's state, the furniture in it), set by the builder. */
+  openLine: (() => string | null) | null = null;
 
   constructor(private readonly box: StorageBox) {
     super();
@@ -133,14 +139,40 @@ export class CellarBox extends Prop implements Interactable, Updatable {
       markOpened(box.n);
       this.target = DOOR.open;
       session.react(box.find?.line ?? 'Your box: empty, swept, waiting.');
+      this.onFirstOpen?.();
       return;
     }
     if (this.isOpen) {
-      session.react(box.find?.line ?? 'Nothing left in it but dust.');
+      // The find's line only while the game is still in its carton; taken, the box says what is left.
+      const own = this.openLine?.();
+      session.react(own ?? (box.find && !isTaken(box.n) ? box.find.line : 'Nothing left in it but dust.'));
       return;
     }
     playLatchClick(0.1);
     session.react(box.locked ?? 'Padlocked.');
+  }
+
+  /** The flat's put-away furniture (`count` pieces, up to `max` shown) as dust-sheeted lumps at the back of the box. */
+  showStored(count: number, max: number): void {
+    this.stored = count;
+    const sheet = paint(0xd9d3c3, 0.95);
+    const random = lcg(this.box.n * 31 + count);
+    for (let i = 0; i < Math.min(count, max); i++) {
+      const w = 0.45 + random() * 0.35;
+      const h = 0.35 + random() * 0.6;
+      const d = 0.35 + random() * 0.25;
+      const x = -CELL / 2 + 0.35 + i * ((CELL - 0.7) / Math.max(1, max - 1));
+      // Lifted a hair off the floor: a sheet's hem on the concrete, not a face in its plane.
+      const lump = boxMesh(w, h, d, sheet, { x, y: h / 2 + 0.004, z: -1.15 - random() * 0.2 }); // convention-ok: a sheet's hem just off the concrete
+      lump.rotation.y = (random() - 0.5) * 0.4;
+      lump.castShadow = true;
+      this.add(lump);
+    }
+  }
+
+  /** How many pieces of furniture are put away in it. */
+  get storedCount(): number {
+    return this.stored;
   }
 
   update(dt: number): void {

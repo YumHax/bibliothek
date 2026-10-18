@@ -40,6 +40,10 @@ class GaspardSunday implements MemeFeatureLive {
   private readonly dodges = new LineBag(() => GASPARD_TALK.dodge);
   private readonly leavings = new LineBag(() => GASPARD_TALK.leaving);
   private readonly afters = new LineBag(() => GASPARD_TALK.afterHim);
+  private readonly backChats = new LineBag(() => GASPARD_TALK.back.chat);
+  private readonly backAfters = new LineBag(() => GASPARD_TALK.back.afterHim);
+  /** His one Sunday back after the apology (`FamilyStory.returning`): sorry to the player, Félix's copy handed over. */
+  private back = false;
   /** At the table now (from the player's coming in until he walks out). */
   private here = false;
   private going = false;
@@ -57,7 +61,7 @@ class GaspardSunday implements MemeFeatureLive {
     const social = talkHook(ctx.social, GASPARD_ID, () => this.session());
     const [x, z] = PLAN.seat.at;
     this.body = zone.place(
-      new Walker({ viewer: ctx.listener, seed: 1958, look: gaspardLook(), label: 'Gaspard', speaker: 'Gaspard', talk: () => this.chats.next(), ...(social ? { social } : {}) }),
+      new Walker({ viewer: ctx.listener, seed: 1958, look: gaspardLook(), label: 'Gaspard', speaker: 'Gaspard', talk: () => (this.back ? this.backChats.next() : this.chats.next()), ...(social ? { social } : {}) }),
       new THREE.Vector3(x, 0, z),
       PLAN.seat.yaw,
     );
@@ -67,7 +71,36 @@ class GaspardSunday implements MemeFeatureLive {
   arrived(arrival: MemeArrival): void {
     if (!this.here) return;
     this.scene.zone.after(arrival.helloEnds + AFTER_HELLO, () => {
-      if (this.here && !this.going && this.scene.playerIn) this.body.speak(this.openings.next());
+      if (!this.here || this.going || !this.scene.playerIn) return;
+      if (this.back) this.makeAmends();
+      else this.body.speak(this.openings.next());
+    });
+  }
+
+  /** Back after the apology: on his feet, his sorry to the player, Félix's copy held out; Mémé has him stay for lunch. */
+  private makeAmends(): void {
+    const { scene, body, family } = this;
+    const t = GASPARD_TALK.back;
+    const beat = PLAN.beat;
+    const eyes = scene.ctx.listener.getWorldPosition(new THREE.Vector3());
+    body.stand(yawTo(body.getWorldPosition(new THREE.Vector3()), eyes), 'stand', eyes);
+    body.speak(t.opening);
+    body.feel({ frown: 0.4, squint: 0.2 }, beat * 2);
+    scene.zone.after(beat, () => {
+      body.speak(t.sorry[0]);
+      body.gesture('rubNeck');
+    });
+    scene.zone.after(beat * 2, () => {
+      body.speak(t.sorry[1]);
+      body.gesture('handsJoin');
+      family.gaspardBrought(scene.day());
+      nudge(GASPARD_ID, { warmth: 10, trust: 10, day: scene.day(), memory: 'I said sorry to the kid too', memoryWeight: 10 });
+    });
+    scene.zone.after(beat * 3, () => {
+      if (scene.playerIn && !scene.busyWith) scene.meme.speak(t.meme);
+      const [x, z] = PLAN.seat.at;
+      body.sit(PLAN.seat.yaw, PLAN.seat.height, 'lap', scene.world(...PLAN.gaze));
+      body.position.set(x, 0, z);
     });
   }
 
@@ -86,7 +119,7 @@ class GaspardSunday implements MemeFeatureLive {
     this.body.visible = this.here && !filming;
     if (!this.here || this.going || this.talking || this.stage === 'asked') return;
     this.sat += dt;
-    if (this.sat >= PLAN.stay && this.stage === 'idle') this.leave(true);
+    if (this.sat >= PLAN.stay && (this.stage === 'idle' || this.back)) this.leave(true);
   }
 
   /** The player in: on his Sunday, he is at the table already. */
@@ -100,7 +133,9 @@ class GaspardSunday implements MemeFeatureLive {
     this.body.sit(PLAN.seat.yaw, PLAN.seat.height, 'lap', scene.world(...PLAN.gaze));
     this.here = true;
     this.going = false;
-    this.stage = 'idle';
+    this.back = family.returning;
+    // Back after the apology there is nothing left to have out: only his sorry and lunch.
+    this.stage = this.back ? 'done' : 'idle';
     this.sat = 0;
   }
 
@@ -122,7 +157,7 @@ class GaspardSunday implements MemeFeatureLive {
     const { family } = this;
     const asked = (): string | null => (this.stage === 'asked' ? null : 'not now');
     return [
-      { id: 'gaspard:dodge', group: 'ask', label: 'About the sale…', disabled: () => (family.saleSeen ? 'seen' : null), run: () => ({ line: this.dodges.next() }) },
+      { id: 'gaspard:dodge', group: 'ask', label: 'About the sale…', disabled: () => (family.saleSeen || this.back ? 'seen' : null), run: () => ({ line: this.dodges.next() }) },
       {
         id: 'gaspard:confront',
         group: 'talk',
@@ -140,6 +175,13 @@ class GaspardSunday implements MemeFeatureLive {
         label: GASPARD_TALK.catalogue.label,
         disabled: () => (this.stage === 'asked' && this.scene.ctx.keepsakes?.has('catalogue') ? null : 'not now'),
         run: () => this.reckon('apologised', GASPARD_TALK.catalogue.his),
+      },
+      {
+        id: 'gaspard:letter',
+        group: 'talk',
+        label: GASPARD_TALK.letter.label,
+        disabled: () => (this.stage === 'asked' && this.scene.ctx.keepsakes?.has('gaspardLetter') ? null : 'not now'),
+        run: () => this.reckon('apologised', GASPARD_TALK.letter.his),
       },
       { id: 'gaspard:crane', group: 'talk', label: GASPARD_TALK.crane.ask, disabled: asked, run: () => this.reckon('gone', GASPARD_TALK.crane.his) },
       { id: 'gaspard:silence', group: 'talk', label: GASPARD_TALK.silence.label, disabled: asked, run: () => this.reckon('silent', GASPARD_TALK.silence.his[0]) },
@@ -257,7 +299,7 @@ class GaspardSunday implements MemeFeatureLive {
         body.setPresent(false);
         this.here = this.going = false;
         if (own) scene.zone.after(AFTER_HIM, () => {
-          if (scene.playerIn && !scene.busyWith) scene.say([this.afters.next()]);
+          if (scene.playerIn && !scene.busyWith) scene.say([this.back ? this.backAfters.next() : this.afters.next()]);
         });
       });
     });

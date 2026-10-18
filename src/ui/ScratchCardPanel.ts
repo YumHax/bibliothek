@@ -1,9 +1,33 @@
 import { CardPanel, type PanelAction } from './panel/CardPanel';
-import { html, paint, raw, type Html } from './panel/html';
+import { attr, html, paint, raw, type Html } from './panel/html';
 import { renderKeys } from './keys';
-import type { ScratchCard, ScratchSymbol } from '@/world/street/shops/scratchCard';
+import { SCRATCH_SYMBOLS, type ScratchCard, type ScratchSymbol } from '@/world/street/shops/scratchCard';
+import { formatCoins } from '@/text/money';
 import './ScratchCardPanel.css';
 import { random } from '@/random';
+import { playScratch, playScratchWin } from '@/audio/dealSounds';
+
+/**
+ * The pictures printed under the silver, in the ticket's inks (no emoji: those differ on every system): cherries on
+ * their stems, a pad, a cartridge, a gold star, a red seven. 40 × 40, for the cells and, small, the prize table.
+ */
+const PICTURES: Record<ScratchSymbol['id'], string> = {
+  cherries:
+    '<path d="M20 6c-2 6-6 11-11 15M20 6c1 7 4 12 10 16" fill="none" stroke="#2f7a34" stroke-width="2.4" stroke-linecap="round"/><path d="M20 6c4-3 9-2 11 1-4 2-8 2-11-1z" fill="#3f9a44"/><circle cx="10" cy="27" r="7.5" fill="#d1232a"/><circle cx="30" cy="28" r="7.5" fill="#b81c24"/><circle cx="7.5" cy="24.5" r="2" fill="#ff8a8a"/><circle cx="27.5" cy="25.5" r="2" fill="#ff8a8a"/>',
+  pad: '<rect x="3" y="11" width="34" height="18" rx="4" fill="#d9d6cf" stroke="#3a3a42" stroke-width="1.6"/><rect x="5.5" y="13.5" width="29" height="13" rx="2" fill="#2b2b33"/><path d="M10 17h3v-2.5h3V17h3v3h-3v2.5h-3V20h-3z" fill="#e7e4dc"/><circle cx="26.5" cy="21.5" r="2.4" fill="#d1232a"/><circle cx="31.5" cy="18.5" r="2.4" fill="#d1232a"/><rect x="18.5" y="22.5" width="3" height="1.4" rx=".7" fill="#8a8a92"/>',
+  cartridge:
+    '<path d="M8 5h24v26l-3 4H11l-3-4z" fill="#6a6a74" stroke="#2a2a32" stroke-width="1.6"/><rect x="11" y="9" width="18" height="14" rx="1.5" fill="#f2c84a"/><path d="M13 13h14M13 16.5h10" stroke="#7a3b10" stroke-width="1.6" stroke-linecap="round"/><path d="M12 27h16M12 30h16" stroke="#3a3a42" stroke-width="1.2"/>',
+  star: '<path d="M20 3l5 10.5 11.5 1.5-8.4 8 2.1 11.4L20 29l-10.2 5.4 2.1-11.4-8.4-8L15 13.5z" fill="#ffd23a" stroke="#a86a10" stroke-width="1.8" stroke-linejoin="round"/><path d="M16 15l3-6" stroke="#fff3b8" stroke-width="1.6" stroke-linecap="round"/>',
+  seven:
+    '<path d="M9 7h23v5L21 35h-7l10.5-22H9z" fill="#d92a2a" stroke="#ffd23a" stroke-width="2.2" stroke-linejoin="round"/><path d="M11 9.5h17" stroke="#ff8a7a" stroke-width="1.4" stroke-linecap="round"/>',
+};
+
+function picture(symbol: ScratchSymbol, className: string): Html {
+  return raw(`<svg class="${className}" viewBox="0 0 40 40" role="img" aria-label="${symbol.name}">${PICTURES[symbol.id]}</svg>`);
+}
+
+/** The coin's rasp is played at most this often while scratching (ms). */
+const RASP_EVERY_MS = 90;
 
 /** How much of a cell's silver must be gone before it counts as scratched. */
 const CLEARED = 0.5;
@@ -18,6 +42,8 @@ interface ScratchDeal {
   done: (win: ScratchSymbol | null) => string;
   /** Buys the next card, or returns why not (null = dealt). */
   again: () => string | null;
+  /** What the next card costs (on the "Another card" button). */
+  price?: number;
   /** Cells already scratched (a card taken up again after a reload), by index. */
   revealed?: readonly boolean[];
   /** A cell was scratched clear (its index): for keeping the card in progress. */
@@ -40,9 +66,14 @@ interface Cell {
  */
 export class ScratchCardPanel extends CardPanel {
   private deal: ScratchDeal | null = null;
+  /** Cards laid since the game started: the how-to line is printed on the first only. */
+  private laid = 0;
+  /** The ticket's serial, new with each card. */
+  private serial = '';
   private cells: Cell[] = [];
   private finished = false;
   private scratching: HTMLCanvasElement | null = null;
+  private raspAt = 0;
 
   constructor(container: HTMLElement) {
     super(container, { className: 'scratch-panel', cardClass: 'scratch-panel__card ui-card', title: 'A scratch card', header: false });
@@ -54,17 +85,30 @@ export class ScratchCardPanel extends CardPanel {
   show(deal: ScratchDeal): void {
     this.deal = deal;
     this.finished = false;
+    this.laid++;
+    this.serial = `${String(Math.floor(random() * 900) + 100)}-${String(Math.floor(random() * 90000) + 10000)}`;
     if (this.isOpen) this.refresh();
   }
 
   protected render(): Html {
-    return html`<header><h2>PIXEL SCRATCH</h2><p>Three alike win. 🍒 2 · 🎮 3 · 💾 5 · ⭐ 10 · 7 25 coins</p></header>
-      <div class="scratch-panel__cells"></div>
-      <p class="scratch-panel__hint">${raw(renderKeys('Scratch with the mouse, tap a cell, or {Enter} for the next one'))}</p>`;
+    const win = this.finished ? this.deal?.card.win : undefined;
+    const table = SCRATCH_SYMBOLS.map(
+      (symbol) => html`<li class="scratch-panel__prize${win === symbol ? ' is-won' : ''}">${picture(symbol, 'scratch-panel__mini')}${picture(symbol, 'scratch-panel__mini')}${picture(symbol, 'scratch-panel__mini')}<span class="scratch-panel__pays">${formatCoins(symbol.prize)}</span></li>`,
+    );
+    const result = !this.finished ? '' : win ? html`<p class="scratch-panel__stamp">Winner · ${formatCoins(win.prize)}</p>` : html`<p class="scratch-panel__lost">Not a winner this time</p>`;
+    return html`<header class="scratch-panel__band"><h2>PIXEL SCRATCH</h2><span class="scratch-panel__serial">No ${this.serial}</span></header>
+      <div class="scratch-panel__play">
+        <div class="scratch-panel__cells"></div>
+        ${result}
+      </div>
+      <section class="scratch-panel__table" aria-label="Match three to win"><h3>Match 3 to win</h3><ul>${table}</ul></section>
+      <p class="scratch-panel__hint"${attr('hidden', this.laid > 1)}>${raw(renderKeys('Scratch with the mouse or a finger, or {Enter} for the next one'))}</p>`;
   }
 
   protected override actions(): PanelAction[] {
-    return [{ action: 'reveal', label: 'Scratch it all' }, ...(this.finished ? [{ action: 'again', label: 'Another card' }] : [])];
+    if (!this.finished) return [{ action: 'reveal', label: 'Scratch it all' }];
+    const price = this.deal?.price;
+    return [{ action: 'again', label: price !== undefined ? `Another card · ${formatCoins(price)}` : 'Another card', primary: true }];
   }
 
   /** The cells are canvases with their silver and their pointer handlers: built after the markup, from the deal. */
@@ -77,7 +121,7 @@ export class ScratchCardPanel extends CardPanel {
     this.cells = deal.card.cells.map((symbol, index) => {
       const cell = document.createElement('div');
       cell.className = 'scratch-panel__cell';
-      paint(cell, html`<span class="scratch-panel__symbol${symbol.glyph === '7' ? ' scratch-panel__symbol--seven' : ''}" aria-label="${symbol.name}">${symbol.glyph}</span>`);
+      paint(cell, html`<span class="scratch-panel__symbol">${picture(symbol, 'scratch-panel__picture')}</span>`);
       const canvas = document.createElement('canvas');
       canvas.width = CELL_PX;
       canvas.height = CELL_PX;
@@ -144,6 +188,11 @@ export class ScratchCardPanel extends CardPanel {
     const x = ((e.clientX - rect.left) / rect.width) * CELL_PX;
     const y = ((e.clientY - rect.top) / rect.height) * CELL_PX;
     const ctx = cell.ctx;
+    const now = performance.now();
+    if (now - this.raspAt > RASP_EVERY_MS) {
+      this.raspAt = now;
+      playScratch();
+    }
     ctx.globalCompositeOperation = 'destination-out';
     ctx.beginPath();
     ctx.arc(x, y, COIN, 0, Math.PI * 2);
@@ -156,6 +205,7 @@ export class ScratchCardPanel extends CardPanel {
     if (cell.revealed) return;
     cell.revealed = true;
     cell.ctx.clearRect(0, 0, CELL_PX, CELL_PX);
+    playScratch(0.08);
     if (this.cells.every((c) => c.revealed)) this.finish();
     else this.deal?.onReveal?.(this.cells.indexOf(cell));
   }
@@ -174,6 +224,7 @@ export class ScratchCardPanel extends CardPanel {
     this.finished = true;
     const { win } = this.deal.card;
     if (win) for (const cell of this.cells) if (cell.symbol === win) cell.canvas.parentElement?.classList.add('scratch-panel__cell--win');
+    if (win) playScratchWin();
     this.setStatus(this.deal.done(win), win ? 'ok' : 'info');
     // "Another card" joins the footer.
     if (this.isOpen) this.refresh();

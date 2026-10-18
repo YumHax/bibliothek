@@ -20,8 +20,13 @@ export class Interactor implements Updatable {
    */
   eyeSway: THREE.Vector3 | null = null;
 
+  /**
+   * Where on the view the ray is cast from (normalised device coordinates): the crosshair at the centre, or a free
+   * cursor's spot while one moves over the view (facing a bookcase, `shelfView/ShelfView`), which puts it back after.
+   */
+  readonly aim = new THREE.Vector2(0, 0);
+
   private readonly raycaster = new THREE.Raycaster();
-  private readonly centre = new THREE.Vector2(0, 0);
   private readonly owners = new Map<THREE.Object3D, Interactable>();
   /** What the ray tests, rebuilt from `owners` / `occluderSet` before the next pick after a change (a trip (de)activates hundreds at once). */
   private hitboxes: THREE.Object3D[] = [];
@@ -144,17 +149,21 @@ export class Interactor implements Updatable {
     this.refresh();
     if (this.nearAge > NEAR_SECONDS || eye.distanceToSquared(this.nearFrom) > NEAR_STEP * NEAR_STEP) this.sortNear(eye);
     this.raycaster.far = this.maxDistance;
-    this.raycaster.setFromCamera(this.centre, this.camera);
+    this.raycaster.setFromCamera(this.aim, this.camera);
     if (this.eyeSway) this.raycaster.ray.origin.sub(this.eyeSway);
     const hits = this.raycaster.intersectObjects(this.near, false);
     if (!hits.length) return null;
     const wallAt = this.raycaster.intersectObjects(this.occluders, false)[0]?.distance ?? Infinity;
+    let first: Interactable | null = null;
     for (const hit of hits) {
-      if (hit.distance > wallAt) return null;
+      if (hit.distance > wallAt) break;
       const owner = this.owners.get(hit.object);
-      if (owner && !this.ignore(owner)) return owner;
+      if (!owner || this.ignore(owner)) continue;
+      if (!first) first = owner;
+      // A part set inside the first one's hitbox (`within`) wins over it.
+      else if (owner.within === first) return owner;
     }
-    return null;
+    return first;
   }
 
   /** Keeps the hitboxes whose bounding sphere comes within `maxDistance + NEAR_STEP` of `eye`. */

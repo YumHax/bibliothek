@@ -13,6 +13,9 @@ export const PASTIME_LINES = {
     blurtWrong: ['{answer}! No… yes. {answer}.', 'It’s {answer}, I’d put my teeth on it.', 'Is it {answer}? It’s always {answer}.'],
     /** The video games: she has no idea and guesses anyway. */
     blurtGames: ['{answer}? I’m guessing. Félix would know.', 'I’ll say {answer}. It sounds like a game.', 'Don’t look at me. {answer}?'],
+    /** Her own question between the show's: the family, then the player's shelves (she lets them answer). */
+    herOwn: ['That one’s mine, while the man with the teeth does his adverts. Go on, you know it.', 'I’ll keep quiet for this one. It’s family.', 'Don’t look at me, I asked it!'],
+    herShelves: ['Your boxes, your answer. I’ll just watch.', 'I looked at your shelves, you know. I pay attention.', 'If you get this wrong I’m telling your mother.'],
     /** The player's answer, right or wrong. */
     youRight: ['Clever thing! You get that from me.', 'See? All that reading.', 'Bravo. He’d have said that too.'],
     youWrong: ['Ooh, no. Never mind, love.', 'That’s what I would have said. Before.', 'They make them hard on purpose.'],

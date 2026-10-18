@@ -4,6 +4,7 @@ import { createCanvas, toTexture } from '@/covers/generated/canvasUtils';
 import type { Interactable } from '@/interaction/Interactable';
 import type { SessionActions } from '@/game/SessionActions';
 import type { ChoicePanel } from '@/ui/street/ChoicePanel';
+import { CABBIE } from '@/ui/taxiRide/TaxiRide';
 import type { Furniture } from '../../Furniture';
 import type { DayNight } from '../../props/DayNight';
 import type { ZoneId } from '../../zoneIds';
@@ -14,11 +15,14 @@ import type { Vec2 } from '../streetPlan';
 import type { StreetCars } from '../StreetCars';
 import { inHours } from '@/time/clock';
 import { formatCoins } from '@/text/money';
+import { pick, random } from '@/random';
+import type { Pastimes } from '@/household/pastime';
 import { rideBy } from '../../travel/rideVia';
 
 /** Where a taxi may take the player: as `STREET_PLAN.busRide.destinations` reads (read at each click, never copied). */
 interface Destination {
-  readonly to: ZoneId;
+  /** A place line 38 goes, or `DRIVE`: a turn round town at night and back to the rank. */
+  readonly to: ZoneId | typeof DRIVE;
   readonly label: string;
   readonly hours?: readonly [number, number];
   readonly shut?: string;
@@ -38,9 +42,36 @@ interface TaxiRankOptions {
   destinations: () => readonly Destination[];
   /** The pick of where to, when more than one place is open (none: the first open). */
   choice?: ChoicePanel;
+  /**
+   * The night's drive, a ride the bus never gives: along the river and round by the lit bridges, back at the rank
+   * (`label`, in its `hours`): told in a beat (`pastimes`, the clock wound on by `minutes`), the back seat over the
+   * dark (`backSeat`, `ui/taxiRide`).
+   */
+  drive?: { label: string; hours: readonly [number, number]; minutes: number; pastimes: Pastimes; backSeat: (ride: { to: string; fare: number; chat: string; night: boolean }) => Promise<void> };
 }
 
+/** The night drive's id among the destinations. */
+const DRIVE = 'drive' as const;
+
 const POLE = { height: 2.7, radius: 0.04 } as const;
+/** Waving again while the taxi is on its way: a word back. */
+const COMING = ['Down the street a taxi flashes its lights: on its way.', 'A horn toots twice from the crossing. Coming, coming.'];
+/** What the driver says on the night drive. */
+const DRIVE_CHAT = [
+  'The bridges are lit till one. I take this way home myself, some nights.',
+  'Quiet, isn’t it. The town’s nicer when it’s asleep.',
+  'See the barges? My father worked those. Never once took me on one.',
+];
+/** What the drive leaves, back at the rank. */
+const DRIVEN = ['The meter clicks off at the rank. The town still glitters behind your eyes.', 'Back where you started, the long way round. Worth every coin.'];
+/** What the driver says as the meter starts. */
+const DRIVER_CHAT = [
+  'Busy round here today. That market of yours, is it?',
+  'Thirty years I’ve driven this town. The bus is quicker on Sundays, don’t tell anyone.',
+  'Mind the box on the seat, my grandson’s console. Fixing it for him.',
+  'You’re the one with all the games upstairs? The concierge mentioned you.',
+  'Radio on or off? Off. Good. Me too.',
+];
 const SIGN = { width: 0.62, height: 0.24, depth: 0.08 } as const;
 
 /**
@@ -57,6 +88,7 @@ export class TaxiRank extends THREE.Group implements Furniture, Updatable, Inter
   private readonly signMaterial: THREE.MeshBasicMaterial;
   /** Follows the hailed taxi while it waits (raycast only then). */
   private readonly cab: THREE.Mesh;
+  private waved = 0;
 
   constructor(private readonly options: TaxiRankOptions) {
     super();
@@ -107,7 +139,9 @@ export class TaxiRank extends THREE.Group implements Furniture, Updatable, Inter
     const open = this.open();
     if (cars.hailedTaxi) {
       if (!open.length) return 'Taxi · nowhere to go at this hour';
-      return open.length === 1 ? `Taxi · get in to ${open[0]!.label} (${formatCoins(fare)})` : `Taxi · get in (${formatCoins(fare)})`;
+      const only = open.length === 1 ? open[0]! : null;
+      if (only?.to === DRIVE) return `Taxi · ${only.label.toLowerCase()} (${formatCoins(fare)})`;
+      return only ? `Taxi · get in to ${only.label} (${formatCoins(fare)})` : `Taxi · get in (${formatCoins(fare)})`;
     }
     if (cars.taxiComing) return 'Taxi rank · a taxi is on its way';
     if (!open.length) return `Taxi rank · ${this.shutWord()}`;
@@ -125,7 +159,10 @@ export class TaxiRank extends THREE.Group implements Furniture, Updatable, Inter
       this.getIn(session, open);
       return;
     }
-    if (cars.taxiComing) return;
+    if (cars.taxiComing) {
+      session.react(COMING[this.waved++ % COMING.length]!);
+      return;
+    }
     if (!open.length) {
       session.refuse(this.shutWord());
       return;
@@ -140,6 +177,8 @@ export class TaxiRank extends THREE.Group implements Furniture, Updatable, Inter
       choice.show({
         title: 'Where to?',
         intro: `The meter says ${formatCoins(this.options.fare)}, wherever you go.`,
+        look: { kind: 'taxi', fare: this.options.fare },
+        who: { ...CABBIE, line: 'Hop in. Where to, then?' },
         choices: open.map((d) => ({ id: d.to, label: d.label })),
         pick: (id) => {
           const where = open.find((d) => d.to === id);
@@ -158,12 +197,39 @@ export class TaxiRank extends THREE.Group implements Furniture, Updatable, Inter
       session.refuse('The taxi has gone. Hail another at the rank.');
       return;
     }
+    const { fare, drive } = this.options;
+    const to = where.to;
+    if (to === DRIVE) {
+      if (!drive) return;
+      // Something else already told in a beat: no fare taken for a drive that would not happen.
+      if (drive.pastimes.isBusy) return;
+      session.pay({
+        price: fare,
+        title: 'The taxi fare',
+        paid: () => {
+          this.options.cars.boardHailed();
+          const chat = pick(random, DRIVE_CHAT);
+          // The drive told in a beat: out, the back seat over the dark, the clock on, back at the rank.
+          let rode: Promise<void> = Promise.resolve();
+          const backSeat = (): void => {
+            rode = drive.backSeat({ to: drive.label, fare, chat, night: true });
+          };
+          void drive.pastimes.run({ minutes: drive.minutes, outMs: 700, darkMs: 4800, inMs: 900, dark: backSeat }, () => undefined).then(async (done) => {
+            await rode;
+            if (done !== null) session.react(pick(random, DRIVEN));
+          });
+          return `You get in the back: ${drive.label.toLowerCase()}, no hurry.`;
+        },
+      });
+      return;
+    }
     session.pay({
-      price: this.options.fare,
+      price: fare,
+      title: 'The taxi fare',
       paid: () => {
         this.options.cars.boardHailed();
-        rideBy('taxi');
-        session.travel(where.to);
+        rideBy({ by: 'taxi', to: where.label, fare, chat: pick(random, DRIVER_CHAT) });
+        session.travel(to);
         return `You get in the back and give the driver the address: ${where.label}.`;
       },
     });
@@ -172,7 +238,9 @@ export class TaxiRank extends THREE.Group implements Furniture, Updatable, Inter
   /** The places open now (a taxi takes the player at any hour they are). */
   private open(): Destination[] {
     const hours = this.options.dayNight.state.hours;
-    return this.options.destinations().filter((d) => !d.hours || inHours(hours, d.hours));
+    const drive = this.options.drive;
+    const places: Destination[] = [...this.options.destinations(), ...(drive ? [{ to: DRIVE, label: drive.label, hours: drive.hours }] : [])];
+    return places.filter((d) => !d.hours || inHours(hours, d.hours));
   }
 
   /** Why nowhere is open: the first place's word for it. */

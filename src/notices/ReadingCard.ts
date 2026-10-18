@@ -4,20 +4,19 @@ import { readMs } from './readingTime';
 import type { ReadingNotice } from './types';
 import { closeOnPress, followDismissHints, setDismissVerb } from './dismissHint';
 import { buildCard, pagesOf, type CardParts } from './readingLooks';
+import { noteSaid } from './speechLog';
 
 /** Once read, walking this far from where it was opened puts the card away (m). */
 const WALK_AWAY = 1.2;
 /** Unless the player walks away, a page stays this many times its reading time (the last page: then the card goes). */
 const LINGER = 2.2;
 const FADE_MS = 320;
-/** Waiting cards past this many are merged into the last one ("…and 2 more notes"); a batch (`of`) is never merged. */
-const QUEUE_MAX = 3;
 /** A postcard shows its picture this long before turning to the written side. */
 const FLIP_MS = 1200;
 
 const eye = new THREE.Vector3();
 
-type Card = ReadingNotice & { more?: number };
+type Card = ReadingNotice;
 
 /** The card up: its markup, its pages and the one shown, whether a postcard has turned to its written side. */
 interface Shown {
@@ -35,9 +34,9 @@ interface Shown {
  * behind it. It stays at least its reading time whatever the player does; after that, walking
  * away puts it down, else it goes on its own a while later. A long text is cut into pages: the
  * key (or a click) turns them, the last press puts the card down; a postcard shows its picture
- * first. Cards queue; past `QUEUE_MAX` waiting, the last one is a merged card ("…and 2 more
- * notes"), like the rewards: none is silently lost. A batch (the mailbox's three pieces, `of`)
- * never merges.
+ * first. Cards queue, none merged and none lost: the last page of the card up says how many
+ * wait behind it ("2 more to read"), a press puts down one card (never a page unread), and every
+ * card read is kept with the lines said (`speechLog`, "What was said") to read again.
  */
 export class ReadingCard {
   private readonly root: HTMLDivElement;
@@ -46,8 +45,6 @@ export class ReadingCard {
   private current: Shown | null = null;
   /** Between a card put away and the next one out. */
   private opening = false;
-  /** The timer bringing the next card out (0: none). */
-  private pending = 0;
   private shownFor = 0;
   private needed = 0;
   private readonly from = { x: 0, z: 0 };
@@ -70,34 +67,23 @@ export class ReadingCard {
 
   /**
    * Put down by hand (docs/notices.md): a page left turns over, a picture side turns to the writing; else the card
-   * goes at once, read or not, and the next waiting one comes out; `all` takes the waiting ones too. False when there
-   * was no card.
+   * goes at once, read or not, and the next waiting one comes out. One card a press, however fast the presses come: a
+   * letter's pages and the day's mail are never thrown away by a double press. False when there was no card.
    */
-  dismiss(all = false): boolean {
+  dismiss(): boolean {
     if (!this.isUp) return false;
-    if (all) {
-      this.queue.length = 0;
-      // The next card was already on its way out: it stays in.
-      if (this.pending) window.clearTimeout(this.pending);
-      this.pending = 0;
-      this.opening = false;
-      if (this.current) this.close();
-      // The next card was on its way (the one before it gone): nothing is up any more, the room comes back.
-      else this.clearDim();
-      return true;
-    }
     if (this.current) this.advance();
     return true;
   }
 
   show(card: ReadingNotice): void {
     if (!card.text) return;
+    // The same card asked for again while it is up or waiting (a key pressed twice: the booklet, the mail) is one card.
+    const same = (other: Card): boolean => other.text === card.text && other.title === card.title;
+    if ((this.current && same(this.current.card)) || this.queue.some(same)) return;
     if (this.current || this.opening) {
-      if (this.queue.length >= QUEUE_MAX && !card.of) {
-        // The last waiting card takes this one in: its own text is shown, the ones after it counted under it.
-        const last = this.queue[this.queue.length - 1]!;
-        this.queue[this.queue.length - 1] = { ...last, more: (last.more ?? 0) + 1 };
-      } else this.queue.push(card);
+      this.queue.push(card);
+      if (this.current) this.countWaiting(this.current);
       // The one up now has been read enough: make way.
       if (this.current && this.shownFor >= this.needed && this.onLastPage()) this.close();
       return;
@@ -140,6 +126,8 @@ export class ReadingCard {
     this.root.appendChild(parts.el);
     this.current = shown;
     this.turn(shown, 0);
+    // Kept to read again ("What was said"): who wrote it, or what it is, and its text.
+    noteSaid({ name: card.from ?? card.title, text: card.effect ? `${card.text} ${card.effect}` : card.text, card: true });
     this.viewer.getWorldPosition(eye);
     this.from.x = eye.x;
     this.from.z = eye.z;
@@ -155,7 +143,7 @@ export class ReadingCard {
     const last = index >= pages.length - 1;
     parts.body.textContent = pages[index] ?? '';
     if (parts.effect) parts.effect.hidden = !last;
-    if (parts.more) parts.more.hidden = !last;
+    this.countWaiting(shown);
     const where = [card.of ? `${card.of.index} of ${card.of.count}` : '', pages.length > 1 ? `${index + 1}/${pages.length}` : ''].filter(Boolean).join(' · ');
     parts.stamp.textContent = where;
     parts.stamp.hidden = !where;
@@ -163,6 +151,13 @@ export class ReadingCard {
     this.needed = readMs(`${index === 0 ? (card.title ?? '') : ''} ${pages[index] ?? ''} ${last ? (card.effect ?? '') : ''}`) + (shown.flipped ? 0 : FLIP_MS);
     this.hint(shown);
     if (index > 0) playNoticeSound('page');
+  }
+
+  /** The last page says how many cards wait behind this one (none: nothing said). */
+  private countWaiting(shown: Shown): void {
+    const waiting = this.queue.length;
+    shown.parts.more.textContent = waiting ? `${waiting} more to read` : '';
+    shown.parts.more.hidden = !waiting || shown.page < shown.pages.length - 1;
   }
 
   /** A postcard's picture side turns to the writing. */
@@ -195,9 +190,8 @@ export class ReadingCard {
       return;
     }
     this.opening = true;
-    this.pending = window.setTimeout(() => {
+    window.setTimeout(() => {
       this.opening = false;
-      this.pending = 0;
       this.open(next);
     }, FADE_MS);
   }

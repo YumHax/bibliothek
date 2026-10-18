@@ -40,7 +40,7 @@ interface PhotoModeDeps {
   interactor?: { enabled: boolean };
   /** Why photo mode cannot start now (a box in hand, a panel open, at a machine…), or null. */
   blocked?: () => string | null;
-  /** A line for the HUD (the Toast or the hint), shown once photo mode is left or when it cannot start. */
+  /** A line for the player (a notice), said once photo mode is left or when it cannot start. */
   say?: (text: string) => void;
   /** Hears each shot as saved (the roll keeps a small print for Mémé's album, `photo/photoRoll`). */
   kept?: (shot: HTMLCanvasElement) => void;
@@ -87,6 +87,15 @@ export class PhotoMode implements Updatable {
   constructor(private readonly deps: PhotoModeDeps) {
     this.hud = new PhotoHud(deps.container);
     this.hud.setFrame(PHOTO_FRAMES[0]!);
+    // A touchscreen's camera buttons: the grade, the guide, back to the start, and out (the stick flies, a drag looks,
+    // a pinch zooms, a tap takes the photo).
+    const key = (id: 'photoLook' | 'photoFrame' | 'photoReset'): (() => void) => () => void this.keyAction(ACTIONS[id].codes[0]!);
+    this.hud.setTouchActions([
+      { label: 'Look', run: key('photoLook') },
+      { label: 'Frame', run: key('photoFrame') },
+      { label: 'Reset', run: key('photoReset') },
+      { label: 'Back', run: () => this.exit() },
+    ]);
     window.addEventListener('wheel', (e) => this.onWheel(e), { passive: false });
     document.addEventListener('mousedown', (e) => {
       if (this.active && e.button === 0 && this.deps.player.isLocked) this.capture();
@@ -166,8 +175,14 @@ export class PhotoMode implements Updatable {
     savePhoto(out, (result) => {
       if (result.ok) this.hud.setSaved(`Saved ${result.name}`, false);
       else this.hud.setSaved(`Not saved: ${result.reason}`, true);
+      this.hud.showPrint(out, result.ok ? 'Kept: in your downloads, and a print for the album' : `Not saved: ${result.reason}`, !result.ok);
       this.refresh();
     });
+  }
+
+  /** Two fingers spread (positive) or pinched on a touchscreen: the lens zooms in or out, like the wheel. */
+  pinch(amount: number): void {
+    if (this.active && amount) this.zoom(-amount * 6);
   }
 
   /** A key press while active: true when photo mode used it (always, while active: nothing else should hear it). */

@@ -19,6 +19,8 @@ export interface ConflictState {
   decided: number | null;
   /** The game day it blew over without the player (no side taken in time). */
   lapsed: number | null;
+  /** The game day the player made the two make up (a friend of both), or null. */
+  peace?: number | null;
   /** Each side told the player their side of it. */
   told: { a?: boolean; b?: boolean };
   /** The winner told how it went; the loser said their piece; the loser's way back taken. */
@@ -61,6 +63,7 @@ function readSave(data: unknown): ConflictSave | null {
       side: v.side === 'a' || v.side === 'b' ? v.side : null,
       decided: typeof v.decided === 'number' ? v.decided : null,
       lapsed: typeof v.lapsed === 'number' ? v.lapsed : null,
+      peace: typeof v.peace === 'number' ? v.peace : null,
       told: { a: v.told?.a === true, b: v.told?.b === true },
       concluded: v.concluded === true,
       lostSaid: v.lostSaid === true,

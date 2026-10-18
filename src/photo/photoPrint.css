@@ -1,0 +1,31 @@
+/* Photo mode's print of the last shot: a white-bordered instant photo that slides in at the bottom right, then away. */
+@layer tokens, base, components, panels;
+@layer panels {
+  .photo-print {
+    --print-paper: var(--paper-letter);
+    --print-ink: var(--ink-letter);
+    position: absolute;
+    right: var(--sp-5);
+    bottom: var(--sp-5);
+    z-index: var(--z-hud);
+    width: 12rem;
+    margin: 0;
+    padding: 0.55rem 0.55rem 0.4rem;
+    background: var(--print-paper);
+    color: var(--print-ink);
+    box-shadow: var(--ui-shadow-paper);
+    rotate: 2.5deg;
+    pointer-events: none;
+    transition: opacity var(--dur-fade) ease, translate var(--dur-fade) ease;
+  }
+  .photo-print--in { animation: photo-print-in var(--dur-slow) var(--ui-ease); }
+  .photo-print--out { opacity: 0; translate: 0 1rem; }
+  @keyframes photo-print-in {
+    from { opacity: 0; translate: 2rem 1.5rem; rotate: 8deg; }
+    to { opacity: 1; translate: 0 0; rotate: 2.5deg; }
+  }
+  .photo-print__shot { display: block; width: 100%; height: auto; background: var(--ui-black); }
+  .photo-print__caption { margin: 0.4rem 0 0; font-family: var(--ui-font-hand); font-size: var(--fs-5); line-height: 1.2; text-align: center; }
+  .photo-print__caption--failed { color: var(--ui-danger); }
+  .reduce-motion .photo-print--in { animation: none; }
+}

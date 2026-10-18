@@ -38,6 +38,18 @@ const BLOCKS_FROM = 3;
 const MAX_BLOCKS = 9;
 /** The start row's left part stays clear: the snake comes back there after a crash. */
 const START_CLEAR = 16;
+/** Each stage lights the board in its own colours (round and round): the floor, its checks, the wall. */
+const STAGE_LOOKS = [
+  { floor: '#060a12', check: 'rgba(80,255,190,0.05)', wall: '#1f6f5a' },
+  { floor: '#0e0618', check: 'rgba(255,95,176,0.07)', wall: '#7a2a66' },
+  { floor: '#04121c', check: 'rgba(90,190,255,0.07)', wall: '#1f557f' },
+  { floor: '#141006', check: 'rgba(255,210,58,0.06)', wall: '#7f5f1f' },
+] as const;
+/** From this stage on a pair of warp holes opens: in one, out of the other, heading on; through pays a little. */
+const WARP_FROM = 2;
+const WARP_POINTS = 15;
+/** Reaching this stage without a crash: a feat (a feat challenge asks for it). */
+const FEAT_STAGE = 3;
 
 type Dir = 'left' | 'right' | 'up' | 'down';
 const STEP: Record<Dir, [number, number]> = { left: [-1, 0], right: [1, 0], up: [0, -1], down: [0, 1] };
@@ -53,7 +65,8 @@ interface Cell {
  * once); each one pays points and a little time, pellets eaten in quick succession chain the
  * combo, a gold one now and then pays two seconds before it fades. Every six pellets the snake
  * speeds up and the clock gets two seconds; from the third stage each stage also drops a block on
- * the board, so it keeps closing in once the speed tops out. Hitting a wall, a block or yourself
+ * the board, so it keeps closing in once the speed tops out; each stage lights the board in its own colours, and from
+ * the second a pair of warp holes opens (in one, out of the other). Hitting a wall, a block or yourself
  * costs two seconds and the combo, and the snake starts again short from the middle: only the
  * clock ends the play.
  */
@@ -77,6 +90,10 @@ export class Snake extends BaseGame {
   private eaten = 0;
   /** The blocks dropped on the board, cell by cell. */
   private blocks: Cell[] = [];
+  /** The two warp holes (from `WARP_FROM`), moved at every stage. */
+  private warps: [Cell, Cell] | null = null;
+  /** Crashes this play. */
+  private crashes = 0;
 
   constructor() {
     super(ROUND_SECONDS, SNAKE_COMBO_MAX);
@@ -88,6 +105,8 @@ export class Snake extends BaseGame {
     this.crashed = 0;
     this.pellets = [];
     this.blocks = [];
+    this.warps = null;
+    this.crashes = 0;
     this.startSnake();
     while (this.pellets.length < PELLETS) this.pellets.push(this.freeCell());
   }
@@ -134,11 +153,19 @@ export class Snake extends BaseGame {
   }
 
   protected paint(ctx: CanvasRenderingContext2D): void {
-    ctx.fillStyle = '#060a12';
+    const look = STAGE_LOOKS[(this.stage - 1) % STAGE_LOOKS.length]!;
+    ctx.fillStyle = look.floor;
     ctx.fillRect(0, 0, SCREEN_W, SCREEN_H);
-    ctx.fillStyle = 'rgba(80,255,190,0.05)';
+    ctx.fillStyle = look.check;
     for (let x = 0; x < COLS; x++) for (let y = 0; y < ROWS; y++) if ((x + y) % 2 === 0) ctx.fillRect(x * CELL, TOP + y * CELL, CELL, CELL);
-    ctx.strokeStyle = '#1f6f5a';
+    // The warp holes: two rings that turn, one blue, one orange.
+    if (this.warps) this.warps.forEach((w, i) => {
+      const r = 3 + Math.round(1 + Math.sin(this.elapsed * 8 + i * Math.PI));
+      ctx.strokeStyle = i ? '#ff9a3c' : '#4ab8ff';
+      ctx.lineWidth = 2;
+      ctx.strokeRect(w.x * CELL + CELL / 2 - r, TOP + w.y * CELL + CELL / 2 - r, r * 2, r * 2);
+    });
+    ctx.strokeStyle = look.wall;
     ctx.lineWidth = 2;
     ctx.strokeRect(1, TOP + 1, COLS * CELL - 2, ROWS * CELL - 2);
     // The pellet pulses; the gold one blinks as it runs out.
@@ -204,7 +231,15 @@ export class Snake extends BaseGame {
     if (next) this.dir = next;
     const head = this.body[0]!;
     const [dx, dy] = STEP[this.dir];
-    const cell = { x: head.x + dx, y: head.y + dy };
+    let cell = { x: head.x + dx, y: head.y + dy };
+    // Into a warp hole: out of the other one, heading on.
+    const warpIn = this.warps?.findIndex((w) => w.x === cell.x && w.y === cell.y) ?? -1;
+    if (this.warps && warpIn >= 0) {
+      const out = this.warps[1 - warpIn]!;
+      cell = { x: out.x, y: out.y };
+      this.addScore(WARP_POINTS, cell.x * CELL + CELL / 2, TOP + cell.y * CELL);
+      this.sound('bonus', 1.6);
+    }
     const tailMoves = this.grow === 0;
     const hitsSelf = this.body.some((c, i) => c.x === cell.x && c.y === cell.y && !(tailMoves && i === this.body.length - 1));
     const hitsBlock = this.blocks.some((b) => b.x === cell.x && b.y === cell.y);
@@ -228,8 +263,10 @@ export class Snake extends BaseGame {
       this.timeLeft += PELLET_SECONDS;
       if (this.eaten % PELLETS_PER_STAGE === 0) {
         this.fx.pop(`STAGE ${this.stage}`, SCREEN_W / 2, SCREEN_H / 2 - 20, '#ffffff', 12);
+        if (this.stage === FEAT_STAGE && !this.crashes) this.feat(`STAGE ${FEAT_STAGE} CLEAN`);
         this.addTime(STAGE_SECONDS, SCREEN_W / 2, SCREEN_H / 2);
         if (this.stage >= BLOCKS_FROM) this.dropBlock();
+        if (this.stage >= WARP_FROM) this.openWarps();
       }
       if (this.eaten % GOLD_EVERY === 0 && !this.gold) {
         this.gold = { ...this.freeCell(), life: GOLD_LIFE };
@@ -252,7 +289,7 @@ export class Snake extends BaseGame {
   }
 
   private freeCell(): Cell {
-    const taken = (cell: Cell): boolean => [...this.body, ...this.pellets, ...this.blocks].some((c) => c.x === cell.x && c.y === cell.y);
+    const taken = (cell: Cell): boolean => [...this.body, ...this.pellets, ...this.blocks, ...(this.warps ?? [])].some((c) => c.x === cell.x && c.y === cell.y);
     for (let tries = 0; tries < 200; tries++) {
       const cell = { x: 1 + Math.floor(this.rand() * (COLS - 2)), y: 1 + Math.floor(this.rand() * (ROWS - 2)) };
       if (!taken(cell)) return cell;
@@ -267,7 +304,7 @@ export class Snake extends BaseGame {
     const [dx, dy] = STEP[this.dir];
     const startRow = Math.floor(ROWS / 2);
     const occupied = (c: Cell): boolean =>
-      [...this.body, ...this.pellets, ...this.blocks].some((o) => o.x === c.x && o.y === c.y) ||
+      [...this.body, ...this.pellets, ...this.blocks, ...(this.warps ?? [])].some((o) => o.x === c.x && o.y === c.y) ||
       (c.y === startRow && c.x < START_CLEAR) ||
       (Math.abs(c.x - (head.x + dx * 2)) <= 2 && Math.abs(c.y - (head.y + dy * 2)) <= 2) ||
       (this.gold !== null && this.gold.x === c.x && this.gold.y === c.y);
@@ -282,9 +319,25 @@ export class Snake extends BaseGame {
     }
   }
 
+  /** Two warp holes where nothing is, in the board's two halves, away from the head (the old pair closes). */
+  private openWarps(): void {
+    const head = this.body[0]!;
+    const pick = (left: boolean): Cell | null => {
+      for (let tries = 0; tries < 60; tries++) {
+        const c = this.freeCell();
+        if (c.x < COLS / 2 === left && Math.abs(c.x - head.x) + Math.abs(c.y - head.y) > 4) return c;
+      }
+      return null;
+    };
+    const a = pick(true);
+    const b = pick(false);
+    this.warps = a && b ? [a, b] : null;
+  }
+
   /** A wall or the tail: seconds and the combo go, and the snake starts again short once it has blinked. */
   private crash(): void {
     this.crashed = CRASH_PAUSE;
+    this.crashes += 1;
     this.breakCombo();
     this.fx.flash('#ff5f5f', 0.15);
     this.fx.shake(3, 0.2);

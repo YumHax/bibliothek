@@ -213,21 +213,34 @@
   body.alert-up .hover-label--edge { visibility: hidden; }
 
   /*
-   * Anchored from the top, not centred: the press's card arrives after the rest and grows the panel downwards
-   * instead of re-centring it (everything jumped up). Capped to the view; a long description stops at six lines.
+   * The card beside the game in hand (`GamePanel`): a collector's index card, cream with a red header rule and faint
+   * blue lines. Anchored from the top, not centred, and the press's place kept from the start (`review-card--waiting`):
+   * nothing above moves when it comes in. Capped to the view; the blurb stops at a few lines until the box is turned over.
    */
   .game-panel {
+    --fade-mask: #000;
+    --paper: var(--paper-note);
+    --ink: var(--ink-letter);
     position: fixed;
     top: 12vh;
     right: 3rem;
     width: min(22rem, 40vw);
     max-height: 76vh;
     overflow: hidden;
-    padding: var(--sp-5) 1.75rem;
-    border-radius: var(--ui-radius);
-    background: var(--ui-panel);
-    border: 1px solid var(--ui-border);
-    color: var(--ui-text);
+    /* The facts flow in the middle; the key hints keep their place at the foot whatever the height. */
+    display: flex;
+    flex-direction: column;
+    box-sizing: border-box;
+    padding: var(--sp-4) 1.5rem var(--sp-5);
+    border-radius: var(--ui-radius-xs);
+    background:
+      linear-gradient(transparent 4.6rem, var(--paper-margin) 4.6rem, var(--paper-margin) calc(4.6rem + 1.5px), transparent calc(4.6rem + 1.5px)),
+      repeating-linear-gradient(transparent 0, transparent 1.45rem, var(--paper-squares) 1.45rem, var(--paper-squares) calc(1.45rem + 1px)),
+      var(--paper);
+    color: var(--ink);
+    color-scheme: light;
+    box-shadow: var(--ui-shadow-paper);
+    rotate: 0.5deg;
     pointer-events: none;
     animation: panel-in var(--dur-quick) ease-out;
     transition: opacity var(--dur-fade) ease;
@@ -238,12 +251,49 @@
     from { opacity: 0; transform: translateX(1rem); }
     to   { opacity: 1; transform: none; }
   }
-  .game-panel h2 { margin: 0 0 var(--sp-4); font-size: 1.4rem; line-height: 1.2; }
-  .game-panel dl { display: grid; grid-template-columns: auto 1fr; gap: 0.35rem var(--sp-4); margin: 0; font-size: var(--fs-5); }
-  .game-panel dt { color: var(--ui-text-dim); }
+  .game-panel__head { min-height: 3.6rem; margin-bottom: var(--sp-3); }
+  .game-panel h2 { margin: 0; font-family: var(--ui-font-print); font-weight: 400; font-size: 1.45rem; line-height: 1.15; }
+  .game-panel__line { margin: 0.2rem 0 0; font-size: var(--fs-3); letter-spacing: 0.04em; opacity: 0.7; }
+  .game-panel__stamps { display: flex; flex-wrap: wrap; gap: 0.35rem; margin: 0 0 var(--sp-3); padding: 0; list-style: none; }
+  .game-panel__stamp {
+    padding: 0.05rem 0.45rem;
+    border: 1.5px solid currentColor;
+    border-radius: var(--ui-radius-2xs);
+    font-size: var(--fs-2);
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    rotate: -2deg;
+  }
+  .game-panel__stamp--good { color: var(--ink-green); }
+  .game-panel__stamp--flaw { color: var(--ink-red); }
+  .game-panel__stamp--rare { color: var(--ink-gold); }
+  .game-panel dl { display: grid; grid-template-columns: auto 1fr; gap: 0.2rem var(--sp-3); margin: 0; font-size: var(--fs-4); }
+  .game-panel dt { opacity: 0.6; }
   .game-panel dd { margin: 0; }
-  .game-panel p { margin: var(--sp-4) 0 0; font-size: var(--fs-5); line-height: 1.45; opacity: 0.9; }
-  .game-panel p:not(.game-panel__note) { display: -webkit-box; -webkit-line-clamp: 6; line-clamp: 6; -webkit-box-orient: vertical; overflow: hidden; }
-  .game-panel footer { margin-top: 1.25rem; font-size: var(--fs-3); color: var(--ui-text-dim); }
-  .game-panel .game-panel__note { padding: 0.5rem 0.7rem; border-left: 3px solid var(--ui-accent); background: var(--ui-accent-soft); opacity: 1; }
+  .game-panel__asides { margin: var(--sp-3) 0 0; padding-left: 1rem; font-size: var(--fs-4); line-height: 1.35; }
+  .game-panel__receipt { margin: var(--sp-3) 0 0; font-family: var(--ui-font-hand); font-size: var(--fs-6); line-height: 1.1; color: var(--ink-note); rotate: -1deg; }
+  .game-panel p { margin: var(--sp-3) 0 0; font-size: var(--fs-4); line-height: 1.45; }
+  .game-panel__blurb p { display: -webkit-box; -webkit-line-clamp: 4; line-clamp: 4; -webkit-box-orient: vertical; overflow: hidden; }
+  .game-panel--back .game-panel__blurb p { -webkit-line-clamp: 18; line-clamp: 18; }
+  .game-panel__more { display: none; font-size: var(--fs-2); font-style: italic; opacity: 0.55; }
+  .game-panel__blurb--cut .game-panel__more { display: block; }
+  .game-panel--back .game-panel__more { display: none; }
+  .game-panel footer { flex: none; margin-top: 1.25rem; font-size: var(--fs-3); opacity: 0.7; }
+  .game-panel__content { flex: 1 1 auto; min-height: 0; overflow: hidden; }
+  /* Taller than the view: the card fades out at its foot, over the hints, instead of being cut dead. */
+  .game-panel--overflow .game-panel__content {
+    -webkit-mask-image: linear-gradient(var(--fade-mask) calc(100% - 3rem), transparent);
+    mask-image: linear-gradient(var(--fade-mask) calc(100% - 3rem), transparent);
+  }
+  .game-panel__more kbd { font-style: normal; }
+  /* A short screen: the card starts higher, its blurb shorter, so the hints stay on it. */
+  @media (max-height: 40rem) {
+    .game-panel { top: 6vh; max-height: 86vh; padding-bottom: var(--sp-4); }
+    .game-panel__blurb p { -webkit-line-clamp: 3; line-clamp: 3; }
+    .game-panel--back .game-panel__blurb p { -webkit-line-clamp: 10; line-clamp: 10; }
+  }
+  .game-panel .game-panel__note { padding: 0.45rem 0.65rem; border-left: 3px solid var(--ink-red); background: var(--rule-reading); }
+  /* The press's place, kept while its lookup runs: a faint clipping, so the card does not grow when it lands. */
+  .game-panel .review-card--waiting { min-height: 6.5rem; opacity: 0.35; animation: none; }
 }

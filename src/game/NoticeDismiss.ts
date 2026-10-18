@@ -8,12 +8,12 @@ export interface NoticeDismissParts {
   noticeDismiss?: NoticeDismissing;
 }
 
-/** A second press within this long puts every waiting card away, not just the one up (ms). */
+/** A second press within this long puts every waiting banner and tip away, not just the one up (ms); cards go one a press. */
 const DOUBLE_MS = 450;
 
 /**
- * X puts down what is being read (docs/notices.md): the card up, read or not; twice quickly, every card waiting
- * behind it; with no card, the reward banner and the newest tip; the subtitles with any press. Last in the routes
+ * X puts down what is being read (docs/notices.md): the card up, read or not, one a press; with no card, the reward
+ * banner and the newest tip (twice quickly: every banner and tip waiting); the subtitles with any press. Last in the routes
  * but for seating: a piece of furniture carried (put away) and a market copy in hand (swap) keep X.
  */
 export class NoticeDismiss implements KeyRoute {

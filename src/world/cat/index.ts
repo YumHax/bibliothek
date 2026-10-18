@@ -17,11 +17,17 @@ import type { CatPerch } from './spots';
 import type { Placer } from '../build/owned';
 import type { Furnishings } from '@/furnishing/Furnishings';
 
+/** Where the cat lies against the console stand while a game plays (TV-local: beside the stand, a little out from it). */
+const WARM_SPOT = { side: 0.62, out: 0.32 };
+const warmTurn = new THREE.Quaternion();
+const warmAt = new THREE.Vector3();
+
 export { Cat } from './Cat';
 export { CatSettingsStore,  } from './catSettings';
 export { catPlacers, followAdoption } from './adoption';
 export { placeCatEscapes,   } from './escapes';
 export * from './types';
+import type { CatBoxLike } from './CatBrain';
 
 interface CatFurnishOptions {
   /** Name and coat; the cat follows later changes. */
@@ -33,6 +39,8 @@ interface CatFurnishOptions {
   tv: Television;
   /** The rest of the flat: its rooms (world XZ), spots to visit there, places to nap and more water (see `CatOptions`). */
   flat?: { rooms: THREE.Box2[]; visits: THREE.Vector3[]; perches: CatPerch[]; waters?: WaterBowlLike[] };
+  /** The living room's shelved boxes: a low one gets pawed out of its row now and then. */
+  boxes?: () => Iterable<CatBoxLike>;
   /**
    * Who places what (`build/owned.placerFor`): the cat with its bowls and bed once adopted, the scratching post and the
    * ball once bought. The zone itself (everything at once) without.
@@ -101,6 +109,8 @@ export function furnishCat(zone: Zone, options: CatFurnishOptions): Cat {
       isPlaying: () => tv.state === 'playing',
       watchingSpot: (out) => out.copy(watchingSpot),
       screenPoint: (out) => tv.getWorldPosition(out).setY(0.9),
+      // Against the stand under the set, to its side, off the rug the watchers sit on.
+      warmSpot: (out) => out.set(WARM_SPOT.side, 0, WARM_SPOT.out).applyQuaternion(tv.getWorldQuaternion(warmTurn)).add(tv.getWorldPosition(warmAt)).setY(0),
     },
     voice: new CatVoice(),
     listener: options.listener,
@@ -109,6 +119,7 @@ export function furnishCat(zone: Zone, options: CatFurnishOptions): Cat {
     visits: options.flat?.visits,
     perches: options.flat?.perches,
     waters: options.flat?.waters,
+    boxes: options.boxes,
   });
   options.settings.subscribe((s) => cat.applySettings(s));
   if (!post.owned) post.onOwned(() => cat.provide({ scratcher }));

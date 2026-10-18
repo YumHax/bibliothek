@@ -18,7 +18,7 @@ import { HOMEBREW_CARTS } from '@/emulator/homebrew';
 import { dressCopy, drawBootleg } from './copyTraits';
 import { shuffled } from '@/random';
 import { dayStream } from '@/time/daily';
-import { hidesShowpiece, stallLoyalty, stallMarkup } from '@/social/market';
+import { hidesShowpiece, stallMarkup } from '@/social/market';
 
 /** What a day's draw reads and asks of the market (`MarketStock` hands itself over): the stores, the stalls' room, the index, the pricing. */
 export interface DrawContext {
@@ -358,7 +358,7 @@ class Stall {
     this.room = terms.room;
     this.markup = terms.markup;
     this.held = terms.held;
-    this.loyalty = stallLoyalty(platform, draw.ctx.standing.loyalty(platform));
+    this.loyalty = draw.ctx.standing.loyalty(platform);
   }
 
   has(id: string): boolean {

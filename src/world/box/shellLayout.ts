@@ -215,6 +215,14 @@ function sideOpening(dims: BoxDimensions, kind: CaseKind, media: MediaSpec): She
   };
 }
 
+/** The media's block at rest in the closed box (box space): its real size, turned a quarter when `sideways`. */
+export function mediaSlab(layout: ShellLayout, media: MediaSpec): Slab {
+  const { width, height, depth } = media.size;
+  const [w, h] = layout.media.sideways ? [height, width] : [width, height];
+  const c = layout.media.centre;
+  return slab(c.x - w / 2, c.x + w / 2, c.y - h / 2, c.y + h / 2, c.z - depth / 2, c.z + depth / 2);
+}
+
 /** Too wide to stand upright in the box, but it fits turned a quarter. */
 function needsSideways(media: MediaSpec, cavity: Slab): boolean {
   const cw = cavity.x.max - cavity.x.min - 0.002;

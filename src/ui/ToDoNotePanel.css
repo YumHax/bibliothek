@@ -120,4 +120,6 @@
     cursor: pointer;
   }
   .todo-note__paper button:hover { background: var(--paper-note-wash); }
+  /* Asking once more before the tips stop: in red felt pen. */
+  .todo-note__paper button.ui-btn--armed { color: var(--ink-red); border-color: var(--ink-red); background: transparent; font-weight: 700; }
 }

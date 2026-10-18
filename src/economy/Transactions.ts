@@ -9,7 +9,7 @@ import type { JobLot } from './MarketStock';
 import { lotOffer } from './JobLot';
 import type { Prize } from './Prizes';
 import type { StockItem } from './StockItem';
-import { PRIZE_WHERE, RARE_PRIZE_WHERE, SWAP_WHERE_PREFIX, wantedPay } from './pricing';
+import { PRIZE_WHERE, RARE_PRIZE_WHERE, SWAP_WHERE_PREFIX, swapChange, wantedPay } from './pricing';
 
 /*
  * The shapes a transaction needs of each store: structural, so the Session's parts (`SessionParts`)
@@ -215,7 +215,7 @@ export class Transactions {
   }
 
   /** X at a stall: `mine` (worth `value`) goes to the stall, `item` comes home, the difference is paid (no change given). */
-  swap(item: StockItem, mine: Game, value: number, where: string): TxResult<{ game: Game; topUp: number }> {
+  swap(item: StockItem, mine: Game, value: number, where: string): TxResult<{ game: Game; topUp: number; change: number }> {
     const { wallet, collection, market, standing } = this.deps;
     if (!wallet || !collection?.remove || !market) return fail('unavailable');
     if (!item.priced) return fail('pricing');
@@ -224,16 +224,20 @@ export class Transactions {
     if (collection.owns(item.game.id)) return fail('owned');
     const topUp = Math.max(0, item.due - value);
     if (wallet.coins < topUp) return fail('short', topUp, wallet.coins);
-    const game = bought(item.game, topUp, `${SWAP_WHERE_PREFIX}${where}`, market.day);
+    const change = swapChange(item.due, value);
+    const receipt = bought(item.game, topUp, `${SWAP_WHERE_PREFIX}${where}`, market.day);
+    // What it cost in all (the coins and the game given, less the change), so a dealer never counts it for more.
+    const game: Game = { ...receipt, acquired: { ...receipt.acquired!, worth: Math.max(1, topUp + value - change) } };
     batch(() => {
       wallet.spend(topUp);
+      if (change) wallet.earnCoins(change);
       collection.remove!(mine.id);
       market.consign(mine);
       collection.add(game);
       market.sold(item);
       standing?.record('swap');
     });
-    return { ok: true, game, topUp };
+    return { ok: true, game, topUp, change };
   }
 
   /** The WE BUY desk: `game` leaves the collection for `offer` coins and goes on its stall from tomorrow. */
@@ -343,6 +347,33 @@ export class Transactions {
     return { ok: true, games };
   }
 
+  /**
+   * A private seller's whole table at once (`classifieds/rules` `TABLE_LOT` of what the copies cost one by one: docs/economy.md
+   * "Small ads and the seller's flat"): every copy the player lacks into the parcel for `total`, each receipt its share.
+   */
+  buyTable(items: readonly StockItem[], total: number, where: string): TxResult<{ games: Game[] }> {
+    const { wallet, collection, market } = this.deps;
+    if (!wallet || !collection) return fail('unavailable');
+    // The total is for every copy on the table: one still being priced, or one the player has, and the table is not the lot it was.
+    if (items.some((item) => !item.priced)) return fail('pricing');
+    const wanted = items.filter((item) => !collection.owns(item.game.id));
+    if (wanted.length < items.length) return fail('owned');
+    if (wallet.coins < total) return fail('short', total, wallet.coins);
+    const list = wanted.reduce((sum, item) => sum + item.price, 0);
+    let left = total;
+    const games = wanted.map((item, i) => {
+      const share = i === wanted.length - 1 ? left : Math.round((item.price / Math.max(1, list)) * total);
+      left -= share;
+      return bought(item.game, Math.max(0, share), where, market?.day ?? 0);
+    });
+    batch(() => {
+      wallet.spend(total);
+      if (collection.addMany) collection.addMany(games);
+      else for (const game of games) collection.add(game);
+    });
+    return { ok: true, games };
+  }
+
   /** The mail-order catalogue: a new copy at `price`, into the parcel. */
   buyMailOrder(game: Game, price: number): TxResult<{ game: Game }> {
     const { wallet, collection, market, standing } = this.deps;
@@ -425,6 +456,60 @@ export class Transactions {
       alsoDo?.();
     });
     return { ok: true, game };
+  }
+
+  /**
+   * A copy entered for a coming sale at the saleroom (`AuctionHouse.consign`, run by `enter`: false when the sale has
+   * one already): out of the collection now, the coins after its hammer (`consignmentSold`), back if the room passes it.
+   * Not a lent copy, a keepsake nor a reproduction (the house does not take fakes).
+   */
+  consignToSale(game: Game, enter: () => boolean): TxResult {
+    const { collection } = this.deps;
+    if (!collection?.remove) return fail('unavailable');
+    if (!collection.owns(game.id) || (game.status ?? 'owned') !== 'owned' || isKeepsake(game) || game.repro) return fail('notOwned');
+    let entered = false;
+    batch(() => {
+      entered = enter();
+      if (entered) collection.remove!(game.id);
+    });
+    return entered ? { ok: true } : fail('done');
+  }
+
+  /** The hammer fell on the player's consigned copy: the house's cheque (`consignNet`, worked out by the caller). */
+  consignmentSold(net: number): TxResult {
+    const { wallet } = this.deps;
+    if (!wallet) return fail('unavailable');
+    wallet.earnCoins(net);
+    return { ok: true };
+  }
+
+  /** The room passed the player's consigned copy: it comes home as it left (its receipt kept). */
+  consignmentBack(game: Game): TxResult {
+    const { collection } = this.deps;
+    if (!collection) return fail('unavailable');
+    if (collection.owns(game.id)) return fail('owned');
+    collection.add({ ...game, status: 'owned' });
+    return { ok: true };
+  }
+
+  /** A game found among odds and ends (a carton's unlabelled cart): into the collection for nothing, its receipt 0 coins at `where`. */
+  keepFound(game: Game, where: string): TxResult<{ game: Game }> {
+    const { collection, market } = this.deps;
+    if (!collection) return fail('unavailable');
+    if (collection.owns(game.id)) return fail('owned');
+    const copy = bought(game, 0, where, market?.day ?? 0);
+    collection.add(copy);
+    return { ok: true, game: copy };
+  }
+
+  /** A manual found for a copy that lacked one (a carton's bag of manuals): it goes in the box, the copy complete. */
+  fillManual(id: string): TxResult {
+    const { collection } = this.deps;
+    if (!collection?.update) return fail('unavailable');
+    const copy = collection.find?.(id) ?? collection.games?.find((g) => g.id === id);
+    if (!copy || copy.condition !== 'noManual') return fail('notOwned');
+    collection.update(id, { condition: 'complete' });
+    return { ok: true };
   }
 
   /** A sealed carton bought (the market's corner, the saleroom's hammer): the coins go, `takeHome` puts it in the hallway, in one save. */

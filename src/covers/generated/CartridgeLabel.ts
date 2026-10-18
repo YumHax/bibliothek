@@ -1,10 +1,13 @@
 import type * as THREE from 'three';
 import type { Game } from '@/catalog/types';
 import { getPlatform } from '@/catalog/platforms';
-import { createCanvas, drawImageCover, fitFontSize, roundRect, toTexture, wrapLines, FONT } from './canvasUtils';
+import { drawImageCover, fitFontSize, layoutCanvas, roundRect, toTexture, wrapLines, FONT } from './canvasUtils';
 import { contrastText, css } from './palette';
 
+/** Layout width: every size below is in these units. */
 const WIDTH_PX = 384;
+/** The canvas's longest side (px): the label read with the cartridge lifted up to the eye. */
+const LONG_PX = 1024;
 
 /**
  * A cartridge's sticker: the game's art (title screen, screenshot or the cover itself) over a title
@@ -15,7 +18,7 @@ const WIDTH_PX = 384;
 export function createCartridgeLabelTexture(game: Game, accent: THREE.Color, art: CanvasImageSource | null, anisotropy: number, aspect: number, fold = 0): THREE.CanvasTexture {
   const w = WIDTH_PX;
   const h = Math.round(w / aspect);
-  const [canvas, ctx] = createCanvas(w, h);
+  const [canvas, ctx] = layoutCanvas(w, h, LONG_PX);
   const foldH = Math.round(h * fold);
 
   // Paper, with the accent's dark shade as the border ground.

@@ -21,16 +21,17 @@ export const TV_SHOP: ShopPlan = {
   clerk: {
     seed: 83,
     lines: [
-      '“Everything on the tables is tested. The wall? Those are waiting for their owners.”',
-      '“Projectors? I have one on the bench. Runs like new.”',
-      '“A soldering iron, a radio in pieces, a smell of warm dust. You get used to it.”',
-      '“They all show snow because there is nothing on. Nothing worth watching, anyway.”',
+      'Everything on the tables is tested. The wall? Those are waiting for their owners.',
+      'Projectors? I have one on the bench. Runs like new.',
+      'A soldering iron, a radio in pieces, a smell of warm dust. You get used to it.',
+      'They all show snow because there is nothing on. Nothing worth watching, anyway.',
     ],
     callOuts: ['All tested!'],
+    greetings: { first: ['Mind the cables. If it has a tube, I can fix it.'], met: ['Ah, you. Something gone fuzzy?', 'Hello again. The kettle’s on, the sets are warm.'] },
     thanks: [
-      '“There you go. If it ever goes fuzzy, you know where I am.”',
-      '“Good pick. Give it a knock on the side if it sulks.”',
-      '“Sold. It’ll be upstairs tonight, warmed up and all.”',
+      'There you go. If it ever goes fuzzy, you know where I am.',
+      'Good pick. Give it a knock on the side if it sulks.',
+      'Sold. It’ll be upstairs tonight, warmed up and all.',
     ],
     chores: [
       // A knock on a set of the wall that has gone too quiet.
@@ -50,7 +51,7 @@ export const TV_SHOP: ShopPlan = {
       { at: [1.7, 0.0], yaw: Math.PI / 2 },
       { at: [-0.95, 0.05], yaw: 0 },
     ],
-    lines: ['“He fixed my mum’s set in ten minutes. Twenty years it had been broken.”', '“Just waiting for my radio. It’s always tomorrow.”'],
+    lines: ['He fixed my mum’s set in ten minutes. Twenty years it had been broken.', 'Just waiting for my radio. It’s always tomorrow.'],
   },
   window: { along: 1.8, width: 1.6, height: 1.7 },
   fixtures: [

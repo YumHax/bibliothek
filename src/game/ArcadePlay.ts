@@ -4,7 +4,7 @@ import { arcadePayout } from '@/economy/arcadePayout';
 import { tournamentLine, type TournamentOutcome } from '@/economy/ArcadeTournament';
 import { batch } from '@/persistence';
 import { playCoins } from '@/audio/coins';
-import { playLatchClick } from '@/audio/furnitureSounds';
+import { playLatchClick, playSoftThud } from '@/audio/furnitureSounds';
 import type { ArcadeBonus, ArcadeMachineLike, ArcadeResult } from './SessionActions';
 import type { ArcadeDailyLike, CoreParts, LeagueLike, MedalsLike, PayoutStatsLike, PerksLike, PrizesLike, WalletLike } from './SessionParts';
 import { isAction } from '@/input/actions';
@@ -14,6 +14,8 @@ import { afterReveal, holdReveal } from '@/ui/revealHold';
 import type { KeyRoute, SessionHost } from './SessionHost';
 import { formatNumber } from '@/text/count';
 import { formatCoins, formatTickets } from '@/text/money';
+import { inTurn, random } from '@/random';
+import { actionCap } from '@/ui/verb';
 
 export interface ArcadeParts extends Pick<CoreParts, 'player'> {
   wallet?: WalletLike;
@@ -58,6 +60,13 @@ interface Settled {
   tee: number;
   round: TournamentOutcome | null;
 }
+
+/** Leaving a machine mid-play, said in turn. */
+const WALKED_AWAY = inTurn(random, [
+  'Walked away: that play is over.',
+  'You let go of the stick. The machine plays on to its game over.',
+  'Walked off mid-game. The attract mode takes the screen back.',
+]);
 
 /**
  * Playing at the arcade: a coin goes in and the player stands at the controls (every key is the
@@ -172,8 +181,9 @@ export class ArcadePlay implements KeyRoute {
     // A tournament round: said before it starts, with the score to beat (a play on the house is not a round).
     const round = this.paid && tournament?.running && tournament.gameId === id ? tournament.next : null;
     if (round) this.host.react(`Tournament ${ROUND_WORDS[round.round] ?? 'round'}: beat ${round.name}'s ${formatNumber(round.score)}.`);
-    const walkAway = `[${actionKeyLabel('walkAway')}] walk away`;
-    if (first || this.hintsLeft(id)) this.host.prompt(first ? `${keyCaps(machine.game.hint)} · ${walkAway}` : walkAway, { id: 'arcade-play', until: () => this.machine !== machine || !machine.isPlaying });
+    // Written by a function: the walk-away cap follows the device in hand.
+    const walkAway = (): string => `[${actionCap('walkAway')}] walk away`;
+    if (first || this.hintsLeft(id)) this.host.prompt(() => (first ? `${keyCaps(machine.game.hint)} · ${walkAway()}` : walkAway()), { id: 'arcade-play', until: () => this.machine !== machine || !machine.isPlaying });
   }
 
   /** Whether the HUD still spells out the keys at `gameId`'s machine (its first `HINTED_PLAYS` plays). */
@@ -200,8 +210,8 @@ export class ArcadePlay implements KeyRoute {
     if (wallet.spend(PLAY_COST)) return true;
     this.host.refuse(`Insert coin: a play costs ${formatCoins(PLAY_COST)} and you have ${wallet.coins}.`);
     // The claw never plays for free; the ticket machines do when the player is broke.
-    if (!machine.freeWhenBroke && playIsFree(wallet)) this.host.tip('Broke? The ticket machines play on the house.', { id: 'short-of-coins' });
-    else this.host.tip('Short of coins? Tickets become coins at the prize counter.', { id: 'short-of-coins' });
+    if (!machine.freeWhenBroke && playIsFree(wallet)) this.host.tip('Broke? The ticket machines play on the house.', { id: 'free-play', head: 'Coins', times: 3 });
+    else this.host.tip('Short of coins? Tickets become coins at the arcade’s prize counter.', { id: 'short-of-coins', head: 'Coins', times: 3 });
     return false;
   }
 
@@ -245,7 +255,7 @@ export class ArcadePlay implements KeyRoute {
       return;
     }
     this.leave();
-    this.host.react('Walked away: that play is over.');
+    this.host.react(WALKED_AWAY());
   }
 
   /** The change machine was clicked: today's coins if it works and still has them, else its line. */
@@ -253,7 +263,13 @@ export class ArcadePlay implements KeyRoute {
     const { arcadeDaily, wallet } = this.parts;
     if (!arcadeDaily || !wallet) return;
     if (!arcadeDaily.changeMachineWorks) {
-      this.host.refuse('OUT OF ORDER. Tickets turn into coins at the prize counter.');
+      // Dead today: a thump on its side shakes one coin loose, once; after that it only hums.
+      playSoftThud(0.16);
+      if (arcadeDaily.thump()) {
+        wallet.earnCoins(1);
+        playCoins(1, 0.12);
+        this.host.slip({ title: 'A thump on its side', detail: 'Clunk. One coin rattles down into the cup.', coins: 1 });
+      } else this.host.refuse('A thump, and it just hums at you. Dead today.');
       return;
     }
     const coins = arcadeDaily.claimChange();
@@ -318,7 +334,8 @@ export class ArcadePlay implements KeyRoute {
   private settle(machine: ArcadeMachineLike, result: ArcadeResult): Settled {
     const { arcadeDaily, medals, league, tournament, perks } = this.parts;
     const beginner = this.habits.plays(machine.game.id) <= BEGINNER.plays;
-    const payout = arcadePayout(machine, { ...result, beginner, paid: this.paid }, { daily: arcadeDaily, medals, league, ...(tournament ? { tournament } : {}) });
+    const prizeOwned = result.prize !== undefined && this.parts.prizes?.owns(result.prize) === true;
+    const payout = arcadePayout(machine, { ...result, beginner, paid: this.paid, prizeOwned }, { daily: arcadeDaily, medals, league, ...(tournament ? { tournament } : {}) });
     // The arcade tee: the regulars nod the player through, a few tickets on top of a ticket play's own (not the claw's coin back).
     const tee = payout.tickets && machine.freeWhenBroke ? perks?.arcadeBonus(payout.tickets.paid) ?? 0 : 0;
     if (tee) payout.lines.push(`Arcade tee: +${formatTickets(tee)}`);
@@ -362,8 +379,8 @@ export class ArcadePlay implements KeyRoute {
 
   /** What the keys do next: the initials (a score that makes the table goes there first), or another go (the machine's first few plays). */
   private endTip(machine: ArcadeMachineLike): void {
-    if (machine.isPlaying) this.host.prompt(`Sign the hall of fame: [↑] [↓] pick a letter · [${actionKeyLabel('fire')}] next`, { id: 'arcade-play', until: () => !machine.isPlaying });
-    else if (this.hintsLeft(machine.game.id)) this.host.prompt(`[${actionKeyLabel('fire')}] play again · [${actionKeyLabel('walkAway')}] walk away`, { id: 'arcade-play', until: () => this.machine !== machine || machine.isPlaying });
+    if (machine.isPlaying) this.host.prompt(() => `Sign the hall of fame: [↑] [↓] pick a letter · [${actionCap('fire')}] next`, { id: 'arcade-play', until: () => !machine.isPlaying });
+    else if (this.hintsLeft(machine.game.id)) this.host.prompt(() => `[${actionCap('fire')}] play again · [${actionCap('walkAway')}] walk away`, { id: 'arcade-play', until: () => this.machine !== machine || machine.isPlaying });
   }
 }
 

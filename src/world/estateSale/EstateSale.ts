@@ -196,6 +196,7 @@ export class EstateSale extends THREE.Group implements Furniture, Updatable {
         tag: i < items.length - 3,
         wallet,
         where: `${ESTATE.deceased}’s estate sale`,
+        seller: CLAIRE,
         isWanted: () => isWanted(item.game.id),
         thanks: () => THANKS[Math.floor(random() * THANKS.length)]!,
         react: (reaction) => {

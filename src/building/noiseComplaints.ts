@@ -39,6 +39,8 @@ interface NoiseWatchOptions {
 const SETTLED_S = 10;
 /** The broom's loudness in the flat; on the stairs (the landing's door shut) it is barely heard. */
 const BROOM_LEVEL = { flat: 0.55, elsewhere: 0 };
+/** Away at the broom: he waits this many times longer before he comes up, to give the player time to get home. */
+const AWAY_GRACE = 3;
 
 type Stage = 'calm' | 'broomed' | 'atDoor' | 'answered' | 'done';
 
@@ -61,6 +63,8 @@ export class NoiseWatch extends Prop implements Updatable {
   private nth = 0;
   /** He was answered at the door this visit: a quick turn-down gets a thank-you as he goes. */
   private answered = false;
+  /** The player was home to hear the broom: an unanswered knock or the syndic is fair then, never otherwise. */
+  private heard = false;
   private readonly ear = new THREE.Vector3();
   private readonly unpin: () => void;
 
@@ -84,6 +88,7 @@ export class NoiseWatch extends Prop implements Updatable {
       this.night = night;
       this.stage = 'calm';
       this.loudFor = 0;
+      this.heard = false;
     }
     // How he stands with the player moves when the quiet hours start for him and how loud is too loud (docs/social.md).
     const quietHours = { from: effectValue(COMPLAINER, 'noiseFrom', plan.quietHours.from), to: plan.quietHours.to };
@@ -105,14 +110,20 @@ export class NoiseWatch extends Prop implements Updatable {
         }
         break;
       case 'broomed':
-        if (this.quietFor > SETTLED_S) this.stage = 'calm';
+        if (this.quietFor > SETTLED_S) {
+          // Turned down: the count starts again from nothing, so it takes a whole new stretch of noise to bring the broom back.
+          this.stage = 'calm';
+          this.loudFor = 0;
+        }
         // Hostile, he does not bother knocking: straight to the syndic.
-        else if (this.timer > plan.knockAfterS && loud && has(COMPLAINER, 'straightToSyndic')) this.escalate();
-        else if (this.timer > plan.knockAfterS && loud) this.comeUp();
+        // Away, the player never heard the broom: he comes up instead (after the grace below), so nothing lands unforeseen.
+        else if (this.timer > plan.knockAfterS && loud && this.heard && has(COMPLAINER, 'straightToSyndic')) this.escalate();
+        // Out of the flat at the broom, he gives the player time to get home before he climbs the stairs.
+        else if (this.timer > plan.knockAfterS * (this.heard ? 1 : AWAY_GRACE) && loud) this.comeUp();
         break;
       case 'answered':
         if (this.quietFor > SETTLED_S) this.stage = 'done';
-        else if (this.timer > plan.escalateAfterS) this.escalate();
+        else if (this.timer > plan.escalateAfterS && this.heard) this.escalate();
         break;
       case 'atDoor':
       case 'done':
@@ -135,8 +146,14 @@ export class NoiseWatch extends Prop implements Updatable {
     this.timer = 0;
     this.quietFor = 0;
     const home = this.inFlat();
+    this.heard = home;
     playBroomThumps(home ? BROOM_LEVEL.flat : BROOM_LEVEL.elsewhere);
-    if (!home) return;
+    if (!home) {
+      // Away (the cellar, the yard, the street), the player cannot hear him: word reaches them anyway, before it costs anything.
+      const what = flatNoiseSource();
+      this.options.notices?.slip({ title: plan.awayWarning.title, detail: plan.awayWarning.detail.replace('{what}', what ?? 'TV') });
+      return;
+    }
     const line = plan.broomLines[this.nth % plan.broomLines.length]!;
     playMurmur(line, 0.08, { pan: 0, walls: 3 }, plan.complainer.pitch);
     this.options.notices?.say(line, plan.broomSpeaker);
@@ -161,10 +178,14 @@ export class NoiseWatch extends Prop implements Updatable {
       },
       gaveUp: () => {
         this.options.slipNote(note);
-        if (befriend(complainer.key, cost.unanswered, 'noise', this.night)) this.remember();
+        // Nobody home to answer is not the same as not answering: it only costs when the player was in to hear him.
+        if (this.heard || this.inFlat()) {
+          if (befriend(complainer.key, cost.unanswered, 'noise', this.night)) this.remember();
+        }
         this.toAnswered();
       },
       leaving: (walker) => {
+        this.heard ||= this.answered;
         if (this.answered && this.quietFor > 2) walker.speak(plan.thanks, complainer.name);
         else if (this.answered) walker.gesture('headShake');
         this.answered = false;

@@ -13,6 +13,7 @@ import { closures } from '../details/roadworks';
 import { random } from '@/random';
 import { Walker } from '../../people/Walker';
 import { randomLook, type PersonLook } from '../../people/looks';
+import { noteCall } from './callLog';
 import { placeOnRoute } from './driving';
 
 /** Which service a siren belongs to (the street's sound may tell them apart). */
@@ -38,6 +39,8 @@ export interface EmergencyOptions {
   callChance?: number;
   /** The walkable street's cars (the police flag a driver down: `PoliceCar`); none: never. */
   cars?: TrafficStops;
+  /** The game day (a call is talked about that day: `callLog`). */
+  day?: () => number;
 }
 
 /** A call on the street: the route it comes by, where it pulls up, the door the crew go in by. */
@@ -202,6 +205,7 @@ export abstract class EmergencyVehicle extends ScriptedVehicle implements SirenV
     if (!this.call) return;
     this.scene = 'onScene';
     this.signalOverride = 'hazards';
+    if (this.service.day) noteCall(this.siren, this.call.door, this.service.day());
     this.sendCrew(this.call.door);
   }
 

@@ -23,6 +23,7 @@ import { CabinetScreens } from './CabinetScreens';
 import { AttractLoop } from './AttractLoop';
 import { CabinetControls } from './CabinetControls';
 import { BEZEL_BORDER, COIN_LAMP, DEPTH, FRONT_Z, SCREEN_HEIGHT, SCREEN_Y, SCREEN_Z, TOTAL_H, WIDTH, buildCabinetBody } from './cabinetModel';
+import type { InstructionCard } from './InstructionCard';
 import { HoverGlint } from '../props/hoverGlint';
 import { PooledLight } from '../lighting/LightPool';
 import { random } from '@/random';
@@ -49,6 +50,8 @@ interface ArcadeCabinetOptions {
   medals?: MedalBook;
   /** Whether it is out of order today (a note on the glass, nobody plays it). */
   outOfOrder?: () => boolean;
+  /** Tried while out of order: the attendant's answer (`MachineRun`). */
+  brokenClick?: () => string;
   /** Something bolted on that changes how it is played: a light gun, a dance pad. */
   attachment?: CabinetAttachment;
   /** Whether the screen also lights the room with a real light. Default true; the glow pool on the carpet shows either way. */
@@ -59,6 +62,8 @@ interface ArcadeCabinetOptions {
   freePlay?: boolean;
   /** What a play pays (`ArcadeMachineLike.payout`); default 'arcade'. 'none' (a cabinet at home) also takes INSERT COIN and the tickets off the cards. */
   payout?: ArcadePayoutMode;
+  /** Whether it has power (a cabinet at home goes dark in the building's power cut); none: always. */
+  powered?: () => boolean;
 }
 
 /** Where the player's eye goes while playing: standing at the control panel. */
@@ -113,6 +118,8 @@ export class ArcadeCabinet extends RunMachine implements Furniture, Interactable
   readonly standAt: THREE.Vector3;
   readonly lean: number;
   readonly focus = new THREE.Vector3(0, SCREEN_Y, SCREEN_Z);
+  /** The printed card on the panel: how to play (read up close through a `CardReading` placed with the cabinet). */
+  readonly card: InstructionCard;
   readonly stationEvents: StationEvents = {};
   readonly partner?: PartnerSpot;
 
@@ -123,6 +130,8 @@ export class ArcadeCabinet extends RunMachine implements Furniture, Interactable
   private readonly runner: GameRunner;
   private readonly screens: CabinetScreens;
   private readonly attract: AttractLoop;
+  /** Dark through a power cut (`options.powered`). */
+  private dark = false;
   private readonly controls: CabinetControls;
   private readonly glow: PooledLight | null;
   private readonly pool: GlowPool;
@@ -164,8 +173,9 @@ export class ArcadeCabinet extends RunMachine implements Furniture, Interactable
     this.lean = options.attachment?.lean ?? 0.12;
     const twoPlayer = typeof game.setOpponent === 'function';
 
-    const { body, marquee, marqueeMesh, coinLamps } = buildCabinetBody(this, { color, glow: glowColor, wear: options.wear ?? 0.5, title: game.title, hint: () => game.hint, twoPlayer });
+    const { body, marquee, marqueeMesh, coinLamps, card } = buildCabinetBody(this, { color, glow: glowColor, wear: options.wear ?? 0.5, title: game.title, hint: () => game.hint, twoPlayer });
     this.body = body;
+    this.card = card;
     this.marquee = marquee;
     this.coinLamps = coinLamps;
     // The controls: one joystick and two buttons, or a set for each player on a two-player game.
@@ -217,6 +227,7 @@ export class ArcadeCabinet extends RunMachine implements Furniture, Interactable
       strip: this.strip,
       note: this.screens.note,
       ...(options.outOfOrder ? { outOfOrder: options.outOfOrder } : {}),
+      ...(options.brokenClick ? { brokenClick: options.brokenClick } : {}),
       // A new best keeps its run for the attract screen.
       onSign: (initials, result) => {
         const replay = result.best || result.first ? this.runner.finishRecording(result.score, initials) : null;
@@ -320,6 +331,7 @@ export class ArcadeCabinet extends RunMachine implements Furniture, Interactable
   }
 
   label(_player: PlayerState): string {
+    if (this.options.powered?.() === false) return `${this.game.title} · no power`;
     const attract = this.payout === 'none' ? `${this.game.title} · play` : `${this.game.title} · insert a coin (${this.run.priceText()})`;
     return this.run.label(this.game.gun ? { attract, playing: `${this.game.title} (${actionKeyLabel('walkAway')}: walk away) · shoot` } : { attract });
   }
@@ -329,6 +341,10 @@ export class ArcadeCabinet extends RunMachine implements Furniture, Interactable
   }
 
   activate(session: SessionActions): void {
+    if (this.options.powered?.() === false) {
+      session.react('The screen stays black: the power is off in the whole building.');
+      return;
+    }
     // A light gun shoots where the player looks: a click on the glass is the trigger, not a walk away.
     this.run.activate(session, this, () => {
       if (this.game.gun) this.run.click();
@@ -340,6 +356,17 @@ export class ArcadeCabinet extends RunMachine implements Furniture, Interactable
 
   update(dt: number): void {
     this.speaker.follow();
+    // A power cut: the tube goes black and the game holds where it was until the power is back.
+    if (this.options.powered?.() === false) {
+      if (!this.dark) this.screens.drawBlank();
+      this.dark = true;
+      this.pool.setLevel(0);
+      if (this.glow) this.glow.intensity = 0;
+      this.coinLamps.emissiveIntensity = 0;
+      return;
+    }
+    if (this.dark) this.screens.drawSoon();
+    this.dark = false;
     // The pointer went free mid-play: the game holds still, PAUSED blinking over its frame, until it is locked again.
     if (this.run.paused) {
       this.pausedClock += dt;
@@ -362,7 +389,7 @@ export class ArcadeCabinet extends RunMachine implements Furniture, Interactable
         this.screens.paintGame(dt, true);
         this.speaker.playAll(this.game.takeSounds());
         poolLevel = 0.9 + Math.sin(this.pulse * PULSE_RATE) * 0.12;
-        if (this.game.over) this.run.finish(this.game.score, undefined, this.game.unreported === true);
+        if (this.game.over) this.run.finish(this.game.score, undefined, this.game.unreported === true, this.game.feats ?? []);
         break;
       }
       case 'initials':

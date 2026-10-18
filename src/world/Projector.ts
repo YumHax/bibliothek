@@ -3,7 +3,8 @@ import { poweredAt } from '@/building/mains';
 import { RoundedBoxGeometry } from 'three/examples/jsm/geometries/RoundedBoxGeometry.js';
 import type { Updatable } from '@/core/Engine';
 import type { CssLayer } from '@/core/CssLayer';
-import { unplayableWhy } from './box/unplayable';
+import { mediaWord, unplayableWhy } from './box/unplayable';
+import type { Game } from '@/catalog/types';
 import type { RegionLock } from '@/economy/regionLock';
 import type { Interactable } from '@/interaction/Interactable';
 import type { PlayerState, SessionActions } from '@/game/SessionActions';
@@ -307,24 +308,33 @@ export class Projector extends SurfaceScreen implements Furniture, Updatable, In
     if (this.state === 'searching') return `Projector · looking for a longplay of ${this.surface.searchingFor ?? 'the game'}…`;
     if (this.surface.tuning) return 'Projector · tuning in…';
     if (this.state === 'error') return 'Projector, no longplay found · switch off';
-    return this.state !== 'off' ? 'Projector · switch off' : 'Projector · bring a game box';
+    if (this.state !== 'off') return 'Projector · switch off';
+    return this.last ? `Projector · switch on, ${this.last.game.title}` : 'Projector · bring a game box';
   }
 
-  /** With a box in hand, plays its longplay; otherwise switches the lamp off, even while it is still looking for a source. */
+  /** The game it last showed: empty hands switch it on again with that one. */
+  private last: { readonly game: Game } | null = null;
+
+  /** With a box in hand, plays its longplay; otherwise switches the lamp off (even while it is still looking for a source), or on again with the last game. */
   activate(session: SessionActions): void {
     if (!poweredAt(this)) return session.refuse('No power: the whole building is dark.');
     const box = session.held;
     if (box && !box.playable) {
-      session.refuse(`${box.game.title} is ${unplayableWhy(box)}: no cartridge to put in.`);
+      session.refuse(`${box.game.title} is ${unplayableWhy(box)}: no ${mediaWord(box)} to put in.`);
     } else if (box) {
       const locked = this.regionLock?.(box.game);
       if (locked) return session.refuse(locked);
       if (this.state === 'off') playRockerClick(); // the lamp's switch
+      this.last = { game: box.game };
       session.putBack();
       void session.playOn(this, box);
     } else if (this.state !== 'off') {
       playRockerClick();
       session.stopScreen(this);
+    } else if (this.last) {
+      // Empty hands, the lamp off: on again with the game it last showed, as the TV does with the one last put in.
+      playRockerClick();
+      void session.playOn(this, this.last);
     }
   }
 

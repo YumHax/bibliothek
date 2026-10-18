@@ -11,6 +11,7 @@ import { airlockLink } from '@/world/airlock';
 import { outsideIfShut } from '@/world/shop/ClosingTime';
 import * as THREE from 'three';
 import { reduceMotion } from '@/settings/motion';
+import { playTaxiRide } from '@/ui/taxiRide/TaxiRide';
 import { playRide } from '@/ui/busRide/BusRide';
 import { ridersFor } from '@/ui/busRide/busRiders';
 import { STREET_PLAN } from '@/world/street/streetPlan';
@@ -54,8 +55,9 @@ export function createPlayerMoves(services: Services, parts: { world: GameWorld;
     // Line 38 to Mémé's and back (docs/story.md "Mémé"): the ride from a seat by the window over the curtain, with the
     // line's regulars of the hour, and some mornings Mémé herself on her way back from the market (docs/grandma.md).
     interlude: (from, to) => {
-      // By taxi (`traffic/TaxiRank`): no bus ride over the curtain.
-      if (takeRideVia() === 'taxi') return null;
+      // By taxi (`traffic/TaxiRank`): the back seat over the curtain, the meter running up, the driver's word.
+      const via = takeRideVia();
+      if (via?.by === 'taxi') return () => playTaxiRide(services.container, { to: via.to, fare: via.fare, chat: via.chat, night: sky.dayNight.state.daylight < 0.35 });
       const line = STREET_PLAN.busRide.destinations.find((d) => (from === 'street' && to === d.to) || (from === d.to && to === 'street'));
       if (!line) return null;
       const { daylight, hours } = sky.dayNight.state;
@@ -65,7 +67,11 @@ export function createPlayerMoves(services: Services, parts: { world: GameWorld;
       const meme = !home && to === 'lindenAvenue' && services.sharedRide.board(day, hours);
       if (reduceMotion()) return null;
       const riders = ridersFor(day, hours, meme);
-      return () => playRide(services.container, { board: `${STREET_PLAN.bus.line} ${home ? 'FRONT STREET' : line.board}`, daylight, hours, seed: home ? 83 : 38, riders });
+      // After nine the night bus runs the line (her "the last bus is at nine": the N38, near empty); the town past the
+      // window is the day's own, a ride there and back never the same street.
+      const night = hours % 24 >= 21 || hours % 24 < 5;
+      const board = `${night ? 'N' : ''}${STREET_PLAN.bus.line} ${home ? 'FRONT STREET' : line.board}`;
+      return () => playRide(services.container, { board, daylight, hours, seed: (home ? 83 : 38) + day * 101, riders });
     },
   });
   // The building's sas: crossing between the hall's twin and the street's moves the player with no curtain

@@ -1,8 +1,8 @@
 import * as THREE from 'three';
 import type { GameBox } from '../GameBox';
 import type { Shelf, ShelfSpot } from '../Shelf';
-import type { Shelving } from './Shelving';
-import { arrange, swapped, type ShelfAddress, type ShelfArrangement } from './arrangement';
+import { mayStandSpineOut, type Shelving } from './Shelving';
+import { arrange, swapped, type ShelfAddress, type ShelfArrangement, type ShelvingRows } from './arrangement';
 import { nextSortMode, type SortMode } from './sort';
 
 /** A spot on one of the flat's bookcases for the box in hand (`ShelvingGroup.spotAt`). */
@@ -10,6 +10,17 @@ export interface ShelfTarget extends ShelfAddress {
   shelf: Shelf;
   spot: ShelfSpot;
 }
+
+/** The shelves at one moment, for the undo (`ShelvingGroup.snapshot`). */
+export interface ShelvesSnapshot {
+  mode: SortMode;
+  shelves: Record<string, ShelvingRows>;
+  /** The games standing spine out. */
+  spines: string[];
+}
+
+/** Why a box would not turn (`ShelvingGroup.setSpineOut`): its spine runs along its top, a card stands in its gap, no room to stand it cover out. */
+export type TurnRefusal = 'landscape' | 'card' | 'full';
 
 /**
  * Several Shelvings seen as one by the session: every zone handle's `shelving` (the collection
@@ -64,8 +75,9 @@ export class ShelvingGroup {
   /**
    * The spot on a bookcase where `ray` (world) meets it within `far` metres, for `held`: which bookcase, row and
    * place in the row. Null when the ray meets none. What stands between (a wall) is the caller's to check.
+   * `spineOut`: it would go in standing spine out (`Shelf.spotAt`).
    */
-  spotAt(ray: THREE.Ray, held: GameBox, far: number): (ShelfTarget & { point: THREE.Vector3 }) | null {
+  spotAt(ray: THREE.Ray, held: GameBox, far: number, spineOut = false): (ShelfTarget & { point: THREE.Vector3 }) | null {
     this.raycaster.set(ray.origin, ray.direction);
     this.raycaster.far = far;
     let best: (ShelfTarget & { point: THREE.Vector3; distance: number }) | null = null;
@@ -73,7 +85,7 @@ export class ShelvingGroup {
       shelving.bookcases.forEach((shelf, bookcase) => {
         const hit = this.raycaster.intersectObject(shelf, true).find((h) => h.object !== held);
         if (!hit || (best && hit.distance >= best.distance)) return;
-        const spot = shelf.spotAt(shelf.worldToLocal(this.local.copy(hit.point)), held);
+        const spot = shelf.spotAt(shelf.worldToLocal(this.local.copy(hit.point)), held, spineOut);
         if (!spot) return;
         // A swap sends the other box to the row the one in hand came from: that row must have room for it.
         if (spot.swap && spot.fits && shelf.rowOf(held) !== spot.row) spot.fits = this.originHasRoom(held, spot.swap);
@@ -86,10 +98,12 @@ export class ShelvingGroup {
   /**
    * Puts `box` (in hand) at `to`: the boxes as they stand become the player's arrangement, with this one moved
    * (the games not on the shelves today keep their places), and every shelving lays it out: the neighbours
-   * slide to make room, the box's rest pose (and `home`) is its new spot. The caller then lets it go.
+   * slide to make room, the box's rest pose (and `home`) is its new spot. The caller then lets it go. `spineOut`,
+   * when given, is how it stands there (absent: as it stood).
    */
-  moveBox(box: GameBox, to: ShelfAddress): void {
+  moveBox(box: GameBox, to: ShelfAddress, spineOut?: boolean): void {
     if (!this.arrangement) return;
+    if (spineOut !== undefined) this.arrangement.setSpineOut(box.game.id, spineOut && mayStandSpineOut(box.game));
     const shown = Object.fromEntries(this.members.map((shelving) => [shelving.id, shelving.rows()]));
     this.arrangement.setArrangement(arrange(shown, this.arrangement.all(), box.game.id, to));
     for (const shelving of this.members) shelving.arranged();
@@ -98,14 +112,56 @@ export class ShelvingGroup {
 
   /**
    * Swaps `held` (in hand) with `other` (on a shelf): each takes the other's place, the rest of the shelves as they
-   * stand becoming the player's arrangement, as `moveBox` does. The caller then lets the box in hand go.
+   * stand becoming the player's arrangement, as `moveBox` does. The caller then lets the box in hand go. `spineOut`,
+   * when given, is how the box in hand stands in its new place (the other keeps its own way).
    */
-  swapBoxes(held: GameBox, other: GameBox): void {
+  swapBoxes(held: GameBox, other: GameBox, spineOut?: boolean): void {
     if (!this.arrangement) return;
+    if (spineOut !== undefined) this.arrangement.setSpineOut(held.game.id, spineOut && mayStandSpineOut(held.game));
     const shown = Object.fromEntries(this.members.map((shelving) => [shelving.id, shelving.rows()]));
     this.arrangement.setArrangement(swapped(shown, this.arrangement.all(), held.game.id, other.game.id));
     for (const shelving of this.members) shelving.arranged();
     this.sortAll('custom');
+  }
+
+  /** Whether `gameId`'s box stands spine out (the player turned it). */
+  isSpineOut(gameId: string): boolean {
+    return this.arrangement?.isSpineOut(gameId) ?? false;
+  }
+
+  /**
+   * Turns `gameId`'s box on its shelf spine out (`on`) or cover out again, where it stands: its row closes up or opens
+   * (the neighbours slide), in whatever sort the shelves are in, and stays so in every sort. Null when done (or
+   * already so), else why not: a landscape box, a card in the gap, no room left on its row to stand it cover out.
+   */
+  setSpineOut(gameId: string, on: boolean): TurnRefusal | null {
+    if (!this.arrangement) return 'full';
+    if (this.arrangement.isSpineOut(gameId) === on) return null;
+    const box = this.members.map((shelving) => shelving.findBox(gameId)).find((b) => b !== undefined);
+    if (on && box && isCard(box)) return 'card';
+    if (on && box && !mayStandSpineOut(box.game)) return 'landscape';
+    const shelf = box?.home ?? null;
+    const standing = this.members.flatMap((shelving) => shelving.bookcases).find((b) => b === shelf);
+    // Cover out it needs its width of the row again; spine out it always fits.
+    if (!on && box && standing && !standing.roomToTurn(box, false)) return 'full';
+    this.arrangement.setSpineOut(gameId, on);
+    this.sortAll(this.members[0]!.sortMode);
+    return null;
+  }
+
+  /** How the shelves stand now (the sort, the player's rows, the boxes spine out), for an undo to put back (`restore`). */
+  snapshot(): ShelvesSnapshot | null {
+    if (!this.arrangement) return null;
+    return { mode: this.members[0]!.sortMode, shelves: structuredClone(this.arrangement.all()), spines: this.arrangement.spineOut() };
+  }
+
+  /** The shelves as `snapshot` had them: the player's rows put back (a box moved, a swap undone, a box turned), in the sort they were in. */
+  restore(snapshot: ShelvesSnapshot): void {
+    if (!this.arrangement) return;
+    this.arrangement.setSpines(snapshot.spines);
+    this.arrangement.setArrangement(snapshot.shelves);
+    for (const shelving of this.members) shelving.arranged();
+    this.sortAll(snapshot.mode);
   }
 
   /** Whether the row `held` came from (it counts there while in hand) has room for `other` in its place. */
@@ -132,4 +188,9 @@ export class ShelvingGroup {
     for (const shelving of rest) shelving.rebuild();
     return mode;
   }
+}
+
+/** A wish or a game lent out: a card in the gap, no box to turn. */
+function isCard(box: GameBox): boolean {
+  return !box.castsShadow;
 }

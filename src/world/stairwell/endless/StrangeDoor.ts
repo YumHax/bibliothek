@@ -3,6 +3,7 @@ import type { Updatable } from '@/core/Engine';
 import type { Interactable } from '@/interaction/Interactable';
 import type { SessionActions } from '@/game/SessionActions';
 import { playKnock } from '@/audio/doorbell';
+import { KEYS, PersistedStore } from '@/persistence';
 import { invisibleHitbox } from '../../meshUtils';
 import { ShutDoor } from '../../props/ShutDoor';
 
@@ -18,6 +19,14 @@ const ANSWER_S = 1.6;
 export class StrangeDoor extends ShutDoor implements Interactable, Updatable {
   readonly hitboxes: THREE.Object3D[];
   private answer = 0;
+  /** Knocks on it this loop. */
+  private knocks = 0;
+  /**
+   * Once, past enough wraps (`answerFrom`, the loop's count told by `wraps`): a second knock is answered (`answered`
+   * says it and the card it slides under), saved so it never comes again; after it the door is only wood.
+   */
+  answering: { wraps: () => number; from: number; answered: () => void; line: string; after: string } | null = null;
+  private readonly store = new PersistedStore<{ answered: boolean }>({ key: KEYS.endlessDoor, version: 1, defaults: () => ({ answered: false }), read: (d) => (typeof d === 'object' && d !== null ? { answered: (d as { answered?: unknown }).answered === true } : null) });
 
   constructor(private readonly caption: string, private readonly knockLine: string) {
     super({ style: 'panelled', leafColor: 0x8c8a86, mat: false });
@@ -29,6 +38,7 @@ export class StrangeDoor extends ShutDoor implements Interactable, Updatable {
   }
 
   setShown(shown: boolean): void {
+    if (!shown) this.knocks = 0;
     this.visible = shown;
   }
 
@@ -44,6 +54,15 @@ export class StrangeDoor extends ShutDoor implements Interactable, Updatable {
     if (!this.visible) return;
     playKnock(3, 0.35);
     this.answer = ANSWER_S;
+    this.knocks++;
+    const answering = this.answering;
+    if (answering && this.store.load().answered) return session.react(answering.after);
+    if (answering && this.knocks >= 2 && answering.wraps() >= answering.from) {
+      this.store.save({ answered: true });
+      session.react(answering.line);
+      answering.answered();
+      return;
+    }
     session.react(this.knockLine);
   }
 

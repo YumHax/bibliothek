@@ -15,6 +15,7 @@ import { StreetTrees } from '../street/StreetTrees';
 import { StreetBounds } from '../street/StreetBounds';
 import { Precipitation } from '../street/Precipitation';
 import type { Vec2 } from '../street/streetPlan';
+import { COURTYARD } from '../measures/street';
 import { FACADES } from '@/world/city/facades';
 import { Courtyard } from '../outlook/Courtyard';
 import { COURTYARD_YARD } from '@/world/courtyard/courtyardPlan';
@@ -39,6 +40,8 @@ import { YardLantern } from './YardLantern';
 import { YardBounds, binBags } from './YardBounds';
 import { courtyardDressers } from './huntHook';
 import { YardDressing } from './YardDressing';
+import { YardBall } from './YardBall';
+import { BenchSeat } from '../street/details/BenchSeats';
 import { YardGroundFloors } from './YardGroundFloors';
 import { placeBulky } from './placeBulky';
 import { placeCinema } from './placeCinema';
@@ -81,7 +84,7 @@ export function furnishCourtyard(zone: Zone, ctx: Pick<BuildContext, 'cssLayer' 
 
   // Light, sky, the yard and the buildings round it.
   const lighting = zone.place(
-    new StreetLighting(dayNight, listener, (out) => sky.outdoors.lightDirection(dayNight.state, out), { shadowMapSize: Math.min(2048, QUALITY.shadowMapSize * 2), shadowReach: 20, groundY: street.y }),
+    new StreetLighting(dayNight, listener, (out) => sky.outdoors.lightDirection(dayNight.state, out), { shadowMapSize: Math.min(2048, QUALITY.shadowMapSize * 2), shadowReach: 20, groundY: street.y, nightAmbient: plan.nightAmbient }),
     origin,
   );
   zone.place(new SkyDome(dayNight, listener), origin);
@@ -99,15 +102,35 @@ export function furnishCourtyard(zone: Zone, ctx: Pick<BuildContext, 'cssLayer' 
   zone.place(new YardBounds(plan.trunk.radius), street);
   // What makes it lived in, walked: the bench, the washing, the downpipe and drains, puddles, the tap, the lean-to...
   zone.place(new YardDressing(dayNight), street);
+  // The ball on the lawn, to kick; the bench against our wall, to sit on and watch the yard.
+  const { ball, bench } = plan.dressing;
+  zone.place(new YardBall(listener, plan.dressing.lawnY), street.clone().add(new THREE.Vector3(ball[0], 0, ball[1])));
+  let seen = 0;
+  zone.place(
+    new BenchSeat({
+      at: bench.at,
+      yaw: bench.yaw,
+      seat: plan.dressing.benchSeat,
+      length: bench.width,
+      name: 'The bench',
+      viewer: listener,
+      overhear: () => plan.dressing.benchSeen[seen++ % plan.dressing.benchSeen.length] ?? null,
+      tell: (line) => ctx.notices.react(line),
+    }),
+    street.clone().add(new THREE.Vector3(bench.at[0], 0, bench.at[1])),
+    bench.yaw,
+  );
   // The ground floors round it, built: plinths, doors, barred windows, vents, a downpipe.
   zone.place(new YardGroundFloors(dayNight), street);
 
   // Our back door, back into the entrance hall.
   const { backDoor } = plan;
   zone.place(new TravelDoor({ style: 'panelled', width: backDoor.width, height: backDoor.height, leafColor: YARD_DOOR_COLOUR, label: 'The entrance hall · go in', to: 'stairwell' }), at([backDoor.at[0], backDoor.at[1] - 0.005]), Math.PI);
-  // Its lantern over it, lit on the building's timer from dusk (the yard's one light but the party's).
-  const lanternY = backDoor.height + plan.lantern.overDoor;
-  zone.place(new YardLantern(dayNight, -lanternY), at(backDoor.at, lanternY));
+  // The lanterns over it and on the rear building, lit all night (the yard's lights but the party's).
+  for (const lantern of plan.lanterns) {
+    const line = lantern.wall === 'back' ? COURTYARD.back : COURTYARD.far;
+    zone.place(new YardLantern(dayNight, -lantern.y), at([lantern.along, line], lantern.y), lantern.wall === 'back' ? 0 : Math.PI);
+  }
   // The concierge's pots by it, and the bags by the bins on bin day.
   for (const pot of plan.pots) zone.place(new Plant({ kind: pot.kind, pot: 'terracotta', seed: pot.seed }), at(pot.at));
   if (today.gameDay % plan.binDay.every === plan.binDay.phase) zone.place(binBags(plan.binDay.bags), street);

@@ -17,16 +17,17 @@ export const FURNITURE_SHOP: ShopPlan = {
   clerk: {
     seed: 71,
     lines: [
-      '“Whatever you buy goes up your stairs today. Five floors, and the lads don’t complain. Much.”',
-      '“That armchair? Came out of a house on Park Street. Sat in by a retired projectionist.”',
-      '“The bed is only for looking at, I’m afraid. The last man who tried it slept till closing.”',
-      '“The list of everything is on the counter, if you’d rather not walk round.”',
+      'Whatever you buy goes up your stairs today. Five floors, and the lads don’t complain. Much.',
+      'That armchair? Came out of a house on Park Street. Sat in by a retired projectionist.',
+      'The bed is only for looking at, I’m afraid. The last man who tried it slept till closing.',
+      'The list of everything is on the counter, if you’d rather not walk round.',
     ],
     callOuts: ['All in good nick!', 'Delivered today!'],
+    greetings: { first: ['Come in, come in. Have a sit on anything, that’s what it’s for.'], met: ['Ah, my favourite customer. Something new came in, have a look.', 'Back for more? The flat must be filling up.'] },
     thanks: [
-      '“Good choice. It’ll be upstairs by tonight: the lads are on their way.”',
-      '“Sold! Mind the stairs when they bring it up, it’s heavier than it looks.”',
-      '“Lovely. That one’s been waiting for the right flat.”',
+      'Good choice. It’ll be upstairs by tonight: the lads are on their way.',
+      'Sold! Mind the stairs when they bring it up, it’s heavier than it looks.',
+      'Lovely. That one’s been waiting for the right flat.',
     ],
     chores: [
       // Straightens the kitchen chairs, then back behind the counter.
@@ -45,7 +46,7 @@ export const FURNITURE_SHOP: ShopPlan = {
       { at: [1.75, 1.85], yaw: Math.PI },
       { at: [-3.0, 0.0], yaw: Math.PI },
     ],
-    lines: ['“Just looking. My wife wants a sideboard. I want a bed.”', '“Everything here has a story, he says. I just want a chair.”'],
+    lines: ['Just looking. My wife wants a sideboard. I want a bed.', 'Everything here has a story, he says. I just want a chair.'],
   },
   window: { along: -3.0, width: 2.2, height: 1.85 },
   // Deep enough for the armchair the window shows the street (docs/shops.md "The window").

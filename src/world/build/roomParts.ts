@@ -61,6 +61,8 @@ interface StraySpot {
   readonly yaw: number;
   /** How far off square and off the spot the box may lie (radians, m): less than the default on a small top. */
   readonly jitter?: { readonly yaw: number; readonly offset: number };
+  /** What it is on, as the caption names it: a box in hand can be set down there ("the kitchen table"). */
+  readonly where?: string;
 }
 
 /**
@@ -75,7 +77,7 @@ export function placeStrayBox(
   spot: StraySpot,
 ): StrayBox | null {
   if (!strays) return null;
-  const stray = new StrayBox({ strays, slot, covers, ...(spot.jitter ? { jitter: spot.jitter } : {}) });
+  const stray = new StrayBox({ strays, slot, covers, ...(spot.jitter ? { jitter: spot.jitter } : {}), ...(spot.where ? { where: spot.where } : {}) });
   stray.position.set(spot.at[0], host.topHeight, spot.at[1]);
   stray.rotation.y = spot.yaw;
   placeWith(zone, host, stray);

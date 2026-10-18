@@ -22,6 +22,8 @@ export interface VisitHost {
   /** The bell rang today (a friend came, or a gathering did): one visit a day. */
   rang(day: number): void;
   rangOn(day: number): boolean;
+  /** Who was asked round on the phone for `day`, if anyone (a games night that day would stand them up). */
+  invitedOn(day: number): string | null;
   /** The line itself over their head for a player in earshot (or always), else a word of `word`'s kind. */
   say(plan: FriendPlan, line: string, word: Word, always?: boolean): void;
   /** A line of `bucket`, from its persisted shuffle bag. */

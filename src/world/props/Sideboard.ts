@@ -49,6 +49,8 @@ export class Sideboard extends THREE.Group implements Furniture {
    * turntable (`world/vinyl/RecordPlayer`) hides behind its own.
    */
   turntable: { centre: THREE.Vector3; pivot: THREE.Vector3; plinth: { at: THREE.Vector3; size: THREE.Vector3 }; still: THREE.Object3D[] } | null = null;
+  /** The pile of sleeves beside it, in the sideboard's frame (its bottom centre, its side and height), or null: where a record is picked out. */
+  sleevePile: { at: THREE.Vector3; size: number; height: number } | null = null;
 
   constructor(options: SideboardOptions = {}) {
     super();
@@ -143,6 +145,7 @@ export class Sideboard extends THREE.Group implements Furniture {
   private buildRecords(colors: number[], x: number, z: number, top: number): void {
     const size = 0.315;
     const thick = 0.006;
+    this.sleevePile = { at: new THREE.Vector3(x, top, z), size, height: colors.length * thick };
     colors.forEach((color, i) => {
       // The two on top, seen from above at arm's length, are printed soundtracks; the rest show only their edges.
       const printed = i >= colors.length - 2 ? RECORDS[(colors.length - 1 - i) % RECORDS.length] : undefined;

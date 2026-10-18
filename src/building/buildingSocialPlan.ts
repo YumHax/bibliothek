@@ -52,7 +52,8 @@ export const BUILDING_SOCIAL = {
     postDue: 'Your parcel is here already! Go on up, I gave it to the postman again.',
     opinionLabel: 'What does the building think of me?',
     opinion: 'What do they say? They call you {name}. I only repeat.',
-    roofKey: { title: 'The roof key', detail: 'Mme Pereira trusts you: the roof, at night, is yours too.' },
+    lodgeKey: { title: 'The lodge’s spare key', detail: 'Mme Pereira’s geranium is yours to water while she is out.' },
+    roofKey: { title: 'The roof key', detail: 'Mme Pereira trusts you: the lift’s keyhole marked TOIT takes you up to the roof.' },
   },
   /** The concierge's goodwill and the post (game hours added to a parcel's round): Cold a day late, Friend a round sooner. */
   parcels: { late: 24, sooner: -5 },

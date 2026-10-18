@@ -1,7 +1,7 @@
 import type { SessionActions } from '@/game/SessionActions';
 import type { HomeShop } from '@/economy/homeGoods';
 import { pocket } from '@/errands/pocket';
-import { FAULTS, TOOLS } from '@/repair/consoles';
+import { TOOLS, faultOf } from '@/repair/consoles';
 import type { Workshop } from '@/repair/Workshop';
 import { getPlatform } from '@/catalog/platforms';
 import { has } from '@/social/perks';
@@ -84,7 +84,8 @@ export function clerkTalk(options: ClerkTalkOptions, session: SessionActions): T
 function extrasOf(id: PersonId, options: ClerkTalkOptions, session: SessionActions): TalkExtra[] {
   const day = options.day();
   const factor = shopFactor(options.shop);
-  const priceWord = factor < 1 ? ` (${Math.round((1 - factor) * 100)}% off for you)` : factor > 1 ? ` (${Math.round((factor - 1) * 100)}% more for you)` : '';
+  // Said, never counted: a friend's price, or a cold one.
+  const priceWord = factor < 1 ? ' (at a friend’s price)' : factor > 1 ? ' (full price, and then some)' : '';
   const extras: TalkExtra[] = [{ id: 'till', group: 'trade', label: `See everything for the flat${priceWord}`, opensPanel: true, run: () => options.openTill(session) }];
   // Once a day from Friendly: no draw, their standing and their day decide (a friend always obliges).
   extras.push({
@@ -134,7 +135,7 @@ function extrasOf(id: PersonId, options: ClerkTalkOptions, session: SessionActio
       run: () => {
         const broken = workshop.nextBroken;
         if (!broken) return { line: 'Nothing on your table? Then stop worrying and play something.' };
-        const fault = FAULTS[broken.fault];
+        const fault = faultOf(broken);
         return { line: `The ${getPlatform(broken.platform).name}? “${fault.symptom}” I know that one. ${fault.finding} Take the ${TOOLS[fault.tool].name.toLowerCase()}.` };
       },
     });
@@ -167,7 +168,7 @@ function karimExtras(id: PersonId, day: number, workshop: Workshop, trade: Karim
         if (!trade.purse.spend(fee)) return { line: `${formatCoins(fee)} for the bench. Come back when you have it.` };
         workshop.leaveAtShop(broken.id, day);
         session.slip({ title: `The ${getPlatform(broken.platform).shortName} on Karim’s bench`, detail: 'He picks it up on his way home. Back working tomorrow.', coins: -fee });
-        return { line: `The ${getPlatform(broken.platform).name}? ${FAULTS[broken.fault].finding} I’ll pick it up on my way home. Come back tomorrow, it’ll work.` };
+        return { line: `The ${getPlatform(broken.platform).name}? ${faultOf(broken).finding} I’ll pick it up on my way home. Come back tomorrow, it’ll work.` };
       },
     },
     {

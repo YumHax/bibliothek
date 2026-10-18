@@ -40,9 +40,15 @@ export const SEED_GAMES: readonly Game[] = LISTED.map((g) => ({ ...g, id: canoni
 
 /**
  * What a new game's collection starts with: one game (its console stands under the TV), so the TV has something to play
- * on the first evening. The rest is earned at the arcade and bought at the market.
+ * on the first evening. The rest is earned at the arcade and bought at the market. It is Félix's own copy, the one the
+ * sale missed because it had fallen behind the bookcase (docs/story.md "The premise"): worn, his note inside the lid.
  */
-export const STARTER_GAMES: readonly Game[] = SEED_GAMES.filter((g) => g.platform === 'nes' && g.title === 'Super Mario Bros.');
+export const STARTER_GAMES: readonly Game[] = SEED_GAMES.filter((g) => g.platform === 'nes' && g.title === 'Super Mario Bros.').map((g) => ({
+  ...g,
+  condition: 'worn',
+  past: { kind: 'note', text: 'Inside the lid, in Félix’s capitals on a strip of tape: FOR THE KID. START HERE.' },
+  acquired: { price: 0, where: 'behind the bookcase, the one game the sale missed', day: 1 },
+}));
 
 /** `id`, or the canonical id when it is one of the built-in lists' old hand-made ids. */
 export function canonicalGameId(id: string): string {

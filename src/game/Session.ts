@@ -5,7 +5,7 @@ import type { GameBox } from '@/world/GameBox';
 import type { VideoScreen } from '@/world/screen';
 import type { ZoneId } from '@/world/zoneIds';
 import type { ArcadeMachineLike, ForSaleLike, PaymentLike, SeatLike, SessionActions, UpgradeOfferLike } from './SessionActions';
-import type { PromptOptions, ReadingNotice, RewardNotice, SlipNotice, TipOptions } from '@/notices';
+import type { PromptOptions, PromptText, ReadingNotice, RewardNotice, SlipNotice, TipOptions } from '@/notices';
 import type { ModalLike, SessionParts } from './SessionParts';
 import type { KeyRoute, SessionHost } from './SessionHost';
 import { ModalStack } from './ModalStack';
@@ -16,6 +16,7 @@ import { Screens } from './Screens';
 import { GoingOut } from './GoingOut';
 import { ArcadePlay } from './ArcadePlay';
 import { ProgramPlay } from './ProgramPlay';
+import { ScreenRemote } from './ScreenRemote';
 import { MarketCounter } from './MarketCounter';
 import { Purchases } from './Purchases';
 import { Browse } from './Browse';
@@ -24,6 +25,9 @@ import { NoticeDismiss } from './NoticeDismiss';
 import { PhotoControl } from './PhotoControl';
 import { Rearranging, type PieceLike } from './Rearranging';
 import { Labelling } from './Labelling';
+import { ShelfViewing } from './ShelfViewing';
+import { Comparing } from './Comparing';
+import { Stacking } from './Stacking';
 import { isAction } from '@/input/actions';
 import { actionKeyLabel } from '@/ui/keys';
 import { grabCap } from '@/ui/verb';
@@ -58,6 +62,11 @@ export class Session implements SessionActions, SessionHost {
   private readonly browse: Browse;
   /** Moving things about the flat: a box into any shelf's gap, the furniture about it (right-click, M). */
   private readonly rearranging: Rearranging;
+  /** Facing a bookcase: the eye square before it, a cursor over its boxes (docs/furnishing.md "The bookcase view"). */
+  private readonly shelfViewing: ShelfViewing;
+  /** A second box held beside the one in hand (C), and boxes carried behind it in the arms (Y): docs/furnishing.md. */
+  private readonly comparing: Comparing;
+  private readonly stacking: Stacking;
   /**
    * Who hears a key, in this order; the first to take it ends the routing. The order is the rules (the
    * keys are the action table's, `input/actions`, which lists the shared ones):
@@ -66,12 +75,15 @@ export class Session implements SessionActions, SessionHost {
    *    travel menu reads its digits, or the player sleeps;
    * 3. at an arcade machine every key is the game's (E walks away, fire replays on the end card);
    *    then photo mode: while it is on every key is its own; P enters it, J opens the journal;
+   *    then facing a bookcase (`ShelfViewing`): W / S / A / D, the up and down arrows, F, U, E are the view's (B in front
+   *    of one with free hands faces it), until a box is taken in hand there;
    *    then moving things (docs/furnishing.md): from above (L) every key is the planning view's; while a piece is
    *    carried M / R / Q / G / X / E are its; M puts the shelf box in hand where it is aimed, M on a piece takes it,
    *    U (hands free, at home) undoes the last move; the right mouse button does the same (`bindInput`);
-   * 4. a box in hand, O: a sealed copy stays shut at a stall (and asks twice at home), a copy's past shows (`CopyOpening`);
+   * 4. Y takes the shelf box aimed at in hand, or into the arms behind the one there; O, V, T wait while the arms are
+   *    full (`Stacking`); then a box in hand, O: a sealed copy stays shut at a stall (and asks twice at home), a copy's past shows (`CopyOpening`);
    *    then a market copy in hand: U (just bought), B, H, R, X; O finds out a fake and goes on to 5;
-   * 5. a box in hand: E puts it back, O opens it;
+   * 5. a box in hand: E puts it back, O opens it; then C holds the shelf box aimed at beside it, again lets it go (`Comparing`);
    * 6. browsing: F / Slash search, T sorts, N night, R random pick (not while holding), Enter picks up the found box;
    *    then K, the label maker, at home with free hands (`Labelling`);
    * 7. X puts down the card being read, the tips, the banner (`NoticeDismiss`; Esc too, when the page hears it); C calls the cat;
@@ -92,11 +104,18 @@ export class Session implements SessionActions, SessionHost {
     });
     this.seating = new Seating(parts, this);
     this.screens = new Screens(parts);
+    // The longplay's remote at home: Space, the arrows, Backspace; its keys shown a while when one comes on.
+    const remote = new ScreenRemote(() => this.screens.remote, this);
+    this.screens.onLongplayOn = () => remote.showKeys();
     this.goingOut = new GoingOut(parts, this, this.screens);
     this.arcade = new ArcadePlay(parts, this);
     this.programPlay = new ProgramPlay(parts, this);
     this.purchases = new Purchases(parts, this);
     this.rearranging = new Rearranging(parts, this, () => this.onHover(this.hovered));
+    this.shelfViewing = new ShelfViewing(parts, this, (before) => this.rearranging.rememberShelves(before), () => this.rearranging.undoLast(), () => this.rearranging.turnAimed());
+    const own = (box: GameBox): boolean => parts.shelving?.findBox(box.game.id) === box;
+    this.comparing = new Comparing(parts, this, () => this.aimedShelfBox(), own, () => this.stacking.stacked);
+    this.stacking = new Stacking(parts, this, () => this.aimedShelfBox(), own, () => this.comparing.comparing);
     const deaf: KeyRoute = { onKey: () => this.modalOpen || !parts.player.isLocked || this.goingOut.menuOpen || this.seating.asleep };
     // Esc that the page hears in the room (the keyboard held in full screen, `settings/fullscreen`), once nothing before
     // took it (a card put down, the planning view left): the pause menu, as the browser's own Esc would.
@@ -104,12 +123,18 @@ export class Session implements SessionActions, SessionHost {
     const photo = new PhotoControl(parts, (panel) => this.openPanel(panel));
     // O on a box in hand asks the copy first (a seal, a past: `CopyOpening`), then the market, then the hands open it.
     const opening = new CopyOpening(parts, () => this.counter.holding);
-    this.routes = [this.modals, deaf, this.arcade, this.programPlay, photo, this.rearranging, opening, this.counter, this.hands, this.browse, new Labelling(parts, this, (panel) => this.openPanel(panel), () => this.rearranging.carrying), new NoticeDismiss(parts), new CatCare(parts, this), this.seating, pauseOnEsc];
+    this.routes = [this.modals, deaf, this.arcade, this.programPlay, photo, this.shelfViewing, this.rearranging, this.stacking, opening, this.counter, this.hands, this.comparing, remote, this.browse, new Labelling(parts, this, (panel) => this.openPanel(panel), () => this.rearranging.carrying, () => this.shelfViewing.active), new NoticeDismiss(parts), new CatCare(parts, this), this.seating, pauseOnEsc];
 
     const { interactor, inspector, player, search } = parts;
     // The carried box must not block the ray, nor its wrapper (a market copy's `ForSaleBox` owns the box's hitbox).
     interactor.ignore = (item) => {
       const held = inspector.current;
+      // A box looked at fills the middle of the still view: what stands behind it is neither captioned nor clicked (a
+      // reflex click on the box would take the shelf box behind it, or open the door).
+      if (inspector.examining) return true;
+      if (item.passesThrough?.(held !== null)) return true;
+      // Nor the boxes carried with it: the one held beside it, the armful behind it (and those on their way home).
+      if (parts.secondHand?.carries(item) || parts.armful?.carries(item)) return true;
       return held !== null && (item === held || item.hitboxes.includes(held));
     };
     interactor.onHoverChange((item) => this.onHover(item));
@@ -141,7 +166,8 @@ export class Session implements SessionActions, SessionHost {
   }
 
   get seatedIn(): SeatLike | null {
-    return this.arcade.current ? null : this.seating.current;
+    // Facing a bookcase sits the eye too, but in no seat.
+    return this.arcade.current || this.shelfViewing.active ? null : this.seating.current;
   }
 
   get seated(): boolean {
@@ -153,17 +179,24 @@ export class Session implements SessionActions, SessionHost {
   }
 
   /** What the hands are on (a machine, a market copy, a box, a seat, nothing): the touch bar shows what works there. */
-  get handsContext(): 'arcade' | 'market' | 'held' | 'seated' | 'room' | 'furnishing' {
+  get handsContext(): 'arcade' | 'market' | 'held' | 'seated' | 'room' | 'furnishing' | 'shelves' {
     if (this.arcade.current || this.programPlay.holding) return 'arcade';
     if (this.rearranging.carrying || this.rearranging.planning) return 'furnishing';
     if (this.counter.holding) return 'market';
     if (this.hands.held) return 'held';
+    // Facing a bookcase sits the eye, in no seat: the bookcase view's keys.
+    if (this.shelfViewing.active) return 'shelves';
     return this.parts.player.isSeated ? 'seated' : 'room';
+  }
+
+  /** The boxes carried behind the one in hand (Y): a table spot takes them all as a pile (`strays/StrayBox`). */
+  get armful(): readonly GameBox[] {
+    return this.parts.armful?.boxes ?? [];
   }
 
   /** True while a DOM overlay (search bar, collection editor, catalogue) owns the keyboard. */
   get modalOpen(): boolean {
-    return this.modals.active !== null || (this.parts.search?.isOpen ?? false);
+    return this.modals.active !== null || (this.parts.search?.isOpen ?? false) || this.shelfViewing.typing;
   }
 
   /** Routes clicks and key presses to the rules. Call once. */
@@ -175,7 +208,9 @@ export class Session implements SessionActions, SessionHost {
     // hardly moved: a reflex right-drag (to turn a box that has just gone back) never lifts the armchair behind it.
     let rightTap: { at: number; moved: number; withBox: boolean } | null = null;
     doc.addEventListener('mousedown', (e) => {
-      if (this.modalOpen || !player.isLocked) return;
+      // The pad of a program (or a cabinet) in hand: its buttons are the game's, and on a controller the NES's A is
+      // also the synthetic right button, which must never lift the armchair under the crosshair.
+      if (this.modalOpen || !player.isLocked || this.programPlay.holding || this.arcade.current) return;
       if (e.button === 2) {
         const now = performance.now();
         const withBox = inspector.current !== null;
@@ -184,6 +219,8 @@ export class Session implements SessionActions, SessionHost {
       }
       if (e.button !== 0) return;
       if (this.rearranging.click()) return; // sets the carried piece down
+      // Facing a bookcase, a press on a box is the view's: a drag lifts it along the shelves, a release takes it.
+      if (this.shelfViewing.press()) return;
       // A click at nothing does nothing, a box in hand included: it goes back with E (or a tap of the right button
       // on a shelf's gap), never because a click on its console landed a few pixels off.
       interactor.select();
@@ -192,12 +229,14 @@ export class Session implements SessionActions, SessionHost {
       if (rightTap) rightTap.moved += Math.abs(e.movementX) + Math.abs(e.movementY);
     });
     doc.addEventListener('mouseup', (e) => {
+      if (e.button === 0) this.shelfViewing.release();
       if (e.button !== 2 || !rightTap) return;
       const tap = rightTap;
       rightTap = null;
       if (this.modalOpen || !player.isLocked || tap.moved >= RIGHT_TAP_MOVE) return;
       if (tap.withBox) {
-        if (performance.now() - tap.at < RIGHT_TAP_MS) this.rearranging.tapWithBox();
+        // Looked at, the view is still on the box, not on a shelf's gap: a tap shelves nothing.
+        if (performance.now() - tap.at < RIGHT_TAP_MS && !inspector.examining) this.rearranging.tapWithBox();
       } else if (!inspector.current) this.rearranging.grab();
     });
     // Right-click drag rotates the held box; the browser menu would steal the mouse.
@@ -222,6 +261,9 @@ export class Session implements SessionActions, SessionHost {
 
   putBack(): void {
     if (this.parts.inspector.current) this.putBackAt = performance.now();
+    // The box held beside it and the armful go home with it.
+    this.parts.secondHand?.letGo();
+    this.parts.armful?.letGo();
     this.hands.putBack();
   }
 
@@ -229,10 +271,14 @@ export class Session implements SessionActions, SessionHost {
   private putBackAt = -Infinity;
 
   sit(seat: SeatLike): void {
+    // A seat clicked from a bookcase faced: back where the player stood at once, so the seat remembers that spot (and the view ends).
+    this.shelfViewing.leave(true);
     this.seating.sit(seat);
   }
 
   stand(): void {
+    // Facing a bookcase: back where the player stood, looking the way they looked.
+    if (this.shelfViewing.leave()) return;
     if (!this.arcade.leave() && !this.programPlay.leave()) this.seating.stand();
   }
 
@@ -270,6 +316,10 @@ export class Session implements SessionActions, SessionHost {
 
   pay(payment: PaymentLike): void {
     this.purchases.pay(payment);
+  }
+
+  faceBookcase(bookcase: object): void {
+    this.shelfViewing.face(bookcase);
   }
 
   openPrizeCounter(): void {
@@ -313,7 +363,7 @@ export class Session implements SessionActions, SessionHost {
     return this.parts.notices.tip(text, options);
   }
 
-  prompt(text: string, options?: PromptOptions): () => void {
+  prompt(text: PromptText, options?: PromptOptions): () => void {
     return this.parts.notices.prompt(text, options);
   }
 
@@ -328,6 +378,8 @@ export class Session implements SessionActions, SessionHost {
   setFrozen(frozen: boolean): void {
     const { player, interactor } = this.parts;
     player.movementEnabled = !frozen;
+    // Unfrozen (a search picked, the travel menu cancelled) with a box looked at: the view stays still on it.
+    if (!frozen && this.parts.inspector.examining) player.controls.enabled = false;
     interactor.enabled = !frozen && !this.modals.active && !this.rearranging.carrying;
   }
 
@@ -364,15 +416,48 @@ export class Session implements SessionActions, SessionHost {
   /**
    * The keys that matter with a box of the player's in hand, after what is aimed at, as one prompt line (three groups at
    * most): at a shelf's gap, shelving it there; on something clickable, only the way back (the caption says what a click
-   * does there); else open, turn over, put back. A market copy's keys are on its panel instead.
+   * does there); else closer, open, put back. Looked at (the view still), the keys of the box looked at (`Hands.keysLine`).
+   * A market copy's keys are on its panel instead.
    */
   private holdingKeys(): string | null {
     const { inspector, shelfPlacing } = this.parts;
     if (!inspector.current || this.counter.holding || this.rearranging.carrying) return null;
+    // A stray taken off a table (not a shelf's own box) is not compared nor stacked (`Comparing`, `Stacking`).
+    const own = this.parts.shelving?.findBox(inspector.current.game.id) === inspector.current;
+    const carried = this.carriedKeys();
+    if (carried) return carried;
+    const examined = this.hands.keysLine();
+    if (examined) return examined;
     const back = `[${actionKeyLabel('putBack')}] put back`;
-    if (shelfPlacing?.active && shelfPlacing.target) return `[${grabCap()}] shelve it here · ${back}`;
+    if (shelfPlacing?.active && shelfPlacing.target) {
+      // Spine out or cover out, as the ghost will stand (not for a box that can only stand cover out).
+      const turn = shelfPlacing.canTurn ? ` · [${actionKeyLabel('spineOut')}] ${shelfPlacing.turned ? 'cover out' : 'spine out'}` : '';
+      // Aimed at another box: the two may swap, or that one come beside this one to compare them.
+      if (own && shelfPlacing.swapping && this.aimedShelfBox()) return `[${grabCap()}] swap them · [${actionKeyLabel('compareBox')}] side by side · ${back}`;
+      return `[${grabCap()}] shelve it here${turn} · ${back}`;
+    }
+    // Another of the flat's boxes aimed at: it can come to the hand too, beside this one or into the arms.
+    if (own && this.aimedShelfBox()) return `[${actionKeyLabel('compareBox')}] side by side · [${actionKeyLabel('takeArmful')}] take it too · ${back}`;
     if (this.hovered) return back;
-    return `[${actionKeyLabel('openBox')}] open · [${actionKeyLabel('turnBox')}] turn over · ${back}`;
+    return `[${this.hands.closerCap()}] look closer · [${actionKeyLabel('openBox')}] open · ${back}`;
+  }
+
+  /** The keys with more than one box in hand (one beside it, an armful behind it), or null. */
+  private carriedKeys(): string | null {
+    if (this.comparing.comparing) return `[${actionKeyLabel('compareBox')}] that one back · [${this.hands.closerCap()}] closer · [${actionKeyLabel('putBack')}] put both back`;
+    if (!this.stacking.stacked) return null;
+    const all = `[${actionKeyLabel('putBack')}] put them all back`;
+    if (this.hovered && !this.aimedShelfBox()) return all; // a table spot's caption says it takes them
+    return this.parts.armful?.full ? all : `[${actionKeyLabel('takeArmful')}] one more · ${all}`;
+  }
+
+  /** The flat's own shelf box under the crosshair (not the one in hand, not a market copy, not a stray's), or null. */
+  private aimedShelfBox(): GameBox | null {
+    const item = this.hovered as Partial<GameBox> | null;
+    const id = item?.game?.id;
+    if (!id) return null;
+    const box = this.parts.shelving?.findBox(id);
+    return box && box === item && box !== this.parts.inspector.current ? box : null;
   }
 
   private showHoldingKeys(): void {

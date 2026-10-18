@@ -111,6 +111,7 @@ export class ClawSim {
   private whirClock = 0;
   private readonly random: () => number;
   private readonly prizeFor: (color: number) => string | undefined;
+  private readonly owns: (prize: string) => boolean;
   private readonly from = new THREE.Vector3();
   private readonly scratch = new THREE.Vector3();
   private readonly sounds = new SoundQueue();
@@ -118,9 +119,11 @@ export class ClawSim {
   private outcome: ClawOutcome | null = null;
 
   /** `luck` keeps the misses in a row (the pity grip's count) across visits: `economy/ArcadeHabits`. */
-  constructor(seed: number, prizeFor: (color: number) => string | undefined, luck: { clawMisses: number } = { clawMisses: 0 }) {
+  /** `owns`: whether a prize is on the bed at home already (the attendant restocks with the others first). */
+  constructor(seed: number, prizeFor: (color: number) => string | undefined, luck: { clawMisses: number } = { clawMisses: 0 }, owns: (prize: string) => boolean = () => false) {
     this.random = lcg(seed * 4099);
     this.prizeFor = prizeFor;
+    this.owns = owns;
     this.luck = luck;
     // The heap: soft blobs in pastels on the floor of the case, clear of the chute, the last few on top of the others.
     for (let i = 0; i < PLUSH_COUNT; i++) {
@@ -380,9 +383,17 @@ export class ClawSim {
     }
   }
 
-  /** The attendant tops the heap up: the plush comes back in a new colour at a new spot, on the others. */
+  /**
+   * The attendant tops the heap up: the plush comes back in a new colour at a new spot, on the others; a colour the
+   * player has not taken home yet when there is one left.
+   */
   private restock(p: ClawPlush): void {
-    p.color = PASTELS[Math.floor(this.random() * PASTELS.length)]!;
+    const missing = PASTELS.filter((c) => {
+      const prize = this.prizeFor(c);
+      return prize !== undefined && !this.owns(prize);
+    });
+    const pool = missing.length ? missing : PASTELS;
+    p.color = pool[Math.floor(this.random() * pool.length)]!;
     p.home.copy(this.heapSpot(p.r, true, p));
     p.pos.copy(p.home);
   }

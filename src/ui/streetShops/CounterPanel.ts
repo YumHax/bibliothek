@@ -2,10 +2,22 @@ import { ARM_ABOVE } from '@/economy/pricing';
 import { playCoins } from '@/audio/coins';
 import { Arming, armedLine } from '../confirmTwice';
 import { CardPanel } from '../panel/CardPanel';
-import { attr, html, type Html } from '../panel/html';
-import { coverImg, priceHtml, walletLine } from '../panel/widgets';
+import { html, type Html } from '../panel/html';
+import { coverImg, emptyState, priceHtml } from '../panel/widgets';
+import { Speaker } from '../panel/speaker';
 import type { Game } from '@/catalog/types';
+import type { PersonId } from '@/social/types';
+import { findPerson } from '@/social/people';
+import { formatCoins } from '@/text/money';
 import './streetShops.css';
+
+/** The paper a counter prints on (`data-shop` on the panel: its own colours and type in `streetShops.css`). */
+type CounterPaper = 'bookshop' | 'comics' | 'kiosk' | 'popup';
+
+/** The face beside the shopkeeper's words (CSS px), on the counter's paper. */
+const FACE = 60;
+/** Each paper's backdrop behind the keeper's face (the shop's own wall). */
+const SHOP_FACE_PAPER: Record<CounterPaper, string> = { bookshop: '#e7d9bb', comics: '#f6e27a', kiosk: '#d9dbd4', popup: '#2b2450' };
 
 /** One thing on a Front Street counter: what, a line about it, its price (none: free), its button's verb. */
 export interface CounterRow {
@@ -47,6 +59,13 @@ export interface CounterDeal {
   /** A change elsewhere repaints the counter (a price looked up). */
   onChange?(cb: () => void): () => void;
   cover?(game: Game): string | undefined;
+  /** The counter's own paper (absent: the kit's card). */
+  paper?: CounterPaper;
+  /**
+   * Who serves: their name under their face, the face a person's card (`id`) or, for a keeper the town keeps no card
+   * on, the look seed their walker wears (`seed`, `ui/social/strangerFace`).
+   */
+  keeper?: { name: string; id?: PersonId; seed?: number };
 }
 
 /**
@@ -57,20 +76,28 @@ export interface CounterDeal {
  */
 export class CounterPanel extends CardPanel {
   private deal: CounterDeal | null = null;
-  private line = '';
+  /** The keeper: face and name tag, their words in a balloon (pleased with a sale, put out by a no). */
+  private readonly keeper = new Speaker({ name: 'Behind the counter' }, { face: FACE, className: 'street-counter__keeper' });
   private readonly arming = new Arming(() => this.refresh());
   private stop: (() => void) | null = null;
 
   constructor(container: HTMLElement) {
     super(container, { className: 'street-counter', title: 'The counter', dismiss: 'Leave the counter' });
+    this.keeper.mountAbove(this.body);
   }
 
   /** Lays out `deal` (before the Session opens the panel). */
   show(deal: CounterDeal): void {
     this.stop?.();
     this.deal = deal;
-    this.line = deal.says();
+    const who = deal.keeper;
+    const backdrop = SHOP_FACE_PAPER[deal.paper ?? 'bookshop'];
+    const known = who?.id && findPerson(who.id) ? who.id : undefined;
+    this.keeper.setWho({ name: who?.name ?? 'Behind the counter', backdrop, ...(known ? { person: known } : who?.seed !== undefined ? { seed: who.seed } : {}) });
+    this.keeper.say(deal.says(), 'smile');
     this.setTitle(deal.title);
+    if (deal.paper) this.root.dataset.shop = deal.paper;
+    else delete this.root.dataset.shop;
     this.stop = deal.onChange?.(() => {
       if (this.isOpen) this.refresh();
     }) ?? null;
@@ -89,22 +116,21 @@ export class CounterPanel extends CardPanel {
   protected render(): Html {
     const deal = this.deal;
     if (!deal) return html``;
-    return html`<p class="street-counter__says">${this.line}</p>
-      <p class="street-counter__wallet">${walletLine(deal.coins())}</p>
+    return html`<p class="street-counter__purse"><span class="ui-coin" aria-hidden="true"></span>${formatCoins(deal.coins())} in your pocket</p>
       ${deal.sections().map((section) => html`<section class="street-counter__section">
         <h3>${section.title}</h3>
-        ${section.rows.length ? html`<ul class="street-counter__rows">${section.rows.map((row) => this.rowHtml(deal, row))}</ul>` : html`<p class="street-counter__empty">${section.empty}</p>`}
+        ${section.rows.length ? html`<ul class="street-counter__rows">${section.rows.map((row) => this.rowHtml(deal, row))}</ul>` : emptyState(section.empty, { pictogram: 'shelf', className: 'street-counter__empty' })}
       </section>`)}`;
   }
 
   private rowHtml(deal: CounterDeal, row: CounterRow): Html {
     const armed = this.arming.isArmed(row.id);
-    const price = row.price === undefined ? '' : priceHtml(row.price, { pending: row.pending });
-    const label = armed ? `${row.verb} · ${row.price}?` : row.verb;
+    const priceTag = row.price === undefined ? '' : priceHtml(row.price, { pending: row.pending });
+    const label = armed && row.price !== undefined ? `${row.verb} · ${formatCoins(row.price)}?` : row.verb;
     const cover = row.game ? coverImg(deal.cover?.(row.game), row.game, 'street-counter__cover') : '';
     return html`<li class="street-counter__row">
       ${cover}<span class="street-counter__what"><span class="street-counter__title">${row.title}${row.badge ? html` <span class="ui-badge">${row.badge}</span>` : ''}</span>${row.detail ? html`<small>${row.detail}</small>` : ''}</span>
-      ${price}<button type="button" class="ui-btn${armed ? ' ui-btn--armed' : ''}" data-action="take" data-id="${row.id}"${attr('aria-disabled', row.unavailable !== undefined || row.pending === true)}>${label}</button>
+      ${priceTag}<button type="button" class="ui-btn${armed ? ' ui-btn--armed' : ''}" data-action="take" data-id="${row.id}"${row.unavailable !== undefined || row.pending === true ? html` aria-disabled="true"` : ''}>${label}</button>
     </li>`;
   }
 
@@ -127,9 +153,9 @@ export class CounterPanel extends CardPanel {
       return;
     }
     const done = deal.take(row.id);
-    this.line = done.line;
+    this.keeper.say(done.line, done.ok ? 'smile' : 'frown');
     if (done.ok && done.coins) playCoins(2);
-    this.setStatus(done.ok ? '' : done.line, done.ok ? 'ok' : 'error');
+    this.setStatus('');
     this.refresh();
   }
 }

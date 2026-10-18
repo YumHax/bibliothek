@@ -67,7 +67,23 @@ export class ArcadeHall extends Prop {
       const brokenToday = daily?.outOfOrder(this.options.breakable) ?? null;
       this.brokenOn = tournament.isOn && brokenToday === tournament.gameId ? null : brokenToday;
     }
+    // The repair man, once rung, has it going again at the hour he said.
+    const ready = daily?.repairAt;
+    if (this.brokenOn && ready !== null && ready !== undefined && this.options.hours() >= ready) return null;
     return this.brokenOn;
+  }
+
+  /**
+   * The player tries the broken machine: Gus rings the repair man the first time (it works again `REPAIR_HOURS`
+   * later), then says when he is due. His words.
+   */
+  brokenClick(): string {
+    const { daily } = this.options;
+    if (!daily) return 'OUT OF ORDER. Sorry.';
+    const asked = daily.repairAt !== null;
+    const ready = daily.askRepair(this.options.hours());
+    const at = `${Math.min(23, ready)}:00`;
+    return asked ? `Didier’s on his way. ${at}, he said.` : `Again? Right, I’ll ring Didier. He’ll have it going by ${at}. Have a go on something else meanwhile.`;
   }
 
   /** The next play's price right now (0: on the house). */
@@ -143,6 +159,7 @@ export class ArcadeHall extends Prop {
     if (challenge.done) return ['You beat the challenge today. A new one comes at midnight.'];
     const title = titleOf(challenge.gameId);
     const reward = formatTickets(challenge.reward);
+    if (challenge.kind === 'feat') return [`Today’s challenge is ${title}: ${challenge.ask}. Show me one and I add ${reward}.`];
     if (challenge.kind === 'twice') return [`Today’s challenge: ${formatNumber(challenge.target)} on ${title}, twice. Do that and I add ${reward}.`];
     if (challenge.kind === 'total') return [`Today’s challenge: ${formatNumber(challenge.target)} on ${title}, all your goes today added up. I add ${reward}.`];
     if (challenge.personal) return [`Today’s challenge is ${title}: ${formatNumber(challenge.target)}. I set it from your own best, gold medallist. ${reward} if you do it.`];
@@ -153,7 +170,10 @@ export class ArcadeHall extends Prop {
   private machineNews(titleOf: (id: string) => string): string[] {
     const lines: string[] = [];
     if (this.options.daily?.changeMachineWorks) lines.push('The change machine is working today. Do not tell anyone.');
-    if (this.broken) lines.push(`${titleOf(this.broken)} is out of order today. The repair man comes tomorrow. Probably.`);
+    if (this.broken) {
+      const ready = this.options.daily?.repairAt;
+      lines.push(ready != null ? `${titleOf(this.broken)} is out of order. Didier’s coming at ${Math.min(23, ready)}:00 to fix it.` : `${titleOf(this.broken)} is out of order today. I keep meaning to ring Didier about it.`);
+    }
     return lines;
   }
 
@@ -198,8 +218,8 @@ export class ArcadeHall extends Prop {
   /** The wheel's pot, once it is worth mentioning; past a thousand, it is the talk of the hall. */
   private jackpotNews(): string[] {
     const { jackpot } = this.options;
-    if (jackpot.newsworthy) return [`The wheel’s jackpot is over ${formatNumber(Math.floor(jackpot.value / 100) * 100)}. People come in off the street just to look at it.`];
-    return jackpot.value >= 400 ? [`The wheel’s jackpot is at ${jackpot.value}. Somebody is going to be very happy.`] : [];
+    if (jackpot.newsworthy) return [`The wheel’s jackpot is over ${formatTickets(Math.floor(jackpot.value / 100) * 100)}. People come in off the street just to look at it.`];
+    return jackpot.value >= 400 ? [`The wheel’s jackpot is at ${formatTickets(jackpot.value)}. Somebody is going to be very happy.`] : [];
   }
 
   /** A table the player tops. */

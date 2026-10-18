@@ -7,6 +7,8 @@ import { STAIRWELL_PLAN } from '../stairwell/stairwellPlan'; // imports-ok: the 
 import { landingY } from '@/world/measures/building';
 import { NEIGHBOUR_FLAT_PLAN, NEIGHBOUR_HOSTS, hostAt, type NeighbourHost } from './neighbourFlatPlan';
 import { random } from '@/random';
+import { personAtDoor } from '@/social/people';
+import { has } from '@/social/perks';
 
 /*
  * Visiting the neighbours. A knock on their door while they are home counts for how well they know the player
@@ -91,7 +93,12 @@ export function doorVisit(k: number, i: number, moment: DoorMoment): DoorVisit |
     const h = moment.hours();
     return moment.isHome() && h >= NEIGHBOUR_FLAT_PLAN.hours[0] && h < NEIGHBOUR_FLAT_PLAN.hours[1];
   };
-  const canEnter = (): boolean => open() && friendship(key) >= host.inviteAt;
+  // Gone cold, Mrs Roux keeps her door to a word on the step (`curtAtDoor`): no more coming in.
+  const curt = (): boolean => {
+    const who = personAtDoor(key);
+    return !!who && has(who, 'curtAtDoor');
+  };
+  const canEnter = (): boolean => open() && !curt() && friendship(key) >= host.inviteAt;
   const knocked = (): void => {
     befriend(key, FRIENDSHIP_NUDGES.knock, 'knock', moment.day());
   };
@@ -100,7 +107,7 @@ export function doorVisit(k: number, i: number, moment: DoorMoment): DoorVisit |
     knock: (session) => {
       if (!open()) return false;
       knocked();
-      if (friendship(key) < host.inviteAt) return false;
+      if (curt() || friendship(key) < host.inviteAt) return false;
       enter(host, session);
       return true;
     },

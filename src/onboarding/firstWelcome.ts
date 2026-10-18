@@ -93,6 +93,8 @@ export function startFirstWelcome(deps: WelcomeDeps): void {
   const met = standing(CONCIERGE).met;
   if (state.stage === 'none' && met !== null && met < today - 1) save('skipped', today);
   if (state.stage === 'skipped') return;
+  // The promise still going: its to-do slip is back after a reload.
+  if (state.stage === 'promised') pinTodo(deps);
 
   addExtras((ctx) => extrasFor(ctx.person, ctx.day, deps));
   addThreadSource((id) => (id === CONCIERGE && state.stage === 'promised' ? [{ person: CONCIERGE, kind: 'promise', text: WORDS.thread, due: WORDS.due, day: state.day }] : []));
@@ -104,6 +106,11 @@ export function startFirstWelcome(deps: WelcomeDeps): void {
       deps.note(WORDS.broken);
     }
   });
+}
+
+/** The parcel's to-do slip, top left, up until it is delivered or the promise lapses. */
+function pinTodo(deps: WelcomeDeps): void {
+  deps.notices.tip(WORDS.todo, { id: 'welcome-parcel', head: 'To do', until: () => state.stage !== 'promised', ms: Number.POSITIVE_INFINITY });
 }
 
 function extrasFor(person: string, day: number, deps: WelcomeDeps): TalkExtra[] {
@@ -120,7 +127,7 @@ function extrasFor(person: string, day: number, deps: WelcomeDeps): TalkExtra[] 
       return [
         { id: 'welcome-yes', group: 'promise', label: WORDS.yes, once: true, due: WORDS.due, fit: 'loves', run: () => {
           save('promised', day);
-          deps.notices.tip(WORDS.todo, { id: 'welcome-parcel', head: 'To do', until: () => state.stage !== 'promised', ms: 10 * 60_000 });
+          pinTodo(deps);
           return { line: WORDS.yesSaid };
         } },
         { id: 'welcome-no', group: 'promise', label: WORDS.no, fit: 'meh', run: () => {

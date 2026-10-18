@@ -17,6 +17,8 @@ interface Saved {
   mode: SortMode;
   /** Per shelving id; empty until the player first moves a box. */
   shelves: Record<string, ShelvingRows>;
+  /** The games standing spine out (turned a quarter, the cover to the side), in every sort; absent in older saves: none. */
+  spines?: string[];
 }
 
 /**
@@ -30,10 +32,14 @@ export class ShelfArrangement {
   private readonly store: PersistedStore<Saved>;
   /** Game id -> the shelving its rows are on, built on first ask after a change. */
   private index: Map<string, string> | null = null;
+  private spines: Set<string>;
+  /** Bumped whenever a box is turned (`setSpineOut`, `setSpines`): a layout made before is stale. */
+  private turns = 0;
 
   constructor(storage: Storage | null = safeStorage(), key: string = KEYS.shelves, defaultMode: SortMode = 'platform') {
     this.store = new PersistedStore<Saved>({ key, version: 1, storage, defaults: () => ({ mode: defaultMode, shelves: {} }), read: readSaved });
     this.state = this.store.load();
+    this.spines = new Set(this.state.spines ?? []);
   }
 
   get mode(): SortMode {
@@ -64,6 +70,43 @@ export class ShelfArrangement {
     return this.index.get(gameId) ?? null;
   }
 
+  /** Whether the player stood `gameId`'s box spine out. */
+  isSpineOut(gameId: string): boolean {
+    return this.spines.has(gameId);
+  }
+
+  /** The games standing spine out (for an undo to put back: `setSpines`). */
+  spineOut(): string[] {
+    return [...this.spines];
+  }
+
+  /** How many times a box was turned: part of what a layout depends on. */
+  get turnRevision(): number {
+    return this.turns;
+  }
+
+  /** Stands `gameId`'s box spine out (`on`) or cover out again. */
+  setSpineOut(gameId: string, on: boolean): void {
+    if (this.spines.has(gameId) === on) return;
+    if (on) this.spines.add(gameId);
+    else this.spines.delete(gameId);
+    this.saveSpines();
+  }
+
+  /** Exactly `ids` spine out (an undo putting the shelves back). */
+  setSpines(ids: readonly string[]): void {
+    const next = new Set(ids);
+    if (next.size === this.spines.size && ids.every((id) => this.spines.has(id))) return;
+    this.spines = next;
+    this.saveSpines();
+  }
+
+  private saveSpines(): void {
+    this.turns++;
+    this.state = { ...this.state, spines: [...this.spines] };
+    this.store.save(this.state);
+  }
+
   setMode(mode: SortMode): void {
     if (mode === this.state.mode) return;
     this.state = { ...this.state, mode };
@@ -72,7 +115,7 @@ export class ShelfArrangement {
 
   /** The player's arrangement, every shelving at once; the sort becomes theirs. */
   setArrangement(shelves: Record<string, ShelvingRows>): void {
-    this.state = { mode: 'custom', shelves };
+    this.state = { ...this.state, mode: 'custom', shelves };
     this.index = null;
     this.store.save(this.state);
   }
@@ -162,7 +205,7 @@ function keepHidden(row: readonly string[], old: readonly string[], visible: Rea
 
 function readSaved(data: unknown): Saved | null {
   if (typeof data !== 'object' || data === null) return null;
-  const { mode, shelves } = data as { mode?: unknown; shelves?: unknown };
+  const { mode, shelves, spines } = data as { mode?: unknown; shelves?: unknown; spines?: unknown };
   if (typeof mode !== 'string' || !(SORT_MODES as readonly string[]).includes(mode)) return null;
   const clean: Record<string, ShelvingRows> = {};
   if (typeof shelves === 'object' && shelves !== null) {
@@ -173,5 +216,6 @@ function readSaved(data: unknown): Saved | null {
       );
     }
   }
-  return { mode: mode as SortMode, shelves: clean };
+  const turned = Array.isArray(spines) ? spines.filter((x): x is string => typeof x === 'string') : [];
+  return { mode: mode as SortMode, shelves: clean, ...(turned.length ? { spines: turned } : {}) };
 }

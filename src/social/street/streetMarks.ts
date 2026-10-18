@@ -8,7 +8,7 @@ import { KEYS, PersistedStore } from '@/persistence';
  */
 
 /** A moment of the street, kept once. */
-type StreetMark =
+export type StreetMark =
   | 'strayHome'
   | 'scratchBig'
   | 'garageFind'
@@ -19,7 +19,13 @@ type StreetMark =
   | 'felixGuide'
   | 'secret:dust'
   | 'secret:chalk'
-  | 'secret:carving';
+  | 'secret:carving'
+  | 'phoneFelix'
+  | 'worksOpen'
+  /** Mr Ferrand, across Mémé's landing, opened his door once (`world/linden/FerrandDoor`). */
+  | 'ferrandOpened'
+  /** LE TILLEUL's owner told what the café saw before the sale, once (`world/linden/TilleulWindow`). */
+  | 'tilleulTold';
 
 const store = new PersistedStore<string[]>({
   key: KEYS.streetMarks,

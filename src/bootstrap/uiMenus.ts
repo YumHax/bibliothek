@@ -26,6 +26,8 @@ import { installRoomDebug } from './debug';
 import { late, type Late } from './late';
 import type { Services } from './services';
 import { lastSavedAt } from '@/persistence';
+import type { Owned } from '@/world/build/owned';
+import type { HomeUpgrade } from '@/economy/homeGoods';
 
 /** What the menus read of things made after them: where the player is, the rules. */
 export interface UiLate {
@@ -81,7 +83,9 @@ export function createMenus(services: Services, player: FirstPersonController, h
   if (services.debug) installRoomDebug(() => lockFlow.enter('gamepad'), player);
   overlay.addSetting('display', 'Graphics', new QualityPicker((options) => overlay.confirm(options)).element, QualityPicker.NOTE);
   addGameSettings(overlay, settings, { onEraseProgress: eraseProgress, version });
-  overlay.addSetting('game', 'Cat', new CatSettingsForm(catSettings).element);
+  // Only once a cat lives here (named at the pet shop on adoption); her coat is the one she came with.
+  const upgrades = services.upgrades;
+  overlay.addSetting('game', 'Your cat', new CatSettingsForm(catSettings, { has: () => upgrades.has('cat'), subscribe: (cb) => upgrades.subscribe(cb) }).element);
   // The save as a file and back, and the collection to share (a picture, a page with covers straight from GitHub).
   const githubCovers = new LibretroCoverProvider({ proxy: null });
   addSaveFileSettings(overlay, {
@@ -103,11 +107,11 @@ export function addPauseButtons(services: Services, player: FirstPersonControlle
   const { container, input } = services;
   const { overlay, lockFlow } = menus;
   const here = (): ZoneId => holders.zones.get().current.id;
-  overlay.addPauseButton('journal', () => (services.journal.unread > 0 ? `Journal · ${services.journal.unread} new` : 'Journal'), () => holders.session.get().openPanel(panels.journalPanel));
-  overlay.addPauseButton('people', 'People', () => holders.session.get().openPanel(panels.peopleBook.get()));
+  overlay.addPauseButton('journal', () => (services.journal.unread > 0 ? `Journal · ${services.journal.unread} new` : 'Journal'), () => holders.session.get().openPanel(panels.journalPanel), undefined, { group: 'yours', key: primaryCode('journal') });
+  overlay.addPauseButton('people', 'People', () => holders.session.get().openPanel(panels.peopleBook.get()), undefined, { group: 'yours', key: primaryCode('people') });
   // The last lines said to the player, to read again what went by too fast.
   const said = new SaidPanel(container);
-  overlay.addPauseButton('said', 'What was said', () => holders.session.get().openPanel(said));
+  overlay.addPauseButton('said', 'What was said', () => holders.session.get().openPanel(said), undefined, { group: 'yours' });
   const inRoomThen = (code: string) => inRoomThenRun(() => input.pressVirtual(code));
   const inRoomThenRun = (run: () => void) => {
     const press = () => {
@@ -122,10 +126,10 @@ export function addPauseButtons(services: Services, player: FirstPersonControlle
   };
   // Out without the walk down: from the flat, once the way to Front Street is known (the first day's trip to the
   // market), the "Where to?" list; the front door and the stairs stay for whoever likes the walk.
-  overlay.addPauseButton('go-out', 'Go out…', () => inRoomThenRun(() => holders.session.get().travel()), () => holders.zones.isSet && inFlat(here()) && services.firstDay.isDone('market'));
-  overlay.addPauseButton('photo', 'Photo mode', () => inRoomThen(primaryCode('photoMode')));
-  overlay.addPauseButton('search', 'Search a game', () => inRoomThen(primaryCode('search')));
-  overlay.addPauseButton('plan-room', 'Plan the room', () => inRoomThen(primaryCode('planView')), () => holders.zones.isSet && inFlat(here()) && here() !== 'stairwell');
+  overlay.addPauseButton('go-out', 'Go out…', () => inRoomThenRun(() => holders.session.get().travel()), () => holders.zones.isSet && inFlat(here()) && services.firstDay.isDone('market'), { group: 'out' });
+  overlay.addPauseButton('photo', 'Photo mode', () => inRoomThen(primaryCode('photoMode')), undefined, { group: 'room', key: primaryCode('photoMode') });
+  overlay.addPauseButton('search', 'Search a game', () => inRoomThen(primaryCode('search')), undefined, { group: 'yours', key: primaryCode('search') });
+  overlay.addPauseButton('plan-room', 'Plan the room', () => inRoomThen(primaryCode('planView')), () => holders.zones.isSet && inFlat(here()) && here() !== 'stairwell', { group: 'room', key: primaryCode('planView') });
   // The room's furniture back where it came (docs/furnishing.md): only once something in it was moved, after a yes.
   const movedHere = () => (holders.zones.isSet ? services.furnishings.piecesIn(holders.zones.get().current).filter((piece) => services.furnishings.moved(piece)) : []);
   overlay.addPauseButton(
@@ -141,6 +145,7 @@ export function addPauseButtons(services: Services, player: FirstPersonControlle
       });
     },
     () => movedHere().length > 0,
+    { group: 'room' },
   );
   // The furniture put away (X while carrying), taken out in front of the player in the room they are in.
   const storagePanel = new StoragePanel(container);
@@ -150,7 +155,7 @@ export function addPauseButtons(services: Services, player: FirstPersonControlle
     () => {
       const stored = services.furnishings.storedPieces();
       storagePanel.show(
-        stored.map((piece) => ({ name: piece.name, room: zoneName(piece.zone.id as ZoneId) })),
+        stored.map((piece) => ({ name: piece.name, room: zoneName(piece.zone.id as ZoneId), good: goodOf(piece.owned) })),
         (index) => {
           const piece = stored[index];
           if (piece) inRoomThenRun(() => holders.session.get().takeOutStored(piece));
@@ -159,8 +164,21 @@ export function addPauseButtons(services: Services, player: FirstPersonControlle
       holders.session.get().openPanel(storagePanel);
     },
     () => services.furnishings.storedPieces().length > 0,
+    { group: 'room' },
   );
   return storagePanel;
+}
+
+/** The good a piece was bought as (its shop photo in the storage list): the first one its `owned` names. */
+function goodOf(owned: Owned | undefined): HomeUpgrade | undefined {
+  if (!owned) return undefined;
+  if (typeof owned === 'string') return owned;
+  if ('good' in owned) return owned.good;
+  for (const o of owned) {
+    const good = goodOf(o);
+    if (good) return good;
+  }
+  return undefined;
 }
 
 /** How long ago the game last wrote the save, for the pause menu ("Just now", "2 min ago"); "Automatically" before the first write. */

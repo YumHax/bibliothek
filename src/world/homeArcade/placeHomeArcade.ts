@@ -5,6 +5,7 @@ import { placerFor, type Owned } from '../build/owned';
 import { ArcadeCabinet } from '../arcade/ArcadeCabinet';
 import { HomeArcadeGames } from './HomeArcadeGames';
 import { HOME_CABINET } from './homeArcadeModel';
+import { poweredAt } from '@/building/mains';
 
 /** What the home cabinet reads of the context: the keys, the camera, what the flat owns, and its own table of scores. */
 type HomeArcadeBuild = Pick<BuildContext, 'input' | 'listener'> & { home: Pick<HomeContext, 'upgrades' | 'furnishings'>; arcade: Pick<ArcadeContext, 'homeScores'> };
@@ -25,7 +26,7 @@ export interface HomeArcade {
 export function placeHomeArcade(zone: Zone, ctx: HomeArcadeBuild, at: Placement, owned: Owned): HomeArcade {
   const scores = ctx.arcade.homeScores;
   const games = new HomeArcadeGames((id) => scores.bestOf(id));
-  const cabinet = new ArcadeCabinet(games, ctx.input, {
+  const cabinet: ArcadeCabinet = new ArcadeCabinet(games, ctx.input, {
     color: HOME_CABINET.color,
     glow: HOME_CABINET.glow,
     scores,
@@ -35,6 +36,8 @@ export function placeHomeArcade(zone: Zone, ctx: HomeArcadeBuild, at: Placement,
     glowLight: false,
     wear: HOME_CABINET.wear,
     payout: 'none',
+    // On the flat's mains: dark through the building's power cut, like the TV.
+    powered: (): boolean => poweredAt(cabinet),
   });
   placerFor(zone, ctx.home.upgrades, owned).placeAt(cabinet, at);
   ctx.home.furnishings?.register(zone, cabinet, { key: 'homeArcade', at, owned, name: 'Arcade cabinet' });

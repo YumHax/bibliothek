@@ -1,18 +1,29 @@
-/* The cat's name and coat, one row of the Settings screen. */
+/* The cat's row of the Settings screen: her photo in a little round frame, her name, her coat. */
 @layer tokens, base, components, panels;
 @layer panels {
   .cat-settings {
     display: flex;
     align-items: center;
     gap: var(--sp-4);
-    flex-wrap: wrap;
     margin: 0;
   }
-  .cat-settings__field {
-    display: flex;
-    align-items: center;
-    gap: var(--sp-2);
+  .cat-settings__photo {
+    flex: none;
+    display: grid;
+    place-items: center;
+    width: 4rem;
+    height: 4rem;
+    overflow: hidden;
+    border-radius: 50%;
+    border: 2px solid var(--ui-border-strong);
+    background: var(--paper-shop);
   }
+  .cat-settings__photo img { width: 100%; height: 100%; object-fit: cover; }
+  .cat-settings__photo img:not([src]) { visibility: hidden; }
+  .cat-settings__photo--none { display: none; }
+  .cat-settings__about { display: grid; gap: var(--sp-1); min-width: 0; }
+  .cat-settings__field { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-2); }
   .cat-settings__field span { color: var(--ui-text-dim); }
+  .cat-settings__coat { margin: 0; color: var(--ui-text-dim); }
   .cat-settings input[type='text'] { width: 9rem; }
 }

@@ -7,7 +7,7 @@ import { MoonpostSound } from './moonpostSound';
 /**
  * The prototype cart in the NES, on the TV: `MoonpostDemo` run as a `ScreenProgram` (pad one's A or up
  * fires the jet pack, Start starts and skips). `onFinished` hears once that it was played to its end
- * (the credits rolled): the trail's last step.
+ * (the credits rolled to their end, or the set switched off while they rolled): the trail's last step.
  */
 export class MoonpostProgram implements ScreenProgram {
   readonly title = 'MOONPOST (prototype)';
@@ -50,6 +50,11 @@ export class MoonpostProgram implements ScreenProgram {
   }
 
   dispose(): void {
+    // Switched off during the credits: the rounds were all delivered, it was played through.
+    if (this.demo.rolled && !this.told) {
+      this.told = true;
+      this.onFinished();
+    }
     this.sound?.dispose();
     this.sound = null;
   }

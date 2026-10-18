@@ -41,12 +41,18 @@ export const STREET_PLACES = {
     bell: 3,
     wrongNumbers: [
       '“Is that Pizza Roma? … No? Then who orders forty pizzas from a phone box?” Click.',
-      '“Félix? Félix, is that you? … Oh. Sorry, love, wrong number.”',
-      '“I’ve got the cartridges. Same place, same time.” Click. Nobody says which place.',
       '“Is Kevin there? Tell him his mum says tea’s ready.”',
       'Heavy breathing, then a tiny chiptune played down the line. Somebody hangs up laughing.',
       '“This is a recorded message: you have won a holiday for two. Press—” You hang up.',
+      '“Hello? Is that the launderette? Machine 4 ate my jumper.” Click.',
     ] as readonly string[],
+    /**
+     * The calls that are not quite wrong numbers: once, an old friend of Félix's asking for him (Mémé knows who:
+     * `grandma/storyLines` 'roger'); while the trail is on the collector (`StoryStage` 'arcade'), somebody arranging
+     * to swap old carts outside RETRO GAMES.
+     */
+    felix: '“Félix? Félix, is that you? … No? It’s Roger. From the radio shop, years ago. He hasn’t rung me in months… Oh. Oh, I see. I didn’t know. I’m so sorry, love.” A long breath. “Tell Odette I rang, would you?” Click.',
+    collector: '“I’ve got the cartridges. The Hana box, the lot. Same place, same time: outside RETRO GAMES.” Click. Somebody is selling old carts on Front Street.',
   },
 
   /** The park's gardens (`PARK_WALK`): what the player does there. */
@@ -59,8 +65,8 @@ export const STREET_PLACES = {
     /** The ducks: how many, where they paddle about (a box of the pond's water, x0..x1, z0..z1), how close they come when fed. */
     ducks: { count: 5, water: { x0: -101, x1: -90, z0: -50, z1: -31 }, fedAt: [-89.6, -40.3] as Vec2 },
     /**
-     * Sunday afternoons' concert on the lawn by the path from the gate (the bandstand is across the lawn, out of the
-     * gardens): the stage's middle and the way it faces, the band on it (stage-local x), the folding chairs before it.
+     * Sunday afternoons' concert on the lawn by the path from the gate (the bandstand's boards are not to be trusted,
+     * the band plays on the grass): the stage's middle and the way it faces, the band on it (stage-local x), the folding chairs before it.
      */
     concert: {
       stage: { at: [-64, -32.4], yaw: Math.PI } as PlaceSpot,
@@ -69,6 +75,16 @@ export const STREET_PLACES = {
       /** The game weekday (6: Sunday), its hours, and dry weather only. */
       weekday: 6,
       hours: [15, 18] as [number, number],
+    },
+    /**
+     * The bandstand at the end of its lane (`BANDSTAND_WALK`, its middle at -100.7, 38.7): its steps up to the
+     * railing's gap, sat on looking out north-west (the upper tread 0.4 m up), and the plaque on the plinth's face
+     * towards the lane.
+     */
+    bandstand: {
+      steps: { at: [-103.18, 41.18], yaw: -Math.PI / 4 } as PlaceSpot,
+      seat: 0.4,
+      plaque: { at: [-97.89, 37.54], yaw: Math.PI * 0.625 } as PlaceSpot,
     },
     /**
      * The building's kids at the playground on Sundays (`building/kids`): on the swings (the seat's top 0.5 m up), one

@@ -9,6 +9,7 @@ import { paint, standard } from '../materials/palette';
 import { Prop } from '../props/Prop';
 import { foundChannels, onChannels, showOn, type Channel } from './channels';
 import { onCoproChange } from '@/building/coproState';
+import { mainsOn } from '@/building/mains';
 
 interface ChannelDialOptions {
   /** The set it tunes (the collection room's TV). */
@@ -32,6 +33,8 @@ export class ChannelDial extends Prop implements Interactable {
   private readonly unsubscribe: (() => void)[];
   /** The channel the dial stands on (an index into the found ones), -1 off. */
   private on = -1;
+  /** The dial is bringing its channel up on the set: the set's searching and playing are its own. */
+  private tuning = false;
 
   constructor(private readonly options: ChannelDialOptions) {
     super();
@@ -52,7 +55,28 @@ export class ChannelDial extends Prop implements Interactable {
       this.visible = foundChannels().length > 0;
     };
     show();
-    this.unsubscribe = [onChannels(show), onCoproChange(show)];
+    // The set switched off, or on to something else (a box put in, the projector's remote): the dial back to "--".
+    const followSet = (state: string): void => {
+      if (this.on < 0) return;
+      if (this.tuning) {
+        // Its own channel coming up: settled once it plays (or fails); switched off meanwhile, the dial goes back.
+        if (state === 'playing' || state === 'error' || state === 'off') this.tuning = false;
+        if (state === 'off') this.setOn(-1);
+        return;
+      }
+      if (state === 'off' || state === 'searching') this.setOn(-1);
+    };
+    this.unsubscribe = [onChannels(show), onCoproChange(show), options.tv.onStateChange(followSet)];
+  }
+
+  private setOn(on: number): Channel | null {
+    this.on = on;
+    this.knob.rotation.z = on * 0.7;
+    const channel = on >= 0 ? foundChannels()[on] ?? null : null;
+    this.face.map?.dispose();
+    this.face.map = dialTexture(channel);
+    this.face.needsUpdate = true;
+    return channel;
   }
 
   setHovered(hovered: boolean): void {
@@ -70,20 +94,23 @@ export class ChannelDial extends Prop implements Interactable {
     const found = foundChannels();
     if (!found.length) return;
     playLatchClick(0.05);
-    this.on = this.on + 1 < found.length ? this.on + 1 : -1;
-    this.knob.rotation.z = this.on * 0.7;
-    const channel = this.on >= 0 ? found[this.on]! : null;
-    this.face.map?.dispose();
-    this.face.map = dialTexture(channel);
-    this.face.needsUpdate = true;
+    const channel = this.setOn(this.on + 1 < found.length ? this.on + 1 : -1);
     if (!channel) {
       session.stopScreen(this.options.tv);
       session.react('The tuner clicks back to nothing.');
       return;
     }
+    if (!mainsOn()) {
+      session.react(`Channel ${channel.number}, and nothing: the building’s power is off, the set downstairs with it.`);
+      return;
+    }
     const show = showOn(channel, this.options.day(), this.options.hours());
-    if (!show) return;
+    if (!show) {
+      session.react(`${channel.name}: only snow at this hour. Try again later in the day.`);
+      return;
+    }
     session.react(`${channel.name}: ${show.title}.`);
+    this.tuning = true;
     void session.playOn(this.options.tv, { game: show });
   }
 

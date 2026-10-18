@@ -20,8 +20,14 @@ export interface MemoryFacts {
   clubSet: boolean;
   /** The lost prototype found (the trail's end). */
   prototypeFound: boolean;
-  /** The memories already seen. */
+  /** The memories already seen: how many, and which (`MEMORIES` ids). */
   seen: number;
+  seenIds: readonly string[];
+  /**
+   * How near the flat is to the dream room, Félix's as the opening shows it (`grandma/dreamRoom`): 0 bare, 1 every
+   * piece of his living room bought back and every shelf of it full.
+   */
+  dreamRoom: number;
 }
 
 export interface Memory {
@@ -35,8 +41,8 @@ export interface Memory {
   againAfter: string;
 }
 
-/** The dream room is not built yet: a room this full stands in for it (memory 7). */
-const FULL_ROOM = 120;
+/** The dream room near enough for the keys (memory 7): most of his living room put back (`dreamRoom`). */
+export const DREAM_NEAR = 0.75;
 
 export const MEMORIES: readonly Memory[] = [
   {
@@ -80,18 +86,19 @@ export const MEMORIES: readonly Memory[] = [
     againAfter: 'He stood at the window till the bus turned the corner. He told me so.',
   },
   {
-    // The sale, as Mémé saw it: Gaspard, the papers, Crane in the front row.
+    // The sale, as Mémé saw it: Gaspard, the papers, Crane in the front row. After the row (4): Gaspard is met there first.
     id: 'sale',
     title: 'Lot 1 to 412',
-    unlocked: (facts) => facts.felixHome,
+    unlocked: (facts) => facts.felixHome && facts.seenIds.includes('row'),
     after: 'I signed where Gaspard pointed. I should have read them. I’m sorry, love.',
     againAfter: 'That man in the front row raised his card for everything. Everything.',
   },
   {
-    // The keys: Mémé hands them over, a day too late; it meets the opening. Last: the six before it seen.
+    // The keys: Mémé hands them over, a day too late; it meets the opening. Last: the six before it seen, and his
+    // hunt over or his room nearly back as he had it.
     id: 'keys',
     title: 'A day late',
-    unlocked: (facts) => facts.seen >= 6 && (facts.prototypeFound || facts.gamesOwned >= FULL_ROOM),
+    unlocked: (facts) => facts.seen >= 6 && (facts.prototypeFound || facts.dreamRoom >= DREAM_NEAR),
     after: 'There. Now you know all of it. It’s your flat, love. It always was going to be.',
     againAfter: 'A day late. And look what you did with it.',
   },

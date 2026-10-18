@@ -12,7 +12,7 @@ import { SpeechBubble } from './SpeechBubble';
 import { Attention, type AttentionRange } from './attention';
 import type { SocialHook } from './socialHook';
 import { SocialSelf } from './socialSelf';
-import type { SocialAct } from './motion/repertoire';
+import type { Manner, SocialAct } from './motion/repertoire';
 import type { Fit } from '@/social/types';
 import type { FaceKey, GestureName } from './motion/gestures';
 import { random } from '@/random';
@@ -230,9 +230,9 @@ export class Vendor extends THREE.Group implements Furniture, Interactable, Upda
   }
 
   /** A conversation's moment (a loved topic, a polite "meh", an insult), `strength` 0..1, in their own measure. */
-  socialReact(act: SocialAct, strength: number): void {
+  socialReact(act: SocialAct, strength: number, manner?: Manner): void {
     this.socialSelf.reacted();
-    this.model.socialReact(act, strength);
+    this.model.socialReact(act, strength, manner);
   }
 
   /** Their face before the player chooses what to say (`fit`: how they would take it), or back to listening (null). */

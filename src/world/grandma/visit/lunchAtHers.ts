@@ -2,7 +2,8 @@ import * as THREE from 'three';
 import type { SeatLike, SessionActions } from '@/game/SessionActions';
 import type { TalkExtra } from '@/social/talk';
 import type { GrandmaRituals } from '@/grandma/GrandmaRituals';
-import { LUNCH, LUNCH_LINES, lunchHours, lunchOf, type LunchKind } from '@/grandma/lunch';
+import { LUNCH, LUNCH_LINES, dishOf, lunchHours, lunchOf, type LunchKind } from '@/grandma/lunch';
+import { GASPARD_TALK } from '@/grandma/gaspardLines';
 import { GRANDMA_TALK } from '@/grandma/grandma';
 import { pick, random, shuffled } from '@/random';
 import type { MemeScene } from '../memeScene';
@@ -72,7 +73,7 @@ export class LunchAtHers {
       this.scene.zone.after(at, () => this.call());
       return true;
     }
-    if (this.kind() && this.scene.hour() < LUNCH.from && !this.rituals.ateOn(this.scene.day())) this.scene.zone.after(at, () => this.scene.say([LUNCH_LINES.later]));
+    if (this.kind() && this.scene.hour() < LUNCH.from && !this.rituals.ateOn(this.scene.day())) this.scene.zone.after(at, () => this.scene.say([this.withDish(LUNCH_LINES.later)]));
     return false;
   }
 
@@ -107,6 +108,7 @@ export class LunchAtHers {
     this.called = false;
     this.seated = false;
     this.eating = false;
+    this.table?.setGuest(false);
     this.clearChair();
     scene.release(OWNER);
   }
@@ -121,8 +123,10 @@ export class LunchAtHers {
     }
     this.called = true;
     this.table?.setSunday(true);
+    // Gaspard at the table today: his plate laid at the door end.
+    this.table?.setGuest(this.gaspardHere());
     const kind = this.kind();
-    scene.say([pick(random, kind === 'christmas' ? [...LUNCH_LINES.call, LUNCH_LINES.christmas[0]] : LUNCH_LINES.call)]);
+    scene.say([this.withDish(pick(random, kind === 'christmas' ? [...LUNCH_LINES.call, LUNCH_LINES.christmas[0]] : LUNCH_LINES.call))]);
     const { table } = GRANDMA_FLAT_PLAN.memeDay;
     const sitDown = (): void => {
       scene.meme.sit(table.yaw, table.seat, 'lap', scene.world(...table.gaze));
@@ -157,9 +161,61 @@ export class LunchAtHers {
     this.clearChair();
     session.sit(this.seat);
     this.table?.serve('served');
-    const talk = this.kind() === 'christmas' ? LUNCH_LINES.christmas : LUNCH_LINES.talk;
     this.scene.meme.gesture('point');
-    this.scene.say([pick(random, LUNCH_LINES.serve), ...shuffled(random, talk).slice(0, 2)], () => this.meal(session));
+    const dish = dishOf(this.scene.ctx.today.realDate());
+    this.scene.say([pick(random, dish.serve), ...this.talk()], () => this.askBread(session));
+  }
+
+  /** Over the meal she asks for the bread: passed with a click on it, or she reaches for it herself after a while. */
+  private askBread(session: SessionActions): void {
+    const { scene } = this;
+    if (!this.eating || session.seatedIn !== this.seat) {
+      this.meal(session);
+      return;
+    }
+    const { at, size, waits } = RITUALS_PLAN.lunch.bread;
+    let done = false;
+    const finish = (line: string): void => {
+      if (done) return;
+      done = true;
+      scene.zone.remove(spot);
+      scene.say([line], () => this.meal(session));
+    };
+    const spot = new Hotspot(size, {
+      label: () => 'The bread · pass it to her',
+      use: () => finish(pick(random, LUNCH_LINES.bread.thanks)),
+    });
+    scene.say([pick(random, LUNCH_LINES.bread.ask)], () => {
+      if (!this.eating) return;
+      scene.zone.place(spot, new THREE.Vector3(at[0], at[1], at[2]));
+      scene.zone.after(waits, () => finish(pick(random, LUNCH_LINES.bread.herself)));
+    });
+  }
+
+  /** Two lines over the meal: Christmas's, else a memory of the album seen, Gaspard spoken to if he is there, her own. */
+  private talk(): string[] {
+    const { scene } = this;
+    if (this.kind() === 'christmas') return shuffled(random, LUNCH_LINES.christmas).slice(0, 2);
+    const gaspard = this.gaspardHere();
+    // Her own talk, less what would name Gaspard behind his back while he sits there.
+    const own = LUNCH_LINES.talk.filter((line) => !gaspard || !line.includes('Gaspard'));
+    const remembered = scene.visits.seen.map((m) => LUNCH_LINES.remembers[m.id]).filter((line): line is string => !!line);
+    const lines: string[] = [];
+    if (gaspard) lines.push(pick(random, GASPARD_TALK.lunch));
+    if (remembered.length && random() < 0.7) lines.push(pick(random, remembered));
+    for (const line of shuffled(random, own)) if (lines.length < 2) lines.push(line);
+    return lines;
+  }
+
+  /** Gaspard at her table this Sunday (his plate laid, his name not said behind his back). */
+  private gaspardHere(): boolean {
+    // At the table now (sat down when the player came in, not gone since), not merely due by the hour.
+    return this.scene.ctx.family?.gaspardIn(this.scene.day()) ?? false;
+  }
+
+  /** `{dish}` in a line: today's dish. */
+  private withDish(line: string): string {
+    return line.replace('{dish}', dishOf(this.scene.ctx.today.realDate()).name);
   }
 
   /** The meal told in a fade (the clock to the coffee), the tart on the table after it. */
@@ -203,12 +259,12 @@ export class LunchAtHers {
     const { notices, money } = scene.ctx;
     const day = scene.day();
     const steps: (() => void)[] = [];
-    steps.push(() => scene.say([pick(random, LUNCH_LINES.dessert)], next));
+    steps.push(() => scene.say([dishOf(scene.ctx.today.realDate()).tart, pick(random, LUNCH_LINES.dessert)], next));
     const coins = scene.visits.takeEnvelope(day);
     if (coins) {
       steps.push(() => {
         scene.meme.gesture('nudge');
-        scene.say([LUNCH_LINES.envelope], next);
+        scene.say([this.gaspardHere() ? LUNCH_LINES.envelopeGaspard : LUNCH_LINES.envelope], next);
         money.purse?.earnCoins(coins);
         notices.reward({ ...GRANDMA_TALK.envelope, coins });
       });

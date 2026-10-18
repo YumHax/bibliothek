@@ -8,6 +8,7 @@ import { drawSealedLot, type SealedLot } from './boxLots';
 import { felixCopy, felixLotOn } from './felixLots';
 import { describeVariant, dressCopy } from './copyTraits';
 import { AUCTION, marketPrice } from './pricing';
+import { readGame } from '@/catalog/validate';
 import { frozenRng } from '@/random';
 import { dayStream } from '@/time/daily';
 import { SUNDAY_WEEKDAY, weekdayOf } from '@/time/wakefulness';
@@ -54,6 +55,20 @@ export interface AuctionLot {
   /** The lot the sale was put together around (the rival is after it). */
   star: boolean;
   platform?: PlatformId;
+  /** The player's own copy, entered for this sale (`AuctionHouse.consign`): they watch it go, the house pays them. */
+  consigned?: true;
+}
+
+/** A copy of the player's entered for a coming sale, waiting for its hammer. */
+export interface Consignment {
+  /** The sale day it is entered for. */
+  day: number;
+  /** The copy as it left the collection (its receipt kept: `consignNet` reads it, a passed lot comes home with it). */
+  game: Game;
+}
+
+interface ConsignFile {
+  entries: Consignment[];
 }
 
 /** How a lot went: to the player (`'you'`), to a bidder of the room (their id), or passed. */
@@ -93,15 +108,77 @@ function dress(game: Game, rng: () => number, star: boolean, seed: string): { ga
 /** The auctioneer on one of Félix's copies come back (`felixLots`). */
 const FELIX_BLURB = 'From a private collection: a little round sticker on the back, F.A. It has been through this room before, I believe.';
 
+/** The auctioneer on the player's own copy (they sit in the room while it is called). */
+const CONSIGNED_BLURB = 'Entered by a private seller, here in the room today.';
+
+/** The seed of the room's interest in a lot: the day's lots by number, a consigned copy by its id (the same whether or not the player watches it). */
+export function lotSeed(lot: Pick<AuctionLot, 'number' | 'consigned' | 'game'>): string {
+  return lot.consigned && lot.game ? `consign:${lot.game.id}` : `auction:${lot.number}`;
+}
+
 /** The sale days' lots and results. */
 export class AuctionHouse {
   private state: AuctionFile;
   private readonly store: PersistedStore<AuctionFile>;
   private cache: { day: number; lots: Promise<AuctionLot[]> } | null = null;
+  private consignments: ConsignFile;
+  private readonly consignStore: PersistedStore<ConsignFile>;
 
   constructor(private readonly deps: AuctionHouseDeps, storage?: Storage | null) {
     this.store = new PersistedStore<AuctionFile>({ key: KEYS.auction, version: 1, defaults: () => ({ day: -1, results: {} }), read: readFile, ...(storage !== undefined ? { storage } : {}) });
     this.state = this.store.load();
+    this.consignStore = new PersistedStore<ConsignFile>({ key: KEYS.consignments, version: 1, defaults: () => ({ entries: [] }), read: readConsignments, ...(storage !== undefined ? { storage } : {}) });
+    this.consignments = this.consignStore.load();
+  }
+
+  /** The sale a copy entered today goes into: the next one after today (today's lots are on the board already). */
+  consignDay(today: number): number {
+    return nextAuctionDay(today + 1);
+  }
+
+  /** The copy waiting for sale day `day`'s hammer, if the player entered one (one a sale). */
+  consignedFor(day: number): Consignment | undefined {
+    return this.consignments.entries.find((c) => c.day === day);
+  }
+
+  /** Every copy still waiting for its hammer, oldest sale first. */
+  get waiting(): readonly Consignment[] {
+    return this.consignments.entries;
+  }
+
+  /** Enters `game` for the next sale after `today`; false when a copy is entered for it already. The collection side is `Transactions.consignToSale`. */
+  consign(game: Game, today: number): boolean {
+    const day = this.consignDay(today);
+    if (this.consignedFor(day)) return false;
+    this.consignments = { entries: [...this.consignments.entries, { day, game }] };
+    this.consignStore.save(this.consignments);
+    if (this.cache?.day === day) this.cache = null;
+    return true;
+  }
+
+  /** The hammer fell on (or the room passed) the copy entered for `day`: it is no longer waiting. */
+  settleConsignment(day: number): void {
+    this.consignments = { entries: this.consignments.entries.filter((c) => c.day !== day) };
+    this.consignStore.save(this.consignments);
+  }
+
+  /** What the room expects a copy of the player's to fetch, and where it would open, once its fame is known. */
+  estimateFor(game: Game, views: Views): { estimate: number; reserve: number } {
+    const condition = game.condition ?? 'complete';
+    const edition = game.edition ?? 'standard';
+    const reserve = marketPrice(game, views, condition, AUCTION.reserve, edition);
+    return { estimate: Math.max(marketPrice(game, views, condition, AUCTION.consign.estimate, edition), reserve + 2), reserve };
+  }
+
+  /** A consigned copy as a lot of its sale (numbered after the day's own lots by `lotsFor`). */
+  async consignedLot(entry: Consignment, number = 0): Promise<AuctionLot> {
+    const views = await this.deps.fame.lookup(entry.game);
+    const { estimate, reserve } = this.estimateFor(entry.game, views);
+    const variant = describeVariant(entry.game);
+    return {
+      number, kind: 'game', game: entry.game, title: entry.game.title, blurb: `${CONSIGNED_BLURB}${variant ? ` ${variant}.` : ''}`,
+      estimate, reserve, star: false, platform: entry.game.platform, consigned: true,
+    };
   }
 
   /**
@@ -175,6 +252,9 @@ export class AuctionHouse {
     lots.push(...ordinaryLots.slice(0, 1), ...cartons.slice(0, Math.max(0, sealed - 1)), ...ordinaryLots.slice(1));
     if (starLot) lots.push(await starLot);
     lots.push(...cartons.slice(Math.max(0, sealed - 1)));
+    // The player's own copy, entered for this sale, closes it (after the room has warmed up).
+    const entry = this.consignedFor(day);
+    if (entry) lots.push(await this.consignedLot(entry));
     return lots.map((lot, i) => ({ ...lot, number: i + 1 }));
   }
 }
@@ -191,4 +271,18 @@ function readFile(data: unknown): AuctionFile | null {
     if (typeof to === 'string' && typeof price === 'number') out[n] = { to, price };
   }
   return { day, results: out };
+}
+
+function readConsignments(data: unknown): ConsignFile | null {
+  if (typeof data !== 'object' || data === null) return null;
+  const { entries } = data as Partial<Record<keyof ConsignFile, unknown>>;
+  if (!Array.isArray(entries)) return null;
+  const out: Consignment[] = [];
+  for (const entry of entries) {
+    if (typeof entry !== 'object' || entry === null) continue;
+    const { day, game } = entry as Partial<Record<keyof Consignment, unknown>>;
+    const copy = readGame(game);
+    if (typeof day === 'number' && Number.isInteger(day) && copy) out.push({ day, game: copy });
+  }
+  return { entries: out };
 }

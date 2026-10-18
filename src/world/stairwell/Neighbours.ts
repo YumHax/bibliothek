@@ -301,6 +301,8 @@ export class Neighbours extends Prop implements Updatable, OccupancyAware {
     if (Math.hypot(scratch.x - this.eye.x, scratch.z - this.eye.z) > HELLO_RANGE || Math.abs(this.eye.y - 1.6 - scratch.y) > 1.2) return;
     r.greeted = true;
     const offer = this.options.trades?.offerAt(r.door);
+    // With the social layer their social self greets them already, by how they stand (`SocialSelf`): one hello, not two.
+    if (!offer && this.options.social && personAtDoor(r.door)) return;
     const hello = offer ? 'Did you see my note?' : this.hello(r, hours);
     r.walker.say(hello, offer ? 2.5 : 2.2);
     this.murmur(r, hello);

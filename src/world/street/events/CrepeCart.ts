@@ -75,8 +75,9 @@ export class CrepeCart extends THREE.Group implements Furniture, Interactable {
   activate(session: SessionActions): void {
     session.pay({
       price: PRICE,
+      title: 'A crêpe',
       paid: () => {
-        this.keeper.speak('“There you go, mind, it’s hot.”');
+        this.keeper.speak('There you go. Mind, it’s hot.');
         return FILLINGS[this.line++ % FILLINGS.length]!;
       },
     });

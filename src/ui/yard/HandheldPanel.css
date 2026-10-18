@@ -8,6 +8,7 @@
     --hh-ink: #2a2a44;
     --hh-key: #1c1c20;
     --hh-button: #8a1f4a;
+    flex-direction: column;
     padding: var(--sp-4);
     background: var(--ui-backdrop-soft);
   }
@@ -56,15 +57,54 @@
     outline: none;
   }
   .handheld__hint { margin: 0; min-height: 1.3em; font-size: var(--fs-3); }
-  .handheld__controls { display: flex; justify-content: space-between; align-items: center; width: 100%; padding: 0 var(--sp-4); box-sizing: border-box; }
+  .handheld__controls { display: flex; justify-content: space-between; align-items: center; width: 100%; padding: 0 var(--sp-4); box-sizing: border-box; touch-action: none; user-select: none; }
+  /* The D-pad as its four arms (each pressable by a finger or the mouse) round a centre boss. */
   .handheld__dpad {
-    width: 3.6rem;
-    height: 3.6rem;
-    background:
-      linear-gradient(var(--hh-key), var(--hh-key)) center / 1.2rem 100% no-repeat,
-      linear-gradient(var(--hh-key), var(--hh-key)) center / 100% 1.2rem no-repeat;
+    position: relative;
+    width: 4.2rem;
+    height: 4.2rem;
+    background: radial-gradient(circle, var(--hh-key) 0 0.55rem, transparent 0.6rem);
   }
+  .handheld__arm {
+    position: absolute;
+    width: 1.4rem;
+    height: 1.4rem;
+    background: var(--hh-key);
+    cursor: pointer;
+    transition: translate var(--dur-beat) ease, filter var(--dur-beat) ease;
+  }
+  .handheld__arm--up { left: 1.4rem; top: 0; border-radius: var(--ui-radius-2xs) var(--ui-radius-2xs) 0 0; }
+  .handheld__arm--down { left: 1.4rem; bottom: 0; border-radius: 0 0 var(--ui-radius-2xs) var(--ui-radius-2xs); }
+  .handheld__arm--left { left: 0; top: 1.4rem; border-radius: var(--ui-radius-2xs) 0 0 var(--ui-radius-2xs); }
+  .handheld__arm--right { right: 0; top: 1.4rem; border-radius: 0 var(--ui-radius-2xs) var(--ui-radius-2xs) 0; }
   .handheld__buttons { display: flex; gap: var(--sp-3); transform: rotate(-25deg); }
-  .handheld__buttons span { width: 2rem; height: 2rem; border-radius: 50%; background: var(--hh-button); }
+  .handheld__button {
+    display: grid;
+    place-items: center;
+    width: 2.2rem;
+    height: 2.2rem;
+    border-radius: 50%;
+    background: var(--hh-button);
+    box-shadow: 0 3px 0 var(--shade-45);
+    cursor: pointer;
+    transition: translate var(--dur-beat) ease, box-shadow var(--dur-beat) ease;
+  }
+  .handheld__button b { rotate: 25deg; font-size: var(--fs-2); color: var(--tint-50); }
+  /* Held: the printed control goes down (whatever holds it: a key, a controller, a finger). */
+  .handheld__arm.handheld__pressed { filter: brightness(1.8); translate: 0 1px; }
+  .handheld__button.handheld__pressed { translate: 0 3px; box-shadow: 0 0 0 var(--shade-45); }
   .handheld__status { margin: 0; min-height: 1.3em; font-size: var(--fs-4); font-weight: 600; }
+  /* Under the shell: handing it back to the kid, with its key. */
+  .handheld__give {
+    margin-top: var(--sp-3);
+    padding: var(--sp-1) var(--sp-3);
+    border: 1px solid var(--tint-35);
+    border-radius: var(--ui-radius-pill);
+    background: var(--shade-45);
+    color: var(--ui-text);
+    font: inherit;
+    font-size: var(--fs-4);
+    cursor: pointer;
+  }
+  .handheld__give:hover { border-color: var(--tint-75); }
 }

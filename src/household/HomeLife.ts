@@ -14,6 +14,7 @@ import { dreamOf, type Dream } from './dreams';
 import type { StockItem } from '@/economy/StockItem';
 import { formatCount } from '@/text/count';
 import { formatCoins } from '@/text/money';
+import { mainsOn } from '@/building/mains';
 
 interface HomeLifeDeps {
   household: Household;
@@ -123,6 +124,7 @@ export class HomeLife {
     const copy = this.owned(game);
     if (!copy) return no('Only your own boxes, at home.');
     if (!copy.sticker) return no(`No sticker on ${copy.title}.`);
+    if (!mainsOn()) return no('The hair dryer needs the power back first.');
     return null;
   }
 
@@ -189,6 +191,7 @@ export class HomeLife {
   /** Why no cake can be baked now (a refusal), or null. */
   mayBake(): Outcome | null {
     if (!this.kitchenTable()) return no('Nowhere to let a cake cool: the kitchen has no table yet.\nSECOND HOME, on Front Street, sells one.');
+    if (!mainsOn()) return no('The oven is dead with the power off. After the storm.');
     return this.household.cakeOut ? no('There is still cake on the table.') : null;
   }
 

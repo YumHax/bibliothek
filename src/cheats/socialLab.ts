@@ -64,7 +64,7 @@ interface LabDeps {
   settings: { readonly settings: { readonly uiScale: string; readonly reduceMotion: string }; update(patch: { uiScale?: 'normal' | 'largest'; reduceMotion?: 'system' | 'reduce' }): void };
 }
 
-const OPENINGS: readonly OpeningKind[] = ['intro', 'hello', 'mood', 'memory', 'held', 'birthday', 'cold', 'hostile'];
+const OPENINGS: readonly OpeningKind[] = ['intro', 'hello', 'twice', 'outfit', 'mood', 'memory', 'held', 'birthday', 'cold', 'hostile'];
 const STATES: readonly { state: LabState; label: string }[] = [
   { state: 'loves', label: 'They love it' },
   { state: 'likes', label: 'They like it' },

@@ -23,16 +23,18 @@ export const FLOWER_SHOP: ShopPlan = {
   clerk: {
     seed: 59,
     lines: [
-      '“A fig for the corner, a monstera by the window. Water them on Sundays.”',
-      '“The cut flowers are for the street’s tables. The pots are for you.”',
-      '“The balcony pots like the sun. The bathroom one likes the steam.”',
-      '“The roses in the chiller came in at five this morning. So did I.”',
-      '“Tulips, three for two. Nobody ever takes just the three.”',
+      'A fig for the corner, a monstera by the window. Water them on Sundays.',
+      'The cut flowers are for the street’s tables. The pots are for you.',
+      'The balcony pots like the sun. The bathroom one likes the steam.',
+      'The roses in the chiller came in at five this morning. So did I.',
+      'Tulips, three for two. Nobody ever takes just the three.',
     ],
+    callOuts: ['Fresh in this morning!', 'Smell that? Sweet peas.'],
+    greetings: { first: ['Morning! Mind the buckets, the floor’s wet.'], met: ['There you are! Come and see what came in.', 'Hello again. The pots are doing well, I hope?'] },
     thanks: [
-      '“Lovely choice. It’ll be on your sill by tonight.”',
-      '“Thank you! Water it on Sundays, and talk to it a bit.”',
-      '“Sold. It liked you, I could tell.”',
+      'Lovely choice. It’ll be on your sill by tonight.',
+      'Thank you! Water it on Sundays, and talk to it a bit.',
+      'Sold. It liked you, I could tell.',
     ],
     chores: [
       // Sprinkling the buckets on the stand.
@@ -55,9 +57,9 @@ export const FLOWER_SHOP: ShopPlan = {
       { at: [1.6, 0.05], yaw: Math.PI / 2 },
     ],
     lines: [
-      '“Tulips for my mother. She’ll say they’re the wrong colour.”',
-      '“It smells like spring in here, whatever the weather.”',
-      '“Which ones say sorry without saying too much sorry?”',
+      'Tulips for my mother. She’ll say they’re the wrong colour.',
+      'It smells like spring in here, whatever the weather.',
+      'Which ones say sorry without saying too much sorry?',
     ],
   },
   window: { along: 1.7, width: 1.5, height: 1.7 },

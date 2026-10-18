@@ -56,6 +56,8 @@ interface CabinetBody {
   readonly coinLamps: THREE.MeshStandardMaterial;
   /** The control panel (a hover glints its controls). */
   readonly panel: THREE.Mesh;
+  /** The instruction card on the panel (a click reads it up close: `CardReading`). */
+  readonly card: InstructionCard;
 }
 
 /** The coin door on the base's front, left of the ticket slot (x 0.2): its size, centre and plate depth. */
@@ -134,7 +136,7 @@ export function buildCabinetBody(cabinet: THREE.Group, spec: CabinetBodySpec): C
   marqueeMesh.position.set(0, TOTAL_H - 0.1, -0.11 + UPPER_DEPTH / 2 + WALL.notice.lift);
   layMesh(marqueeMesh, WALL.notice);
   cabinet.add(marqueeMesh);
-  return { body: [paint, baseArt, upperArt], marquee, marqueeMesh, coinLamps, panel };
+  return { body: [paint, baseArt, upperArt], marquee, marqueeMesh, coinLamps, panel, card };
 }
 
 /** A shadowed box with `sides` on its two side faces and `paint` everywhere else. */

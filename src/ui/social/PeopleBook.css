@@ -916,6 +916,19 @@
     .people-book__id {
       position: static;
     }
+    /* A narrow web: a taller ring, smaller faces and no tie word, so neighbouring names never overlap. */
+    .people-book__web {
+      height: 19rem;
+    }
+    .people-book__node small {
+      display: none;
+    }
+    .people-book__node b {
+      max-width: 5.5em;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
   }
   .reduce-motion .people-book__tab,
   .reduce-motion .people-book__tile,

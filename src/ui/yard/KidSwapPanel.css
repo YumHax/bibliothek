@@ -1,49 +1,154 @@
-/* A swap of carts with one of the courtyard's kids: their face and words up top (a box of fixed height), their carts as tiles, then the player's games. */
+/*
+ * A swap of carts with one of the courtyard's kids, on the yard's asphalt: the kid in a balloon up top, the deal
+ * under it (a row of fixed height), their pencil case unzipped with its cartridges, then the player's own carts.
+ */
 @layer tokens, base, components, panels;
 @layer panels {
-  .kid-swap__kid {
-    display: grid;
-    grid-template-columns: auto 1fr;
-    grid-template-rows: auto auto;
-    column-gap: var(--sp-3);
-    align-items: center;
-    padding: var(--sp-2) var(--sp-3);
-    margin-bottom: var(--sp-3);
-    border-radius: var(--ui-radius-md);
-    background: var(--ui-fill);
+  .kid-swap {
+    --yard-asphalt: #3f4245;
+    --yard-speck: rgba(255, 255, 255, 0.05);
+    --yard-chalk: #f3efe4;
+    --yard-chalk-soft: rgba(243, 239, 228, 0.35);
+    --case-fabric: #b8392f;
+    --case-fabric-dark: #8f2a22;
+    --case-zip: #d8d2c2;
+    --case-zip-dark: #9a9384;
+    --cart-plastic: #8e8e94;
+    --cart-plastic-dark: #66666c;
+    --felt-tip: #2a6fd6;
+    --felt-pink: #e0559a;
+    --sticker: #f2d24a;
+    --sticker-ink: #3a2a10;
   }
-  .kid-swap__face { grid-row: 1 / span 2; }
-  .kid-swap__face .social-portrait { width: var(--size); height: var(--size); border-radius: var(--ui-radius-sm); display: block; }
-  /* Two lines whatever they say: the buttons under it never move. */
-  .kid-swap__line {
-    margin: 0;
-    min-height: 2.6em;
-    font-family: var(--ui-font-comic);
-    font-size: var(--fs-7);
-    line-height: 1.3;
+  .kid-swap .catalogue__scroll {
+    background:
+      radial-gradient(circle at 20% 30%, var(--yard-speck) 0 1px, transparent 1.5px) 0 0 / 11px 13px,
+      radial-gradient(circle at 70% 60%, var(--yard-speck) 0 1px, transparent 1.5px) 0 0 / 17px 7px,
+      var(--yard-asphalt);
+    color: var(--yard-chalk);
+    --ui-text-dim: var(--yard-chalk-soft);
   }
-  .kid-swap__deal { min-height: 2.2rem; display: flex; gap: var(--sp-2); align-items: center; }
-  .kid-swap__heading { margin: var(--sp-3) 0 var(--sp-2); font-size: var(--fs-4); color: var(--ui-text-dim); font-weight: 600; }
-  /* A row of tiles' height while they are thought over or none is left: the player's list below never jumps. */
-  .kid-swap__carts { display: flex; flex-wrap: wrap; gap: var(--sp-2); min-height: 9.5rem; }
-  .kid-swap__wait { margin: 0; color: var(--ui-text-dim); }
+  .kid-swap__speaker { margin-bottom: 0; }
+
+  /* The kid's deal, a row that keeps its height whether there is a button in it or not. */
+  .kid-swap__deal { min-height: 2.4rem; display: flex; gap: var(--sp-2); align-items: center; margin-bottom: var(--sp-2); }
+
+  .kid-swap__heading { margin: 0 0 var(--sp-2); font-family: var(--ui-font-marker); font-weight: 400; font-size: var(--fs-t1); letter-spacing: 0.02em; color: var(--yard-chalk); }
+  .kid-swap__heading em { font-style: normal; color: var(--sticker); }
+
+  /* The pencil case, unzipped: red fabric, the zip along its top, a felt-tip star someone drew on it. */
+  .kid-swap__case {
+    position: relative;
+    padding: 1.6rem var(--sp-4) var(--sp-4);
+    margin-bottom: var(--sp-4);
+    border-radius: 1.6rem;
+    background:
+      repeating-linear-gradient(45deg, transparent 0 3px, var(--yard-speck) 3px 4px),
+      linear-gradient(180deg, var(--case-fabric), var(--case-fabric-dark));
+    box-shadow: inset 0 -6px 0 var(--shade-25), 0 6px 14px var(--shade-45);
+  }
+  .kid-swap__case::before {
+    content: '';
+    position: absolute;
+    left: 1.2rem;
+    right: 1.2rem;
+    top: 0.45rem;
+    height: 0.55rem;
+    border-radius: var(--ui-radius-pill);
+    background: repeating-linear-gradient(90deg, var(--case-zip) 0 4px, var(--case-zip-dark) 4px 6px);
+  }
+  .kid-swap__case::after {
+    content: '';
+    position: absolute;
+    right: 1.4rem;
+    bottom: 0.9rem;
+    width: 1.6rem;
+    height: 1.6rem;
+    background: var(--felt-pink);
+    clip-path: polygon(50% 0, 61% 35%, 98% 35%, 68% 57%, 79% 91%, 50% 70%, 21% 91%, 32% 57%, 2% 35%, 39% 35%);
+    rotate: 12deg;
+    opacity: 0.85;
+  }
+
+  /* Their carts: a row of tiles' height while they are thought over or none is left, so the list below never jumps. */
+  .kid-swap__carts { display: flex; flex-wrap: wrap; gap: var(--sp-3); min-height: 10.5rem; align-items: flex-start; }
+  .kid-swap__wait { margin: 0; align-self: center; font-family: var(--ui-font-hand); font-size: var(--fs-t2); color: var(--yard-chalk); }
   .kid-swap__cart {
+    position: relative;
     display: flex;
     flex-direction: column;
     align-items: center;
-    gap: var(--sp-1);
-    width: 8.5rem;
-    min-height: 9.5rem;
-    padding: var(--sp-2);
-    border: 1px solid var(--ui-border);
-    border-radius: var(--ui-radius-md);
-    background: var(--ui-fill);
-    color: var(--ui-text);
+    gap: 0.2rem;
+    width: 7.5rem;
+    padding: var(--sp-1);
+    border: 0;
+    background: transparent;
+    color: var(--yard-chalk);
     cursor: pointer;
     text-align: center;
+    transition: translate var(--dur-quick) var(--ui-ease), rotate var(--dur-quick) var(--ui-ease);
   }
-  .kid-swap__cart:hover { background: var(--ui-fill-hover); }
-  .kid-swap__cart[aria-pressed='true'] { border-color: var(--ui-accent); box-shadow: 0 0 0 2px var(--ui-accent-soft); }
-  .kid-swap__cover { width: 4.5rem; height: auto; }
-  .kid-swap__cart-title { font-size: var(--fs-3); line-height: 1.2; }
+  /* A cartridge: grey plastic, the top corners cut, ridges along the bottom, the cover stuck on as its label. */
+  .kid-swap__shell {
+    display: block;
+    width: 5.6rem;
+    padding: 0.45rem 0.45rem 1.1rem;
+    background:
+      repeating-linear-gradient(90deg, transparent 0 5px, var(--cart-plastic-dark) 5px 7px) bottom / 100% 0.6rem no-repeat,
+      linear-gradient(180deg, var(--cart-plastic), var(--cart-plastic-dark));
+    clip-path: polygon(10% 0, 90% 0, 100% 8%, 100% 100%, 0 100%, 0 8%);
+    filter: drop-shadow(0 3px 2px var(--shade-45));
+  }
+  .kid-swap__label { display: block; width: 100%; height: 4.6rem; object-fit: cover; border-radius: var(--ui-radius-2xs); filter: none; }
+  .kid-swap__cart-title { font-family: var(--ui-font-hand); font-size: var(--fs-7); line-height: 1.05; }
+  .kid-swap__meta { font-size: var(--fs-1); letter-spacing: 0.06em; text-transform: uppercase; opacity: 0.7; }
+  .kid-swap__sticker {
+    position: absolute;
+    top: 0.2rem;
+    right: -0.2rem;
+    padding: 0.1rem 0.35rem;
+    border-radius: var(--ui-radius-xs);
+    background: var(--sticker);
+    color: var(--sticker-ink);
+    font-size: var(--fs-tiny);
+    font-weight: 700;
+    rotate: 8deg;
+    box-shadow: 1px 1px 0 var(--shade-45);
+  }
+  .kid-swap__cart:hover,
+  .kid-swap__cart:focus-visible { translate: 0 -3px; outline: none; }
+  .kid-swap__cart:focus-visible .kid-swap__shell { filter: drop-shadow(0 0 4px var(--yard-chalk)); }
+  /* The one picked: lifted out of the case and ringed in felt-tip. */
+  .kid-swap__cart[aria-pressed='true'] { translate: 0 -6px; rotate: -2deg; }
+  .kid-swap__cart[aria-pressed='true']::after {
+    content: '';
+    position: absolute;
+    inset: -0.35rem -0.15rem -0.1rem;
+    border: 3px solid var(--felt-tip);
+    border-radius: 48% 52% 45% 55% / 55% 45% 55% 45%;
+    pointer-events: none;
+  }
+  .kid-swap__cart--arrived { animation: kid-swap-drop var(--dur-longer) var(--ui-ease-pop); }
+  @keyframes kid-swap-drop {
+    from { opacity: 0; translate: 0 -2.5rem; rotate: 10deg; }
+    to { opacity: 1; translate: 0 0; rotate: 0deg; }
+  }
+
+  /* The player's carts, chalked round on the asphalt; the question stays at the top while the list scrolls. */
+  .kid-swap__heading--mine { position: sticky; top: calc(-1 * var(--sp-2)); z-index: var(--z-above); padding: var(--sp-2) 0; background: var(--yard-asphalt); }
+  .kid-swap__own-list { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(10rem, 1fr)); gap: var(--sp-2); }
+  .kid-swap__own {
+    display: grid;
+    grid-template-columns: auto 1fr;
+    grid-template-rows: 1fr auto;
+    gap: var(--sp-1) var(--sp-2);
+    padding: var(--sp-2);
+    border: 2px dashed var(--yard-chalk-soft);
+    border-radius: var(--ui-radius-md);
+  }
+  .kid-swap__own-cover { grid-row: 1 / span 2; width: 2.6rem; height: 3.2rem; }
+  .kid-swap__own-title { font-size: var(--fs-4); line-height: 1.2; overflow-wrap: anywhere; }
+  .kid-swap__own-title small { display: block; font-size: var(--fs-1); letter-spacing: 0.06em; text-transform: uppercase; opacity: 0.7; }
+  .kid-swap__offer { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .kid-swap__more { margin: var(--sp-3) 0 0; font-family: var(--ui-font-hand); font-size: var(--fs-t1); color: var(--yard-chalk-soft); }
 }

@@ -1,6 +1,6 @@
 import type { HomeShop } from '@/economy/homeGoods';
 import { moodOf } from '../mood';
-import { effectValue } from '../perks';
+import { effectValue, has } from '../perks';
 import { countedToday, nudge, tier } from '../standing';
 import { atLeast } from '../tiers';
 import type { PersonId } from '../types';
@@ -23,6 +23,10 @@ const SHOP_CLERKS: Partial<Record<HomeShop, PersonId>> = {
 /** Today's discount talked out of a clerk (`askDiscount` agreed): this much off at the till, once. */
 const TALKED_DOWN = 0.9;
 
+/** The friends whose arms (or van) carry the furniture shop's pieces home (`helpsCarry`): no delivery in the price. */
+const CARRIERS: readonly PersonId[] = ['marco', 'girard', 'sam'];
+const NO_DELIVERY = 0.95;
+
 /** The clerk of `shop`, or null (the market's household stall, the agency). */
 export function clerkOf(shop: HomeShop): PersonId | null {
   return SHOP_CLERKS[shop] ?? null;
@@ -32,7 +36,8 @@ export function clerkOf(shop: HomeShop): PersonId | null {
 export function shopFactor(shop: HomeShop): number {
   const clerk = clerkOf(shop);
   if (!clerk) return 1;
-  return effectValue(clerk, 'discount', 1) * effectValue(clerk, 'markup', 1);
+  const carried = shop === 'furniture' && CARRIERS.some((id) => has(id, 'helpsCarry')) ? NO_DELIVERY : 1;
+  return effectValue(clerk, 'discount', 1) * effectValue(clerk, 'markup', 1) * carried;
 }
 
 /** Whether the discount talked out of `shop`'s clerk today is still to be used at the till. */

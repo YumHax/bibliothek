@@ -1,4 +1,7 @@
-/* The keys card (`KeysCard.ts`): held up while H is down, the keys for what the player is doing now, two columns. */
+/*
+ * The keys card (`KeysCard.ts`): held up while H is down, an index card like the game's other cards (cream, a red
+ * header rule, faint blue lines), the keys for what the player is doing now in two columns, each action in pen.
+ */
 @layer tokens, base, components, panels;
 @layer panels {
   .keys-card {
@@ -12,10 +15,22 @@
     overflow: hidden;
     padding: var(--sp-4) var(--sp-5);
     pointer-events: none;
+    color: var(--ink-letter);
+    border: 0;
+    border-radius: var(--ui-radius-xs);
+    background:
+      linear-gradient(transparent 3.2rem, var(--paper-margin) 3.2rem, var(--paper-margin) calc(3.2rem + 1.5px), transparent calc(3.2rem + 1.5px)),
+      repeating-linear-gradient(transparent 0, transparent 1.6rem, var(--paper-squares) 1.6rem, var(--paper-squares) calc(1.6rem + 1px)),
+      var(--paper-note);
+    box-shadow: var(--ui-shadow-paper);
+    color-scheme: light;
+    rotate: -0.4deg;
   }
   .keys-card__title {
-    margin: 0 0 var(--sp-3);
-    font-size: var(--fs-t1);
+    margin: 0 0 var(--sp-4);
+    font-family: var(--ui-font-print);
+    font-weight: 400;
+    font-size: var(--fs-t3);
   }
   .keys-card__list {
     display: grid;
@@ -26,6 +41,7 @@
     list-style: none;
     font-size: var(--fs-4);
   }
-  .keys-card__keys { display: block; color: var(--ui-text-dim); }
+  .keys-card__list li { font-family: var(--ui-font-hand); font-size: var(--fs-t1); line-height: 1.15; }
+  .keys-card__keys { display: block; margin-top: 0.15rem; font-family: var(--ui-font-body); font-size: var(--fs-4); color: var(--ink-review-soft); }
   body.menu-open .keys-card { visibility: hidden; }
 }

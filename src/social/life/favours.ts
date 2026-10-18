@@ -13,7 +13,7 @@ import { witnessed } from '../witnesses';
 import { atLeast, tierOf, tierRank } from '../tiers';
 import type { PersonCard, PersonId, SocialPlace } from '../types';
 import { dueWords } from './due';
-import { AMENDS_LINES, FAVOUR_DAYS, FAVOUR_EXTRAS, FAVOUR_LINES, FAVOUR_VOICES, FAVOURS, FETCHABLE, type FavourVoice } from './favoursPlan';
+import { AMENDS_LINES, FAVOUR_ANSWERS, FAVOUR_DAYS, FAVOUR_EXTRAS, FAVOUR_LINES, FAVOUR_VOICES, FAVOURS, FETCH_ANY, FETCHABLE, OFFER_LINES, type FavourVoice } from './favoursPlan';
 import { life, saveLife, type Favour, type FavourKind } from './lifeStore';
 
 /*
@@ -50,12 +50,17 @@ let deps: FavourDeps | null = null;
 export function startFavours(d: FavourDeps): void {
   deps = d;
   settle(d.day());
-  d.onNewDay((day) => settle(day));
+  // The to-do slips of the promises still going come back after a reload, and each morning (one evicted is pinned again).
+  for (const f of favoursToDo()) pinTodo(f);
+  d.onNewDay((day) => {
+    settle(day);
+    for (const f of favoursToDo()) pinTodo(f);
+  });
   addExtras((ctx) => extrasOf(ctx.person, ctx.day, ctx.place));
   addThreadSource(favourThreads);
   onInteraction((id, interaction, outcome, ctx, extra) => {
     if (interaction !== 'giveGift' && interaction !== 'giveGame') return;
-    const f = open(id).find((x) => x.accepted !== null && ((x.kind === 'fetch' && interaction === 'giveGift' && extra.gift === x.thing) || (x.kind === 'findGame' && interaction === 'giveGame' && extra.game?.title === x.game?.title)));
+    const f = open(id).find((x) => x.accepted !== null && ((x.kind === 'fetch' && interaction === 'giveGift' && extra.gift === x.thing) || (x.kind === 'findGame' && interaction === 'giveGame' && !!extra.game && (extra.game.id === x.game?.id || extra.game.title === x.game?.title))));
     if (!f) return;
     outcome.line = fill(lineOf(f, 'thanks'), f);
     complete(f, ctx.day, ctx.place);
@@ -94,6 +99,12 @@ export function favoursToDo(): readonly Favour[] {
   return life().favours.filter((f) => f.accepted !== null && f.done === undefined && f.failed === undefined && !f.declined);
 }
 
+/** `f`'s to-do slip, top left, up until it is done or failed (a lent game waiting to come back has none). */
+function pinTodo(f: Favour): void {
+  if (f.kind === 'lend' && f.stage === 1) return;
+  deps?.notices.tip(todoText(f), { id: `favour-${f.id}`, head: 'To do', until: () => f.done !== undefined || f.failed !== undefined, ms: Number.POSITIVE_INFINITY });
+}
+
 /** What a favour asks, as the To-do says it. */
 export function todoText(f: Favour): string {
   return fill(FAVOUR_LINES[f.kind].todo, f);
@@ -111,6 +122,8 @@ function voiceOf(f: Favour): FavourVoice | null {
   if (card.group === 'friends') return 'friend';
   // Behind a counter or a stall all day (not the busker, the postman, a bidder).
   if (card.trade && COUNTER_TRADES.has(card.trade)) return 'trade';
+  // Grumpy or proud, they ask without quite asking.
+  if (card.traits.includes('grumpy') || card.traits.includes('proud')) return 'gruff';
   return null;
 }
 
@@ -159,7 +172,7 @@ function draw(day: number): void {
   for (const card of order) {
     if (made >= FAVOURS.perDay) break;
     // Family (Mémé) asks nothing that could be broken: she loses nothing over a missed promise.
-    if (card.family || !isMet(card.id) || open(card.id).length) continue;
+    if (card.family || card.occasional || !isMet(card.id) || open(card.id).length) continue;
     const s = standing(card.id);
     if (!atLeast(tierOf(s.warmth, s.trust), 'acquaintance')) continue;
     const last = Math.max(-Infinity, ...state.favours.filter((f) => f.person === card.id).map((f) => f.done ?? f.failed ?? f.day));
@@ -192,16 +205,16 @@ function fits(card: PersonCard, game: Game): boolean {
 }
 
 /** A favour `card` asks on `day`, or null when the kind drawn has nothing to ask (no game to hunt). */
-function makeFavour(card: PersonCard, day: number, rand: () => number, amends: boolean): Favour | null {
+function makeFavour(card: PersonCard, day: number, rand: () => number, amends: boolean, only?: FavourKind): Favour | null {
   const d = deps;
   if (!d) return null;
-  const kinds = kindsFor(card).filter((k) => !amends || k !== 'findGame');
+  const kinds = only ? [only] : kindsFor(card).filter((k) => !amends || k !== 'findGame');
   const kind = kinds[Math.floor(rand() * kinds.length)]!;
   const state = life();
   const f: Favour = { id: `f${++state.serial}`, person: card.id, kind, day, accepted: null, asked: amends, due: day + FAVOUR_DAYS[kind], stage: 0, amends: amends || undefined };
   if (kind === 'fetch') {
-    const liked = (card.likes ?? []).filter((g) => FETCHABLE.includes(g));
-    const pool = liked.length ? liked : FETCHABLE;
+    const liked = (card.likes ?? []).filter((g) => FETCHABLE.includes(g) && (g !== 'treats' || card.traits.includes('catPerson')));
+    const pool = liked.length ? liked : card.traits.includes('catPerson') ? [...FETCH_ANY, 'treats' as const] : FETCH_ANY;
     f.thing = pool[Math.floor(rand() * pool.length)]!;
   } else if (kind === 'findGame') {
     const wanted = d.catalogue.filter((g) => fits(card, g) && !d.collection.owns(g.id));
@@ -237,6 +250,8 @@ function extrasOf(id: PersonId, day: number, place: SocialPlace): TalkExtra[] {
       });
     }
   }
+  const offer = offerExtra(id, day);
+  if (offer) out.push(offer);
   const amends = amendsExtra(id, day);
   if (amends) out.push(amends);
   return out;
@@ -257,7 +272,7 @@ function extrasFor(f: Favour, day: number, place: SocialPlace): TalkExtra[] {
       { id: `favour-no-${f.id}`, group: 'promise', label: FAVOUR_EXTRAS.decline, fit: 'meh', run: () => {
         f.declined = true;
         saveLife();
-        return { line: FAVOUR_EXTRAS.declined };
+        return { line: answerOf(f).no };
       } },
     ];
   }
@@ -270,9 +285,10 @@ function extrasFor(f: Favour, day: number, place: SocialPlace): TalkExtra[] {
       fit: 'loves',
       disabled: () => (deps?.collection.find(game.id)?.status ?? 'owned') === 'owned' && deps?.collection.owns(game.id) ? null : FAVOUR_EXTRAS.lendGone,
       run: () => {
-        deps?.collection.setStatus(game.id, 'lent');
+        // The favour first, then the status: the shelf's card in the gap reads who has it from the favour.
         f.stage = 1;
         f.back = day + FAVOURS.lendDays;
+        deps?.collection.setStatus(game.id, 'lent');
         nudge(f.person, { warmth: 3, why: `trusted with ${game.title}`, day });
         saveLife();
         return { line: fill(FAVOUR_LINES.lend.thanks, f) };
@@ -286,6 +302,43 @@ function extrasFor(f: Favour, day: number, place: SocialPlace): TalkExtra[] {
     } }];
   }
   return [];
+}
+
+/** How `f`'s asker takes a yes and a no, in their voice. */
+function answerOf(f: Favour): (typeof FAVOUR_ANSWERS)['anyone'] {
+  return FAVOUR_ANSWERS[voiceOf(f) ?? 'anyone'];
+}
+
+/**
+ * The player's "Anything I can do for you?" (docs/social.md "Promises"): to someone met and on good terms with no
+ * favour going, every `FAVOURS.askEveryDays` at most; they find something (asked at once), or, a favour of theirs just
+ * done, thank the player for asking. The way to a stamp when the player wants one, not only when it is drawn.
+ */
+function offerExtra(id: PersonId, day: number): TalkExtra | null {
+  const card = findPerson(id);
+  if (!card || card.family || card.occasional || !isMet(id) || open(id).length) return null;
+  const s = standing(id);
+  if (!atLeast(tierOf(s.warmth, s.trust), 'acquaintance')) return null;
+  const offered = lastCounted(id, 'offerHelp');
+  if (offered !== null && day - offered < FAVOURS.askEveryDays) return null;
+  return {
+    id: `favour-offer-${id}`,
+    group: 'ask',
+    label: OFFER_LINES.label,
+    fit: 'likes',
+    run: () => {
+      nudge(id, { reason: 'offerHelp', day });
+      const state = life();
+      const last = Math.max(-Infinity, ...state.favours.filter((f) => f.person === id).map((f) => f.done ?? f.failed ?? f.day));
+      const rand = gameDayRandom(`offer:${id}`, day);
+      const f = day - last < FAVOURS.gapDays ? null : (makeFavour(card, day, rand, false) ?? makeFavour(card, day, rand, false, 'fetch'));
+      if (!f) return { line: OFFER_LINES.nothing };
+      f.asked = true;
+      state.favours.push(f);
+      saveLife();
+      return { line: fill(lineOf(f, 'ask'), f) };
+    },
+  };
 }
 
 /** Whether `id`, cross with the player, still offers a way to make up (once each). */
@@ -306,7 +359,9 @@ function amendsExtra(id: PersonId, day: number): TalkExtra | null {
     run: () => {
       const state = life();
       state.amends.push(id);
-      const f = makeFavour(card, day, gameDayRandom(`amends:${id}`, day), true);
+      // A fetch is always there to ask when the kind drawn has nothing (no game to lend): the one way back is never wasted.
+      const rand = gameDayRandom(`amends:${id}`, day);
+      const f = makeFavour(card, day, rand, true) ?? makeFavour(card, day, rand, true, 'fetch');
       if (!f) {
         saveLife();
         return { line: 'Not now.' };
@@ -323,10 +378,11 @@ function accept(f: Favour, day: number): { line: string } {
   f.due = day + FAVOUR_DAYS[f.kind];
   saveLife();
   const todo = fill(FAVOUR_LINES[f.kind].todo, f);
-  deps?.notices.tip(todo, { id: `favour-${f.id}`, head: 'To do', until: () => f.done !== undefined || f.failed !== undefined, ms: 10 * 60_000 });
+  pinTodo(f);
   const said = `Said yes to ${shortName(f.person)}: ${todo}`;
   deps?.note(said.length <= 60 ? said : `Said yes to ${shortName(f.person)}’s favour`, 'note');
-  return { line: f.kind === 'lend' ? 'Oh, thank you! Whenever suits.' : 'Thank you! I knew I could count on you.' };
+  const answer = answerOf(f);
+  return { line: f.kind === 'lend' ? answer.lendYes : answer.yes };
 }
 
 /**
@@ -367,6 +423,6 @@ function fail(f: Favour, day: number): void {
 function bringBack(f: Favour, day: number): void {
   const d = deps;
   if (d && f.game && d.collection.find(f.game.id)?.status === 'lent') d.collection.setStatus(f.game.id, 'owned');
-  d?.notices.read({ title: `${shortName(f.person)} brought it back`, text: `${f.game?.title ?? 'Your game'} is back on its shelf, in one piece. “Thank you, I loved it.”`, look: 'note' });
+  d?.notices.read({ title: `${shortName(f.person)} brought it back`, text: `${f.game?.title ?? 'Your game'} is back on its shelf, in one piece. “${answerOf(f).back}”`, look: 'note' });
   complete(f, day);
 }

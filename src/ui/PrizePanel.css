@@ -427,9 +427,10 @@
     cursor: pointer;
     transition: transform var(--dur-tap) ease, box-shadow var(--dur-tap) ease, filter var(--dur-hover) ease;
   }
-  .prizes__take:hover:not(:disabled) { filter: brightness(1.08); }
-  .prizes__take:active:not(:disabled) { transform: translateY(5px); box-shadow: 0 1px 0 var(--pz-hot-dark), 0 2px 5px var(--shade-45), inset 0 1px 0 var(--tint-35); }
-  .prizes__take:disabled { background: var(--pz-take-off); box-shadow: 0 6px 0 var(--pz-take-off-shade); color: var(--pz-take-off-ink); text-shadow: none; cursor: default; font-size: var(--fs-5); }
+  .prizes__take:hover:not(:disabled):not([aria-disabled='true']) { filter: brightness(1.08); }
+  .prizes__take:active:not(:disabled):not([aria-disabled='true']) { transform: translateY(5px); box-shadow: 0 1px 0 var(--pz-hot-dark), 0 2px 5px var(--shade-45), inset 0 1px 0 var(--tint-35); }
+  .prizes__take:disabled,
+  .prizes__take[aria-disabled='true'] { background: var(--pz-take-off); box-shadow: 0 6px 0 var(--pz-take-off-shade); color: var(--pz-take-off-ink); text-shadow: none; cursor: default; font-size: var(--fs-5); }
   /* Pinning a prize as the goal: a quiet button under the big one, always there so nothing moves. */
   .prizes__pin {
     align-self: center;

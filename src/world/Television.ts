@@ -4,7 +4,7 @@ import type { Updatable } from '@/core/Engine';
 import type { CssLayer } from '@/core/CssLayer';
 import type { Interactable } from '@/interaction/Interactable';
 import type { PlayerState, SessionActions } from '@/game/SessionActions';
-import { unplayableWhy } from './box/unplayable';
+import { mediaWord, unplayableWhy } from './box/unplayable';
 import type { RegionLock } from '@/economy/regionLock';
 import { CrtSpeaker } from '@/audio/CrtSpeaker';
 import type { ActivityAware, Furniture } from './Furniture';
@@ -17,7 +17,8 @@ import { HueDrift } from './screen/HueDrift';
 import { QUALITY } from '@/graphics/quality';
 import { paint, timber } from '@/world/materials/palette';
 import { PROUD } from './props/joinery';
-import type { MediaDecks } from './media/MediaDeck';
+import type { MediaDeck, MediaDecks } from './media/MediaDeck';
+import type { PlatformId } from '@/catalog/types';
 import { damp, dampFactor } from '@/math/damp';
 
 /** Height of the built-in cabinet the CRT sits on when nothing else carries it (see `mountOn`). */
@@ -187,6 +188,11 @@ export class Television extends SurfaceScreen implements Furniture, Updatable, I
     this.decks = decks;
   }
 
+  /** The console under it for `platform` (the pad a program is played with, `game/ProgramPlay`). */
+  deckFor(platform: PlatformId): MediaDeck | null {
+    return this.decks?.forPlatform(platform) ?? null;
+  }
+
   label(player: PlayerState): string | null {
     const held = player.held;
     if (held) {
@@ -213,7 +219,7 @@ export class Television extends SurfaceScreen implements Furniture, Updatable, I
     if (!poweredAt(this)) return session.refuse('No power: the whole building is dark.');
     const box = session.held;
     if (box && !box.playable) {
-      session.refuse(`${box.game.title} is ${unplayableWhy(box)}: no cartridge to put in.`);
+      session.refuse(`${box.game.title} is ${unplayableWhy(box)}: no ${mediaWord(box)} to put in.`);
     } else if (box) {
       const deck = this.decks?.forPlatform(box.game.platform);
       if (deck) return deck.insert(session, box);

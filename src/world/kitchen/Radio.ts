@@ -7,11 +7,18 @@ import { Prop, part } from '../props/Prop';
 import { PROUD } from '../props/joinery';
 import { paint, standard } from '../materials/palette';
 import { HoverGlint } from '../props/hoverGlint';
+import { onMains, poweredAt } from '@/building/mains';
+import { playRockerClick } from '@/audio/furnitureSounds';
 
 interface RadioOptions {
   /** Body colour. Default a cream enamel. */
   color?: number;
+  /** The dial turns: a click goes from off to the lounge station, to the 8-bit hour, to off (the flat's). A shop's radio only switches. */
+  tunable?: boolean;
 }
+
+/** What the tuned dial is after: the station's name in the caption. */
+const STATION_NAMES = { lounge: 'Radio Brocante', chip: 'the 8-bit hour' } as const;
 
 const W = 0.22;
 const H = 0.13;
@@ -33,10 +40,25 @@ export class Radio extends Prop implements Interactable {
   private readonly dial = new THREE.MeshStandardMaterial({ color: 0xe9dcb8, emissive: 0xffb347, emissiveIntensity: 0, roughness: 0.4 });
   /** The two knobs glint on hover. */
   private readonly glint: HoverGlint;
+  private readonly tunable: boolean;
+  /** Playing when the building's power went: it comes back on with it. */
+  private cutWhileOn = false;
+  private readonly stopHearingMains: () => void;
 
   constructor(options: RadioOptions = {}) {
     super();
     this.name = 'Radio';
+    this.tunable = options.tunable ?? false;
+    // A mains set: silent through a power cut, back on with the power if it was playing.
+    this.stopHearingMains = onMains(() => {
+      if (!poweredAt(this)) {
+        this.cutWhileOn ||= this.sound.isOn;
+        this.setOn(false);
+      } else if (this.cutWhileOn) {
+        this.cutWhileOn = false;
+        this.setOn(true);
+      }
+    });
     const body = paint(options.color ?? 0xefe4c8, 0.45);
     part(this, W, H, D, body, { y: 0.008 + H / 2 });
     for (const dx of [-W / 2 + 0.02, W / 2 - 0.02]) part(this, 0.02, 0.008, D - 0.02, paint(0x1e1f22, 0.7), { x: dx, y: 0.004 }).castShadow = false;
@@ -87,11 +109,33 @@ export class Radio extends Prop implements Interactable {
   note: (() => string | null) | null = null;
 
   label(): string {
-    return `Radio${this.note?.() ?? ''} · switch ${this.sound.isOn ? 'off' : 'on'}`;
+    if (!poweredAt(this)) return 'Radio · no power';
+    const on = this.sound.isOn;
+    if (!this.tunable) return `Radio${this.note?.() ?? ''} · switch ${on ? 'off' : 'on'}`;
+    const station = this.sound.station;
+    if (!on) return `Radio · switch on`;
+    const playing = `Radio, ${STATION_NAMES[station]}${this.note?.() ?? ''}`;
+    return station === 'lounge' ? `${playing} · turn to ${STATION_NAMES.chip}` : `${playing} · switch off`;
   }
 
-  activate(_session: SessionActions): void {
-    this.setOn(!this.sound.isOn);
+  activate(session: SessionActions): void {
+    if (!poweredAt(this)) {
+      playRockerClick();
+      session.react('Click. Nothing: the power is off in the whole building.');
+      return;
+    }
+    if (!this.tunable || !this.sound.isOn) {
+      if (this.tunable) this.sound.tuneTo('lounge');
+      this.setOn(!this.sound.isOn);
+      return;
+    }
+    // The dial turned on through the static: from the lounge to the 8-bit hour, and from there off.
+    if (this.sound.station === 'lounge') this.sound.tuneTo('chip');
+    else this.setOn(false);
+  }
+
+  dispose(): void {
+    this.stopHearingMains();
   }
 
   /** Switched on or off, the dial lit with it: by a click, or by its room (a shop's radio, on all day). */

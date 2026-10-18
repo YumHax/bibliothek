@@ -129,7 +129,9 @@ root (scaled to look.height) > pelvis > hips (2) > knees > ankles (shoes)
   someone old grey-haired, in glasses and loafers.
 - In the hand (`held.ts`, `heldMesh`, where it hangs: `heldOn`): a phone (at the ear, the `ear` spot, standing or
   walking), a book (open in both hands before the chest, in the torso's frame, the palms on its edges: `BOOK_GRIPS`,
-  walking or not), an umbrella, a shopping bag, a bag with a baguette, a bouquet, a cigarette (its tip glowing), a
+  walking or not), an umbrella (upright on the torso, slid every frame so its shaft runs through the fist: `UMBRELLA_GRIP`
+  on `FIST_HOLE`; that arm skips gestures), a shopping bag, a bag with a baguette, a bouquet, a cigarette (pinched
+  between the index and the middle finger, the filter out of the palm side: `CIGARETTE`, its tip glowing), a
   takeaway cup, a folded paper, a compact camera, a game shop's carrier (`gamebag`), a pumpkin pail; a walking stick and
   a rolling case hold the arm in their own pose (`CANE_ARM`, `SUITCASE_ARM`); a pram stands on the floor in the body's
   frame and both hands hold its handle (`PRAM_GRIPS`, solved every frame, walking or not). `wearOnHead` puts a costume's
@@ -238,7 +240,8 @@ move every frame (planted feet never skate); the face and the swinging parts res
   also keeps the reflections out of its creases (`faceSpecularOcclusion`: sockets, under the nose, mouth corners,
   under the lower lip), in the face's angles from its UVs.
 - **Conversation.** The bubble's `userData.faceLift` gives the conversation the live height of the eyes under it
-  (a child, someone seated): the view turns to just below the face and narrows a little (`player/zoomView`, the
+  (a child, someone seated); every balloon, in passing or in a conversation, points just over the head from it
+  (`notices` `overHead`: the eyes + 0.2 m, never above the anchor), not at the anchor's fixed 2.05 m: the view turns to just below the face and narrows a little (`player/zoomView`, the
   camera's zoom; a waist-up shot, the hands in it). While it lasts the subject is framed (`graphics/framing`): the
   depth of field holds on their face, the room behind a little soft, and the person whose owner holds the bubble
   takes a portrait light (a warm fill from the camera's side and a faint rim, scaled to the frame's key, eased in

@@ -68,6 +68,9 @@ import { FelixNotebook } from '@/story/FelixNotebook';
 import { GrandmaVisits } from '@/grandma/GrandmaVisits';
 import { GrandmaRituals } from '@/grandma/GrandmaRituals';
 import { Keepsakes } from '@/grandma/Keepsakes';
+import { followStickerRoll } from '@/grandma/stickerRoll';
+import { keepsakeLine } from '@/grandma/keepsakeLines';
+import { dreamRoomShare } from '@/grandma/dreamRoom';
 import { followFelixLots } from '@/story/felixLotsTrail';
 import { marketPrice } from '@/economy/pricing';
 import { FamilyStory } from '@/family/FamilyStory';
@@ -84,6 +87,11 @@ import { SharedRide } from '@/grandma/sharedRide';
 import { COLLECTOR_SETS, setProgress } from '@/economy/collectorSets';
 import { effect as socialEffect } from '@/social/perks';
 import { MEME_ID } from '@/social/people/family';
+import { life } from '@/social/life/lifeStore';
+import { shortName } from '@/social/people';
+import { setLoanResolver } from '@/collection/loans';
+import { comesBackWords } from '@/time/dayWords';
+import { FRIENDS } from '@/world/visitors/friendsPlan';
 import { pocket } from '@/errands/pocket';
 import { followStreetDays } from '@/time/streetDay';
 import { PlayerInitials, RECORD_OF_2003, recordOf2003 } from '@/memories/playerInitials';
@@ -234,6 +242,13 @@ export function createServices(container: HTMLElement) {
   const journal = new Journal();
   // Who came round, lent what, when (the visitors' book), and the gatherings planned (games nights, open houses).
   const visitBook = new VisitBook();
+  // Who has a game that is out (a friend's loan, a neighbour's borrowed game): the box's note in its gap, the list, the search.
+  setLoanResolver((gameId) => {
+    const loan = visitBook.lentTo(gameId);
+    if (loan) return { who: FRIENDS.find((f) => f.id === loan.friendId)?.name ?? 'a friend', back: comesBackWords(loan.dueDay, today.gameDay) };
+    const favour = life().favours.find((f) => f.kind === 'lend' && f.stage === 1 && f.done === undefined && f.game?.id === gameId);
+    return favour ? { who: shortName(favour.person), back: comesBackWords(favour.back ?? today.gameDay, today.gameDay) } : null;
+  });
   const gatheringBook = new GatheringBook();
   // Uncle Félix's notebook, at the back of a drawer from the second day: his games onto the wishlist, ticked as they come home (docs/story.md).
   const felix = new FelixNotebook(collection);
@@ -246,6 +261,7 @@ export function createServices(container: HTMLElement) {
       const games = collection.games.filter((g) => g.status !== 'wishlist');
       return {
         gamesOwned: games.length,
+        dreamRoom: dreamRoomShare((piece) => upgrades.count(piece), games.length),
         arcadeMedals: medals.total,
         notebookFound: felix.found,
         clubSet: COLLECTOR_SETS.some((set) => setProgress(set, games).every((p) => p.have)),
@@ -312,6 +328,11 @@ export function createServices(container: HTMLElement) {
   // What Mémé gives to take home after the memories, and Félix's lots: his copies (his sticker on the back) turn up in
   // Crane's suitcase and a dealer's small ad too, and one bought back counts for her album (docs/grandma.md).
   const keepsakes = new Keepsakes();
+  // One store lost on its own (a cleared key) must not split the family's story: the album's memories seen come back
+  // from what they left behind (her keepsakes, the reckoning with Gaspard, the Game Boy's trail).
+  grandma.restoreSeen([...keepsakes.given.flatMap((id) => keepsakeLine(id).memory ?? []), ...family.impliesSeen()]);
+  // His half roll of stickers, once she gives it: one on the back of each game that comes home, till it runs out.
+  followStickerRoll({ given: () => keepsakes.has('stickers'), subscribeGiven: (cb) => keepsakes.subscribe(cb), collection });
   followFelixLots({
     today, collection, rival: lots.rival, classifieds, grandma,
     catalogue: { given: () => keepsakes.has('catalogue'), subscribe: (cb) => keepsakes.subscribe(cb) },

@@ -1,4 +1,4 @@
-import { escapeHtml } from '../html';
+import { html, paint } from '../panel/html';
 
 /**
  * The Settings screen's controls, each a small element with a `set` to follow the store: a slider,
@@ -26,10 +26,12 @@ interface SliderOptions {
 export function slider(label: string, options: SliderOptions): Field<number> {
   const element = document.createElement('label');
   element.className = `menu__field menu__field--slider${options.wideOutput ? ' menu__field--wide-output' : ''}`;
-  element.innerHTML = `
-    <span class="menu__field-label">${escapeHtml(label)}</span>
-    <input type="range" min="${options.min}" max="${options.max}" step="${options.step}" />
-    <output></output>`;
+  paint(
+    element,
+    html`<span class="menu__field-label">${label}</span>
+      <input type="range" min="${options.min}" max="${options.max}" step="${options.step}" />
+      <output></output>`,
+  );
   const range = element.querySelector('input')!;
   const output = element.querySelector('output')!;
   range.addEventListener('input', () => {
@@ -50,9 +52,11 @@ export function slider(label: string, options: SliderOptions): Field<number> {
 export function toggle(label: string, onChange: (on: boolean) => void): Field<boolean> {
   const element = document.createElement('div');
   element.className = 'menu__field';
-  element.innerHTML = `
-    <span class="menu__field-label">${escapeHtml(label)}</span>
-    <button type="button" class="ui-btn menu__switch" role="switch" aria-label="${escapeHtml(label)}"><span></span></button>`;
+  paint(
+    element,
+    html`<span class="menu__field-label">${label}</span>
+      <button type="button" class="ui-btn menu__switch" role="switch" aria-label="${label}"><span></span></button>`,
+  );
   const button = element.querySelector('button')!;
   button.addEventListener('click', () => onChange(button.getAttribute('aria-checked') !== 'true'));
   return {
@@ -67,11 +71,13 @@ export function toggle(label: string, onChange: (on: boolean) => void): Field<bo
 export function choice<T extends string>(label: string, options: ReadonlyArray<{ id: T; label: string }>, onChange: (id: T) => void): Field<T> {
   const element = document.createElement('div');
   element.className = 'menu__field';
-  element.innerHTML = `
-    <span class="menu__field-label">${escapeHtml(label)}</span>
-    <div class="menu__segmented" role="radiogroup" aria-label="${escapeHtml(label)}">
-      ${options.map((o) => `<button type="button" class="ui-btn" role="radio" data-choice="${o.id}">${escapeHtml(o.label)}</button>`).join('')}
-    </div>`;
+  paint(
+    element,
+    html`<span class="menu__field-label">${label}</span>
+      <div class="menu__segmented" role="radiogroup" aria-label="${label}">
+        ${options.map((o) => html`<button type="button" class="ui-btn" role="radio" data-choice="${o.id}">${o.label}</button>`)}
+      </div>`,
+  );
   element.addEventListener('click', (e) => {
     const id = (e.target as HTMLElement).closest<HTMLElement>('[data-choice]')?.dataset.choice as T | undefined;
     if (id) onChange(id);

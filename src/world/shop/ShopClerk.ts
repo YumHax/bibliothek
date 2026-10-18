@@ -29,6 +29,8 @@ interface ShopClerkOptions {
   lines: readonly string[];
   /** Short cries now and then with the player in front of the counter. */
   callOuts?: readonly string[];
+  /** The hello as the player comes in (a stranger's, or a known face's), one picked; none: no hello. */
+  greeting?: () => readonly string[];
   /** What they say after a sale, one picked at random. */
   thanks: readonly string[];
   /** Behind the counter (zone-local) and the way they face there. */
@@ -41,6 +43,8 @@ interface ShopClerkOptions {
   look?: PersonLook;
 }
 
+/** The hello comes this long after the player is in the shop (s), within this of the counter (m). */
+const GREET = { after: 1.2, within: 7 };
 /** Seconds between two chores, drawn in this range; never while the player is at the counter. */
 const CHORE_EVERY: [number, number] = [25, 55];
 /** A player this close to the counter keeps the clerk behind it. */
@@ -67,6 +71,9 @@ export class ShopClerk extends Walker {
   private readonly listener: THREE.Object3D;
   private callOutTimer: number;
   private nextChore = 0;
+  private readonly greeting: (() => readonly string[]) | undefined;
+  /** Seconds the player has been in the shop before the hello, or -1 once said (once a visit: the shop is built per visit). */
+  private greetIn = 0;
   private readonly ear = new THREE.Vector3();
   private readonly mine = new THREE.Vector3();
 
@@ -77,11 +84,24 @@ export class ShopClerk extends Walker {
     this.chores = options.chores;
     this.thanks = options.thanks;
     this.callOuts = options.callOuts ?? [];
+    this.greeting = options.greeting;
     this.listener = options.viewer;
     this.callOutTimer = CALL_OUT_EVERY[0] * (0.4 + (options.seed % 5) * 0.15);
     this.nextChore = options.seed % Math.max(1, this.chores.length);
     this.duty = { kind: 'counter', stance: 6, chore: within(random, CHORE_EVERY) };
     this.stand(this.home.yaw, STANCES[options.seed % STANCES.length]!);
+  }
+
+  /** The hello, once the player has been in a moment (the door's bell rings as they come: `ShopSounds`). */
+  private greet(dt: number): void {
+    if (this.greetIn < 0 || !this.greeting) return;
+    if (this.playerFromHome() > GREET.within) return;
+    if ((this.greetIn += dt) < GREET.after) return;
+    this.greetIn = -1;
+    const lines = this.greeting();
+    const line = lines[Math.floor(random() * lines.length)];
+    if (line) this.speak(line);
+    this.gesture('wave');
   }
 
   /** The coins changed hands: a word of thanks (wherever they are), and a nod. */
@@ -96,6 +116,7 @@ export class ShopClerk extends Walker {
   }
 
   private routine(dt: number): void {
+    this.greet(dt);
     const s = this.duty;
     switch (s.kind) {
       case 'counter': {

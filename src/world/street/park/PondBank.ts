@@ -3,7 +3,7 @@ import type { Interactable } from '@/interaction/Interactable';
 import type { SessionActions } from '@/game/SessionActions';
 import { pocket } from '@/errands/pocket';
 import { parkVisits } from '@/park/parkVisits';
-import { random } from '@/random';
+import { inTurn, random } from '@/random';
 import { formatCoins } from '@/text/money';
 import type { Furniture } from '../../Furniture';
 import { invisibleHitbox } from '../../meshUtils';
@@ -26,6 +26,13 @@ const WISH_PRICE = 1;
 /** What the old arcade token is worth at the counter. */
 const TOKEN_TICKETS = 30;
 const WISHES = ['The coin skips once and sinks. You wish for something rare in a bargain bin.', 'Plop. A ring spreads towards the fountain. You wish for a mint copy, still sealed.', 'The coin goes down glinting. You wish, and do not say what for.'];
+/** Crumbling a croissant for the ducks, said in turn. */
+const FEEDING = inTurn(random, [
+  'You crumble the croissant over the water. The ducks come paddling over, all elbows.',
+  'Crumbs on the water: a drake gets there first and lets everyone know.',
+  'The croissant goes in flakes. The ducks fight over the big ones and ignore the rest.',
+  'A hen takes a crumb from your fingers, very politely, and then bites.',
+]);
 const WATCHING = ['A drake upends himself, tail to the sky.', 'Two hens bicker over nothing at all.', 'The ducks drift by, unhurried, eyeing your pockets.'];
 
 /**
@@ -67,7 +74,7 @@ export class PondBank extends THREE.Group implements Furniture, Interactable {
       ducks.feed();
       this.options.plop?.();
       parkVisits.feed(day());
-      session.react('You crumble the croissant over the water. The ducks come paddling over, all elbows.');
+      session.react(FEEDING());
       return;
     }
     if (parkVisits.wishedToday(day())) {
@@ -76,6 +83,7 @@ export class PondBank extends THREE.Group implements Furniture, Interactable {
     }
     session.pay({
       price: WISH_PRICE,
+      title: 'A coin in the pond',
       paid: () => {
         this.options.plop?.();
         if (parkVisits.wish(day())) {

@@ -5,16 +5,20 @@ interface AtticState {
   found: boolean;
   prize: boolean;
   chest: boolean;
+  /** The blank-label Game Boy cart found down the side of the sheeted sofa. */
+  sofaCart: boolean;
+  /** The service stair's wardrobe opened (its key on the chest's ring). */
+  wardrobe: boolean;
 }
 
 const store = new PersistedStore<AtticState>({
   key: KEYS.attic,
   version: 1,
-  defaults: () => ({ found: false, prize: false, chest: false }),
+  defaults: () => ({ found: false, prize: false, chest: false, sofaCart: false, wardrobe: false }),
   read: (data) => {
     if (typeof data !== 'object' || data === null) return null;
     const d = data as Partial<Record<keyof AtticState, unknown>>;
-    return { found: d.found === true, prize: d.prize === true, chest: d.chest === true };
+    return { found: d.found === true, prize: d.prize === true, chest: d.chest === true, sofaCart: d.sofaCart === true, wardrobe: d.wardrobe === true };
   },
 });
 

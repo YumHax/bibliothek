@@ -102,12 +102,18 @@ import { GiveawayBox, giveawaySpot, isGiveawayDay } from './shops/GiveawayBox';
 import { Trader, isTraderDay } from './shops/Trader';
 import { STREET_PLAN, WAYFINDING, type ShopKind, type Vec2 } from './streetPlan';
 import { HOUSEHOLD } from '@/household/rules';
-import { FACADES, SHOP_ZONE_OF, doorOnPavement, shopDoors, walkInShops, walkedFacades } from '@/world/city/facades';
+import { FACADES, doorOnPavement, shopDoors, walkInShops, walkedFacades } from '@/world/city/facades';
 import { PARK_WALK, WALKABLE } from '@/world/measures/street';
 import { closures, frontWorksMoved, syncWorks } from './details/roadworks';
+import { WorksOpened } from './details/WorksOpened';
+import { STREET_PLACES } from './streetPlacesPlan';
+import { StepAnswerer } from './life/StepAnswerer';
 import { Flagger } from './details/Flagger';
 import { BenchSeat, type BenchSpot } from './details/BenchSeats';
-import { benchExtras, placeStreetEvents } from './events/placeStreetEvents';
+import { SwingSeat } from './details/SwingSeat';
+import { playTaxiRide } from '@/ui/taxiRide/TaxiRide';
+import { kidsOut, playgroundDay } from '@/building/kids/yardKids';
+import { benchExtras, parkOverheard, placeStreetEvents } from './events/placeStreetEvents';
 import { Signpost } from './wayfinding/Signpost';
 import { StreetPlanBoard } from './wayfinding/StreetPlanBoard';
 import { StreetClock } from './wayfinding/StreetClock';
@@ -128,7 +134,8 @@ import { POP_UP_FACADE, StreetCounters } from './shops/counters';
 import { PopUpBoard } from './shops/PopUpBoard';
 import { popUpOpened } from '@/streetShops/popUp';
 import { STREET_SHOPS } from '@/streetShops/rules';
-import { placeNewsagent } from './shops/Newsagent';
+import { placeKioskPrize, placeNewsagent } from './shops/Newsagent';
+import { rafflePrize } from './events/RaffleDrum';
 
 /** What Front Street's builder reads of the `BuildContext`: the sky and the camera, the day, the panels its shops open, the stock, the money, the arcade's day, the collection, the story and the people. */
 type StreetBuild = Pick<BuildContext, 'sky' | 'listener' | 'covers' | 'today' | 'panels' | 'collection' | 'story' | 'classifieds' | 'social' | 'notices'> & {
@@ -208,6 +215,8 @@ interface StreetSite {
   terraces?: Terraces;
   pigeons?: Pigeons;
   strayCat?: StrayCat;
+  /** People made before the people budget (a door's answerer): placed with it, away till they answer. */
+  lateWalkers: { walker: Walker; at: THREE.Vector3 }[];
   // Fronts.
   shopfronts?: Shopfronts;
 }
@@ -333,7 +342,16 @@ function hangDoors(site: StreetSite): void {
   // What is on along the street today and tomorrow (the garage sale, the free box, the collector, the arcade, the rain): the paper and the bar pass it on.
   const news = (site.news = (): string[] => streetNews({ weather: () => dayNight.state, gameDay: () => today.gameDay, challenge: daily ? () => daily.challenge() : undefined, tournamentOn: tournament ? () => tournament.isOn : undefined, jackpot: () => (jackpot.newsworthy ? jackpot.value : null) }));
   zone.place(new Newsstand({ panel: panels.news, issue: () => writeWeekly({ stock: market.peekToday(), day: today.gameDay, theme: marketDay.theme, wanted: isWanted, news: marketDay.news(), classifieds: smallAds(), street: news() }) }), at(plan.kiosk.at), plan.kiosk.yaw);
-  // The Mansions' bells: a seller's visit due (the small ads), else the residents (favours, a find on the step).
+  // The Mansions' bells: a seller's visit due (the small ads), else the residents (favours, a find on the step); a
+  // favour done, the resident comes down to the street door for it.
+  const mansionsDoor = STREET_PLACES.halloween.find((door) => door.id === 'mansions');
+  let mansionsAnswerer: StepAnswerer | undefined;
+  if (mansionsDoor) {
+    const step = at(mansionsDoor.at).add(new THREE.Vector3(Math.sin(mansionsDoor.yaw), 0, Math.cos(mansionsDoor.yaw)).multiplyScalar(0.45));
+    mansionsAnswerer = zone.place(new StepAnswerer({ viewer: site.build.listener, seed: 7811, label: 'A resident of the Mansions', step, yaw: mansionsDoor.yaw }), new THREE.Vector3());
+    // Their body goes in with the street's people, once the people budget is there (`openShops`).
+    site.lateWalkers.push({ walker: mansionsAnswerer.walker, at: step.clone() });
+  }
   zone.place(
     new MansionBell({
       book: classifieds?.book,
@@ -345,6 +363,7 @@ function hangDoors(site: StreetSite): void {
       owns: (id) => collection.owns(id),
       isWanted: (id) => collection.isWanted(id),
       day: () => today.gameDay,
+      ...(mansionsAnswerer ? { answerer: mansionsAnswerer } : {}),
     }),
     new THREE.Vector3(plan.mansionBell.at[0], plan.mansionBell.y, plan.mansionBell.at[1]),
     plan.mansionBell.yaw,
@@ -371,10 +390,15 @@ function placePeople(site: StreetSite): void {
       )
     : null;
   // A passer-by's word, and now and then the day's lead instead (`townsfolk/streetLeads`: the journal writes it down).
-  const talk = (site.talk = withLeads(streetTalk({ sky: () => dayNight.state, market, marketDay, games: collection.games, scores, strayTrust: () => site.strayCat?.trust ?? 0, fairDay: () => isBrocante(today.gameDay) }), () => today.gameDay, owns));
+  const talk = (site.talk = withLeads(streetTalk({ sky: () => dayNight.state, market, marketDay, games: collection.games, scores, strayTrust: () => site.strayCat?.trust ?? 0, fairDay: () => isBrocante(today.gameDay), day: () => today.gameDay }), () => today.gameDay, owns));
   const onDoor = onDoorIn(site);
   const level = QUALITY.level;
   site.budget = zone.place(new PeopleBudget(listener, plan.crowd.budgetByQuality[level]), origin);
+  // Those made before the budget (a door's answerer), away till they come to their door.
+  for (const { walker, at: spot } of site.lateWalkers) {
+    placeWalkerIn(site)(walker, spot);
+    walker.setPresent(false);
+  }
   if (garage) site.budget.join(garage.figure);
   const placeWalker = placeWalkerIn(site);
   // The painted doors open for whoever goes through (and say where a shop's door really is).
@@ -470,6 +494,8 @@ function runVehicles(site: StreetSite): void {
       choice.show({
         title: `Bus ${plan.bus.line}`,
         intro: `${formatCoins(plan.busRide.fare)}, the way back included. Where to?`,
+        look: { kind: 'bus', line: plan.bus.line, fare: plan.busRide.fare, from: 'Front Street' },
+        who: { name: 'The driver', seed: plan.bus.driverSeed, line: `${formatCoins(plan.busRide.fare)} there and back. Where are we off to?` },
         choices: on.map((d) => ({ id: d.to, label: d.label, ...(d.detail ? { detail: d.detail } : {}) })),
         pick: (id) => {
           const stop = on.find((d) => d.to === id);
@@ -498,14 +524,17 @@ function runVehicles(site: StreetSite): void {
   // The people who walk to and from the parked cars.
   for (const person of cars.people) placeWalker(person, origin);
   // Now and then a call on this street (crew in at a door), or the police pulling a driver over.
-  const callBase = { traffic, viewer: listener, routes: plan.traffic.routes, stopFor: plan.traffic.stopFor, collisions: zone.collisions, calls: plan.emergencyCalls, cars };
+  const callBase = { traffic, viewer: listener, routes: plan.traffic.routes, stopFor: plan.traffic.stopFor, collisions: zone.collisions, calls: plan.emergencyCalls, cars, day: () => site.build.today.gameDay };
   const ambulance = zone.place(new Ambulance(dayNight, { ...callBase, ...plan.ambulance }), origin);
   const police = zone.place(new PoliceCar(dayNight, { ...callBase, ...plan.police }), origin);
   const fireEngine = zone.place(new FireEngine(dayNight, { ...callBase, ...plan.fireEngine }), origin);
   for (const person of [...ambulance.crew, ...police.crew, ...fireEngine.crew]) placeWalker(person, origin);
   // The taxi rank: hail one, get in, off wherever the bus goes (`traffic/TaxiRank`); the warden's round (`traffic/ParkingWarden`).
   const { rank } = plan.taxi;
-  zone.place(new TaxiRank({ cars, dayNight, stop: rank.stop, at: rank.at, yaw: rank.yaw, fare: plan.taxi.fare, destinations: () => plan.busRide.destinations, ...(choice ? { choice } : {}) }), origin);
+  // At night, a drive the bus never gives: along the river and back to the rank, the back seat over the dark.
+  const pastimes = site.build.home.household?.pastimes;
+  const drive = pastimes ? { ...plan.taxi.drive, pastimes, backSeat: (ride: Parameters<typeof playTaxiRide>[1]) => playTaxiRide(document.body, ride) } : undefined;
+  zone.place(new TaxiRank({ cars, dayNight, stop: rank.stop, at: rank.at, yaw: rank.yaw, fare: plan.taxi.fare, destinations: () => plan.busRide.destinations, ...(choice ? { choice } : {}), ...(drive ? { drive } : {}) }), origin);
   const warden = zone.place(new ParkingWarden({ cars, dayNight, viewer: listener, weekday: weekdayNow, ...plan.warden }), origin);
   placeWalker(warden.walker, origin);
   site.splashes = spray;
@@ -579,11 +608,42 @@ function placeLife(site: StreetSite): void {
   zone.place(new StreetReactions({ walkers: site.walkers, voices: site.voices, sirens: traffic.sirens, barkers: crowd.barkers, viewer: listener }), origin);
   // The benches and the shelter's, to sit on (the bench's reader keeps the bench they are on).
   const benchSpots: BenchSpot[] = [
-    ...plan.benches.map((b, i) => ({ at: b.at, yaw: b.yaw, seat: 0.46, length: 1.6, name: 'Bench', taken: i === 0 ? () => standing.benchTaken : () => standing.benchTakenAt(b.at) })),
+    ...plan.benches.map((b, i) => ({ at: b.at, yaw: b.yaw, seat: 0.46, length: 1.6, name: b.park ? 'Park bench' : 'Bench', taken: i === 0 ? () => standing.benchTaken : () => standing.benchTakenAt(b.at), ...(b.park ? { overhear: parkOverheard } : {}) })),
     { at: shelterBench(plan.shelter), yaw: plan.shelter.yaw, seat: 0.48, length: plan.shelter.length * 0.6, name: 'Bus shelter bench' },
   ];
+  // A free chair at each terrace while it is laid out: the waiter comes over (`life/Terraces` `playerChair`).
+  const terraces = site.terraces;
+  if (terraces) {
+    plan.terraces.forEach((_, i) => {
+      const chair = terraces.playerChair(i);
+      if (!chair) return;
+      benchSpots.push({
+        at: [chair.at.x, chair.at.z],
+        yaw: chair.yaw,
+        seat: chair.seat,
+        length: 0.45,
+        name: 'Terrace chair',
+        taken: () => terraces.chairTaken(i),
+        away: () => !terraces.chairOut(i),
+        onSit: () => terraces.sitDown(i, (line) => site.build.notices.say(line, 'The waiter')),
+        onStand: () => terraces.standUp(i),
+      });
+    });
+  }
   // Seated, a while waited out and something overheard (`events/placeStreetEvents` `benchExtras`).
-  for (const spot of benchSpots) zone.place(new BenchSeat({ ...spot, ...benchExtras(site.build, dayNight, site.news) }), at(spot.at), spot.yaw);
+  // (The park's bench hears the gardens, not the street.)
+  for (const spot of benchSpots) zone.place(new BenchSeat({ ...spot, ...benchExtras(site.build, dayNight, site.news), ...(spot.overhear ? { overhear: spot.overhear } : {}) }), at(spot.at), spot.yaw);
+  // The playground's swings, to sit on and swing (`details/SwingSeat`): the view rides the seat.
+  // On a Sunday the building's kids sit on them (`events/placeStreetEvents` `YardKids`): a swing a kid is on is taken.
+  const kidOn = (swing: { rest: THREE.Vector3 }): (() => boolean) | undefined => {
+    const kid = Object.entries(STREET_PLACES.park.kids).find(([, spot]) => spot.seat !== null && Math.hypot(spot.at[0] - swing.rest.x, spot.at[1] - swing.rest.z) < 0.4)?.[0];
+    if (!kid) return undefined;
+    return () => playgroundDay(today.gameDay) && kidsOut(today.gameDay, dayNight.state.hours, dayNight.state, today.realDate()).some((k) => k.id === kid);
+  };
+  for (const swing of site.park?.swings ?? []) {
+    const taken = kidOn(swing);
+    zone.place(new SwingSeat({ swing, viewer: listener, creak: (spot) => cues.swing(spot), ...(taken ? { taken } : {}) }), origin);
+  }
   const lorry = ready(site.lorry, 'the bin lorry');
   site.strayCat = zone.place(new StrayCat({ perches: plan.strayCat.perches, viewer: listener, traffic, purse, gameDay: () => today.gameDay, taken: (on) => (on === 'bench' ? standing.benchTaken : lorry.active), home: site.build.home.strayHome, dogs: crowd.dogs }), origin);
 }
@@ -672,8 +732,10 @@ function openShops(site: StreetSite): void {
         })
       : undefined;
     const services: ShopServices = { hours: () => dayNight.state.hours, purse, market, marketDay, isWanted, scratch: panels.scratch, streetNews: ready(site.news, 'the news'), social, day: () => today.gameDay, counters };
+    // The walk-in shops' doors travel (`StreetDoor`); a second shop of a walk-in kind (GREEN FINGERS, past the works) is a plain door.
+    const walkIn = new Set(walkInShops().map(({ door }) => door.shop));
     for (const door of shopDoors()) {
-      if (door.shop.kind === 'retro' || door.shop.kind === 'arcade' || SHOP_ZONE_OF[door.shop.kind]) continue;
+      if (door.shop.kind === 'retro' || door.shop.kind === 'arcade' || walkIn.has(door.shop)) continue;
       // The door's step, half a metre out on the pavement, must be somewhere the player can stand.
       if (!doorOnPavement(door)) continue;
       zone.place(new ShopEntrance(door, services), at(door.at), door.yaw);
@@ -698,8 +760,13 @@ function openShops(site: StreetSite): void {
   }
   // The newsagent in the kiosk's hatch: today's paper to keep, its cover cards, a subscription to the doormat.
   if (purse && panels.streetShops) {
-    placeNewsagent({ viewer: listener, kiosk: { at: at(plan.kiosk.at), yaw: plan.kiosk.yaw }, place: placeWalkerIn(site), counter: panels.streetShops.counter, day: () => today.gameDay, purse });
+    const kiosk = { at: at(plan.kiosk.at), yaw: plan.kiosk.yaw };
+    const newsagent = placeNewsagent({ viewer: listener, kiosk, place: placeWalkerIn(site), counter: panels.streetShops.counter, day: () => today.gameDay, purse });
+    // A raffle prize won at a Fair and left on its stall: the newsagent has it on her ledge.
+    placeKioskPrize({ kiosk, day: today.gameDay, prize: (fair) => rafflePrize(market, fair), host: zone, covers, wallet, keeper: newsagent });
   }
+  // The first time out after the works have moved on, a word that the far stretch is open.
+  zone.place(new WorksOpened({ occupied: () => zone.isOccupied, notices: site.build.notices }), origin);
   // What nobody points out: the dusty TO LET window, the children's chalk, the initials in the railing (`secrets/`).
   placeSecrets({ zone, covers, wallet, purse, randomGames: (seed, count) => market.randomGames(seed, count), owns, isWanted });
 }
@@ -770,6 +837,7 @@ function* furnishStreetSteps(zone: Zone, build: StreetBuild): Generator<void, Zo
     scenery: (item) => zone.place(item, origin),
     doorBells: [],
     walkers: [],
+    lateWalkers: [],
     voices: [],
     roles: new Map(),
   };

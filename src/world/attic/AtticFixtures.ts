@@ -35,12 +35,24 @@ export class ServiceWardrobe extends Prop implements Interactable {
 
   setHovered(): void {}
 
+  /** Whether its key is the player's now (the collector's chest opened), whether it was opened, and what opening it does (the builder's). */
+  key: { held: () => boolean; opened: () => boolean; open: (session: SessionActions) => void; label: string; after: string } | null = null;
+
   label(): string {
+    const { key } = this;
+    if (key?.held() && !key.opened()) return key.label;
     return `${this.caption} · push`;
   }
 
   activate(session: SessionActions): void {
+    const { key } = this;
+    if (key?.held() && !key.opened()) {
+      playWoodKnock(0.1, 1.3);
+      key.open(session);
+      return;
+    }
     playWoodKnock(0.14, 0.7);
+    if (key?.opened()) return session.react(key.after);
     session.react(this.tries++ === 0 ? this.line : 'Still not budging. Whatever is in it is staying.');
   }
 }

@@ -166,12 +166,12 @@ export class WallClock extends Prop implements Interactable, Updatable {
     if (!this.arming.press('alarm')) {
       const next = this.alarm ? `cancel the ${formatClock(this.alarm.at)} alarm` : `set an alarm for ${formatClock(this.hours + ALARM_IN_HOURS)}`;
       session.react(`It’s ${formatClock(this.hours)}`);
-      session.tip(`${useVerbOnCap('the clock')} again to ${next}.`, { id: 'wall-clock', ms: DOUBLE_CLICK_MS });
+      session.tip(`${useVerbOnCap('the clock')} again to ${next}.`, { id: 'wall-clock', head: 'The alarm', ms: DOUBLE_CLICK_MS, times: 2 });
       return;
     }
     if (this.alarm) {
       this.alarm = null;
-      session.react('Alarm off');
+      session.react('The alarm is off.');
       return;
     }
     this.alarm = { left: ALARM_IN_HOURS, at: (this.hours + ALARM_IN_HOURS) % 24 };
@@ -188,7 +188,7 @@ export class WallClock extends Prop implements Interactable, Updatable {
     const at = this.alarm.at;
     this.alarm = null;
     playAlarm();
-    this.session?.react(`The alarm rings: ${formatClock(at)}`);
+    this.session?.react(`The alarm rings: ${formatClock(at)}.`);
   }
 }
 

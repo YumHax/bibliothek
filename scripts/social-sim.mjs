@@ -10,7 +10,9 @@
 //     everyone at 95+ warmth;
 //   - a careless clicker (30 choices in a row with one person on day 1, anything but a long press) gains more than
 //     CARELESS_CAP warmth (one conversation at its best), or ends more than CARELESS_LOSS down;
-//   - the coverage: a deep person with fewer than four topics, a topic without an answer, a choice that is a dead end.
+//   - the coverage: a deep person with fewer than four topics, a topic without an answer, a choice that is a dead end;
+//   - down the phone: a line a call can show (their topics' phone side, their `phoneLines`, the shared phone pools)
+//     with words that need the player there (`IN_PERSON` in src/headless/social.ts: "pass me", "sit down", "you look").
 //
 //   npm run social
 //   npm run social -- --days 90 --seed 7
@@ -103,6 +105,8 @@ const covered = await fresh();
 const cover = covered.coverage();
 console.log(`\nCoverage: ${cover.deep} deep people, ${cover.extras} place entries registered headless`);
 failures.push(...cover.problems.map((p) => `coverage: ${p}`));
+// Down the phone: a call never shows a line that needs the player there ("Pass me the salt").
+failures.push(...covered.phoneProblems().map((p) => `phone: ${p}`));
 
 if (failures.length) {
   console.error(`\nsocial-sim: ${failures.length} problem(s)`);

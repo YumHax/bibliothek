@@ -137,19 +137,25 @@ export const MARKET_PLAN = {
   buyBack: { at: { wall: 'back', along: 1.3, y: 0, offset: DESK_OFF_WALL } as Placement, wallBehind: DESK_OFF_WALL, clerkAt: CLERK_AT },
   clerks: {
     counter: {
-      label: 'The mail-order clerk · chat',
+      label: 'Sylvie, the mail-order clerk · chat',
+      speaker: 'Sylvie',
       lines: [
         "Anything in the catalogue, new and sealed. Takes a day or two, but it's worth the wait.",
         'Cheaper on the stalls, mind. If they have it.',
         'The catalogue tells you if a stall has a copy today.',
+        'The van comes Tuesdays and Fridays. I sign for everything myself.',
+        'Twenty years at this counter. I still open every parcel like it was Christmas.',
       ],
     },
     buyBack: {
-      label: 'The buyer · chat',
+      label: 'Raymond, the buyer · chat',
+      speaker: 'Raymond',
       lines: [
         "I'll take anything off your hands. Can't pay what the stalls ask, though.",
         'Whatever you sell me goes out on the stalls tomorrow. Buy it back if you miss it.',
         "Lent out? Then it's not yours to sell today.",
+        'A first print makes my day. A reproduction ruins it.',
+        'I check every box with this lamp. You would not believe what people try.',
       ],
     },
   },

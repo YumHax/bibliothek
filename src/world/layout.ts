@@ -28,7 +28,7 @@ import { ConsoleStand } from './props/ConsoleStand';
 import { Console } from './props/Console';
 import { Cushion } from './props/Cushion';
 import { LavaLamp } from './props/LavaLamp';
-import { placeClock, placeRoomLight } from './build/roomParts';
+import { placeClock, placeRoomLight, placeStrayBox } from './build/roomParts';
 import { placeDecor } from './props/decor';
 import { SideTable } from './props/SideTable';
 import { Sideboard } from './props/Sideboard';
@@ -48,6 +48,7 @@ import { RecordPlayer } from './vinyl/RecordPlayer';
 import { furnishAnnex, placeAnnexOpening } from './annex/furnishAnnex';
 import { furnishStudy } from './annex/furnishStudy';
 import { onRouxPhase } from '@/building/rouxMove';
+import { addFlatNoise } from '@/building/flatNoise';
 import { regionLockFor } from '@/economy/regionLock';
 import { placeKeepsakes } from './keepsakes/placeKeepsakes';
 
@@ -141,6 +142,8 @@ function furnishRoom(zone: Zone, ctx: Pick<BuildContext, 'cssLayer' | 'covers' |
   // 4. Console stand under the TV with one console per platform, and the two posters; both follow the collection.
   const stand = zone.place(new ConsoleStand(), tv.position.clone(), tv.rotation.y);
   tv.mountOn(stand.topHeight);
+  // Beside the set, a box to play next (set down there by the player, or one left out from the shelves for the day).
+  placeStrayBox(zone, ctx, 'tvStand', stand, plan.standStray);
   // The old tuner beside the set, once the roof's aerial (or the fibre) brought a channel in (`roof/channels`).
   zone.place(new ChannelDial({ tv, day: () => ctx.today.gameDay, hours: () => sky.dayNight.state.hours }), zone.toLocal(stand.localToWorld(new THREE.Vector3(0.53, stand.topHeight, 0.08))), tv.rotation.y);
   const consoles = stand.slotAnchors().map((anchor) => zone.place(new Console(stand.slotWidth, onSelectPlatform), zone.toLocal(stand.localToWorld(anchor)), tv.rotation.y));
@@ -158,7 +161,7 @@ function furnishRoom(zone: Zone, ctx: Pick<BuildContext, 'cssLayer' | 'covers' |
   const platformPoster = first ? zone.placeAt(new Poster(pw, ph, Poster.platform(getPlatform(first))), plan.posters.platform) : null;
   const refresh = (): void => {
     const ids = platformsOf();
-    if (ids.length > consoles.length) console.warn(`[layout] ${ids.length - consoles.length} console(s) do not fit on the stand`);
+    // Two shelves of four slots for the six consoles there are: every platform owned has its console on the stand.
     consoles.forEach((slot, i) => slot.setPlatform(i < ids.length ? getPlatform(ids[i]!) : null));
     collectionPoster.repaint(Poster.bibliothek(games.games.length, ids.map(getPlatform)));
     if (platformPoster && ids[0]) platformPoster.repaint(Poster.platform(getPlatform(ids[0])));
@@ -166,7 +169,7 @@ function furnishRoom(zone: Zone, ctx: Pick<BuildContext, 'cssLayer' | 'covers' |
   refresh();
   zone.onUnload(games.subscribe(refresh));
 
-  // 5. Wall clock over the door (reads the room's time; click = toggle night) and the pendant fixture
+  // 5. Wall clock over the door (reads the room's time) and the pendant fixture
   //    around the room's ceiling light (click = switch it; the switch by the door drives the same lamp).
   const door = plan.room.doorways?.[0];
   const clockAt = door ? { wall: door.wall, along: door.along, y: door.height + plan.clock.aboveDoor } : plan.clock.fallback;
@@ -197,8 +200,12 @@ function furnishRoom(zone: Zone, ctx: Pick<BuildContext, 'cssLayer' | 'covers' |
 
   // 7b. The sideboard's turntable plays the soundtrack LPs bought at the flea market (`world/vinyl`), riding the sideboard.
   if (sideboard?.turntable && upgrades) {
-    const turntable = new RecordPlayer({ turntable: sideboard.turntable, owned: () => upgrades.count('record'), ...heardBy(ctx) });
-    placerFor(zone, upgrades, 'sideboard').placeWith(sideboard, turntable, new THREE.Vector3());
+    const turntable = new RecordPlayer({ turntable: sideboard.turntable, sleevePile: sideboard.sleevePile, owned: () => upgrades.count('record'), ...heardBy(ctx) });
+    const boardPlacer = placerFor(zone, upgrades, 'sideboard');
+    boardPlacer.placeWith(sideboard, turntable, new THREE.Vector3());
+    if (turntable.sleeves) boardPlacer.placeWith(sideboard, turntable.sleeves, new THREE.Vector3());
+    // A record on is heard downstairs too (`building/flatNoise`): an LP at 2 a.m. bothers Mr Leclerc like the radio.
+    zone.onUnload(addFlatNoise('record player', () => turntable.noise));
   }
 
   // 8. The arcade's feather wand, once won: on the projector rug (on its pile once the rug is bought), waved for the cat.

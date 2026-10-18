@@ -6,10 +6,13 @@ import type { Negotiation } from '@/economy/haggle';
 import type { ZoneId } from '@/world/zoneIds';
 import type { NoticeActions } from '@/notices';
 import type { ModalLike } from './SessionParts';
+import type { PersonId } from '@/social/types';
 
 /** What the player is doing right now; interactables read it to phrase labels and choose actions. */
 export interface PlayerState {
   readonly held: GameBox | null;
+  /** The boxes carried in the arms behind the one in hand (`game/Stacking`): a table spot takes them all as a pile. */
+  readonly armful?: readonly GameBox[];
   readonly seated: boolean;
   /** What the player sits (or lies) in, while seated: the bed tells "in me" from "in the chair across the room". */
   readonly seatedIn?: SeatLike | null;
@@ -27,6 +30,8 @@ export interface ArcadeResult {
   first?: boolean;
   /** The play reported nothing through no fault of the player's (LexiPunk's page sent no score): the coin goes back. */
   refund?: boolean;
+  /** The feats the play pulled off (`ArcadeGame.feats`): a feat challenge counts them. */
+  feats?: readonly string[];
 }
 
 /** A bonus a play earned on top of its score's tickets, counted up on the machine's end card: "+60 CHALLENGE". */
@@ -87,6 +92,8 @@ export interface ForSaleLike {
   readonly wanted: boolean;
   /** Where it is sold, for the receipt: "the NES stall", "the bargain bin". */
   readonly where: string;
+  /** Who sells it (their card: the haggle's name, face and voice); none for the bargain bin. */
+  readonly seller?: PersonId;
   /** In a locked glass case: only a player the market trusts may take it in hand. */
   readonly behindGlass?: boolean;
   /**
@@ -121,9 +128,14 @@ export interface SaleDealer {
   readonly noSwap: string;
 }
 
-/** Anything the player can sit (or lie) in: an armchair, the bed. `eyePose` is where the camera goes. */
+/**
+ * Anything the player can sit (or lie) in: an armchair, the bed; or a spot the eye is parked at, such as square in
+ * front of a machine's instruction card. `eyePose` is where the camera goes (`pitch`: level when absent).
+ */
 export interface SeatLike {
-  eyePose(): { position: THREE.Vector3; yaw: number };
+  eyePose(): { position: THREE.Vector3; yaw: number; pitch?: number };
+  /** The prompt's words for getting out of it ("step back"); "stand up" when absent. */
+  readonly leaveVerb?: string;
 }
 
 /** Something for the flat paid for on the spot (a bookcase kit): what it is, what it costs, and what happens once it is paid. */
@@ -141,6 +153,9 @@ export interface UpgradeOfferLike {
 /** A few coins handed over on the spot (a tip for the busker): the price, and what is said once paid (a reaction under the crosshair). */
 export interface PaymentLike {
   readonly price: number;
+  /** What was bought, short ("A coffee", "The bus fare"): the slip's title, `paid`'s line under it. Without it the line is the title. */
+  readonly title?: string;
+  /** Pays, and says what it bought: a line, then (after a newline) what it changed, both on the slip. */
   paid(): string;
 }
 
@@ -179,4 +194,6 @@ export interface SessionActions extends PlayerState, NoticeActions {
   openPanel(panel: ModalLike): void;
   /** Hand over a few coins (a tip): spent from the wallet, then `paid()`'s line as a reaction. */
   pay(payment: PaymentLike): void;
+  /** A bookcase's open face clicked: the eye goes square in front of it, a cursor over its boxes (`game/ShelfViewing`). */
+  faceBookcase(bookcase: object): void;
 }

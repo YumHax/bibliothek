@@ -1,3 +1,4 @@
+import type * as THREE from 'three';
 import type { PlatformId } from '@/catalog/types';
 import type { SessionActions } from '@/game/SessionActions';
 import type { GameBox } from '../GameBox';
@@ -17,6 +18,8 @@ export interface MediaDeck {
   /** Something is going in or coming out. */
   readonly busy: boolean;
   insert(session: SessionActions, box: GameBox): void;
+  /** Its pad and the cable to it, as built on the stand (null for one without). */
+  padModel?(): { pad: THREE.Object3D; cable: THREE.Object3D | null } | null;
 }
 
 /** The consoles under a TV, as it asks for them. */

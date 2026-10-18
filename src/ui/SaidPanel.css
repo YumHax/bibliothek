@@ -1,9 +1,105 @@
-/* "What was said": the lines said to the player, a scrolling list in the card (`.ui-modal--centre`). */
+/*
+ * "What was said": a notebook page (`.ui-modal--centre`) where the lines said to the player are kept as the comic
+ * balloons they came in, the speaker's face beside them, cards read pasted in as slips, and the time written in
+ * the margin between them ("Just now", "Yesterday").
+ */
 @layer tokens, base, components, panels;
 @layer panels {
-  .said-panel .ui-panel__body { max-height: min(60vh, 32rem); overflow-y: auto; }
-  .said-panel__lines { display: flex; flex-direction: column; gap: var(--sp-2); margin: 0; padding: 0; list-style: none; }
-  .said-panel__lines li { font-size: var(--fs-5); line-height: 1.4; }
-  .said-panel__who { color: var(--ui-text-dim); font-weight: 600; }
-  .said-panel__empty { margin: 0; color: var(--ui-text-dim); }
+  .said-panel__card {
+    --said-paper: var(--paper-speech);
+    --said-ink: var(--ink-speech);
+    --said-slip: var(--paper-letter);
+    --said-slip-ink: var(--ink-letter);
+    --card-w: var(--card-w-md);
+    --focus: var(--ink-journal);
+    background:
+      linear-gradient(90deg, transparent 1.9rem, var(--paper-margin) 1.9rem, var(--paper-margin) calc(1.9rem + 1px), transparent calc(1.9rem + 1px)),
+      var(--paper-journal);
+    color: var(--ink-journal);
+    border-color: transparent;
+    box-shadow: var(--ui-shadow-paper);
+    color-scheme: light;
+  }
+  .said-panel__card .ui-panel__header h2 { font-family: var(--ui-font-hand); font-size: var(--fs-t5); letter-spacing: 0; padding-left: 2.2rem; }
+  .said-panel__card .ui-panel__footer .ui-btn { color: var(--ink-journal); background: transparent; border-color: var(--paper-journal-line); }
+  .said-panel__card .ui-panel__footer .ui-btn:hover { background: var(--paper-journal-wash); }
+  .said-panel .ui-panel__body { max-height: min(60vh, 32rem); overflow-y: auto; padding-left: 2.2rem; }
+  .said-panel__lines { display: flex; flex-direction: column; gap: var(--sp-3); margin: 0; padding: 0 var(--sp-1) var(--sp-2) 0; list-style: none; }
+  /* The time, pencilled across the page. */
+  .said-panel__when {
+    margin: var(--sp-2) 0 calc(-1 * var(--sp-1));
+    font-family: var(--ui-font-hand);
+    font-size: var(--fs-t1);
+    color: var(--ink-red);
+  }
+  .said-panel__when:first-child { margin-top: 0; }
+  .said-panel__run { display: flex; align-items: flex-start; gap: var(--sp-3); }
+  .said-panel__face {
+    flex: none;
+    display: grid;
+    place-items: center;
+    width: 34px;
+    height: 34px;
+    overflow: hidden;
+    border: 2px solid var(--said-ink);
+    border-radius: 50%;
+    background: var(--said-paper);
+    color: var(--said-ink);
+    font-weight: 600;
+  }
+  .said-panel__face canvas { width: 34px; height: 34px; }
+  .said-panel__said { display: flex; flex-direction: column; align-items: flex-start; gap: var(--sp-2); min-width: 0; }
+  .said-panel__who { font-size: var(--fs-3); font-weight: 700; letter-spacing: 0.03em; }
+  /* The balloon as it came: paper, an ink outline, a flat shadow, a tail towards the face on the first. */
+  .said-panel__balloon {
+    position: relative;
+    margin: 0;
+    padding: 0.35em 0.8em;
+    border: 2px solid var(--said-ink);
+    border-radius: 1rem;
+    background: var(--said-paper);
+    color: var(--said-ink);
+    box-shadow: 3px 3px 0 var(--shade-25);
+    font-family: var(--ui-font-comic);
+    font-size: var(--fs-8);
+    line-height: 1.3;
+  }
+  .said-panel__who + .said-panel__balloon::before,
+  .said-panel__said > .said-panel__balloon:first-child::before {
+    content: '';
+    position: absolute;
+    top: 0.55rem;
+    left: -0.6rem;
+    width: 0.6rem;
+    height: 0.7rem;
+    background: var(--said-ink);
+    clip-path: polygon(100% 0, 100% 100%, 0 20%);
+  }
+  /* A card read, pasted in as a slip with a strip of tape. */
+  .said-panel__card-read {
+    position: relative;
+    padding: var(--sp-3) var(--sp-3) var(--sp-2);
+    background: var(--said-slip);
+    color: var(--said-slip-ink);
+    box-shadow: 2px 3px 0 var(--shade-25);
+    font-family: var(--ui-font-serif);
+    font-size: var(--fs-5);
+    line-height: 1.4;
+    rotate: -0.6deg;
+  }
+  .said-panel__card-read::before {
+    content: '';
+    position: absolute;
+    top: -0.45rem;
+    left: 50%;
+    width: 3rem;
+    height: 0.9rem;
+    translate: -50% 0;
+    background: var(--tint-50);
+    box-shadow: 0 0 0 1px var(--shade-10);
+    rotate: 2deg;
+  }
+  .said-panel__card-read p { margin: var(--sp-1) 0 0; }
+  .said-panel__eyebrow { display: block; font-family: var(--ui-font-body); font-size: max(var(--fs-2), 14px); letter-spacing: 0.1em; text-transform: uppercase; opacity: 0.75; }
+  .said-panel__empty { color: var(--ink-journal); }
 }

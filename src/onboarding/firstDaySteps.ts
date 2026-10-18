@@ -1,7 +1,7 @@
 /*
  * THE FIRST DAY'S STEPS, in order: the to-do list on the hall console (`ToDoNote`), with the tip a
- * zone shows for the first step not done yet. Each (step, zone) tip shows once a visit, a few visits at most; a step is done by
- * what the stores and the zones say (`FirstDay`), never by a timer.
+ * zone shows for the first step not done yet. Each step's tip shows once a visit to its place (rooms sharing a text are one
+ * place), a few visits at most; a step is done by what the stores and the zones say (`FirstDay`), never by a timer.
  */
 
 import { actionKeyLabel } from '@/ui/keys';
@@ -14,7 +14,7 @@ import { formatCoins } from '@/text/money';
 /** The flat's shops' hours, as the tips say them ("9:00 to 21:00"). */
 const FLAT_SHOPS_HOURS = `${clockShort(SHOP_HOURS.furniture?.open ?? 9)} to ${clockShort(SHOP_HOURS.furniture?.close ?? 21)}`;
 
-export type FirstDayStepId = 'note' | 'out' | 'arcade' | 'play' | 'redeem' | 'market' | 'buy' | 'unpack' | 'shelf';
+export type FirstDayStepId = 'note' | 'lid' | 'out' | 'arcade' | 'play' | 'redeem' | 'market' | 'buy' | 'unpack' | 'shelf';
 
 interface FirstDayStep {
   id: FirstDayStepId;
@@ -30,6 +30,15 @@ export function tipText(step: FirstDayStep, zone: string): string | undefined {
   return typeof tip === 'function' ? tip() : tip;
 }
 
+/**
+ * Where a step's tip in `zone` belongs: the first zone with the same words (the flat's rooms sharing the first tip are
+ * one place, so the tip is not rung again room by room).
+ */
+export function placeOf(step: FirstDayStep, zone: string): string {
+  const text = tipText(step, zone);
+  return Object.keys(step.tips).find((z) => tipText(step, z) === text) ?? zone;
+}
+
 /** The flat's rooms, where the first tip may show. */
 const FLAT_ROOMS = ['living', 'hallway', 'bathroom', 'bedroom', 'kitchen', 'balcony'];
 const everywhereAtHome = (text: string): Partial<Record<string, string>> => Object.fromEntries(FLAT_ROOMS.map((id) => [id, text]));
@@ -38,13 +47,22 @@ export const FIRST_DAY_STEPS: readonly FirstDayStep[] = [
   {
     id: 'note',
     todo: 'Read this list (done!)',
-    tips: everywhereAtHome('New flat, bare walls. Your to-do list is on the hall console, by the keys.'),
+    tips: everywhereAtHome('Mémé left you a note on the hall console, by the keys.'),
+  },
+  {
+    // Félix's game, the one the sale missed behind the bookcase: his note in its lid. Done with going out too (not needed).
+    id: 'lid',
+    todo: 'Open Félix’s game on the shelf: look inside the lid',
+    tips: {
+      living: () => `Félix’s game is on the shelf, the one the sale missed. ${useVerbOnCap('it')}, then open the box.`,
+      hallway: 'Félix’s game waits on the shelf in the living room: look inside its lid.',
+    },
   },
   {
     id: 'out',
     todo: 'Keys from the bowl, out the front door',
     tips: {
-      hallway: 'Keys from the bowl on the console, then the front door at the end of the corridor.',
+      hallway: 'Keys from the bowl on the console, then the front door at the end.',
       living: 'Through to the hallway: keys from the bowl, then out.',
     },
   },
@@ -52,8 +70,8 @@ export const FIRST_DAY_STEPS: readonly FirstDayStep[] = [
     id: 'arcade',
     todo: 'Find the arcade on Front Street',
     tips: {
-      stairwell: 'Down the stairs or the lift: the street door is in the entrance hall, past the concierge’s lodge.',
-      street: 'The arcade is a few doors along on our side, under the neon. The fingerpost by our door points the way.',
+      stairwell: 'Down the stairs or the lift: the street door is past the concierge’s lodge.',
+      street: 'The arcade is a few doors along on our side, under the neon.',
     },
   },
   {
@@ -64,14 +82,14 @@ export const FIRST_DAY_STEPS: readonly FirstDayStep[] = [
   {
     id: 'redeem',
     todo: 'Swap your tickets for coins at the prize counter',
-    tips: { arcade: 'The prize counter swaps your tickets for coins: a handful buys a bargain-bin game, a few more a copy off a stall.' },
+    tips: { arcade: 'Tickets in hand? The prize counter swaps them for coins.' },
   },
   {
     id: 'market',
     todo: 'Flea market, at the back of RETRO GAMES',
     tips: {
       arcade: 'Coins in hand: the flea market is at the back of RETRO GAMES, across the street.',
-      street: `RETRO GAMES: the flea market is at its back, open ${clockShort(SHOP_HOURS.retro?.open ?? 8)} to ${clockShort(SHOP_HOURS.retro?.close ?? 23)}.`,
+      street: `The flea market: at the back of RETRO GAMES, ${clockShort(SHOP_HOURS.retro?.open ?? 8)} to ${clockShort(SHOP_HOURS.retro?.close ?? 23)}.`,
     },
   },
   {
@@ -79,7 +97,7 @@ export const FIRST_DAY_STEPS: readonly FirstDayStep[] = [
     todo: 'Buy a first game!',
     tips: {
       market: () => `The bargain bin: anything in it for ${formatCoins(BARGAIN_PRICE)}. ${useVerbOnCap('a game')} to look closer, [${actionKeyLabel('buy')}] buys it.`,
-      street: `The flat fills from SECOND HOME, the florist and the pet shop along the street, open ${FLAT_SHOPS_HOURS}.`,
+      street: 'A first game: the bargain bin is at the back of RETRO GAMES, across the street.',
     },
   },
   {
@@ -93,9 +111,12 @@ export const FIRST_DAY_STEPS: readonly FirstDayStep[] = [
   {
     id: 'shelf',
     todo: 'Find it on the shelf, watch it on the TV',
-    tips: { living: () => `It is on the shelf. Bring it to its console under the TV and ${useVerbOn('the console')} to put it in.` },
+    tips: { living: () => `On the shelf now. Take it to the console under the TV and ${useVerbOn()}.` },
   },
 ];
 
-/** Said once the list is done (or skipped from the note). */
+/** Said once the list is done. */
 export const FIRST_DAY_DONE = `That is the round: arcade, market, shelves. The flat fills up from Front Street’s shops (${FLAT_SHOPS_HOURS}). The journal on the console keeps your days.`;
+
+/** On the card when the list is put away from the note ("I know my way around"). */
+export const FIRST_DAY_SKIPPED = `No more to-do tips. The round is still there: the arcade pays tickets, the prize counter swaps them, the flea market behind RETRO GAMES sells games. The flat fills up from Front Street’s shops (${FLAT_SHOPS_HOURS}), and the journal on the console keeps your days.`;

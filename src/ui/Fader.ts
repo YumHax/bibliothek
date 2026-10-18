@@ -6,10 +6,14 @@ const CARD_AFTER_MS = 350;
 /** A first trip somewhere (no time measured yet): how long the bar takes to creep to its first marks (ms). */
 const FIRST_GUESS_MS = 4000;
 
+/** The drawn picture side for a place never photographed, by where it is (`travelCards.placeWords`). */
+const DRAWN_SCENES: Readonly<Record<string, string>> = { Home: 'home', 'The building': 'building', 'Front Street': 'street', 'Linden Avenue': 'linden' };
+
 /**
  * Full-screen curtain for teleports: `out()` covers the view, `in()` reveals it, both awaitable. A trip may tint it
  * with the light of where it goes (warm for a shop, the sky's for the street) and show the place's card
- * (`destination`): its name, where it is, a photo of it as the player last left it (`world/travel/travelCards`) and a
+ * (`destination`): its name, where it is, a photo of it as the player last left it (`world/travel/travelCards`; a first
+ * trip gets a drawn picture side instead: "Greetings from" over a little scene of that part of town) and a
  * bar that `progress` moves on (the module fetched, the zone built, its shaders compiled), creeping between the marks
  * at the pace the last trip there took. The card shows only if the curtain is still down after `CARD_AFTER_MS`. A night's
  * sleep uses the curtain without a card.
@@ -18,6 +22,7 @@ export class Fader {
   private readonly el: HTMLDivElement;
   private readonly card: HTMLElement;
   private readonly photo: HTMLDivElement;
+  private readonly greet: HTMLSpanElement;
   private readonly place: HTMLParagraphElement;
   private readonly name: HTMLParagraphElement;
   private readonly bar: HTMLDivElement;
@@ -35,6 +40,9 @@ export class Fader {
     this.card.hidden = true;
     this.photo = document.createElement('div');
     this.photo.className = 'fader__photo';
+    this.greet = document.createElement('span');
+    this.greet.className = 'fader__greet';
+    this.photo.appendChild(this.greet);
     this.place = document.createElement('p');
     this.place.className = 'fader__place';
     this.name = document.createElement('p');
@@ -68,6 +76,9 @@ export class Fader {
     this.place.hidden = !card.place;
     this.photo.style.backgroundImage = card.photo ? `url("${card.photo}")` : '';
     this.card.classList.toggle('fader__card--photo', !!card.photo);
+    this.card.classList.toggle('fader__card--drawn', !card.photo);
+    this.photo.dataset.scene = DRAWN_SCENES[card.place ?? ''] ?? 'town';
+    this.greet.textContent = card.photo ? '' : `Greetings from ${card.place ?? card.label}`;
     this.expectMs = card.expectMs ?? FIRST_GUESS_MS;
     this.setBar(0, 0);
     this.cardTimer = window.setTimeout(() => {

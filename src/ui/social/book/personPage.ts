@@ -14,7 +14,8 @@ import { tierInfo, tierOf } from '@/social/tiers';
 import type { GiftKind, Memory, PersonId, PersonTopic, SocialEffect } from '@/social/types';
 import { whereNow, whereWords } from '@/social/whereNow';
 import { capitalise } from '@/text/strings';
-import { attr, html, type Html } from '../../panel/html';
+import { daysAgoWords } from '@/time/dayWords';
+import { html, type Html } from '../../panel/html';
 import { coverImg } from '../../panel/widgets';
 import { relationMeter } from '../meters';
 import { badge, birthdayLine, FIT_WORDS, stamps, TASTE_WORDS, threadKey, tieName } from './bookParts';
@@ -63,12 +64,12 @@ export function personPage(id: PersonId, look: PageLook, fresh: PageFresh, deps:
   const phone = s.number && deps.canCall ? phoneState(id, deps.day, deps.hour) : null;
   const call = phone
     ? html`<div class="people-book__call">
-        <button type="button" class="ui-btn people-book__callbtn" data-action="call" data-id="${id}"${attr('disabled', !phone.picks)}>Call</button>
+        <button type="button" class="ui-btn people-book__callbtn" data-action="call" data-id="${id}" aria-disabled="${!phone.picks}">Call</button>
         <small>${phone.picks ? 'Picks up now' : capitalise(phone.note)}</small>
       </div>`
     : '';
   const now = html`<dl class="people-book__card">
-      <dt>Now</dt><dd>${!known ? '?' : where ? whereWords(where) : card.whereabouts}</dd>
+      <dt>Now</dt><dd>${!known ? 'Somewhere in town' : where ? whereWords(where) : card.whereabouts}</dd>
       ${met && mood !== 'fine' ? html`<dt>Today</dt><dd>${moodInfo(mood).name}${why ? html` · ${why}` : ''}</dd>` : ''}
       ${birthday ? html`<dt>Birthday</dt><dd>${birthday}</dd>` : ''}
     </dl>`;
@@ -89,7 +90,7 @@ export function personPage(id: PersonId, look: PageLook, fresh: PageFresh, deps:
   const threads = threadsOf(id, deps.day);
   const between = effectsOf(id).active;
   const stamp = (e: SocialEffect) => html`<li class="people-book__stamp people-book__stamp--${e.down ? 'bad' : 'on'}" style="--tier:${tierInfo(e.at).colour}">${e.text}</li>`;
-  const margin = look === 'pencil' && s.met !== null ? html`<p class="people-book__margin" aria-hidden="true">met day ${s.met}${where ? ` · ${where.where.toLowerCase()}` : ''}</p>` : '';
+  const margin = look === 'pencil' && s.met !== null ? html`<p class="people-book__margin" aria-hidden="true">met ${daysAgoWords(s.met, deps.day)}${where ? ` · ${where.where.toLowerCase()}` : ''}</p>` : '';
   const flourish = look === 'hand' || look === 'photo' ? html`<span class="people-book__coffee" aria-hidden="true"></span><span class="people-book__doodle" aria-hidden="true"></span>` : '';
 
   return html`<div class="people-book__dossier people-book__dossier--${look}${fresh.grew ? ' people-book__dossier--grew' : ''}" style="--tier:${tier.colour}">
@@ -156,7 +157,7 @@ function memoriesPart(memories: readonly Memory[], deps: PageDeps, isNew: (key: 
   return html`<ol class="people-book__diary">${memories.map((m) => {
     const game = m.game ? deps.game?.(m.game) : undefined;
     const cover = game ? coverImg(deps.coverUrl?.(game), game, 'people-book__cover') : '';
-    return html`<li class="${m.weight < 0 ? 'people-book__diary--sore' : ''}"><time>Day ${m.day}</time><span>${cover}“${capitalise(m.text)}.”${ribbon(isNew(`memory:${m.day}:${m.text}`))}</span></li>`;
+    return html`<li class="${m.weight < 0 ? 'people-book__diary--sore' : ''}"><time>${capitalise(daysAgoWords(m.day, deps.day))}</time><span>${cover}“${sentence(m.text)}”${ribbon(isNew(`memory:${m.day}:${m.text}`))}</span></li>`;
   })}</ol>`;
 }
 
@@ -186,4 +187,10 @@ function web(id: PersonId): Html {
     <span class="people-book__hub" data-portrait="${id}" data-size="46"></span>
     ${nodes}
   </div>`;
+}
+
+/** A remembered line as a sentence: capitalised, a full stop unless it already ends on one ("!", "?", "…"). */
+function sentence(text: string): string {
+  const said = capitalise(text.trim());
+  return /[.!?…]$/.test(said) ? said : `${said}.`;
 }

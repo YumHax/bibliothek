@@ -27,14 +27,21 @@ same on the keyboard). `src/furnishing/` carries furniture, `src/game/Rearrangin
   a table, a dresser, a stool (25 cm to 1.6 m high) is set on it and rides it (`Zone.ride`; re-found under its feet on
   load and on an undo, `Furnishings.standOnWhatIsUnder`). It may not hang off the edge by more than 3 cm.
 - **Put away** (X): out of sight, its lights kept dark (`setShownKeepingLights`, the scene's light count never
-  changes); not a bookcase, nor anything something stands on. The pause menu's *Stored furniture* lists them and takes one
-  out, in front of the player, in whatever room of the flat they are in, carried (put back, it goes away again).
+  changes); not a bookcase, nor anything something stands on. The pause menu's *Stored furniture* opens *The box room*
+  (`ui/StoragePanel`: luggage tags under the room each was put away from, the shop's photo on each, twins as one tag
+  ×N) and takes one out, in front of the player, in whatever room of the flat they are in, carried (put back, it goes away again).
 - **From above** (L, or the pause menu's *Plan the room*): `furnishing/planView/PlanView` hangs the camera under the
   ceiling looking down, a cursor follows the mouse (the pointer stays locked), and the same carrier moves the floor
-  pieces with it (`FurnitureCarrier.setAim`). Pendant lamps and hung plants hide meanwhile. Its strip names the keys of
-  the moment: with free hands how to take a piece and leave (L), carrying one how to set it down, turn it and put it
-  back. Esc reaches it only with the keyboard held (Settings > Display > Full screen); otherwise the browser takes Esc,
-  lets the mouse go, and the view closes.
+  pieces with it (`FurnitureCarrier.setAim`). Pendant lamps and hung plants hide meanwhile, and so does the HUD (wallet,
+  tips, slips, prompt line, touch bar; the reaction line stays for refusals). The view is under drafting film (a faint
+  grid, corner marks, a vignette) with a title block at the top: the room's name "from above", the keys of the moment as
+  caps (free hands: take a piece, leave; carrying: set down, turn, put back), a quieter second row (free hands: U undoes
+  the last move, which works from above too; carrying: the grid and putting away), the grid's state as a chip ("Grid
+  on" / "Free"), and one line naming what is under the cursor or carried (green when it fits, red with the reason, a
+  fixed piece "stays where it is"). The cursor says what a click does (gold over a piece, a cross while carrying, dashed
+  over a fixed one). Esc reaches it only with the keyboard held (Settings > Display > Full screen); otherwise the browser
+  takes Esc, lets the mouse go, and the view closes. On a touchscreen it does not open (it needs a mouse): a finger held
+  on a piece moves it.
 - **Put the furniture back** (pause menu, shown once something in the room was moved): every moved piece of the room
   goes back to its plan pose (`Furnishings.sendHome`).
 
@@ -89,8 +96,33 @@ and the player's own rows: per shelving id (`'living'`, `'bedroom'`, Mrs Roux's 
   where it would go. In a gap the row's boxes part (`GameBox.setParted`, eased, rest poses untouched) to where the
   row would stand with it in, packed from the left as `placeRow` lays it; warm. Over the middle half of another box
   (`SWAP_SPAN`) the ghost wraps that box, blue: the two swap (`ShelvingGroup.swapBoxes`, `arrangement.swapped`), each
-  taking the other's place; it fits when both rows have room for the box coming in (`Shelf.roomFor`; a swap along one
-  row always does). Red: no room, nothing parts. `ShelfPlacing.swapping` says which it is.
+  taking the other's place; it fits when both rows have room for the box coming in (`Shelf.roomFor`, which measures
+  the rows as they would stand after). Red: no room, nothing parts. `ShelfPlacing.swapping` says which it is.
+- Boxes stand cover out. One can stand **spine out** instead, turned a quarter (its left spine out, the cover to the
+  right): it takes its thickness of the row instead of its width, and two spines side by side stand pressed close
+  (`SPINE_GAP`, 4 mm, against the 2 cm beside a cover), as books do, so a row holds far more. G with a shelf box in hand
+  turns the ghost (`ShelfPlacing.turnInHand`: M or a right-click tap then puts it in that way; a box taken up again goes
+  in cover out unless G is pressed again); G with free hands at home turns the box aimed at where it stands
+  (`ShelfPlacing.turnAimed` -> `ShelvingGroup.setSpineOut`): its row closes up or opens, the box pulled out, turned in
+  front of the row and pushed back in (`GameBox.slideToRest`'s way round). Refused, in words: a landscape box (its
+  spine runs along its top, `mayStandSpineOut`), a card in a gap, no room on the row to stand it cover out again.
+- Spine out belongs to the game, not to the sort: saved in the arrangement (`spines`, absent from older saves: none),
+  kept in every sort T gives, and every layout measures each box as it stands (`Shelving.footprint` and
+  `gapBetween` for the plans, `Shelf`'s `pack` for the rows, both the same). `GameBox.spineOut` is set by the shelving
+  before its shelf lays the box out; the box then slides out by its spine (`slideAxis`, read by the Inspector), tips
+  out of its row in that frame (Q), pops along the shelf's normal. On show in a display it stands face out
+  (`Showcases` clears the flag; the shelves set it again when it comes back). A wish or a lent game is a card, cover out.
+- U with free hands undoes a box moved, swapped or turned on the shelves too (`ShelvingGroup.snapshot` / `restore`, the
+  boxes spine out included, kept in `Rearranging`'s history with the furniture's moves); a box put on a display is not undone.
+- A game lent out leaves its gap like a wished-for one, a card in it headed "lent to Sam" (`WishCard`'s header, who and
+  when from `collection/loans`, wired in `bootstrap/services`); the friend leaves with the box under the arm
+  (`Visit.tuck`). Its caption and a click say who has it and when it comes back.
+- What no shelf has room for waits in a pile of boxes on the floor (`shelving/BoxPile`): in front of the bedroom's
+  bookcase slot until Mrs Roux's rooms are joined (`ANNEX_OVERFLOW`), in the study after (`STUDY_LEFTOVER`), never gone.
+- A box in hand can be set down on the kitchen table, the nightstand or the TV stand beside the set (`ROOM_PLAN.standStray`)
+  for the day, kept there over a reload (`StrayGames.remember`, `KEYS.strayLaid`, that game day only) (`StrayBox`, empty spots take one;
+  free-handed the ray goes through an empty spot, `Interactable.passesThrough`). The search says where a game no shelf
+  shows is (`BrowseParts.whereabouts`: lent, in the parcel, on a table, on display, in the pile).
 - Boxes come from a `BoxPool` shared by both shelvings: a game passing from one room's shelves to the other keeps its
   box. A shelving takes boxes only for the games that get a spot; the plan works on the games' sizes (`boxDimensionsOf`).
 - When the bookcases come out as they stand (same count, same row heights), a rebuild keeps them and the boxes slide;
@@ -108,7 +140,8 @@ and the player's own rows: per shelving id (`'living'`, `'bedroom'`, Mrs Roux's 
 ## Displays (`src/world/showcase/`)
 
 The display case (by the living room's door, five tiers of one box) and the pedestal (one box on an easel, in the open
-floor), bought at SECOND HOME (`displayCase`, `pedestal`; `ROOM_PLAN.showcase`), hold any box of the collection face out.
+floor), bought at SECOND HOME (`displayCase`, `pedestal`; `ROOM_PLAN.showcase`), hold any box of the collection face out;
+so does Mrs Roux's mantel once her rooms are joined (two boxes against the wall, `annex/Fireplace`, docs/building.md).
 
 - **Putting a box in**: with a box in hand (from a shelf or another display) aimed at a display, the ghost leans in the
   slot aimed at (`ShelfPlacing` asks `Showcases.spotAt`; the nearer of a shelf spot and a slot wins); a right-click tap
@@ -150,6 +183,91 @@ Q held at home with free hands (the market's "read the stalls" key): the box und
 display, tips half out of its row (its top 24° towards the eye, 3.5 cm out, `GameBox.setTipped`, eased by its shelf's
 ticks) and its caption says its year, platform, edition and state. Let go or looked away, it slides back. Nothing moves
 for good.
+
+## The bookcase view (`src/shelfView/`)
+
+A click on a bookcase between its boxes (on a board, a side, the back: `BookcaseFronts`, one invisible plane per
+bookcase just in front of its back, kept in the scene and moved with it, so the boxes are always hit first and the
+shelves' own rays never meet it; the ray goes through it with a box in hand, seated, or facing one already), or B with
+free hands in front of one (`ShelfView.aimed`: within 4 m, 40° of the view's middle, seen from the front), faces it.
+`game/ShelfViewing` is the route (after photo mode, before moving things), `ShelfView` the machine.
+
+- **The eye** glides square in front of it (`framing.framePose`: back until the whole bookcase fits the lens and the
+  screen's shape with 10 % of air, eye at its middle height, pitch 0; nearer when a wall stands behind, the framing
+  tighter; nearer still past furniture standing between (a sofa's back, a table: `framePose`'s `inFurniture`, the
+  walk's body probes at a narrower 0.2 m, `FirstPersonController.bodyBlockedAt`, looked along from the eye to 0.45 m
+  in front of the boxes). It is a seat's move (`FirstPersonController.sit`): leaving (E, S from the whole bookcase, B again, Esc the
+  room hears, `Session.stand`) stands the player back where they stood, looking the way they looked
+  (`FirstPersonController.stand`'s `look`). `Session.seatedIn` is null meanwhile (no seat), the Seating route never
+  hears the walking keys (the view's come first).
+- **The cursor**: the view stops turning (`controls.enabled` held off every frame) and the crosshair itself goes where
+  the mouse takes it (`body.shelf-viewing`, `--shelf-cursor-x` / `-y`, `shelfView.css`), its caption and the click's
+  reaction under it; the `Interactor` aims from it (`Interactor.aim`, normalised device coordinates, the middle
+  otherwise). The box under it leans out (`setTipped`), its caption the tipped one (year, platform, state).
+- **Rows**: W (or the wheel turned up) frames the row under the cursor, its spines readable; ↑ / ↓ another row (from
+  the whole bookcase: the top or the bottom one); S back out to the whole bookcase. A / D: the nearest bookcase that
+  way (any shelving, in a room drawn now, within 5 m, no wall between), the same row framed.
+- **Flipping**: a row framed, each notch of the wheel puts the cursor on the next box along the row (left to right as
+  seen), which leans out, as a finger walks along spines; a click takes it.
+- **Taking a box**: a click (a press that hardly moves) takes it in hand and straight up close (`Inspector.examine`);
+  the view parks (the crosshair back in the middle, every key the hands'), and once the box is put back the eye
+  squares up in front again and the cursor is where it was. A walking key with the box in hand stands up as from a seat.
+- **Moving a box**: a press on a box and a drag of 6 px lifts it off its row (out of the shelf, into the scene; the
+  `Interactor` off meanwhile) and it follows the cursor a hand's breadth in front of the boards; over a gap with room
+  it stands in front of it and the row parts (`spot.parting`), over the middle of another box that one leans out (a
+  swap). Let go: `ShelvingGroup.moveBox` / `swapBoxes` as with a box in hand (the player's arrangement), and it slides
+  in (`slideToRest`); no room: "No room on that shelf." and it slides back. U from the view undoes it
+  (`Rearranging.rememberShelves`, `undoLast`). The lock lost, a box taken, the view left: it slides back.
+- **Looking for a game**: F lays a strip of masking tape top centre (`ShelfFilter`); what is typed stays on the field
+  (the walk and the crosshair wait, `Session.modalOpen`), and every box on the shelves drawn now whose title, platform
+  or release year has the words leans out as it is typed. Enter puts the strip down keeping them out, Esc (or the
+  lock lost) puts them back; none on this bookcase: a word says they are on another one, or nowhere.
+- **Spine out, labels**: G turns the box under the cursor spine out, or cover out again (`Rearranging.turnAimed`, U
+  takes it back), and K prints a label for the edge under it (`Labelling`'s `facing`): `ShelfPlacing` and the label
+  maker aim from `Interactor.aim`, which is the middle of the view everywhere else. Q (`BoxTipping`) does nothing there:
+  the box under the cursor leans out already.
+- Keys (`input/actions`, context `shelves`): `faceShelves` B (shares buy's), `shelfIn` W, `shelfOut` S, `shelfLeft` A,
+  `shelfRight` D, `shelfRowUp` / `shelfRowDown` the arrows, `filterShelves` F, `leaveShelves` E; L, M, R and Q do
+  nothing there. On a controller RT presses B (buy's alias: it faces the bookcase in front and steps back from it), the
+  right stick moves the cursor (synthetic mouse deltas), A takes the box under it, the d-pad goes along the rows (↑ ↓)
+  and the bookcases (← →), and B (the right mouse button) steps back from a row, then from the bookcase: the d-pad
+  walks no step meanwhile (`GamepadInput`'s `dpadWalks`). `Session.handsContext` is `'shelves'` there; the keys card and
+  the touch bar, which know no bookcase view yet, show it as sitting (`bootstrap/session`'s `cardContext`).
+
+## Two boxes side by side (`interaction/SecondHand`)
+
+With one of the flat's shelf boxes in hand, C aimed at another shelf box (`game/Comparing`, after the hands) brings it
+to the hand too: the box in hand is looked at (`Inspector.examine`) and moves left of the middle by half the second
+one and a gap (`Inspector.sideShift`, eased; not in the loupe, which magnifies the first), and the second stands to its
+right, turned as it is (`interaction/Rider`: slid out of its row, flown there, home again the same way), so the mouse,
+the faces' keys and the snap turn both. It shows its openable self (`setInHand`), sharp art and back included. C
+again, or the box in hand no longer looked at (a step, the wheel back), sends it home; E puts both back
+(`Session.putBack` lets it go first). The card beside shows the first. A market copy in hand, or nothing aimed at:
+C goes on to the cat. The ray goes through both (`Session`'s `interactor.ignore`).
+
+## An armful (`interaction/Armful`)
+
+Y on a shelf box (`game/Stacking`, before `CopyOpening`): free-handed it is taken in hand; with one of the flat's boxes
+in hand it goes into the arms behind it (four more at most), each a little higher and to the right of the one in
+front so their tops and edges show, turned with it (`Rider`s, closed: no hi-res art). While the arms are full the
+box in front is not opened (O, V, T are refused), nothing is shelved from them (`ShelfPlacing`'s `full`: no ghost, no
+M), and C is refused (and Y while comparing). E puts them all back, each to its home; put the box in hand back any
+other way and the rest go home with it.
+
+A table spot (`strays/StrayBox`: the kitchen table, the nightstand, the TV stand) takes the box in hand and the armful
+as a pile, up to five, lying cover up one on another (2 mm apart), each turned and shifted its own way for the day.
+Each place of the pile is its own claim in `StrayGames` (`kitchenTable`, then `kitchenTable+2`…), kept over a reload
+for the day (`KEYS.strayLaid`, one entry per place: an old save's single box is the bottom place). A click with free
+hands takes the top box, as a stray has always been taken; with a box in hand it goes on top while there is room
+(full: it is swapped for the top one; an armful that does not fit is refused). The click target grows with the pile.
+The search's whereabouts names the spot of any place of a pile.
+
+## Seated with a box
+
+A box in hand stays in hand when the player sits (an armchair, the sofa, the bed: the seat's click), and is looked at
+the same way (the wheel: the view holds still, the mouse turns it). E puts it back first, then gets up; a step drops
+it low in the hand and gets up with it. From the seat a box within reach (a stray on the table, a shelf in reach) is
+taken as standing. The HUD's idle fade (`HudIdle`) waits while a box is in hand. Lying down to sleep puts it back.
 
 ## Furniture: registering a piece
 

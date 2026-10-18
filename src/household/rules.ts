@@ -22,6 +22,13 @@ export const HOUSEHOLD = {
    */
   cake: { days: 2, linger: 1.5, giftChance: 0.45, tip: [4, 9] as [number, number] },
   /**
+   * The kettle boiled: a pot of tea stays hot `freshMs` (real time). A friend who comes in while it is hot has a cup and
+   * stays `linger` times as long (a cake goes first: a slice beats a cup). Toast popped up: the smell brings the cat
+   * into the kitchen, `catChance` of the time.
+   */
+  tea: { freshMs: 12 * 60 * 1000, linger: 1.2, lines: ['Is that the kettle? Go on then, a cup.', 'Tea! You read my mind.', 'Oh, a cup of tea. Perfect, it is cold out.', 'Milk, no sugar. Thanks.'] },
+  toast: { catChance: 0.6 },
+  /**
    * A treat for the cat, once a rest (after a sleep). The next morning, `giftChance` it left something by its kitchen
    * bowl: a lost booklet (`manualChance`, when a game on the shelves lacks one) or a few coins from under the armchair.
    */

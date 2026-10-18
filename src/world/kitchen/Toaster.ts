@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import type { Updatable } from '@/core/Engine';
 import type { Interactable } from '@/interaction/Interactable';
 import type { SessionActions } from '@/game/SessionActions';
+import { poweredAt } from '@/building/mains';
 import { ToasterSound } from '@/audio/kitchenSounds';
 import { cylinderMesh, invisibleHitbox } from '../meshUtils';
 import { Prop, part, matte } from '../props/Prop';
@@ -84,7 +85,10 @@ export class Toaster extends Prop implements Interactable, Updatable {
       this.brown = Math.min(1, this.brown + dt / TOAST_SECONDS);
       this.crumb.color.copy(BREAD).lerp(TOAST, this.brown);
       this.glow.emissiveIntensity = Math.min(1.6, this.glow.emissiveIntensity + dt * 1.2);
-      if (this.left <= 0) this.pop();
+      if (this.left <= 0) {
+        this.pop();
+        this.onToast?.();
+      } else if (!poweredAt(this)) this.pop();
     } else if (this.depth > 0 || this.sincePop >= 0) {
       this.depth = Math.max(0, this.depth - dt / POP_SECONDS * 3);
       this.sincePop += dt;
@@ -109,13 +113,21 @@ export class Toaster extends Prop implements Interactable, Updatable {
     this.glint.set(hovered);
   }
 
+  /** The toast popped up done (not popped early): the smell goes round the flat. */
+  onToast: (() => void) | null = null;
+
   label(): string {
+    if (!poweredAt(this)) return 'Toaster · no power';
     return this.toasting ? 'Toaster · pop the toast' : 'Toaster · make toast';
   }
 
-  activate(_session: SessionActions): void {
+  activate(session: SessionActions): void {
     if (this.toasting) {
       this.pop();
+      return;
+    }
+    if (!poweredAt(this)) {
+      session.refuse('The lever will not stay down: the power is off in the whole building.');
       return;
     }
     this.toasting = true;

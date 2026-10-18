@@ -1,6 +1,7 @@
 import type { SessionActions } from '@/game/SessionActions';
 import type { Errand } from './errands';
 import { pocket } from './pocket';
+import { capitalise } from '@/text/strings';
 
 /**
  * Buys `errand` over a counter: refused past the shop's daily limit (`said` is the shop's word for it) or with the
@@ -17,6 +18,7 @@ export function buyErrand(session: SessionActions, errand: Errand, said: string,
   }
   session.pay({
     price: errand.price,
+    title: capitalise(errand.title),
     paid: () => {
       pocket.recordBuy(errand.id);
       pocket.add(errand.id, errand.portions, errand.max);

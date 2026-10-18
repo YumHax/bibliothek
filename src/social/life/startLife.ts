@@ -6,6 +6,7 @@ import { startVotePromises } from '../conflicts/votes';
 import { personAtDoor, shortName } from '../people';
 import { startWitnesses } from '../witnesses';
 import { upcomingBirthdays, startBirthdays } from './birthdays';
+import { startBuildingTalk } from './buildingTalk';
 import { favoursToDo, startFavours, todoText, type FavourDeps } from './favours';
 import { startIntroductions, together } from './introductions';
 import { startMediation } from './mediation';
@@ -31,6 +32,7 @@ export function startSocialLife(deps: FavourDeps & { realDate(): Date; player?()
   startBirthdays();
   startIntroductions(deps.note);
   startMediation();
+  startBuildingTalk(deps.day);
   onBlackout((cut) => {
     if (cut) for (const pair of POWER_CUT_PAIRS) together(pair, deps.day(), 'powerCut');
   });

@@ -7,8 +7,11 @@ import type { Vec2 } from '../streetPlan';
  * Data only.
  */
 export const SECRETS_PLAN = {
-  /** The dusty pane: its middle on the glass (Park Street's building line, a little out), its height, facing the street (-x). */
-  dust: { at: [-19.32, -23.05] as Vec2, y: 1.35, yaw: -Math.PI / 2, size: [0.55, 0.7] as [number, number] },
+  /**
+   * The dusty pane: its middle a little out from the glass (Park Street's building line), its height, facing the street
+   * (-x); `glass`, how far behind that the glass is (the dust is drawn on it).
+   */
+  dust: { at: [-19.32, -23.05] as Vec2, y: 1.35, yaw: -Math.PI / 2, size: [0.55, 0.7] as [number, number], glass: 0.06 },
   /** Where a fished-out cartridge lands: on the pavement under the door's letterbox. */
   dustFind: { at: [-19.62, -21.95] as Vec2, yaw: -Math.PI / 2 },
   /** The chalk: the first square's middle, the step to the next (along Park Street, southwards), each square's side. */

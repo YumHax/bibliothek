@@ -10,7 +10,8 @@ import { momentAt } from '@/grandma/GrandmaTalk';
 import { LineBag } from '@/grandma/lineBag';
 import { PASTIME_LINES as WORDS } from '@/grandma/pastimeLines';
 import { PASTIME_DEEDS, QUIZ_COIN, WOOL_FOR_SCARF, memePastimes } from '@/grandma/pastimes';
-import { QUIZ_BANK, QUIZ_ROUND, type QuizQuestion } from '@/grandma/quizBank';
+import { FAMILY_QUIZ, QUIZ_BANK, QUIZ_ROUND, collectionQuestion, type QuizQuestion } from '@/grandma/quizBank';
+import { SEED_GAMES } from '@/catalog';
 import { CROSSWORD_BANK } from '@/grandma/crosswordBank';
 import { cardName, deal, type HerMove } from '@/grandma/crazyEights';
 import type { MemeFeature, MemeScene } from '../memeScene';
@@ -88,13 +89,23 @@ function quiz(scene: MemeScene, session: SessionActions): void {
   store.done('quiz', scene.day());
   things.tv.showQuiz(true);
   meme.speak(pick(WORDS.quiz.start));
-  // The questions not asked lately, shuffled.
+  // The show's questions not asked lately, shuffled; one of hers about the family in the middle (once its memory is
+  // seen), and one about the player's own shelves.
   const fresh = QUIZ_BANK.filter((q) => !store.asked.includes(q.id));
-  const questions: QuizQuestion[] = shuffled(random, fresh.length >= QUIZ_ROUND ? fresh : QUIZ_BANK).slice(0, QUIZ_ROUND);
-  store.ask(questions.map((q) => q.id), QUIZ_BANK.length);
+  const show: QuizQuestion[] = shuffled(random, fresh.length >= QUIZ_ROUND ? fresh : QUIZ_BANK);
+  const family = shuffled(random, FAMILY_QUIZ.filter((q) => (!q.after || scene.visits.hasSeen(q.after)) && (!q.told || (scene.ctx.grandmaPresence?.hasTold(q.told) ?? false)) && !store.asked.includes(q.id)))[0];
+  const owned = scene.ctx.collection.games.games.filter((g) => (g.status ?? 'owned') === 'owned').map((g) => g.title);
+  const others = SEED_GAMES.filter((g) => !scene.ctx.collection.owns(g.id)).map((g) => g.title);
+  const shelves = owned.length >= 5 ? collectionQuestion(owned, others, random) : null;
+  const hers = [family, shelves].filter((q): q is QuizQuestion => !!q);
+  const questions: QuizQuestion[] = show.slice(0, QUIZ_ROUND - hers.length);
+  hers.forEach((q, i) => questions.splice(1 + i * 2, 0, q));
+  store.ask(questions.filter((q) => q.kind !== 'shelves').map((q) => q.id), QUIZ_BANK.length + FAMILY_QUIZ.length);
   panel.show({
     questions,
     blurt: (q) => {
+      // Hers: she knows the answer, and lets the player give it.
+      if (q.kind === 'family' || q.kind === 'shelves') return { answer: null, line: pick(q.kind === 'family' ? WORDS.quiz.herOwn : WORDS.quiz.herShelves) };
       const knows = q.kind !== 'games' && random() < (q.kind === 'telly' ? 0.75 : 0.6);
       const wrong = q.answers.map((_, i) => i).filter((i) => i !== q.right);
       const answer = knows ? q.right : q.kind === 'games' ? Math.floor(random() * q.answers.length) : wrong[Math.floor(random() * wrong.length)]!;

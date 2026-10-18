@@ -6,8 +6,12 @@ import { playCoins } from '@/audio/coins';
 import { homeGoodPhoto } from '@/thumbnails/homeGoodPhotos';
 import { MarketPanel } from './market/MarketPanel';
 import { Arming } from './confirmTwice';
-import { attr, html, paint, raw, type Html } from './panel/html';
+import { html, paint, raw, type Html } from './panel/html';
 import { formatCoins } from '@/text/money';
+import { lastDevice } from '@/input/lastDevice';
+import type { CoatKind } from '@/world/cat/types';
+import { COAT_WORDS } from './CatSettings';
+import { LetterPad } from './panel/letterPad';
 import './HomeShopPanel.css';
 
 /** The purse a shop takes coins from. */
@@ -23,6 +27,8 @@ interface HomeShopDeps {
   price?: (shop: HomeShop, base: number) => number;
   /** A piece was bought at `shop`'s till (today's talked-down discount is spent). */
   onBought?: (shop: HomeShop) => void;
+  /** The rescue cat's name and coat: adopted, the panel asks what she will be called (`CatSettingsStore`). */
+  cat?: { name(): string; coat(): CoatKind; rename(name: string): void };
 }
 
 /** What each shop's leaflet says at its top: its name and a line under it. */
@@ -51,6 +57,9 @@ export class HomeShopPanel extends MarketPanel {
   private readonly arming = new Arming(() => {
     if (this.isOpen) this.refresh();
   });
+  /** Just adopted: the counter asks for her name before anything else. */
+  private naming = false;
+  private pad: LetterPad | null = null;
 
   constructor(container: HTMLElement, private readonly deps: HomeShopDeps) {
     super(container, deps.wallet, { title: SHOP_TITLES.furniture.title, className: 'home-shop', blurb: SHOP_TITLES.furniture.blurb });
@@ -76,7 +85,80 @@ export class HomeShopPanel extends MarketPanel {
   }
 
   protected render(): void {
+    if (this.naming && this.deps.cat) {
+      this.renderNaming(this.deps.cat);
+      return;
+    }
+    this.pad = null;
     paint(this.body, html`${goodsOf(this.shop).map((good) => this.cardHtml(good))}`);
+  }
+
+  /** The adoption card: her photo, her coat in words, a name field (the letters on screen for a controller), one button. */
+  private renderNaming(cat: NonNullable<HomeShopDeps['cat']>): void {
+    const url = this.photos.get('cat');
+    paint(
+      this.body,
+      html`<article class="shop__item shop__adopt">
+        <div class="shop__photo${url ? ' shop__photo--ready' : ''}"><img data-photo="cat" alt=""${url ? html` src="${url}"` : ''} /></div>
+        <div class="shop__text">
+          <h3>She's yours</h3>
+          <p>A rescue with ${COAT_WORDS[cat.coat()]}, a little shy. What will you call her?</p>
+          <input class="shop__name" type="text" maxlength="24" autocomplete="off" spellcheck="false" aria-label="Her name" value="${cat.name()}" data-autofocus />
+        </div>
+        <div class="shop__buy">
+          <button type="button" class="shop__btn" data-action="name">Take her home</button>
+        </div>
+      </article>`,
+    );
+    const field = this.body.querySelector<HTMLInputElement>('.shop__name');
+    this.pad = field ? new LetterPad({ field, columns: 9 }) : null;
+    if (this.pad && field) {
+      this.pad.visible = lastDevice() === 'gamepad';
+      field.after(this.pad.element);
+      field.focus({ preventScroll: true });
+      field.select();
+    }
+  }
+
+  /** The D-pad walks the letters while she is being named; down from the field reaches them. */
+  protected override onMove(direction: 'up' | 'down' | 'left' | 'right'): boolean {
+    const pad = this.pad;
+    if (!this.naming || !pad?.visible) return super.onMove(direction);
+    const field = this.body.querySelector('.shop__name');
+    if (direction === 'down' && document.activeElement === field) {
+      pad.focusFirst();
+      return true;
+    }
+    return pad.move(direction);
+  }
+
+  /** Enter in the name field takes her home. */
+  protected override onKey(e: KeyboardEvent): void {
+    if (this.naming && (e.code === 'Enter' || e.code === 'NumpadEnter') && document.activeElement?.classList.contains('shop__name')) {
+      e.preventDefault();
+      this.nameCat();
+      return;
+    }
+    super.onKey(e);
+  }
+
+  protected override onClosed(): void {
+    // Closed before a name was given: she keeps the one the shop had for her.
+    this.naming = false;
+    super.onClosed();
+  }
+
+  /** The name typed (capitals from the letter pad read as a name), saved; back to the leaflet. */
+  private nameCat(): void {
+    const cat = this.deps.cat;
+    const field = this.body.querySelector<HTMLInputElement>('.shop__name');
+    if (!cat || !field) return;
+    const typed = field.value.trim();
+    const name = typed === typed.toUpperCase() && typed.length > 1 ? typed.charAt(0) + typed.slice(1).toLowerCase() : typed;
+    if (name) cat.rename(name);
+    this.naming = false;
+    this.setStatus(name ? `${name} is waiting at home, by her bowls.` : `She keeps the name ${cat.name()}, and waits at home by her bowls.`);
+    this.refresh();
   }
 
   /** What the player pays for `good` here now. */
@@ -93,7 +175,7 @@ export class HomeShopPanel extends MarketPanel {
     const disabled = status !== 'buy' || dear;
     const needs = status === 'needs' ? homeGood(good.requires!).name.toLowerCase() : null;
     const armed = this.arming.isArmed(good.id);
-    const label = status === 'full' ? (good.max > 1 ? 'No more room' : 'At home') : needs ? `Needs the ${needs}` : dear ? `${price - wallet.coins} short` : armed ? 'Again to buy' : good.id === 'cat' ? 'Adopt' : 'Buy';
+    const label = status === 'full' ? (good.max > 1 ? 'No more room' : 'At home') : needs ? `Needs the ${needs}` : dear ? `${formatCoins(price - wallet.coins)} short` : armed ? 'Again to buy' : good.id === 'cat' ? 'Adopt' : 'Buy';
     const url = this.photos.get(good.id);
     const stamp = status === 'full' ? (good.id === 'cat' ? 'Adopted' : good.max > 1 ? 'All placed' : 'At home') : '';
     return html`<article class="shop__item${status === 'full' ? ' shop__item--done' : ''}${needs ? ' shop__item--locked' : ''}">
@@ -108,7 +190,7 @@ export class HomeShopPanel extends MarketPanel {
         </div>
         <div class="shop__buy">
           <span class="shop__tag">${price !== good.price ? html`<s>${good.price}</s> ` : ''}${price}<span class="shop__coin" aria-label="coins"></span></span>
-          <button type="button" class="shop__btn${armed ? ' sell__armed' : ''}" data-action="buy" data-id="${good.id}"${attr('disabled', disabled)}>${label}</button>
+          <button type="button" class="shop__btn${armed ? ' ui-btn--armed' : ''}" data-action="buy" data-id="${good.id}"${disabled ? html` aria-disabled="true"` : ''}>${label}</button>
         </div>
       </article>`;
   }
@@ -128,14 +210,25 @@ export class HomeShopPanel extends MarketPanel {
   }
 
   protected override onAction(action: string, el: HTMLElement): void {
+    if (action === 'name') {
+      this.nameCat();
+      return;
+    }
     if (action !== 'buy') return;
     const good = goodsOf(this.shop).find((g) => g.id === el.dataset.id);
-    if (!good || this.statusOf(good) !== 'buy') return;
+    if (!good) return;
+    // Out of reach stays pressable (aria-disabled): the press says why.
+    const status = this.statusOf(good);
+    if (status === 'needs') {
+      this.setStatus(`${good.name} goes with the ${homeGood(good.requires!).name.toLowerCase()}: that first.`, 'error');
+      return;
+    }
+    if (status !== 'buy') return;
     const { wallet, upgrades } = this.deps;
     const price = this.priceOf(good);
     if (wallet.coins < price) {
       this.arming.reset();
-      this.setStatus(`${good.name} costs ${formatCoins(price)} and you have ${wallet.coins}.`, 'error');
+      this.setStatus(`${good.name} costs ${formatCoins(price)}: ${formatCoins(price - wallet.coins)} short.`, 'error');
       return;
     }
     // A dear piece: the first click arms its button, the second buys.
@@ -149,6 +242,11 @@ export class HomeShopPanel extends MarketPanel {
     this.deps.onBought?.(this.shop);
     playCoins(purchaseClinks(price));
     this.setStatus(`${good.name}: yours for ${formatCoins(price)}. ${boughtLine(good)}`);
+    // Adopted: before the leaflet again, her name.
+    if (good.id === 'cat' && this.deps.cat) {
+      this.naming = true;
+      this.setStatus('');
+    }
     this.refresh();
   }
 

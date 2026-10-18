@@ -32,8 +32,12 @@ interface ClawWiring {
   prizeFor: (color: number) => string | undefined;
   /** Whether it is out of order today. */
   outOfOrder?: () => boolean;
+  /** Tried while out of order: the attendant's answer (`MachineRun`). */
+  brokenClick?: () => string;
   /** Where the misses in a row are kept across visits (the pity grip's count: `economy/ArcadeHabits`). */
   luck?: { clawMisses: number };
+  /** Whether a prize is on the bed at home already (restocks bring the others first). */
+  owns?: (prize: string) => boolean;
 }
 
 /** Where a regular's feet go (close enough to reach the stick), and where the player's eye goes. */
@@ -81,7 +85,7 @@ export class ClawMachine extends RunMachine implements Furniture, Interactable, 
   constructor(options: ClawMachineOptions, wiring: ClawWiring) {
     super();
     this.name = 'ClawMachine';
-    this.sim = new ClawSim(options.seed ?? 1, wiring.prizeFor, wiring.luck);
+    this.sim = new ClawSim(options.seed ?? 1, wiring.prizeFor, wiring.luck, wiring.owns);
     this.model = buildClawModel(this, options.color ?? 0xd23a6a, this.sim.plush);
     this.furColors = this.sim.plush.map((p) => p.color);
     this.hitboxes = [this.model.hitbox];
@@ -95,6 +99,7 @@ export class ClawMachine extends RunMachine implements Furniture, Interactable, 
       note: this.model.note,
       strip: this.model.strip,
       ...(wiring.outOfOrder ? { outOfOrder: wiring.outOfOrder } : {}),
+      ...(wiring.brokenClick ? { brokenClick: wiring.brokenClick } : {}),
     });
     this.placeClaw();
     this.paintDisplay('INSERT COIN');

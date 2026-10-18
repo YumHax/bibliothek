@@ -1,6 +1,37 @@
 /* The market's panels (haggle, swap, notice board, job lot): the catalogue's frame (CataloguePanel.css) plus these. */
 @layer tokens, base, components, panels;
 @layer panels {
+  /* The market's own paper, ink and cork (slot variables: the rules below name them). */
+  .market-panel {
+    --mp-sale-ink: #1b5a8a;
+    --mp-pin-blue: #1b5fb8;
+    --mp-ink: #2a2318;
+    --mp-pencil-green: #3d5a2a;
+    --mp-ink-soft: #5a4c36;
+    --mp-cork-frame: #6b4524;
+    --mp-cork: #9a6b3f;
+    --mp-pin-blue-lit: #9ad7ff;
+    --mp-wanted-ink: #a3261b;
+    --mp-pin-red: #b8261b;
+    --mp-card: #fbf6e6;
+    --mp-pin-red-lit: #ff9a8a;
+    --mp-balloon-you: #fff4cf;
+    --mp-cork-pit: rgb(0 0 0 / 0.12);
+    --mp-card-shadow: rgb(0 0 0 / 0.28);
+    --mp-cork-shade: rgb(0 0 0 / 0.35);
+    --mp-pin-shadow: rgb(0 0 0 / 0.4);
+    --mp-balloon-shadow: rgb(12 10 18 / 0.42);
+    --mp-cork-fleck: rgb(255 255 255 / 0.06);
+    --mp-card-rule: rgb(60 90 160 / 0.18);
+    --mp-stranger: #7a6248;
+    --mp-note: #fdf3c4;
+    --mp-pin-green: #2f7a3a;
+    --mp-pin-green-lit: #a6e6a0;
+    --mp-club: #233f6b;
+    --mp-club-ink: #f6efdc;
+    --mp-club-gold: #e2b54a;
+    --mp-newsprint: #ece6d6;
+  }
   .market-panel h3 { margin: var(--sp-4) 0 0.35rem; font-family: var(--ui-font-display); font-weight: 400; font-size: var(--fs-7); letter-spacing: 0.04em; }
   .market-panel h3:first-child { margin-top: var(--sp-1); }
   .market-panel kbd {
@@ -15,41 +46,504 @@
   /* Dark text on the accent: the key caps follow it. */
   .market-panel .ui-btn--primary kbd { border-color: currentColor; }
 
-  /* Haggle: the deal on top, what was said, the offers along the bottom. */
-  .haggle .ui-panel__body { display: flex; flex-direction: column; gap: var(--sp-3); max-width: 46rem; width: 100%; margin: 0 auto; box-sizing: border-box; }
+  /*
+   * A stall scene (`MarketPanel` `scene`): not a sheet but the stall's moment over the room, lightly dimmed. The stall's
+   * striped awning across the top with the title painted on it and the purse chip on its corner, then the scene itself
+   * (crate, tag, cork) at its own size, centred, scrolling only when the window is short.
+   */
+  .market-panel--scene {
+    --scene-w: 46rem;
+    --awning-a: #b8322a;
+    --awning-b: #f1e6cc;
+    --awning-ink: #fffaf0;
+    --awning-pole: #5b3a1e;
+    --purse-gold: #e2b54a;
+    --purse-gold-lit: #fff0b0;
+    --purse-gold-dark: #9a6f1c;
+    --awning-mask: #000;
+    align-items: center;
+    justify-content: center;
+    gap: 0;
+    padding: var(--sp-5) var(--sp-4);
+    background: var(--ui-backdrop-soft);
+    backdrop-filter: none;
+  }
+  .market-panel--scene > * { width: min(var(--scene-w), 100%); box-sizing: border-box; }
+  .market-panel--scene > .catalogue__scroll { flex: 0 1 auto; border-radius: 0 0 var(--ui-radius) var(--ui-radius); box-shadow: 0 18px 40px var(--shade-55); }
+  .market-panel--scene > .catalogue__status:empty { display: none; }
+  .market-panel--scene > .catalogue__status { padding: var(--sp-1) var(--sp-3); background: var(--ui-panel-solid); }
+  .market-panel--scene > .catalogue__search { padding: var(--sp-2) var(--sp-3); background: var(--ui-panel-solid); }
+  .market-panel--scene > .catalogue__blurb { padding: var(--sp-1) var(--sp-3); background: var(--ui-panel-solid); }
+  .market-panel--scene > .ui-speaker { margin: 0; padding: var(--sp-2) var(--sp-3) var(--sp-1); background: var(--ui-panel-solid); }
+  /* The awning: red and cream canvas stripes, a scalloped hem, the title painted on in the display face. */
+  .market-panel--scene .catalogue__header {
+    position: relative;
+    align-items: center;
+    gap: var(--sp-3);
+    flex-wrap: nowrap;
+    padding: 0.7rem var(--sp-3) 1.35rem;
+    border-radius: var(--ui-radius) var(--ui-radius) 0 0;
+    background: repeating-linear-gradient(90deg, var(--awning-a) 0 2.4rem, var(--awning-b) 2.4rem 4.8rem);
+    box-shadow: inset 0 0.35rem 0 var(--awning-pole);
+    -webkit-mask: radial-gradient(1.2rem 0.75rem at 1.2rem 100%, transparent 98%, var(--awning-mask)) 0 0 / 2.4rem 100% repeat-x;
+    mask: radial-gradient(1.2rem 0.75rem at 1.2rem 100%, transparent 98%, var(--awning-mask)) 0 0 / 2.4rem 100% repeat-x;
+  }
+  .market-panel--scene .catalogue__header h2 {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    padding: 0.15rem 0.7rem;
+    border-radius: var(--ui-radius-sm);
+    background: var(--awning-pole);
+    color: var(--awning-ink);
+    font-size: var(--fs-t3);
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    box-shadow: 0 2px 0 var(--shade-45);
+    justify-self: start;
+    max-width: max-content;
+  }
+  .market-panel--scene .catalogue__actions { margin-left: 0; }
+  .market-panel--scene .catalogue__actions .ui-btn { background: var(--awning-pole); border-color: var(--awning-pole); color: var(--awning-ink); }
+  /* The purse: a gold coin and the count on a tag hung from the awning; a spend dips it, a gain lifts it. */
+  .market-scene__purse {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    margin-left: auto;
+    padding: 0.15rem 0.6rem 0.15rem 0.25rem;
+    border-radius: 999px;
+    background: var(--awning-pole);
+    color: var(--awning-ink);
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+    box-shadow: 0 2px 0 var(--shade-45);
+  }
+  .market-scene__coin { width: 1.15rem; height: 1.15rem; border-radius: 50%; background: radial-gradient(circle at 35% 30%, var(--purse-gold-lit), var(--purse-gold) 55%, var(--purse-gold-dark)); box-shadow: inset 0 0 0 2px var(--purse-gold-dark); }
+  .market-scene__purse--spent { animation: purse-dip var(--dur-quick) var(--ui-ease-pop); }
+  .market-scene__purse--earned { animation: purse-lift var(--dur-quick) var(--ui-ease-pop); }
+  @keyframes purse-dip { 40% { translate: 0 4px; scale: 0.94; } }
+  @keyframes purse-lift { 40% { translate: 0 -4px; scale: 1.08; } }
+  .reduce-motion .market-scene__purse { animation: none; }
+  @media (max-width: 560px) {
+    .market-panel--scene { padding: var(--sp-3) var(--sp-2); }
+    .market-panel--scene .catalogue__header h2 { font-size: var(--fs-t1); }
+  }
+
+  /* Haggle: face to face. Their face and name on top, what was said as comic balloons, the player's words along the bottom. */
+  .haggle {
+    --scene-w: 44rem;
+    --table-wood: #4a3220;
+    --table-wood-dark: #3a2618;
+    --table-grain: rgb(255 230 190 / 0.05);
+  }
+  /* The stall's table between you: dark planks, the talk over them. */
+  .haggle .ui-panel__body {
+    display: flex;
+    flex-direction: column;
+    gap: var(--sp-3);
+    width: 100%;
+    margin: 0 auto;
+    box-sizing: border-box;
+    padding: var(--sp-3) var(--sp-4);
+    background:
+      repeating-linear-gradient(0deg, var(--table-grain) 0 1px, transparent 1px 7px),
+      repeating-linear-gradient(0deg, var(--table-wood) 0 5.5rem, var(--table-wood-dark) 5.5rem 5.65rem);
+  }
   .haggle__deal { display: flex; align-items: center; gap: var(--sp-4); }
-  .haggle__what { flex: 1; display: flex; flex-direction: column; gap: 0.15rem; min-width: 0; }
-  .haggle__patience { white-space: nowrap; color: var(--ui-text-dim); }
-  .haggle__patience span { color: var(--ui-accent); letter-spacing: 0.15em; }
-  .haggle__log { flex: 1; min-height: 8rem; overflow-y: auto; display: flex; flex-direction: column; gap: 0.4rem; padding: var(--sp-1); }
-  .haggle__line { margin: 0; max-width: 80%; padding: 0.45rem 0.7rem; border-radius: var(--ui-radius); background: var(--ui-fill); }
-  .haggle__line b { display: block; font-size: var(--fs-1); color: var(--ui-text-dim); font-weight: 600; }
-  .haggle__line--you { align-self: flex-end; background: var(--ui-accent-soft); }
+  .haggle__face { flex: none; padding: 3px; border: 3px solid var(--ink-speech); border-radius: 50%; background: var(--paper-speech); box-shadow: 4px 5px 0 var(--mp-balloon-shadow); }
+  .haggle__face:empty { display: none; }
+  .haggle__what { flex: 1; display: flex; flex-direction: column; gap: 0.1rem; min-width: 0; }
+  .haggle__who { font-family: var(--ui-font-comic); font-size: var(--fs-t5); line-height: 1; }
+  .haggle__mood { font-family: var(--ui-font-hand); font-size: var(--fs-t2); color: var(--ui-text-dim); }
+  .haggle__asking { display: flex; flex-direction: column; align-items: flex-end; white-space: nowrap; }
+  .haggle__asking small { color: var(--ui-text-dim); font-size: var(--fs-2); }
+  .haggle__log { flex: 1; min-height: 9rem; overflow-y: auto; display: flex; flex-direction: column; gap: 0.6rem; padding: var(--sp-2) var(--sp-1); }
+  .haggle__line { display: flex; align-items: flex-end; gap: 0.5rem; max-width: 82%; }
+  .haggle__line--you { align-self: flex-end; }
+  .haggle__small-face { flex: none; }
+  .haggle__small-face:empty { display: none; }
+  .haggle__balloon {
+    position: relative;
+    margin: 0;
+    padding: 0.5rem 0.95rem 0.55rem;
+    border: 2.5px solid var(--ink-speech);
+    border-radius: 1.3rem;
+    background: var(--paper-speech);
+    color: var(--ink-speech);
+    box-shadow: 4px 5px 0 var(--mp-balloon-shadow);
+    font-family: var(--ui-font-comic);
+    font-size: max(1.1rem, 17px);
+    line-height: 1.2;
+    text-wrap: pretty;
+  }
+  .haggle__line--you .haggle__balloon { background: var(--mp-balloon-you); border-bottom-right-radius: 0.35rem; }
+  .haggle__line--them .haggle__balloon { border-bottom-left-radius: 0.35rem; }
+  .haggle__line--new .haggle__balloon { animation: haggle-say-in var(--dur-quick) var(--ui-ease-pop); }
+  @keyframes haggle-say-in { from { opacity: 0; scale: 0.88; translate: 0 6px; } }
+  .reduce-motion .haggle__line--new .haggle__balloon { animation: none; }
   .haggle__offers { display: flex; flex-wrap: wrap; gap: var(--sp-2); }
   .haggle__offers .ui-btn { display: inline-flex; align-items: center; gap: 0.35rem; }
-  .haggle__offers .catalogue__price { min-width: 0; }
+  .haggle__say { font-family: var(--ui-font-comic); font-size: max(1rem, 16px); }
+  .haggle__say--argue { font-style: italic; }
   .haggle__back { margin-left: auto; }
+  /* The lines keep their slots: one said, or one over what they ask now, stays where it was, struck through. */
+  .haggle__offers { min-height: 5.6rem; align-content: flex-start; }
+  .haggle__say--spent { opacity: var(--ui-faint); text-decoration: line-through; text-decoration-thickness: 2px; }
+  .haggle__say--spent kbd { visibility: hidden; }
+  .haggle__take { margin-left: auto; }
+  .haggle__pay { min-width: 11rem; justify-content: center; }
+  /* Shaken on: the price stamped. */
+  .haggle__asking--agreed .catalogue__price { padding: 0 0.35rem; border: 2px solid currentColor; border-radius: var(--ui-radius-sm); rotate: -4deg; }
+  .haggle__face:has(.haggle__silhouette), .haggle__small-face:has(.haggle__silhouette) { display: grid; place-items: end center; overflow: hidden; border-radius: 50%; background: var(--mp-stranger); }
+  .haggle__face:has(.haggle__silhouette) { width: 72px; height: 72px; }
+  .haggle__small-face:has(.haggle__silhouette) { width: 34px; height: 34px; border: 2px solid var(--ink-speech); }
+  .haggle__silhouette { width: 82%; height: 82%; fill: var(--paper-speech); }
 
-  /* Notice board: tabs (`.ui-btn` marks the selected one), cards, sets. */
+  /* Notice board: tabs (`.ui-btn` marks the selected one); the cards pinned to cork, the sets, the stallholders' faces. */
   .notices__tabs { margin-bottom: 0.6rem; }
   .notices__panel > h3:first-child { margin-top: var(--sp-4); }
-  .notices__kind {
-    font-size: var(--fs-0);
+  .notices__cork {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(15rem, 1fr));
+    gap: var(--sp-4) var(--sp-3);
+    padding: var(--sp-4);
+    border-radius: var(--ui-radius);
+    background:
+      radial-gradient(circle at 20% 30%, var(--mp-cork-fleck) 0 1px, transparent 2px) 0 0 / 9px 9px,
+      radial-gradient(circle at 70% 60%, var(--mp-cork-pit) 0 1px, transparent 2px) 0 0 / 7px 7px,
+      var(--mp-cork);
+    box-shadow: inset 0 0 0 6px var(--mp-cork-frame), inset 0 0 24px var(--mp-cork-shade);
+  }
+  .notices__card {
+    --tilt: -1deg;
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    gap: 0.2rem;
+    padding: 1rem 0.85rem 0.7rem;
+    background: repeating-linear-gradient(transparent 0 1.35rem, var(--mp-card-rule) 1.35rem calc(1.35rem + 1px)), var(--mp-card);
+    color: var(--mp-ink);
+    box-shadow: 2px 4px 0 var(--mp-card-shadow);
+    rotate: var(--tilt);
+  }
+  .notices__card:nth-child(3n + 2) { --tilt: 1.2deg; }
+  .notices__card:nth-child(3n) { --tilt: -0.4deg; }
+  .notices__card:focus-within { rotate: 0deg; z-index: var(--z-above); }
+  .notices__pin { position: absolute; top: 0.3rem; left: 50%; width: 0.75rem; height: 0.75rem; translate: -50% 0; border-radius: 50%; background: radial-gradient(circle at 35% 35%, var(--mp-pin-red-lit), var(--mp-pin-red) 60%); box-shadow: 1px 2px 1px var(--mp-pin-shadow); }
+  .notices__card--sale .notices__pin { background: radial-gradient(circle at 35% 35%, var(--mp-pin-blue-lit), var(--mp-pin-blue) 60%); }
+  .notices__kind { font-family: var(--ui-font-display); font-size: var(--fs-t2); letter-spacing: 0.08em; }
+  .notices__card--wanted .notices__kind { color: var(--mp-wanted-ink); }
+  .notices__card--sale .notices__kind { color: var(--mp-sale-ink); }
+  .notices__game { font-family: var(--ui-font-hand); font-size: var(--fs-t4); line-height: 1.05; }
+  .notices__by, .notices__hint { font-size: var(--fs-3); color: var(--mp-ink-soft); }
+  .notices__hint { font-family: var(--ui-font-hand); font-size: var(--fs-t1); color: var(--mp-pencil-green); }
+  .notices__foot { display: flex; align-items: center; justify-content: flex-end; gap: var(--sp-2); margin-top: auto; padding-top: 0.35rem; }
+  .notices__card .catalogue__meta { color: var(--mp-ink-soft); }
+  .notices__card .catalogue__price { color: var(--mp-ink); }
+  .notices { --scene-w: 60rem; }
+  .notices .ui-panel__body { padding: var(--sp-3); }
+  .notices__act { min-width: 7.5rem; justify-content: center; }
+  /* The game's polaroid, pinned at the card's top corner, tilted against the card. */
+  .notices__card--wanted, .notices__card--sale { padding-right: 4.6rem; min-height: 9.5rem; }
+  .notices__photo {
+    position: absolute;
+    top: 0.55rem;
+    right: 0.55rem;
+    width: 3.4rem;
+    padding: 0.2rem 0.2rem 0.65rem;
+    background: var(--mp-card);
+    box-shadow: 1px 2px 3px var(--mp-card-shadow);
+    rotate: 5deg;
+  }
+  .notices__photo:empty { display: none; }
+  .notices__photo-img { display: block; width: 100%; aspect-ratio: 5 / 7; object-fit: cover; background: var(--mp-card-rule); }
+  /* A card answered: the other side's thanks in its place, a green pin, signed. */
+  .notices__card--note { background: var(--mp-note); min-height: 9.5rem; animation: note-pinned var(--dur-quick) var(--ui-ease-pop); }
+  @keyframes note-pinned { from { opacity: 0; scale: 0.92; rotate: 6deg; } }
+  .reduce-motion .notices__card--note { animation: none; }
+  .notices__card--note .notices__kind { color: var(--mp-pencil-green); }
+  .notices__pin--green { background: radial-gradient(circle at 35% 35%, var(--mp-pin-green-lit), var(--mp-pin-green) 60%); }
+  .notices__note-line { font-family: var(--ui-font-hand); font-size: var(--fs-t3); line-height: 1.1; }
+  .notices__sign { font-family: var(--ui-font-hand); font-size: var(--fs-t2); color: var(--mp-ink-soft); }
+  .notices__sign::before { content: '— '; }
+  .notices__cork--bare { display: block; }
+  .notices__bare { color: var(--mp-card); }
+
+  /* The collectors' club: its letterhead across the cork, then a membership card per set, a pocket per piece. */
+  .notices__cork--club { grid-template-columns: repeat(auto-fill, minmax(17rem, 1fr)); }
+  .club__letterhead {
+    grid-column: 1 / -1;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.2rem var(--sp-2);
+    margin: 0;
+    padding: 0.45rem var(--sp-3);
+    background: var(--mp-club);
+    color: var(--mp-club-ink);
+    box-shadow: 2px 4px 0 var(--mp-card-shadow);
+    font-family: var(--ui-font-print);
+    font-size: var(--fs-t3);
+    letter-spacing: 0.04em;
+  }
+  .club__letterhead small { flex-basis: 100%; font-family: var(--ui-font-hand); font-size: var(--fs-t1); letter-spacing: 0; opacity: 0.85; }
+  .club__emblem { width: 1.4rem; height: 1.4rem; color: var(--mp-club-gold); }
+  .club__card {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    gap: var(--sp-2);
+    padding: 0.7rem 0.8rem 0.6rem;
+    border-top: 0.45rem solid var(--mp-club);
+    background: var(--mp-card);
+    color: var(--mp-ink);
+    box-shadow: 2px 4px 0 var(--mp-card-shadow);
+  }
+  .club__card:nth-child(odd) { rotate: -0.6deg; }
+  .club__card:nth-child(even) { rotate: 0.5deg; }
+  .club__card:focus-within { rotate: 0deg; z-index: var(--z-above); }
+  .club__set { margin: 0; font-family: var(--ui-font-hand); font-size: var(--fs-t3); font-weight: 700; line-height: 1.05; }
+  .club__pockets { display: grid; grid-template-columns: repeat(auto-fill, minmax(3.6rem, 1fr)); gap: var(--sp-2); margin: 0; padding: 0; list-style: none; }
+  .club__pocket { display: flex; flex-direction: column; align-items: center; gap: 0.1rem; min-width: 0; text-align: center; }
+  .club__sleeve {
+    display: block;
+    width: 100%;
+    aspect-ratio: 5 / 7;
+    overflow: hidden;
+    border: 1.5px dashed var(--mp-ink-soft);
+    border-radius: var(--ui-radius-2xs);
+  }
+  .club__pocket--filled .club__sleeve { border: 1px solid var(--mp-card-rule); box-shadow: 1px 2px 2px var(--mp-card-shadow); }
+  .club__cover { display: block; width: 100%; height: 100%; object-fit: cover; opacity: 0.14; filter: grayscale(1); }
+  .club__pocket--filled .club__cover { opacity: 1; filter: none; }
+  .club__name { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-family: var(--ui-font-hand); font-size: var(--fs-t1); line-height: 1; }
+  .club__pocket:not(.club__pocket--filled) .club__name { color: var(--mp-ink-soft); }
+  .club__platform { font-size: var(--fs-0); letter-spacing: 0.06em; text-transform: uppercase; color: var(--mp-ink-soft); }
+  .club__foot { display: flex; align-items: center; justify-content: flex-end; gap: var(--sp-2); min-height: 2.2rem; margin-top: auto; }
+  .club__note { margin-right: auto; font-family: var(--ui-font-hand); font-size: var(--fs-t2); color: var(--mp-pencil-green); }
+  .club__card--complete .club__note { color: var(--mp-wanted-ink); }
+  .club__stamp {
+    order: 2;
+    padding: 0 0.5rem;
+    border: 3px solid var(--mp-wanted-ink);
+    border-radius: var(--ui-radius-sm);
+    color: var(--mp-wanted-ink);
+    font-family: var(--ui-font-marker);
+    font-size: var(--fs-t3);
+    letter-spacing: 0.12em;
+    rotate: -9deg;
+    opacity: 0.85;
+  }
+  .club__stamp--fresh { animation: club-stamp var(--dur-enter) var(--ui-ease-pop); }
+  @keyframes club-stamp { from { scale: 2.2; opacity: 0; } 60% { scale: 0.92; opacity: 1; } }
+  .reduce-motion .club__stamp--fresh { animation: none; }
+
+  /* The stallholders: a polaroid each on the cork, their face, their stall, how they take you in their hand, a ribbon. */
+  .notices__cork--people { grid-template-columns: repeat(auto-fill, minmax(11rem, 1fr)); }
+  .notices__clipping {
+    grid-column: 1 / -1;
+    justify-self: center;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    margin: 0 0 var(--sp-1);
+    padding: 0.45rem 1.4rem 0.55rem;
+    background: var(--mp-newsprint);
+    color: var(--mp-ink);
+    box-shadow: 2px 3px 0 var(--mp-card-shadow);
+    rotate: -1.2deg;
+    clip-path: polygon(0 4%, 6% 0, 14% 5%, 25% 1%, 38% 4%, 52% 0, 66% 4%, 79% 1%, 91% 5%, 100% 1%, 99% 96%, 90% 100%, 76% 95%, 61% 100%, 47% 96%, 33% 100%, 19% 95%, 7% 100%, 1% 96%);
+  }
+  .notices__clipping small { font-family: var(--ui-font-print); font-size: var(--fs-3); letter-spacing: 0.06em; text-transform: uppercase; }
+  .notices__clipping b { font-family: var(--ui-font-print); font-size: var(--fs-t4); font-weight: 400; line-height: 1.1; }
+  .notices__polaroid {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.15rem;
+    margin: 0;
+    padding: 0.9rem 0.6rem 0.7rem;
+    background: var(--mp-card);
+    color: var(--mp-ink);
+    text-align: center;
+    box-shadow: 2px 4px 0 var(--mp-card-shadow);
+  }
+  .notices__polaroid:nth-child(3n) { rotate: 1.4deg; }
+  .notices__polaroid:nth-child(3n + 1) { rotate: -1deg; }
+  .notices__polaroid figcaption { display: flex; flex-direction: column; align-items: center; gap: 0.05rem; }
+  .notices__face { display: grid; place-items: center; width: 64px; height: 64px; overflow: hidden; border-radius: 50%; background: var(--mp-card-rule); }
+  .notices__holder-name { font-family: var(--ui-font-hand); font-size: var(--fs-t3); line-height: 1; }
+  .notices__holder-stall { font-size: var(--fs-0); letter-spacing: 0.08em; text-transform: uppercase; color: var(--mp-ink-soft); }
+  .notices__words { font-family: var(--ui-font-hand); font-size: var(--fs-t1); line-height: 1.05; color: var(--mp-pencil-green); }
+  .notices__ribbon {
+    margin-top: 0.3rem;
+    padding: 0.05rem 0.7rem;
+    background: var(--mp-wanted-ink);
+    color: var(--mp-card);
+    font-size: var(--fs-1);
     font-weight: 700;
     letter-spacing: 0.08em;
-    padding: 0.1rem 0.4rem;
-    border-radius: var(--ui-radius-xs);
-    white-space: nowrap;
+    text-transform: uppercase;
+    clip-path: polygon(0 0, 100% 0, 92% 50%, 100% 100%, 0 100%, 8% 50%);
   }
-  .notices__card--wanted .notices__kind { background: var(--ui-danger-chip); color: var(--ui-danger-pale); }
-  .notices__card--sale .notices__kind { background: var(--ui-success-soft); color: var(--ui-success-faint); }
-  .notices__set { border-top: 1px solid var(--ui-border); padding: 0.3rem 0; }
-  .notices__set--done b { color: var(--ui-accent); }
-  .notices__pieces { list-style: none; margin: 0 0 0.3rem 0.5rem; padding: 0; display: flex; flex-wrap: wrap; gap: var(--sp-1) var(--sp-4); font-size: var(--fs-4); opacity: 0.75; }
-  .notices__have { opacity: 1; color: var(--ui-success-pale); }
-  .notices__perks { margin: 0.3rem 0 0; padding-left: 1.2rem; font-size: var(--fs-5); }
-  .notices__today { background: var(--ui-accent-soft); }
+  .notices__ribbon--none { background: var(--mp-ink-soft); }
 
-  /* Job lot: the total along the bottom. */
-  .joblot__total { border-top: 1px solid var(--ui-border); margin-top: 0.4rem; padding-top: 0.6rem; }
+  /* This week: the market's printed programme, a day a column, today ringed in red marker. */
+  .notices__cork--week { display: block; }
+  .week__poster { position: relative; padding: 1.2rem var(--sp-3) var(--sp-3); background: var(--mp-newsprint); color: var(--mp-ink); box-shadow: 2px 4px 0 var(--mp-card-shadow); rotate: -0.4deg; }
+  .week__head { margin: 0 0 var(--sp-3); padding-bottom: 0.3rem; border-bottom: 3px double var(--mp-ink); font-family: var(--ui-font-print); font-size: var(--fs-t4); font-weight: 400; letter-spacing: 0.04em; text-align: center; text-transform: uppercase; }
+  .week__days { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 0; margin: 0; padding: 0; list-style: none; }
+  .week__day { position: relative; display: flex; flex-direction: column; gap: 0.25rem; padding: 0.5rem 0.45rem; border-left: 1px solid var(--mp-card-rule); }
+  .week__day:first-child { border-left: 0; }
+  .week__name { font-size: var(--fs-1); font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--mp-ink-soft); }
+  .week__title { font-family: var(--ui-font-print); font-size: var(--fs-5); font-weight: 400; line-height: 1.05; }
+  .week__day--special .week__title { color: var(--mp-wanted-ink); }
+  .week__blurb { font-size: var(--fs-2); line-height: 1.25; color: var(--mp-ink-soft); }
+  .week__day--today::after { content: ''; position: absolute; inset: -0.2rem -0.1rem; border: 3px solid var(--mp-pin-red); border-radius: 48% 52% 46% 54% / 55% 45% 55% 45%; rotate: -2deg; pointer-events: none; }
+  @media (max-width: 720px) {
+    .week__days { grid-template-columns: 1fr; }
+    .week__day { flex-direction: row; flex-wrap: wrap; align-items: baseline; border-left: 0; border-top: 1px solid var(--mp-card-rule); }
+    .week__day:first-child { border-top: 0; }
+    .week__name { min-width: 6.5rem; }
+    .week__blurb { flex-basis: 100%; }
+  }
+
+  /* A swap at a neighbour's door: their words once it is done. */
+  .neighbour-trade__says { margin: var(--sp-2) 0 var(--sp-4); font-family: var(--ui-font-comic); font-size: max(1.1rem, 17px); }
+
+  /*
+   * Swap: the stall's swap tag, kraft card on a string. Their copy tied on at the top, the player's games listed down
+   * the tag with what each counts for in a rubber stamp.
+   */
+  .trade {
+    --tag-kraft: #c9a878;
+    --tag-kraft-dark: #b08f5f;
+    --tag-ink: #2b2014;
+    --tag-ink-soft: #5b4630;
+    --tag-fibre: rgb(255 255 255 / 0.08);
+    --tag-stamp: #8a2a1e;
+    --tag-hole: #3a2a1a;
+  }
+  .trade .ui-panel__body {
+    position: relative;
+    padding-top: 2.4rem;
+    background:
+      radial-gradient(circle at 50% 1.1rem, var(--tag-hole) 0 0.42rem, transparent 0.46rem) no-repeat,
+      repeating-linear-gradient(100deg, var(--tag-fibre) 0 1px, transparent 1px 6px),
+      linear-gradient(var(--tag-kraft), var(--tag-kraft-dark));
+    color: var(--tag-ink);
+  }
+  .trade .catalogue__row { border-bottom: 1px dashed var(--tag-ink-soft); }
+  .trade .catalogue__title { color: var(--tag-ink); }
+  .trade .catalogue__meta { color: var(--tag-ink-soft); }
+  .trade .catalogue__price { font-family: var(--ui-font-print); color: var(--tag-stamp); letter-spacing: 0.04em; }
+  .trade__empty { color: var(--tag-ink-soft); }
+  .trade__theirs { display: flex; align-items: center; gap: var(--sp-3); margin: 0 0 var(--sp-3); padding-bottom: var(--sp-3); border-bottom: 2px solid var(--tag-ink); }
+  .trade__theirs-text { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+  .trade__theirs b { font-family: var(--ui-font-hand); font-size: var(--fs-t4); font-weight: 400; line-height: 1.05; }
+  .trade__theirs small { display: block; font-family: var(--ui-font-print); font-size: var(--fs-2); letter-spacing: 0.08em; text-transform: uppercase; color: var(--tag-ink-soft); }
+  .trade__theirs-meta { font-size: var(--fs-3); color: var(--tag-ink-soft); }
+  /* What a game counts for, and what they ask, as rubber stamps: a fixed box so a value landing moves nothing. */
+  .trade__stamp {
+    display: inline-flex;
+    flex-direction: column;
+    align-items: center;
+    min-width: 4.6rem;
+    padding: 0.05rem 0.35rem 0.1rem;
+    border: 2px solid var(--tag-stamp);
+    border-radius: var(--ui-radius-sm);
+    color: var(--tag-stamp);
+    rotate: -3deg;
+  }
+  .trade__stamp small { font-family: var(--ui-font-print); font-size: var(--fs-0); letter-spacing: 0.08em; text-transform: uppercase; }
+  .trade__stamp--asking { rotate: 4deg; }
+  .trade__stamp--pending { opacity: 0.45; }
+  .trade__swap { min-width: 11.5rem; justify-content: center; }
+  /* The game tied on with a first press: lifted off the tag on its string, waiting for the handshake. */
+  .trade__row--tied { position: relative; background: var(--tag-fibre); box-shadow: 0 3px 0 var(--tag-kraft-dark); translate: 0 -2px; transition: translate var(--dur-quick) var(--ui-ease-pop); }
+  .trade__row--tied::before { content: ''; position: absolute; left: -0.6rem; top: 50%; width: 0.6rem; border-top: 2px dashed var(--tag-ink); }
+  .reduce-motion .trade__row--tied { translate: none; transition: none; }
+
+  /*
+   * Job lot: the crate itself. Its slats behind, the packing list clipped to it (what is inside, Bernard's word over it
+   * in a balloon), the total chalked on the end of the crate.
+   */
+  .joblot {
+    --crate-slat: #a8834f;
+    --crate-slat-dark: #8a6a3c;
+    --crate-gap: rgb(40 26 12 / 0.55);
+    --list-paper: #f3ecd8;
+    --list-ink: #2a2318;
+    --list-ink-soft: #5a4c36;
+    --list-clip: #9aa0a6;
+    --chalk: #f4f1e8;
+    --chalk-board: #2f3a33;
+  }
+  .joblot .ui-panel__body {
+    background: repeating-linear-gradient(var(--crate-slat) 0 3.2rem, var(--crate-slat-dark) 3.2rem 3.35rem, var(--crate-gap) 3.35rem 3.6rem);
+  }
+  .joblot__list {
+    position: relative;
+    margin: var(--sp-3) var(--sp-2) var(--sp-3);
+    padding: 1.6rem var(--sp-4) var(--sp-2);
+    background: var(--list-paper);
+    color: var(--list-ink);
+    box-shadow: 2px 4px 0 var(--mp-card-shadow);
+    rotate: -0.6deg;
+  }
+  .joblot__list::before {
+    content: '';
+    position: absolute;
+    top: -0.5rem;
+    left: 50%;
+    width: 5rem;
+    height: 1.2rem;
+    translate: -50% 0;
+    border-radius: 0.3rem;
+    background: linear-gradient(var(--list-clip), var(--crate-slat-dark));
+  }
+  .joblot__list .catalogue__row { border-bottom: 1px solid var(--mp-card-rule); }
+  .joblot__list .catalogue__title { color: var(--list-ink); }
+  .joblot__list .catalogue__meta, .joblot__list .catalogue__stall { color: var(--list-ink-soft); }
+  /* A game already home: struck through on the list, "yours already" pencilled beside it. */
+  .joblot__row--yours .catalogue__title { text-decoration: line-through; text-decoration-color: var(--mp-wanted-ink); text-decoration-thickness: 2px; }
+  .joblot__row--yours .catalogue__cover { opacity: 0.5; }
+  .joblot__yours { font-family: var(--ui-font-hand); font-size: var(--fs-t1); color: var(--mp-wanted-ink); }
+  /* The end of the crate, chalked: the count, the price, the one button; SOLD across it once bought. */
+  .joblot__total {
+    position: relative;
+    display: flex;
+    align-items: center;
+    gap: var(--sp-3);
+    margin: 0 var(--sp-2) var(--sp-2);
+    padding: 0.7rem var(--sp-3);
+    border-radius: var(--ui-radius);
+    background: var(--chalk-board);
+    box-shadow: inset 0 0 0 4px var(--crate-slat-dark), inset 0 0 18px var(--mp-cork-shade);
+    color: var(--chalk);
+  }
+  .joblot__count { flex: 1; font-family: var(--ui-font-marker); font-size: var(--fs-t3); line-height: 1; }
+  .joblot__total .catalogue__price { font-family: var(--ui-font-marker); font-size: var(--fs-t3); color: var(--chalk); }
+  .joblot__total .ui-btn { min-width: 9rem; justify-content: center; }
+  .joblot__total--sold .joblot__count, .joblot__total--sold .catalogue__price { opacity: 0.4; }
+  .joblot__sold {
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    translate: -50% -50%;
+    rotate: -8deg;
+    padding: 0 0.6rem;
+    border: 3px solid var(--mp-pin-red-lit);
+    border-radius: var(--ui-radius-sm);
+    color: var(--mp-pin-red-lit);
+    font-family: var(--ui-font-marker);
+    font-size: var(--fs-t4);
+    letter-spacing: 0.1em;
+    pointer-events: none;
+  }
+  /* Waiting on the crate, or nothing in it: chalked on its end. */
+  .joblot__waiting { margin: var(--sp-3) var(--sp-2); padding: var(--sp-4); border-radius: var(--ui-radius); background: var(--chalk-board); color: var(--chalk); }
 }

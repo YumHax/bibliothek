@@ -151,6 +151,8 @@ export interface HouseholdContext {
   catName(): string;
   /** The treat jar shaken: whether the cat comes (the day's treat is spent only then), and how that went. */
   callCat?: () => { came: boolean; line: string };
+  /** The toaster's smell going round the flat: the cat (if any, awake, at home) comes to the kitchen. Whether it did. */
+  smellToast?: () => boolean;
   /** The long jobs (cleaning a box, a sticker, the cake, a soak) told in a fade to black, the clock wound on (`household/pastime.ts`). */
   pastimes?: Pastimes;
   /** The shelf's own box of a game (rebuilt after a change to the copy): the one put back in the hand after a job on it. */
@@ -238,6 +240,8 @@ export interface WorldPanels {
   toDo?: ToDoNotePanel;
   /** The residents' table at the neighbours' party in the courtyard: they buy games off the player (`building/neighboursParty`). */
   partySale?: ModalLike;
+  /** The saleroom's consignment sheet: a copy of the player's entered for the next sale (`economy/consignments`). */
+  consign?: ModalLike;
   /** The film night's pick, opened by the sheet in the courtyard (`building/yardCinema`). */
   screening?: ModalLike;
   /** The courtyard's kids: a swap of carts, a go on their handheld, a cart handed over (`courtyard/YardKids`). */

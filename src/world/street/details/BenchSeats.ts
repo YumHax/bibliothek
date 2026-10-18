@@ -28,6 +28,11 @@ export interface BenchSpot {
   name: string;
   /** Someone of the street sits there now (the bench's reader): not offered. */
   taken?: () => boolean;
+  /** Not there to sit on now (a terrace's chairs stacked away): no caption, no click. */
+  away?: () => boolean;
+  /** The player sat down (a terrace's waiter comes over), and got up again. */
+  onSit?: () => void;
+  onStand?: () => void;
   /** Seated, a click lets time pass (a fade, the clock wound on: `household/pastime`); none: a click stands up. */
   wait?: () => BenchWait | null;
   pastimes?: Pastimes;
@@ -60,8 +65,11 @@ export class BenchSeat extends THREE.Group implements Furniture, Interactable, S
   readonly contactShadow = false;
   readonly hitboxes: THREE.Object3D[];
   private readonly eye: THREE.Vector3;
-  /** Seconds sat here since the last sit down, or -1 when the player is not sitting here. */
-  private sat = -1;
+  /** Seconds sat here since the last sit down. */
+  private sat = 0;
+  /** The player is sitting here (`onSit` told, `onStand` not yet); something overheard this sit already. */
+  private sitting = false;
+  private heard = false;
   private readonly seatEye = new THREE.Vector3();
   private readonly camera = new THREE.Vector3();
 
@@ -87,6 +95,7 @@ export class BenchSeat extends THREE.Group implements Furniture, Interactable, S
   }
 
   label(player: PlayerState): string | null {
+    if (this.spot.away?.() && player.seatedIn !== this) return null;
     if (player.seated) {
       const wait = player.seatedIn === this && this.spot.pastimes ? this.spot.wait?.() : null;
       return wait ? `${this.spot.name} · sit ${wait.until}` : `${this.spot.name} · stand up`;
@@ -95,6 +104,7 @@ export class BenchSeat extends THREE.Group implements Furniture, Interactable, S
   }
 
   activate(session: SessionActions): void {
+    if (this.spot.away?.() && session.seatedIn !== this) return;
     if (session.seated) {
       const wait = session.seatedIn === this ? this.spot.wait?.() : null;
       const pastimes = this.spot.pastimes;
@@ -105,26 +115,37 @@ export class BenchSeat extends THREE.Group implements Furniture, Interactable, S
         return;
       }
       session.stand();
+      if (session.seatedIn !== this) this.left();
     } else if (this.spot.taken?.()) session.refuse('Someone is sitting there.');
     else {
       session.sit(this);
       this.sat = 0;
+      this.heard = false;
+      this.sitting = true;
+      this.spot.onSit?.();
     }
   }
 
+  /** The sit is over (stood up, or walked off): whoever was told the player sat is told they left. */
+  private left(): void {
+    if (!this.sitting) return;
+    this.sitting = false;
+    this.spot.onStand?.();
+  }
+
   update(dt: number): void {
-    if (this.sat < 0 || !this.spot.viewer || !this.spot.overhear) return;
+    if (!this.sitting || !this.spot.viewer) return;
     // Still here? The camera where the seat put it, once it has settled (a step away and the sit is over).
     this.spot.viewer.getWorldPosition(this.camera);
     this.localToWorld(this.seatEye.copy(this.eye));
+    this.sat += dt;
     if (this.sat > SETTLE && this.camera.distanceTo(this.seatEye) > STILL_SITTING) {
-      this.sat = -1;
+      this.left();
       return;
     }
-    this.sat += dt;
-    if (this.sat < OVERHEAR_AFTER) return;
-    // Once a sit.
-    this.sat = -1;
+    // Once a sit, a little while in: something overheard.
+    if (this.heard || !this.spot.overhear || this.sat < OVERHEAR_AFTER) return;
+    this.heard = true;
     const line = this.spot.overhear();
     if (line) this.spot.tell?.(line);
   }

@@ -2,6 +2,10 @@ import * as THREE from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { Prop } from '../../props/Prop';
 import { METAL, paint } from '../../materials/palette';
+import type { Interactable } from '@/interaction/Interactable';
+import type { SessionActions } from '@/game/SessionActions';
+import { invisibleHitbox } from '../../meshUtils';
+import { playBikeBell } from '@/audio/furnitureSounds';
 
 const TYRE = paint(0x1a1a1c, 0.8);
 const WHEEL_R = 0.33;
@@ -20,11 +24,19 @@ function tube(a: THREE.Vector3, b: THREE.Vector3, r: number): THREE.BufferGeomet
  * A town bicycle stood against a wall: two wheels, a diamond frame in its colour, a saddle and the handlebar. One mesh
  * per material. Floor placement, the bike along local z (front wheel at +z), origin under its middle. Decoration.
  */
-export class Bicycle extends Prop {
+/** What ringing a parked bike's bell gets, in turn: the vote put them in the hall, and the hall answers. */
+const BELL_LINES = ['Ding ding. The hall rings with it, all the way up the stairs.', 'Ding. From somewhere upstairs: “Who is playing with my bike?”', 'You ring it once more, softly. The concierge looks up from behind her glass, and down again.'];
+
+export class Bicycle extends Prop implements Interactable {
+  readonly hitboxes: THREE.Object3D[] = [];
+  private rings = 0;
   /** `lean`: how far it leans on its stand towards +x (radians), against the wall. */
   constructor(color: number, lean = 0) {
     super();
     this.name = 'Bicycle';
+    const hit = invisibleHitbox(0.3, 1.0, 1.7, { y: 0.5 });
+    this.add(hit);
+    this.hitboxes.push(hit);
     const body = new THREE.Group();
     body.rotation.z = lean;
     this.add(body);
@@ -48,5 +60,21 @@ export class Bicycle extends Prop {
     add(frame, paint(color, 0.45));
     add(chrome, METAL.chrome());
     add([saddle], paint(0x2a1e16, 0.6));
+  }
+
+  setHovered(): void {}
+
+  /** Hidden until the co-owners vote the bikes in (`coproLook`): a hidden hitbox still takes the ray, so it lets it by. */
+  passesThrough(): boolean {
+    return !this.visible;
+  }
+
+  label(): string {
+    return 'A co-owner’s bicycle · ring the bell';
+  }
+
+  activate(session: SessionActions): void {
+    playBikeBell();
+    session.react(BELL_LINES[this.rings++ % BELL_LINES.length]!);
   }
 }

@@ -15,7 +15,9 @@ friend coming round), never a daily chore. What is worn or set stays so (saved) 
 | Kitchen hob, mixing bowl | Bake a cake (on the table two market days, three for a lemon drizzle with the greengrocer's basket in the pocket; refused without the table) | A friend visiting while it is out has a slice, lingers `cake.linger` times as long and leaves a thank-you (a game to their taste, else coins) | `HomeLife.bake`, `Visitors.thankForCake` |
 | Kitchen worktop, Mémé's recipe tin (once she taught one) | Cook her next recipe (blanquette, plum jam, yoghurt cake) | The dish counts as the cake for a friend who drops by; a portion goes to her (docs/grandma.md "Sunday lunch, recipes and favours") | `world/kitchen/memeRecipes.ts`, `GrandmaRituals.cook` |
 | Kitchen worktop, treat jar | A treat, once a rest (after a night's sleep, or every `restEvery` market days; the cat comes) | Next morning, sometimes, something by its kitchen bowl: coins, or the lost booklet of a shelved `noManual` game (complete again) | `HomeLife.giveTreat` / `takeGift`, `catGift.ts` |
-| Kitchen radio | Switched on between `radio.from` and `radio.until`, once a day | Radio Brocante: a grail heard of `radio.grailDays` ahead (the others say 3), tomorrow's theme and clearance, the Flea Fair | `chronicle.ts` |
+| Kitchen radio | Switched on between `radio.from` and `radio.until`, once a day, on Radio Brocante (a second click turns the dial to the 8-bit hour, a third switches off) | Radio Brocante: a grail heard of `radio.grailDays` ahead (the others say 3), tomorrow's theme and clearance, the Flea Fair | `chronicle.ts`, `audio/RadioTune` `RadioStation` |
+| Kitchen kettle | Boiled to the click | A pot of tea, hot `tea.freshMs`: the next friend in (with no cake out) has a cup and stays `tea.linger` times as long | `Household.brewTea`, `Visitors` `hosting.teaReady` |
+| Kitchen toaster | Toast popped up done | The smell brings the cat into the kitchen (`toast.catChance`) | `HouseholdContext.smellToast` |
 | Bedroom chair | Sit with a **complete** box in hand | Its manual read: platform know-how. From `knowHow.eye` manuals a fake's print is noticed before opening the box; from `respect` that platform's stallholders go easier | `HomeLife.readManual`, `Perks.tell` / `ease` |
 | Bedroom nightstand, alarm clock | Click cycles the wake hour | The bed's night ends then (`Sleep`'s `wakeHour`) | `Household.cycleAlarm` |
 | Bed | A night's sleep | Some nights a dream: one of the morning's remarkable copies (grail, wishlist, estate, bin gem, showpiece), on the `DreamCard` | `dreams.ts`, `HomeLife.dream` |
@@ -23,7 +25,7 @@ friend coming round), never a daily chore. What is worn or set stays so (saved) 
 | Bedroom phone | Call a stall where the player is a regular (`phone.regularFrom`) in market hours | It reads out today's table and puts a copy aside for the hold deposit, as if held at the stall | `PhonePanel`, `Transactions.holdCopy` |
 | Bedroom phone | Ask a friend round, once a market day before `phone.friendsUntil` | They come `phone.inHours` later (a visit on demand: loans, tips, the cake) | `Visitors.invite`, `VisitBook.invite` |
 | Bedroom phone | It rings: Mémé, a photo of her album ready (or her message after) | The conversation opens on her news; let ring out, her message is read at the next click | `world/bedroom/memeRing` (docs/grandma.md) |
-| Bedroom phone | It rings: a friend, at the hour of the day `social/phoneCalls` drew (never over Mémé, never mid-conversation) | Picked up, the conversation over the phone on their first word; let ring out (or rung while the player was out), a message waits, a red dot blinking on the phone, played on paper slips in the phone's panel | `world/bedroom/friendCalls`, `PhonePanel` `voicemail` (docs/social.md "The phone") |
+| Bedroom phone | It rings: a friend, at the hour of the day `social/phoneCalls` drew (never over Mémé, never mid-conversation) | Picked up, the conversation over the phone on their first word; let ring out (or rung while the player was out), a message waits, a red dot blinking on the phone, played in the phone's Messages, each by the sender's face | `world/bedroom/friendCalls`, `PhonePanel` `voicemail` (docs/social.md "The phone") |
 | Bedroom phone | Ring a contact | Who picks up now first; asleep or at work, in words, greyed, the line says why | `social/phoneCalls.phoneState`, `social/whereNow` |
 | Bedroom phone | Have everyone round tonight; ring THE GAMING WEEKLY for an open house | A games night (PADDLE WARS on the TV, a photo), an open house two days on (coins at the door, the paper's article) | `Gatherings.phoneRows`, `call` (docs/visitors.md "Gatherings") |
 | Market stalls | Some ordinary copies carry an old price sticker (`STICKER.odds`) | Sold at `STICKER.factor`: a bargain once peeled off at home | `MarketStock.priced` (its own hash) |
@@ -100,8 +102,10 @@ The kitchen radio ducks its music `DUCK_DB` under a jingle while the chronicle's
   remembers the last played); the platter spins up, the arm swings in and drops, side A plays from the sideboard through
   the walls (`vinyl/RecordTune`, an ambient `Voice` behind a `PointSound`: crackle and pops, the needle's thump, four
   tracks made up from the record and the track number in its console's style, an NES's pulses to a PS1's breakbeats;
-  the same tune every time). A click while it plays lifts the needle; at the side's end the arm returns by itself.
-  Original music only, invented sleeves.
+  the same tune every time). A click while it plays lifts the needle; at the side's end the arm returns by itself, and
+  the next click turns the record over: side B, four tracks of its own (`Soundtrack.sideB`). The pile of sleeves beside
+  it (`RecordSleeves`, over `Sideboard.sleevePile`) picks the next record out. A record on counts as the flat's noise
+  after ten (`building/flatNoise`). Original music only, invented sleeves.
 - **The home arcade cabinet** (`world/homeArcade`, the bedroom by the door, `homeArcade` from TV REPAIR): the hall's own
   `ArcadeCabinet` around a 7-in-1 board (`HomeArcadeGames`: a menu, then the game picked), `atHome` (no coin, no
   ticket, no medal, league or challenge), its scores on a table of its own (`HomeScores`, `KEYS.homeArcade`). No light
@@ -123,16 +127,26 @@ Every number is in `household/rules.ts` (`HOUSEHOLD`) or at the top of `outfits.
 A console bought broken (from a small ad's seller, docs/economy.md "Small ads and the seller's flat", or TV REPAIR's
 crate of spares-or-repair inside its door, one on `REPAIR.crateOdds` of game days) goes into the `Workshop`
 (`KEYS.workshop`) with its fault (`consoles.FAULTS` by platform: bent 72-pin connector, dirty contacts, a leaky
-capacitor, a blown fuse, corroded battery terminals, a dusty lens, a loose screen ribbon). It waits on the kitchen's
+capacitor, a blown fuse, corroded battery terminals, a dusty lens, a loose screen ribbon), each showing one of two
+ways (`consoles.faultOf`: its usual symptom and finding or `Fault.alt`'s, drawn from the console and its price, so the
+seller's word and the kitchen table agree). It waits on the kitchen's
 right-hand chair (`REPAIR_PLAN.kitchenChair`, once the table is bought: the table is the bench) with a TO FIX tag; a
-click opens the repair on the table (`RepairPanel`, a drawing of the console from above): the shell's screws out one
-by one, the shell lifted, the fault found on the board (a healthy part only "looks fine"), the right tool from the
-tray (a wrong one is a word), the fix by hand (scrub: hold the pointer down on it and work it clean; swap: the old part
-out, the new one seated; solder: each joint touched, a capacitor out on two legs and in on two more), the shell back,
-screwed shut, the power switch: the light, the chime, `Workshop.fix`. Shut halfway, nothing changes (it starts over).
-A mended console waits on the chair (WORKS!) until sold at TV REPAIR's counter (the WE BUY card, `ConsoleDeskPanel`,
-two clicks) for `REPAIR.resaleShare` of its value (`CONSOLES`). Bonus only: a broken console waits as long as it likes.
-Not kept to play: the TV stand already shows a console for every platform owned. Numbers in `repair/consoles.ts`.
+click opens the repair on the table (`RepairPanel`, a drawing of the console from above, under its job ticket with the
+seller's words and five pips for where the job is: open it, find the fault, mend it, close it, switch on): the shell's
+screws out one by one, the shell lifted, the fault found on the board (a healthy part only "looks fine", and shakes),
+the right tool from the tray (drawn in the bench's inks, `ui/repair/repairArt`; a wrong one is a word), the fix by hand
+(scrub: hold the pointer down on it and work it clean, or a stroke per arrow left / right, Enter or A on it; swap: the
+old part out, the new one seated; solder: each joint touched, a capacitor out on two legs and in on two more), the
+shell back, screwed shut, the power switch: the light, the chime, the ticket stamped WORKS, `Workshop.fix`. What can
+be touched at a step is a button laid over the drawing, so the mouse, the keys, a controller and a finger all work
+it; the tool in hand is drawn by the part it works on, and the repair manual's note under the bench says what was
+found and what is next. Shut halfway, the job waits as it was left (the
+screws out, the fault found) for the next opening, across a reload too (`Workshop.keepBench`, saved with the workshop).
+A mended console waits on the chair (WORKS!) until sold at TV REPAIR's counter (the WE BUY card, `ConsoleDeskPanel`:
+the repairer's face and words over the counter mat, each mended console drawn with his tag of what he pays and "Sell
+it", two clicks; the broken ones still at home on a note pinned beside it, each with its symptom) for `REPAIR.resaleShare` of its value (`CONSOLES`). Bonus only: a broken console waits as long as it likes.
+Not kept to play: the TV stand already shows a console for every platform owned. A mended Game Boy can also be given to
+the Nguyen twins, in their flat (docs/building.md "Small things about the building"). Numbers in `repair/consoles.ts`.
 A friend upstairs helps: with Théo at Friend, the find and tool steps name the faulty part and the tool
 (`RepairPanel`'s `hint`, `social/building/student.repairHint`).
 Or Karim mends it (`clerkTalk`'s `bench`, `streetShops/karim.benchFee`: 45 % of what he pays for it working): left on

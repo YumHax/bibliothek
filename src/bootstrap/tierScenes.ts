@@ -6,6 +6,7 @@ import { findPerson } from '@/social/people';
 import { playSceneNow, setSceneStage, tickScenes, welcomeKept, type SceneVisitor } from '@/social/scenes/tierScenes';
 import type { PersonId } from '@/social/types';
 import type { NoticeActions } from '@/notices';
+import { paintKeepsake, paintPhoto } from '@/world/kitchen/keepsakeTextures';
 import { randomLook } from '@/world/people/looks';
 import type { BuildingServices } from '@/world/stairwell/building';
 import type { StairLife } from '@/world/stairwell/noiseAndCat';
@@ -48,6 +49,15 @@ export function wireTierScenes(services: Services, engine: Engine, world: GameWo
     snapshot: () => {
       engine.renderFrame();
       return engine.renderer.domElement;
+    },
+    keepsakePicture: (def, giver, key, photo) => {
+      const canvas = paintKeepsake(def, giver, key);
+      if (def.kind === 'photo' && photo) {
+        const print = new Image();
+        print.onload = () => paintPhoto(canvas, print);
+        print.src = photo;
+      }
+      return canvas;
     },
     notices,
   });

@@ -133,11 +133,7 @@ export class BusRideScene {
     roundedPath(ctx, WINDOW.left * w, WINDOW.top * h, (WINDOW.right - WINDOW.left) * w, (WINDOW.bottom - WINDOW.top) * h, WINDOW.radius * w);
     ctx.clip();
     ctx.translate(0, bounce);
-    this.drawSky(ctx, w, h, f);
-    this.drawRoofs(ctx, w, h, f, night);
-    this.drawFacades(ctx, w, h, f, night);
-    this.drawRoad(ctx, w, h, night);
-    this.drawKerb(ctx, w, h, f, night);
+    this.drawTown(ctx, w, h, f, night);
     ctx.translate(0, -bounce);
     this.drawGlass(ctx, w, h, night);
     ctx.restore();
@@ -150,6 +146,22 @@ export class BusRideScene {
     vignette.addColorStop(1, `rgba(0,0,0,${0.35 + 0.2 * night})`);
     ctx.fillStyle = vignette;
     ctx.fillRect(0, 0, w, h);
+  }
+
+  /**
+   * The town going past alone, inside whatever clip the caller has laid: another vehicle's side window (the taxi's
+   * back seat, `ui/taxiRide`). The layers stand at the same heights of the canvas as through the bus's window.
+   */
+  drawStreet(ctx: CanvasRenderingContext2D, w: number, h: number, f: Pick<RideFrame, 't' | 'travelled' | 'speed' | 'daylight' | 'dusk'>): void {
+    this.drawTown(ctx, w, h, { ...f, stopping: false, board: '' }, 1 - f.daylight);
+  }
+
+  private drawTown(ctx: CanvasRenderingContext2D, w: number, h: number, f: RideFrame, night: number): void {
+    this.drawSky(ctx, w, h, f);
+    this.drawRoofs(ctx, w, h, f, night);
+    this.drawFacades(ctx, w, h, f, night);
+    this.drawRoad(ctx, w, h, night);
+    this.drawKerb(ctx, w, h, f, night);
   }
 
   private drawSky(ctx: CanvasRenderingContext2D, w: number, h: number, f: RideFrame): void {

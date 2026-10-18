@@ -4,6 +4,7 @@ import type { Pastime } from '@/household/pastime';
 import type { StoryStage } from '@/story/prototype';
 import { catSitter, type CatSitting } from './catSitter';
 import { claireReturns } from './claire';
+import { duboisCake } from './duboisCake';
 import { wireHaddad } from './haddad';
 import { wireMartin } from './martin';
 import { wireMeals } from './meals';
@@ -41,6 +42,7 @@ export function wireBuildingPerks(options: BuildingPerksOptions): void {
   wireSmallPerks(options.post);
   options.addUpdatable(new StairsRace(options, options.camera));
   options.onFlat(catSitter(options, options.cat));
+  options.onFlat(duboisCake(options));
   claireReturns(options);
   options.onNewGameDay(() => claireReturns(options));
 }

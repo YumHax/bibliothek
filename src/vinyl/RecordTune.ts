@@ -149,10 +149,15 @@ export class RecordTune extends Voice {
     return null;
   }
 
-  /** The needle goes down on `record`'s side A. */
-  play(record: Soundtrack): void {
+  /** The side on the platter now. */
+  side: 'A' | 'B' = 'A';
+
+  /** The needle goes down on `record`'s side `side`. */
+  play(record: Soundtrack, side: 'A' | 'B' = 'A'): void {
     this.record = record;
-    this.tracks = record.tracks.map((_, i) => makeTrack(record, i));
+    this.side = side;
+    // Side B's tracks are their own (another seed), not side A's again.
+    this.tracks = (side === 'A' ? record.tracks : record.sideB).map((_, i) => makeTrack(record, side === 'A' ? i : i + SIDE_B_SEED));
     this.startedAt = performance.now();
     this.cursor = 0;
     this.dropPending = true;
@@ -382,6 +387,9 @@ export class RecordTune extends Voice {
     return wave;
   }
 }
+
+/** Side B's tracks are drawn from this far along the record's seed, so they never repeat side A's. */
+const SIDE_B_SEED = 100;
 
 /** Everything a track is, drawn from its record and number: the same tune every time. */
 function makeTrack(record: Soundtrack, index: number): Track {

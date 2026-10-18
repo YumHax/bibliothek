@@ -52,49 +52,173 @@
     background: var(--touch-sprint-knob);
   }
 
-  /* On-screen action buttons, top centre, clear of the joystick and look zones. */
+  /*
+   * On-screen action buttons, top centre, clear of the joystick and look zones: one row of one fixed height (it never
+   * wraps, so the HUD under it never jumps), each button a pictogram over its word, the hands' main action lit, the
+   * collection and the menu apart at the end.
+   */
   .touch-bar {
+    --touch-btn-h: max(3.2rem, 48px);
     position: fixed;
     top: calc(var(--safe-top) + 0.5rem);
     left: 50%;
     transform: translateX(-50%);
     display: flex;
-    flex-wrap: wrap;
-    justify-content: center;
-    gap: 0.4rem;
-    max-width: calc(100vw - 2rem);
+    flex-wrap: nowrap;
+    align-items: center;
+    gap: 0.6rem;
+    height: var(--touch-btn-h);
+    max-width: calc(100vw - 1rem);
     padding: 0;
     margin: 0;
   }
+  .touch-bar__acts,
+  .touch-bar__always {
+    display: flex;
+    flex-wrap: nowrap;
+    gap: 0.3rem;
+    min-width: 0;
+  }
+  .touch-bar__always {
+    flex: none;
+    padding-left: 0.6rem;
+    border-left: 1px solid var(--ui-border);
+  }
+  .touch-bar__acts:not(:has(> :not([hidden]))) + .touch-bar__always { padding-left: 0; border-left: 0; }
   .touch-bar__btn {
-    min-width: max(3.4rem, 48px);
+    display: inline-flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 0.15rem;
+    flex: 0 1 auto;
     /* A fingertip's target, whatever the text size. */
-    min-height: max(2.6rem, 44px);
-    padding: 0.35rem 0.75rem;
-    border-radius: var(--ui-radius-pill);
+    min-width: max(2.8rem, 44px);
+    height: var(--touch-btn-h);
+    padding: 0.25rem 0.5rem 0.2rem;
+    box-sizing: border-box;
+    border-radius: var(--ui-radius-md);
     border: 1px solid var(--ui-border-strong);
     background: var(--ui-panel);
     color: var(--ui-text);
     font: inherit;
-    font-size: var(--fs-4);
     touch-action: manipulation;
     -webkit-tap-highlight-color: transparent;
     -webkit-user-select: none;
     user-select: none;
+    transition: background var(--dur-tap) var(--ui-ease), transform var(--dur-tap) var(--ui-ease);
+  }
+  .touch-bar__icon {
+    width: 1.25rem;
+    height: 1.25rem;
+    flex: none;
+  }
+  .touch-bar__word {
+    max-width: 5.5rem;
+    overflow: hidden;
+    font-size: var(--fs-1);
+    line-height: 1.1;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+  }
+  .touch-bar__btn--primary {
+    min-width: max(3.6rem, 56px);
+    border-color: var(--ui-accent);
+    background: color-mix(in srgb, var(--ui-accent) 32%, var(--ui-panel-solid));
+    color: var(--ui-white);
+  }
+  .touch-bar__btn--primary .touch-bar__word { font-weight: 700; }
+  /*
+   * A phone held upright (320–400 px): eight buttons cannot stand side by side at full size. The buttons narrow, the
+   * pictogram shrinks, a two-word label goes on two short lines (every button keeps its word), and Games folds into
+   * Menu (the pause menu has the collection). The row's height is the same, so nothing jumps.
+   */
+  @media (max-width: 400px) {
+    .touch-bar { gap: 0.3rem; }
+    .touch-bar__acts, .touch-bar__always { gap: 0.2rem; }
+    .touch-bar__always { padding-left: 0.3rem; }
+    .touch-bar__btn[data-action='collection'] { display: none; }
+    .touch-bar__btn { min-width: 38px; padding: 0.2rem 0.15rem; gap: 0.1rem; }
+    .touch-bar__btn--primary { min-width: 44px; }
+    .touch-bar__icon { width: 1rem; height: 1rem; }
+    .touch-bar__word { max-width: 3rem; font-size: var(--fs-0); line-height: 1; white-space: normal; text-align: center; overflow: visible; }
   }
   .touch-bar__btn:active,
   .touch-bar__btn.is-pressed {
     background: var(--ui-fill-hover);
+    transform: scale(0.94);
   }
 
-  /* Shown under the crosshair while a long press rotates the carried box: last in its column (`hud-slot--crosshair`). */
+  /*
+   * The pad on the glass, bottom right while a program's pad is held: A and B as a real pad's round buttons, Start and
+   * Select as its small pills under them (the stick, on the left half, is the d-pad). At a cabinet: its fire button.
+   */
+  .touch-pad {
+    position: fixed;
+    right: calc(var(--safe-right) + 1.2rem);
+    bottom: calc(var(--safe-bottom) + 1.2rem);
+    z-index: var(--z-controls);
+    display: grid;
+    grid-template-columns: repeat(2, 4.4rem);
+    grid-template-areas: 'b a' 'select start';
+    align-items: center;
+    justify-items: center;
+    gap: 0.8rem 0.6rem;
+  }
+  .touch-pad__btn {
+    border: 2px solid var(--shade-55);
+    color: var(--ui-white);
+    font: inherit;
+    font-weight: 700;
+    touch-action: none;
+    -webkit-tap-highlight-color: transparent;
+    -webkit-user-select: none;
+    user-select: none;
+    box-shadow: 0 3px 0 var(--shade-60), 0 4px 10px var(--shade-45);
+    transition: transform var(--dur-tap) var(--ui-ease), box-shadow var(--dur-tap) var(--ui-ease);
+  }
+  .touch-pad[data-mode='pad'] .touch-pad__btn[data-mode='cabinet'],
+  .touch-pad[data-mode='cabinet'] .touch-pad__btn[data-mode='pad'] { display: none; }
+  .touch-pad__btn--a,
+  .touch-pad__btn--b,
+  .touch-pad__btn--fire {
+    width: 4.2rem;
+    height: 4.2rem;
+    border-radius: 50%;
+    background: radial-gradient(circle at 35% 30%, color-mix(in srgb, var(--ui-danger) 70%, var(--ui-white)), var(--ui-danger) 60%);
+    font-size: var(--fs-7);
+  }
+  .touch-pad__btn--a { grid-area: a; translate: 0 -0.8rem; }
+  .touch-pad__btn--b { grid-area: b; translate: 0 0.4rem; }
+  .touch-pad__btn--fire { grid-column: 1 / -1; width: 5.4rem; height: 5.4rem; font-size: var(--fs-5); letter-spacing: 0.08em; text-transform: uppercase; }
+  .touch-pad__btn--select,
+  .touch-pad__btn--start {
+    min-width: 4rem;
+    height: 2rem;
+    padding: 0 0.6rem;
+    border-radius: var(--ui-radius-pill);
+    background: var(--ui-panel-solid);
+    font-size: var(--fs-1);
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+  .touch-pad__btn--select { grid-area: select; }
+  .touch-pad__btn--start { grid-area: start; }
+  .touch-pad__btn.is-pressed {
+    transform: translateY(2px) scale(0.96);
+    box-shadow: 0 1px 0 var(--shade-60), 0 2px 6px var(--shade-45);
+  }
+
+  /* Shown under the crosshair while a long press turns the box in hand: last in its column (`hud-slot--crosshair`), the prompt line's look. */
   .touch-badge {
     order: 2;
-    padding: 0.25rem 0.6rem;
-    border-radius: var(--ui-radius-sm);
-    background: var(--ui-panel);
+    padding: 0.3rem 0.8rem;
+    border-radius: var(--ui-radius-pill);
+    border: 1px solid var(--ui-border);
+    background: var(--ui-panel-glass);
     color: var(--ui-text);
     font-size: var(--fs-3);
+    box-shadow: var(--ui-shadow);
     pointer-events: none;
   }
 }

@@ -5,11 +5,12 @@ import type { SessionActions } from '@/game/SessionActions';
 import { audioBus, startedAudioContext } from '@/audio/audioContext';
 import type { OccupancyAware } from '../Furniture';
 import { boxMesh } from '../meshUtils';
-import { paint, standard } from '../materials/palette';
-import { PROUD } from '../props/joinery';
+import { standard } from '../materials/palette';
 import { Prop } from '../props/Prop';
 import { arriveNextAt } from '../travel/nextArrival';
-import { LiftButton } from '../stairwell/LiftButton';
+import { LiftButton, panelButton } from '../stairwell/LiftButton';
+import { FoldingGate } from '../stairwell/FoldingGate';
+import { buildCarShell, floorMark, panelSpot } from '../stairwell/liftBody';
 import { STAIRWELL_PLAN } from '../stairwell/stairwellPlan'; // imports-ok: the attic's lift stop stands over the stairwell's car
 import { landingY } from '@/world/measures/building';
 import { ATTIC_PLAN as plan } from './atticPlan';
@@ -17,10 +18,7 @@ import { ATTIC_PLAN as plan } from './atticPlan';
 const GATE_SECONDS = 0.45;
 /** Seconds between the gate shutting and the view going dark on the way down. */
 const SINK_DELAY = 0.7;
-const WOOD = paint(0x5a3120, 0.45);
 const IRON = standard({ color: 0x1c1d20, roughness: 0.45, metalness: 0 });
-/** The gate's bars: this many, folding towards the west post. */
-const BARS = 9;
 
 type Phase = 'shut' | 'opening' | 'open' | 'closing' | 'leaving';
 
@@ -36,7 +34,7 @@ export class AtticLift extends Prop implements Updatable, OccupancyAware {
   readonly contactShadow = false;
   readonly colliders: THREE.Box3[] = [];
   readonly button: LiftButton;
-  private readonly gate = new THREE.Group();
+  private readonly gate: FoldingGate;
   private readonly lamp = new THREE.MeshBasicMaterial({ color: 0xffe2b0 });
   private phase: Phase = 'shut';
   private open = 0;
@@ -56,33 +54,14 @@ export class AtticLift extends Prop implements Updatable, OccupancyAware {
     this.name = 'AtticLift';
     const { car } = plan;
     const w = car.x1 - car.x0;
-    const d = car.z1 - car.z0;
-    const cx = (car.x0 + car.x1) / 2;
-    const cz = (car.z0 + car.z1) / 2;
     const h = car.height;
-    // The car: floor, three wooden walls, its ceiling and lamp, the mirror, the brass panel.
-    this.add(boxMesh(w, 0.08, d, WOOD, { x: cx, y: -0.04 + PROUD, z: cz }));
-    this.add(boxMesh(0.03, h, d, WOOD, { x: car.x0 + 0.015, y: h / 2, z: cz }));
-    this.add(boxMesh(0.03, h, d, WOOD, { x: car.x1 - 0.015, y: h / 2, z: cz }));
-    this.add(boxMesh(w, h, 0.03, WOOD, { x: cx, y: h / 2, z: car.z0 + 0.015 }));
-    // The roof up to the lintel's plaster (5 cm over the car, `AtticShell`), not into its plane.
-    this.add(boxMesh(w, 0.05, d, WOOD, { x: cx, y: h + 0.025, z: cz }));
-    const mirror = new THREE.Mesh(new THREE.PlaneGeometry(w * 0.6, 1.1), standard({ color: 0xa8b0b4, metalness: 1, roughness: 0.25 }));
-    mirror.position.set(cx, 1.35, car.z0 + 0.03 + PROUD);
-    this.add(mirror);
-    const lamp = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.12, 0.04, 16), this.lamp);
-    lamp.position.set(cx, h - 0.02, cz);
-    this.add(lamp);
-    this.add(boxMesh(0.02, 0.5, 0.16, standard({ color: 0xc9a75b, metalness: 1, roughness: 0.32 }), { x: car.x1 - 0.035, y: 1.2, z: cz }));
+    // The car, the stairwell's own (`stairwell/liftBody`): panelled walls, mirror, dome lamp, brass panel.
+    buildCarShell(this, car, this.lamp);
     // The cage's posts and its top, up into the dark of the winding room.
     for (const x of [car.x0 - 0.05, car.x1 + 0.05]) this.add(boxMesh(0.05, plan.corridorHeight, 0.05, IRON, { x, y: plan.corridorHeight / 2, z: car.z1 + 0.04 }));
-    // The folding gate: bars from its west post, squeezed together as it opens.
+    // The folding gate, from its west post.
+    this.gate = new FoldingGate(w, h);
     this.gate.position.set(car.x0, 0, car.z1 + 0.04);
-    for (let i = 0; i < BARS; i++) {
-      const bar = boxMesh(0.012, h, 0.012, IRON, { x: ((i + 0.5) / BARS) * w, y: h / 2 });
-      this.gate.add(bar);
-    }
-    for (const y of [0.1, h / 2, h - 0.08]) this.gate.add(boxMesh(w, 0.02, 0.01, IRON, { x: w / 2, y }));
     this.add(this.gate);
     // The car's walls hold the player in; the gate is its own collider, there while it is not open.
     const box = (x0: number, z0: number, x1: number, z1: number): void => {
@@ -91,13 +70,15 @@ export class AtticLift extends Prop implements Updatable, OccupancyAware {
     box(car.x0 - 0.06, car.z0 - 0.06, car.x0 + 0.03, car.z1);
     box(car.x1 - 0.03, car.z0 - 0.06, car.x1 + 0.06, car.z1);
     box(car.x0 - 0.06, car.z0 - 0.06, car.x1 + 0.06, car.z0 + 0.03);
-    // Its one live button, on the panel facing in.
+    // Its one live button, the 5th floor's, where it is on the stairwell car's panel.
     this.button = new LiftButton(
       () => (this.phase === 'leaving' || this.phase === 'closing' ? 'Going down…' : 'The 5th floor · go down'),
       (session) => this.goDown(session),
+      panelButton(floorMark(0)),
     );
     this.button.rotation.y = -Math.PI / 2;
-    this.button.position.set(car.x1 - 0.047, 1.3, cz + 0.03);
+    const spot = panelSpot(car, 0);
+    this.button.position.set(spot.x, spot.y, spot.z);
   }
 
   override get footprint(): THREE.Box3 {
@@ -143,7 +124,7 @@ export class AtticLift extends Prop implements Updatable, OccupancyAware {
       default:
         break;
     }
-    this.gate.scale.x = 1 - 0.85 * this.open;
+    this.gate.setOpen(this.open);
     const flicker = this.phase === 'leaving' && Math.sin(this.clock * 31) > 0.4 ? 0.3 : 1;
     this.lamp.color.setRGB(flicker, 0.89 * flicker, 0.69 * flicker);
     const shut = this.phase !== 'open';

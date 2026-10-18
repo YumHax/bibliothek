@@ -27,9 +27,9 @@ const GENERAL = [
   "Everything's tested. Well, most of it.",
   'The whole crate came from a house clearance.',
   'Bought half of these new in the nineties. Never finished them.',
-  'Pick one up and make me an offer. H, like "haggle".',
-  "Short today? R and I'll hold it for you, small deposit.",
-  "Got something to swap? X, and let's see what you've brought.",
+  'Pick one up and make me an offer. Go on, haggle.',
+  "Short today? Say the word and I'll hold it for you, small deposit.",
+  "Got something to swap? Let's see what you've brought.",
   'Always open the box before you pay. Always. You never know.',
 ];
 
@@ -132,7 +132,7 @@ function thePride({ items }: StallState): string[] {
   const pride = showpiece ?? dearest;
   if (pride) lines.push(pride.priced ? `${pride.game.title}? Pride of the stall. ${formatCoins(pride.price)} and worth every one.` : `${pride.game.title}? Still working out what that one's worth.`);
   const cheapest = priced.reduce<StockItem | null>((best, item) => (!best || item.price < best.price ? item : best), null);
-  if (cheapest && cheapest !== pride) lines.push(`Short of coins? ${cheapest.game.title} is only ${cheapest.price}.`);
+  if (cheapest && cheapest !== pride) lines.push(`Short of coins? ${cheapest.game.title} is only ${formatCoins(cheapest.price)}.`);
   return lines;
 }
 

@@ -26,6 +26,19 @@ export interface MemeVisitDeps {
   printId: string;
   /** A frame rendered now (the 3D view as the player sees it), for her photo; null when there is none. */
   frame(): HTMLCanvasElement | null;
+  /** Something bought for the kitchen (the table, the rug, the appliances): what her word on it is. */
+  kitchenDressed(): boolean;
+  /** Her promised cake on the kitchen table (later visits): put out, or one was out already. */
+  bringCake(): 'brought' | 'there';
+  /** MOONPOST, Félix's grey cart, ran to its end on the TV. */
+  prototypeEnded(): boolean;
+}
+
+/** How things went, as she would bring it up at the flat: Gaspard's end, the grey cart, the Game Boy. */
+function reflectionsOf(meme: MemeVisitDeps): string[] {
+  const t = EPILOGUE_TALK.visit.reflect;
+  const end = meme.family.gaspardEnd;
+  return [...(end ? [t[end]] : []), ...(meme.prototypeEnded() ? [t.prototype] : []), ...(meme.family.gameBoy === 'given' ? [t.gameBoy] : [])];
 }
 
 /**
@@ -45,6 +58,8 @@ export class MemeVisit {
   private photo = false;
   private finished = false;
   private came = false;
+  /** How things went, in her words: one said once seated (`sat`), the rest for her chat. */
+  private readonly reflections: string[];
 
   constructor(
     private readonly deps: GatheringDeps,
@@ -54,12 +69,13 @@ export class MemeVisit {
     const { host } = deps;
     const visit = this;
     this.first = !meme.family.visited;
+    this.reflections = reflectionsOf(meme);
     this.party = new Party(host, {
-      enterLine: () => (visit.first ? EPILOGUE_TALK.visit.kitchen : host.line('meme:again', EPILOGUE_TALK.visit.enterAgain)),
+      enterLine: () => (visit.first ? (meme.kitchenDressed() ? EPILOGUE_TALK.visit.kitchen : EPILOGUE_TALK.visit.kitchenBare) : visit.again()),
       browse: (_, kind, at, yaw) => visit.browse(kind, at, yaw),
       sitLine: () => visit.sat(),
       leaveLine: () => host.line('meme:leave', EPILOGUE_TALK.visit.leave),
-      chat: () => (visit.photoOpen() ? EPILOGUE_TALK.visit.photoAsk : host.line('meme:chat', EPILOGUE_TALK.visit.chat)),
+      chat: () => (visit.photoOpen() ? EPILOGUE_TALK.visit.photoAsk : (visit.reflections.shift() ?? host.line('meme:chat', EPILOGUE_TALK.visit.chat))),
       visitOptions: () => ({ sits: true, stops: () => visit.route(), ...(meme.family.photoTaken ? {} : { stayUntil: { done: () => visit.photo, max: MEME_VISIT.waitPhoto } }) }),
       cameIn: () => visit.letIn(),
       gaveUp: () => {
@@ -104,7 +120,15 @@ export class MemeVisit {
       // Her photo in the album (a frame that could not be read leaves it for her next visit).
       if (this.photo && this.meme.family.photoTaken) host.options.notices?.reward({ ...EPILOGUE_TALK.visit.reward, big: true });
     }
+    // No photo yet (not asked in time, or a frame that would not read): she comes back next Saturday for it.
+    if (!this.meme.family.photoTaken) this.meme.family.planVisit(this.day);
     nudge(MEME_ID, { warmth: 8, trust: 5, why: 'you had her round', reason: 'flatVisit', day: this.day, memory: this.first ? 'I came to see the flat' : undefined, memoryWeight: 20 });
+  }
+
+  /** A later visit's first word: the cake she promised ("Same time next month? I'll bring a cake"), on the kitchen table. */
+  private again(): string {
+    const { enterAgain, cake, cakeThere } = EPILOGUE_TALK.visit;
+    return `${enterAgain} ${this.meme.bringCake() === 'brought' ? cake : cakeThere}`;
   }
 
   /** Let in: her visit counted. */

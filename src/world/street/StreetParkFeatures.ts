@@ -5,7 +5,9 @@ import { PARK_TREES } from '../city/trees';
 import { TriBuilder } from './relief/TriBuilder';
 import { snowCovered } from './snowCover';
 import type { Vec2 } from './streetPlan';
-import { FLAT_IN_STREET, LAWN_REACH, PARK_STREET, PARK_WALK, STREET_ENDS } from '@/world/measures/street';
+import { BANDSTAND_WALK, FLAT_IN_STREET, LAWN_REACH, PARK_STREET, PARK_WALK, STREET_ENDS } from '@/world/measures/street';
+
+type Area = (typeof BANDSTAND_WALK)[number];
 import { standard } from '../materials/palette';
 import { GROUND, onSurface } from '../surface/layers';
 import { rippled, type RippleUniforms } from './waterRipples';
@@ -31,6 +33,12 @@ const SHRUB = { every: 2.4, size: [1.3, 2.3] as [number, number], height: 1.35 }
 /** The hoop-topped fence round the gardens one walks in (`PARK_WALK`): its height, a post every so many metres. */
 const HOOPS = { height: 0.62, every: 1.1, collide: 1.2 };
 
+/**
+ * The bandstand's steps: the way they face (yaw, the railing's gap: -x and +z), how far out their upper and lower
+ * treads' middles lie from its middle (m). The plinth stands 0.6 m over the lawn.
+ */
+const BANDSTAND_STEPS = { yaw: -Math.PI / 4, upper: 3.2, lower: 3.925 } as const;
+
 /** The swings' beam over the playground (metres over the lawn), the chains' length to the seat. */
 const SWING = { beam: 2.3, chain: 1.82, omega: Math.sqrt(9.81 / 1.82) };
 
@@ -42,8 +50,12 @@ const SWING = { beam: 2.3, chain: 1.82, omega: Math.sqrt(9.81 / 1.82) };
 export interface PlaygroundSwing {
   readonly seat: THREE.Vector3;
   readonly rest: THREE.Vector3;
+  /** Where its chains hang from on the beam (the park's frame). */
+  readonly hang: THREE.Vector3;
   angle: number;
   push: number;
+  /** The player sits on it (`details/SwingSeat`): no child takes it. */
+  player: boolean;
 }
 
 /** What the park adds besides its paths and beds: what moves (the fountain's plume, the swings) and what collides. */
@@ -209,11 +221,23 @@ function buildFountain({ parent, lawnY, add }: Site): THREE.Mesh {
 }
 
 /** The bandstand: an octagonal plinth, slim iron posts, a railing (not on the steps' side), a copper roof and finial. */
-function buildBandstand({ lawnY, painted, add }: Site): void {
+function buildBandstand({ lawnY, painted, add, walkable, box }: Site): void {
   const [bx, bz] = parkInStreet([BANDSTAND.x, BANDSTAND.z]);
   const b = new THREE.Matrix4().makeTranslation(bx, lawnY, bz);
   const r = BANDSTAND.width / 2;
   add(b, new THREE.CylinderGeometry(r + 0.2, r + 0.3, 0.6, 8).translate(0, 0.3, 0), '#a8a094');
+  // Two stone steps up to the railing's gap (between the third and fourth posts, looking out north-west), to sit on.
+  const steps = b.clone().multiply(new THREE.Matrix4().makeRotationY(BANDSTAND_STEPS.yaw));
+  painted.box(steps, 0, 0.2, BANDSTAND_STEPS.upper, 1.6, 0.4, 1.05, '#a8a094').box(steps, 0, 0.1, BANDSTAND_STEPS.lower, 1.6, 0.2, 0.4, '#9e968a');
+  // Walked round once the lane reaches it: the plinth and its steps collide.
+  if (walkable) {
+    // The octagon (corners on the axes and the diagonals) as a square and a cross of boxes inside it.
+    const inner = (r + 0.3) * Math.SQRT1_2;
+    box(bx, bz, inner, inner, 3.2);
+    box(bx, bz, r - 0.2, 1, 3.2);
+    box(bx, bz, 1, r - 0.2, 3.2);
+    box(bx + Math.sin(BANDSTAND_STEPS.yaw) * BANDSTAND_STEPS.lower, bz + Math.cos(BANDSTAND_STEPS.yaw) * BANDSTAND_STEPS.lower, 0.55, 0.55, 0.4);
+  }
   add(b, new THREE.CylinderGeometry(r + 0.05, r + 0.05, 0.06, 8).translate(0, 0.63, 0), '#7a5a3a');
   for (let i = 0; i < 8; i++) {
     const a = (i / 8) * Math.PI * 2 + Math.PI / 8;
@@ -268,7 +292,7 @@ function buildPlayground(site: Site): void {
       pivot.add(mesh);
       parent.add(pivot);
       const rest = new THREE.Vector3(pivot.position.x, pivot.position.y - SWING.chain, pivot.position.z);
-      site.swings.push({ pivot, seat: rest.clone(), rest, angle: 0, push: 0, phase: site.random() * 6, amplitude: 0 });
+      site.swings.push({ pivot, seat: rest.clone(), rest, hang: pivot.position, angle: 0, push: 0, player: false, phase: site.random() * 6, amplitude: 0 });
     }
   }
   // The slide: a ladder up to a platform, the chute down.
@@ -490,7 +514,7 @@ function buildShrubbery({ parent, lawnY, random }: Site): void {
 
 /** Whether (x, z) is in the walked gardens. */
 function inWalk(x: number, z: number): boolean {
-  return x >= PARK_WALK.minX && x <= PARK_WALK.maxX && z >= PARK_WALK.minZ && z <= PARK_WALK.maxZ;
+  return [PARK_WALK, ...BANDSTAND_WALK].some((a) => x >= a.minX && x <= a.maxX && z >= a.minZ && z <= a.maxZ);
 }
 
 /**
@@ -500,10 +524,17 @@ function inWalk(x: number, z: number): boolean {
  */
 function buildHoopFence(painted: TriBuilder, colliders: THREE.Box3[], lawnY: number): void {
   const { minX, maxX, minZ, maxZ } = PARK_WALK;
+  // The lane to the bandstand leaves the gardens' far corner (`BANDSTAND_WALK`): their west fence runs on along it, the
+  // round of lawn about the bandstand is fenced the same, and the gardens' north fence starts past the lane.
+  const [lane, round] = BANDSTAND_WALK as [Area, Area];
   const runs: [Vec2, Vec2][] = [
     [[maxX + 0.3, minZ], [minX, minZ]],
-    [[minX, minZ], [minX, maxZ]],
-    [[minX, maxZ], [maxX + 0.3, maxZ]],
+    [[minX, minZ], [minX, lane.maxZ]],
+    [[lane.maxX, maxZ], [maxX + 0.3, maxZ]],
+    [[lane.maxX, maxZ], [lane.maxX, round.maxZ]],
+    [[lane.minX, round.minZ], [round.minX, round.minZ]],
+    [[round.minX, round.minZ], [round.minX, round.maxZ]],
+    [[round.minX, round.maxZ], [round.maxX, round.maxZ]],
   ];
   const hoop = new THREE.TorusGeometry(HOOPS.every / 2, 0.012, 4, 10, Math.PI);
   for (const [a, b] of runs) {
