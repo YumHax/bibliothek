@@ -6,8 +6,9 @@ earned: the front door opens on the building's stairwell, whose street door tele
 mini-games pay tickets, swapped for prizes or coins, and a flea market that sells games). So is the flat: it starts bare
 (one bookcase, one game, the TV, a mattress; no cat), the rest is bought in Front Street's shops (docs/economy.md "The
 bare flat"). `?debug` plays on its own save with the seed collection, the editor's add pane and every progression done
-(social, keys, attic, hunt, story, market, arcade); its panel (key left of 1, or F8) switches each one, sets the votes, runs
-events and travels anywhere (docs/checks.md "Debug mode").
+(social, keys, attic, hunt, story, market, arcade); its panel (key left of 1, or F8, a search over every page) restarts
+the debug save from any act, sets each progression to any step, everyone's tier, money, day, hour and weather, adds any
+game, runs events and travels anywhere (docs/checks.md "Debug mode").
 
 ## Commands
 

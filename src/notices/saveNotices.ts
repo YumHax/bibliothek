@@ -57,7 +57,7 @@ const SAVE_NAMES: Readonly<Record<keyof typeof KEYS, string>> = {
   playerInitials: 'your initials', albumFinds: 'Mémé’s album', albumPrints: 'your photos in Mémé’s album', memoryStills: 'the album’s memory photos',
   photoRoll: 'your last photos', grandmaPastimes: 'your afternoons with Mémé', grandmaBread: 'Mémé’s bread', sharedRide: 'your bus rides with Mémé',
   // Notices.
-  tipsSeen: 'the tips you have seen', saidLog: 'what was said', debugProgress: 'the debug switches',
+  tipsSeen: 'the tips you have seen', saidLog: 'what was said', debugProgress: 'the debug switches', debugStart: 'the debug start point',
   // Caches (not progress, named all the same).
   longplayCache: 'the longplay search', fameCache: 'the games’ fame', scanCache: 'the box scans found', artMisses: 'the missing box art',
   reviewsCache: 'the press reviews', loadTimesCache: 'the loading times', travelCardsCache: 'the travel cards’ photos',

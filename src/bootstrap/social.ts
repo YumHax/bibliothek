@@ -166,7 +166,7 @@ export function createSocial(services: Services, container: HTMLElement, notices
     player: () => player?.getEyePosition() ?? null,
   });
   // The first day: Mme Pereira's welcome, the first promise (docs/social.md "The first day").
-  startFirstWelcome({ day: () => today.gameDay, onNewDay: (cb) => void today.onNewGameDay(cb), notices, note: (text) => journal.note('note', text), enabled: !services.debug && !services.returningPlayer });
+  startFirstWelcome({ day: () => today.gameDay, onNewDay: (cb) => void today.onNewGameDay(cb), notices, note: (text) => journal.note('note', text), enabled: services.playsOpening && !services.returningPlayer });
   // Victor Crane: a kind word after beating him, a gloat; his wager; his collection shown at the end of the arc (docs/social.md "Victor").
   wireRivalry({ rival: services.lots.rival, collection, notices, pool: SEED_GAMES, day: () => today.gameDay, onNewDay: (cb) => void today.onNewGameDay(cb) });
   // Front Street's moments (the stray come home, a secret, a find) count in the collector's book; a passer-by's lead goes in the journal.

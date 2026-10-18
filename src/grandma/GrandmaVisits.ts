@@ -274,6 +274,12 @@ export class GrandmaVisits {
     this.commit({ ...this.state, seen: MEMORIES.map((memory) => memory.id) });
   }
 
+  /** The album's first `count` memories seen, the later ones not (at least one visit made when any is). */
+  debugSeeFirst(count: number): void {
+    const seen = MEMORIES.slice(0, Math.max(0, count)).map((memory) => memory.id);
+    this.commit({ ...this.state, seen, visits: seen.length ? Math.max(1, this.state.visits) : this.state.visits });
+  }
+
   /** The Sunday envelope given again on the next Sunday visit (today's, if today is one). */
   debugSundayAgain(): void {
     this.commit({ ...this.state, envelope: null });

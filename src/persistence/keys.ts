@@ -239,6 +239,8 @@ export const KEYS = {
   friendsLife: save('friendsLife.v1'),
   /** `?debug` only: the progressions its panel switched off, which the debug save then never unlocks again (`cheats/progress`). */
   debugProgress: save('debugProgress.v1'),
+  /** `?debug` only: the start point its panel last started the debug save from (the opening on or off, which collection), its dials still to set (`cheats/start`). */
+  debugStart: save('debugStart.v1'),
   /** The park's gardens: the ducks fed, the wishes made in the pond, the token found (`park/parkVisits`). */
   parkVisits: save('parkVisits.v1'),
   /** The Grand Flea Fair's raffle on Front Street: the tickets bought on the Fair's day, the prize taken (`fair/raffle`). */

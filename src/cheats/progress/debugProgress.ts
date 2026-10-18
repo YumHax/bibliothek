@@ -25,6 +25,12 @@ export function debugWants(id: string): boolean {
   return !switchedOff().has(id);
 }
 
+/** A start point's progressions (`cheats/start`): every other one switched off, so the next start-up does these only. */
+export function keepOnly(done: readonly string[]): void {
+  declined = new Set(PROGRESSIONS.map((p) => p.id).filter((id) => !done.includes(id)));
+  store.save([...declined]);
+}
+
 /** Start-up, under `?debug`: every progression not switched off is done now if it is not yet. Returns those it did. */
 export function unlockDebugProgress(subjects: DebugSubjects): string[] {
   const done: string[] = [];

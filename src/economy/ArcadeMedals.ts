@@ -129,6 +129,14 @@ export class ArcadeMedals {
     return this.earned(gameId).includes('gold') ? MASTERY.gold : 0;
   }
 
+  /** `?debug`'s dial: `gameId`'s medals set to the first `count` tiers outright (0 none, 3 gold), paid nothing. */
+  debugSetMedals(gameId: string, count: number): void {
+    const tiers = TIERS.slice(0, Math.max(0, Math.min(TIERS.length, count)));
+    const machine: MachineMedals = tiers.includes('gold') ? { tiers, platinumAt: platinumOf(this.thresholds(gameId).gold) } : { tiers };
+    this.state = { ...this.state, machines: { ...this.state.machines, [gameId]: machine } };
+    this.commit();
+  }
+
   /** How many medals the player holds in all, platinum included (the league board and the attendant mention it). */
   get total(): number {
     return Object.values(this.state.machines).reduce((n, m) => n + m.tiers.length + (m.platinum ? 1 : 0), 0);

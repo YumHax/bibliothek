@@ -46,13 +46,13 @@ export function registerLabScenes(hooks: LabScenes): void {
 }
 
 /** One button of the lab: what it says, what it does (its result in words for the panel's status line). */
-export interface LabEvent {
+interface LabEvent {
   label: string;
   run(): string;
 }
 
 /** The lab's buttons, by group. */
-export interface LabGroup {
+interface LabGroup {
   label: string;
   events: readonly LabEvent[];
 }

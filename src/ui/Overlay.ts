@@ -93,12 +93,13 @@ const BACK = html`<button type="button" class="ui-btn menu__back" data-nav data-
 /** The busy button's ticking ellipsis. */
 const DOTS = html`<span class="menu__dots" aria-hidden="true"></span>`;
 
-/** The pause menu's groups, in order: what the player has, going out, the room they are in. */
-type PauseGroup = 'yours' | 'out' | 'room';
+/** The pause menu's groups, in order: what the player has, going out, the room they are in; `?debug`'s console last. */
+type PauseGroup = 'yours' | 'out' | 'room' | 'debug';
 const PAUSE_GROUPS: readonly { id: PauseGroup; label: string }[] = [
   { id: 'yours', label: 'Your things' },
   { id: 'out', label: 'Going out' },
   { id: 'room', label: 'This room' },
+  { id: 'debug', label: 'Debug' },
 ];
 
 /**

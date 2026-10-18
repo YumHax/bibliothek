@@ -11,13 +11,13 @@ import type { BuiltWorld, GameWorld } from './world';
 
 /**
  * The opening cutscene (docs/story.md "The opening"), asked first on the way into the room (`PointerLockFlow.setGate`):
- * on a new game (no progress, not `?debug`, not seen yet), or always with `?intro`, and only from the flat. Wiring only.
+ * on a new game (no progress, not `?debug` unless its panel started one, not seen yet), or always with `?intro`, and only from the flat. Wiring only.
  */
 export function createIntro(services: Services, parts: { player: FirstPersonController; ui: Ui; built: BuiltWorld; world: GameWorld }): void {
-  const { engine, input, container, debug, returningPlayer } = services;
+  const { engine, input, container, playsOpening, returningPlayer } = services;
   const { player, ui, built, world } = parts;
   const forced = flag('intro');
-  if (!forced && (debug || returningPlayer || introSeen())) return;
+  if (!forced && (!playsOpening || returningPlayer || introSeen())) return;
   let state: 'waiting' | 'playing' | 'done' = 'waiting';
   // The covers the dream's shelves wear: the built-in games with baked art, mixed so no shelf is one platform.
   const games = shuffled(seededRng('intro-covers'), SEED_GAMES.filter((game) => game.externalIds?.libretroName));

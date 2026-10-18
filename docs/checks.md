@@ -227,20 +227,52 @@ the index was just produced by the same code, with the reason in a comment), and
 
 Not a check but the way to reach every feature at once, on a save of its own (`persistence/keys`: every key under
 `bibliothek.debug.`, the player's real save never read or written). It starts with the seed collection and the homebrew
-carts, the editor's add pane, no first day and no opening, and every progression done: `src/cheats/progress/progressions.ts`
+carts, the editor's add pane, no first day and no opening, and every progression done (until the panel starts it
+from another point, *Start from* below): `src/cheats/progress/progressions.ts`
 lists them (the furnished flat, the concierge and the cellar key, the attic's code, cabinet and chest, the aerial's
 channels, the treasure hunt, everyone met as a close friend with their number, facts and traits (quietly: no banner or journal line each), the grey cart, Félix's
 notebook, the market's top reputation and best-customer standing at every stall, gold on every arcade machine, every
 prize), each with `on` / `unlock` / `lock`. `bootstrap/services` unlocks whatever does not hold yet at each start-up
 (`debugProgress.unlockDebugProgress`), before the trail reads its cart.
 
-The debug panel (`ui/debug/DebugPanel`, the key left of 1 or F8, `bibliothek.debugPanel()`): *Progress* switches each
-progression (a switch turned off is undone and stays off in the debug save, `KEYS.debugProgress`; "Apply and reload"),
-*Votes* sets the co-owners' decisions outright (`coproState.decideResolution`), *Now* makes things happen (power cut, an
-endless night, the neighbours' party today, the estate sale today, a bulky-waste day in the courtyard, 5000 coins, 500 tickets), *Go to* travels to any
-stop, those only their own door reaches included (`Travel.everyStop`). In the console besides: `bibliothek.coins(n)`,
-`blackout()`, `endlessStairs()`, `party()`, `estateSale()`, `bulkyDay()`, `social.table()` / `social.set(id, warmth, trust)`,
-`zfight()`; typing 5 0 0 0 still gives 5000 coins. A new progression is one entry in `PROGRESSIONS`.
+The debug console (`ui/debug/DebugPanel`: the key left of 1 or F8, the pause menu's *Debug console*,
+`bibliothek.debugPanel()`) is a wide card in two panes: its sections down a rail with the state of things under them
+(game day and hour, wallet, weather, the start point), a search in the header whose words find any line of any section
+(a person, a piece of furniture, an event, a place, a game), and the section's cards on the right. Its controls are its
+own: switches, named segments for a few short levels, ladders of steps (‹ › and a rung per level, a person's in their
+tier's colours), steppers with presets, tiles that tick when done; the status line sits by the footer's buttons. A
+line is a `DebugEntry` (an action, a dial or a number; a `hint` under it, a `visual`: a face, a cover, a place's
+photo). Its sections:
+
+- *Restart from* (`cheats/start`): the debug save wiped (the real save never) and started again from a point of the
+  story's acts (`START_POINTS`: a new game with the opening and the first day, the bare flat, act 2 the street, act 3
+  the building, act 4 the trail, everything done). A point names its progressions done (every other one switched off),
+  its dials' levels, its coins, whether the opening plays and which collection (seed or starter) the save starts with;
+  `debugStart` keeps that (`KEYS.debugStart`) for `bootstrap/services` (`playsOpening`, the collection) and sets the
+  dials once the page is back (`takePendingStart`, one more reload when a dial is read as the world is built). Drawn
+  as the story's line, the point the save came from marked. Press twice. A new start point is one entry.
+- *Progress*: each progression's switch (a switch turned off is undone and stays off in the debug save,
+  `KEYS.debugProgress`; "Apply and reload"), then the dials (`cheats/dials` `buildDials`): a progression set to any of
+  its steps at once, quietly: Mémé's memories seen, the prototype's trail stage (the cart added or taken away with it),
+  the market's reputation and each stall's custom, each machine's medals, each piece of the flat (shows after a
+  reload); the co-owners' votes set outright (`coproState.decideResolution`). The stores' own `debug*` setters do it
+  (`HomeUpgrades.debugSetCount`, `ArcadeMedals.debugSetMedals`, `MarketStanding.debugSet`, `GrandmaVisits.debugSeeFirst`,
+  `PrototypeStory.debugSetStage`). A new dial is one entry in `buildDials`, with an id a start point can name.
+- *People*: a card each, their face in their tier's colour, everyone's tier, from nemesis to close friend (`setStanding`, quietly, well inside the tier).
+- *Money & time*: the coins and tickets set exactly, the hour jumped (no day passes), the next morning, a week or
+  any number of days wound on (`DayNight.advanceTo`: every day passes, so everything that counts them sees it), the
+  weather held to one kind or let go (`Weather.pin`).
+- *Collection*: the shelves filled past their room, a parcel in the hall, the collection emptied, the newest games;
+  with a search, any built-in game added or any game taken away, by its cover.
+- *Happenings* make things happen, by group (power cut, an endless night, the neighbours' party, the estate sale, a
+  bulky-waste day, the kids, a film night; the cat; Mémé, her keepsakes, her ways, the family). *Travel* goes to
+  any stop, those only their own door reaches included (`Travel.everyStop`), each by its travel card's photo. *Tools*: z-fighting here, everyone's
+  standing in the console, the render of before.
+
+In the console besides: `bibliothek.coins(n)`, `blackout()`, `endlessStairs()`, `party()`, `estateSale()`,
+`bulkyDay()`, `social.table()` / `social.set(id, warmth, trust)`, `zfight()`; typing 5 0 0 0 still gives 5000 coins. A
+new progression is one entry in `PROGRESSIONS`; a line of the panel is a `DebugEntry` (an action, a dial or a number)
+in `bootstrap/debug`.
 
 *Social lab* (`cheats/socialLab`; `?debug&social-lab` opens the panel on it at boot) acts on one person: the one being
 talked to, else the last talked to, else the one picked with its Previous / Next buttons. It sets their tier outright

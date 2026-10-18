@@ -168,7 +168,7 @@ export function createSession(services: Services, parts: { player: FirstPersonCo
   // After Mr Lambert's sale, other families clear a late relative's games through the small ads (`classifieds/estates`).
   scheduleEstateAds(services.classifieds, services.today);
   // `?debug`: the debug panel on its key (every progression's switch, the votes, events now, a trip anywhere).
-  if (services.debug) installDebugPanel(services, { input, openPanel: (panel) => session.openPanel(panel), modalOpen: () => session.modalOpen, travel: moves.travel, cat: built.cat });
+  if (services.debug) installDebugPanel(services, { input, openPanel: (panel) => session.openPanel(panel), modalOpen: () => session.modalOpen, travel: moves.travel, cat: built.cat, menu: ui.overlay });
   // `?debug`: what a click at the crosshair does, for a browser driven by a script (`bibliothek.room.use()`).
   if (services.debug) exposeRoomUse(() => interaction.interactor.select());
   return session;

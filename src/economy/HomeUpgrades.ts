@@ -83,6 +83,12 @@ export class HomeUpgrades {
     this.set({ ...this.state, counts: { ...this.state.counts, [upgrade]: this.state.counts[upgrade] + 1 } });
   }
 
+  /** `?debug`'s dial: exactly `n` of `upgrade` (0 to its `max`; the flat shows it once built again). */
+  debugSetCount(upgrade: HomeUpgrade, n: number): void {
+    const count = Math.max(0, Math.min(homeGood(upgrade).max, Math.round(n)));
+    this.set({ ...this.state, counts: { ...this.state.counts, [upgrade]: count } });
+  }
+
   /**
    * Once, for a save from before the flat started bare (called with a persisted collection): bookcases enough for `games`
    * boxes (beyond the one that stands from the start), so a collection that grew on self-sizing shelves still stands on

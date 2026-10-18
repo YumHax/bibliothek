@@ -5,7 +5,7 @@ import type { Ad, ScriptedAd } from '@/classifieds/ads';
 import { CLUE_NOTES, KEEPER, LANDLADY_AD, LINES, NEXT_LEADS, PROTOTYPE_ID, STORY_RULES, prototypeGame, type StoryMail, type StoryStage } from './prototype';
 
 /** The stages in order: a clue is found at most once, never out of order. */
-const ORDER: readonly StoryStage[] = ['waiting', 'clipping', 'stall', 'radio', 'arcade', 'trader', 'found', 'ended'];
+export const STORY_ORDER: readonly StoryStage[] = ['waiting', 'clipping', 'stall', 'radio', 'arcade', 'trader', 'found', 'ended'];
 
 /** What the trail reads of the rest of the game. */
 interface StoryDeps {
@@ -202,9 +202,20 @@ export class PrototypeStory {
   file(): StoryFile | null {
     const { stage } = this.state;
     if (stage === 'waiting') return null;
-    const clues = ORDER.slice(1, rank(stage) + 1).map((s) => CLUE_NOTES[s as Exclude<StoryStage, 'waiting'>]);
+    const clues = STORY_ORDER.slice(1, rank(stage) + 1).map((s) => CLUE_NOTES[s as Exclude<StoryStage, 'waiting'>]);
     const next = NEXT_LEADS[stage];
-    return { title: 'The MOONPOST file', clues, total: ORDER.length - 1, ...(next ? { next } : {}), ...(stage === 'ended' ? { done: true } : {}) };
+    return { title: 'The MOONPOST file', clues, total: STORY_ORDER.length - 1, ...(next ? { next } : {}), ...(stage === 'ended' ? { done: true } : {}) };
+  }
+
+  /**
+   * `?debug`'s dial: the trail put at `stage` outright, as of today (no journal line, no banner). The cart's place in
+   * the collection is the caller's (owned, the trail reads `found` again at the next start).
+   */
+  debugSetStage(stage: StoryStage): void {
+    this.state = { stage, since: this.deps.today.gameDay, keeper: null };
+    this.store.save(this.state);
+    if (stage === 'arcade') this.advertise();
+    for (const cb of [...this.listeners]) cb();
   }
 
   // --- moving on ---------------------------------------------------------------------------------
@@ -228,13 +239,13 @@ export class PrototypeStory {
   }
 }
 
-const rank = (stage: StoryStage): number => ORDER.indexOf(stage);
+const rank = (stage: StoryStage): number => STORY_ORDER.indexOf(stage);
 
 function readSaved(data: unknown): Saved | null {
   if (!data || typeof data !== 'object') return null;
   const d = data as Partial<Saved>;
-  const stage = ORDER.includes(d.stage as StoryStage) ? (d.stage as StoryStage) : null;
+  const stage = STORY_ORDER.includes(d.stage as StoryStage) ? (d.stage as StoryStage) : null;
   if (!stage) return null;
-  const keeper = ORDER.includes(d.keeper as StoryStage) ? (d.keeper as StoryStage) : null;
+  const keeper = STORY_ORDER.includes(d.keeper as StoryStage) ? (d.keeper as StoryStage) : null;
   return { stage, since: typeof d.since === 'number' && Number.isFinite(d.since) ? d.since : 0, keeper };
 }

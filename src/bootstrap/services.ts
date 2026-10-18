@@ -96,6 +96,7 @@ import { pocket } from '@/errands/pocket';
 import { followStreetDays } from '@/time/streetDay';
 import { PlayerInitials, RECORD_OF_2003, recordOf2003 } from '@/memories/playerInitials';
 import { debugWants, unlockDebugProgress } from '@/cheats/progress/debugProgress';
+import { debugStart } from '@/cheats/start/debugStart';
 import { debugSubjects } from './debug';
 
 /** The engine and every store and data source: nothing in the world, no panel but the arcade's big frame. */
@@ -110,6 +111,8 @@ export function createServices(container: HTMLElement) {
   const params = new URLSearchParams(location.search);
   /** `?debug`: the built-in seed collection, the editor's "add a game" pane, every progression done (its panel: docs/checks.md "Debug mode"). */
   const debug = flag('debug');
+  /** The opening, the first day and the welcome play: a new game's, and `?debug`'s when its panel started it as one (`cheats/start`). */
+  const playsOpening = !debug || debugStart().opening;
   // Read before any store writes: a save from before the guided first day never sees it.
   const returningPlayer = hasProgress();
   // The faces the signs, tags and arcade screens are painted in, fetched now so later zones letter in them at once.
@@ -128,7 +131,7 @@ export function createServices(container: HTMLElement) {
   // with coins won at the arcade. Whatever the player owns is persisted in localStorage; an exported collection can
   // still be imported (Tab).
   // `?debug` has the homebrew carts too (they really play on the TV, docs/media.md "Homebrew carts").
-  const collection = new CollectionStore(debug ? [...SEED_GAMES, ...HOMEBREW_CARTS.map((c) => c.game)] : STARTER_GAMES);
+  const collection = new CollectionStore(debug && debugStart().collection === 'seed' ? [...SEED_GAMES, ...HOMEBREW_CARTS.map((c) => c.game)] : STARTER_GAMES);
   // Games bought while out wait in a parcel in the hallway until unpacked; the shelves show the rest.
   const deliveries = new Deliveries(collection);
   // A game or two left lying about the flat each day (the kitchen table, a nightstand): off their shelves until picked up.
@@ -238,7 +241,7 @@ export function createServices(container: HTMLElement) {
   // The neighbours' swaps, slipped under the door some market days (the post and the doorstep are the world's: `bootstrap/world`).
   const neighbourTrades = new NeighbourTrades({ collection, today, market, fame, residents: stairwellResidents(), present: (door) => !movedOut(door) });
   // The guided first day (a new game only) and the daily journal, which fills itself from the stores.
-  const firstDay = new FirstDay({ returningPlayer, enabled: !debug });
+  const firstDay = new FirstDay({ returningPlayer, enabled: playsOpening });
   const journal = new Journal();
   // Who came round, lent what, when (the visitors' book), and the gatherings planned (games nights, open houses).
   const visitBook = new VisitBook();
@@ -342,7 +345,7 @@ export function createServices(container: HTMLElement) {
   const workshop = new Workshop();
 
   return {
-    container, params, debug, returningPlayer, engine, input, settings, cssLayer,
+    container, params, debug, playsOpening, returningPlayer, engine, input, settings, cssLayer,
     collection, deliveries, strays, showcases, shelfLabels, upgrades, overflow, arrangement, boxPool: new BoxPool(covers), furnishings, wallet,
     scores, arcadeDaily, prizes, prizeGoal, prizeSets, medals, league, payoutStats, arcadeScreen,
     index, fame, coverUrl, covers, videos,

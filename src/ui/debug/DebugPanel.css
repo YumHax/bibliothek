@@ -1,53 +1,746 @@
-/* `?debug`'s panel: the progressions' switches, the votes, events and places, on the kit's card (`.ui-modal--centre`). */
+/*
+ * `?debug`'s console: a wide card in two panes, the sections down a dark rail with the state of things under them, the
+ * section's cards on the right; a search in the header, the status line beside the footer's buttons. Its own controls:
+ * toggle switches, segmented choices, ladders of steps (a person's in their tier's colours), steppers, tiles.
+ */
 @layer tokens, base, components, panels;
 @layer panels {
-  .debug-panel__card { --card-w: 40rem; }
-  .debug-panel__page {
-    max-height: 60vh;
+  .debug-panel {
+    --dbg-bg: #11131a;
+    --dbg-rail: #0c0e13;
+    --dbg-surface: #171a23;
+    --dbg-raised: #1e222d;
+    --dbg-raised-hover: #262b38;
+    --dbg-line: rgba(255, 255, 255, 0.08);
+    --dbg-line-strong: rgba(255, 255, 255, 0.16);
+    --dbg-track: rgba(255, 255, 255, 0.14);
+    --dbg-knob: #f4f1ea;
+    --dbg-dim: rgba(236, 233, 226, 0.58);
+    --dbg-faint: rgba(236, 233, 226, 0.38);
+    --dbg-rail-w: 13.5rem;
+  }
+
+  /* --- the card ----------------------------------------------------------------------------------------- */
+  .debug-panel .debug-panel__card {
+    --card-w: 72rem;
+    position: relative;
+    display: grid;
+    grid-template-columns: 1fr auto;
+    grid-template-rows: auto minmax(0, 1fr) auto;
+    height: min(50rem, 100%);
+    padding: 0;
+    overflow: hidden;
+    background: var(--dbg-bg);
+    border-color: var(--dbg-line-strong);
+  }
+  .debug-panel .debug-panel__card > .ui-panel__header {
+    grid-column: 1 / -1;
+    grid-row: 1;
+    display: flex;
+    align-items: center;
+    gap: var(--sp-4);
+    margin: 0;
+    padding: var(--sp-3) var(--sp-4);
+    border-bottom: 1px solid var(--dbg-line);
+  }
+  .debug-panel .debug-panel__card > .ui-panel__header h2 {
+    flex: none;
+    width: calc(var(--dbg-rail-w) - var(--sp-4));
+    font-size: var(--fs-t1);
+    color: var(--ui-accent);
+  }
+  .debug-panel__find {
+    flex: 1;
+    display: flex;
+  }
+  .debug-panel__search {
+    flex: 1;
+    font: inherit;
+    font-size: var(--fs-6);
+    color: var(--ui-text);
+    background: var(--dbg-surface);
+    border: 1px solid var(--dbg-line-strong);
+    border-radius: var(--ui-radius-md);
+    padding: 0.55rem 0.85rem;
+    transition: border-color var(--dur-hover) ease, background var(--dur-hover) ease;
+  }
+  .debug-panel__search::placeholder {
+    color: var(--dbg-faint);
+  }
+  .debug-panel__search:focus {
+    background: var(--dbg-raised);
+    border-color: var(--ui-accent);
+    outline: none;
+  }
+  .debug-panel__keys {
+    flex: none;
+    font-family: var(--ui-font-mono);
+    font-size: var(--fs-2);
+    color: var(--dbg-faint);
+  }
+  .debug-panel .debug-panel__card > .ui-panel__body {
+    grid-column: 1 / -1;
+    grid-row: 2;
+    min-height: 0;
+    overflow: hidden;
+  }
+  /* The status line sits left of the footer's buttons: the result of the last press, where the eye comes back to. */
+  .debug-panel .debug-panel__card > .ui-panel__status {
+    grid-column: 1;
+    grid-row: 3;
+    align-self: center;
+    min-height: 0;
+    margin: 0;
+    padding: var(--sp-2) var(--sp-4) var(--sp-2) calc(var(--dbg-rail-w) + var(--sp-4));
+    font-size: var(--fs-4);
+    color: var(--dbg-dim);
+    opacity: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .debug-panel .debug-panel__card > .ui-panel__status.ui-panel__status--ok {
+    color: var(--ui-success);
+  }
+  .debug-panel .debug-panel__card > .ui-panel__footer {
+    grid-column: 2;
+    grid-row: 3;
+    margin: 0;
+    padding: var(--sp-2) var(--sp-4);
+    flex-wrap: nowrap;
+  }
+  .debug-panel .debug-panel__card > .ui-panel__status,
+  .debug-panel .debug-panel__card > .ui-panel__footer {
+    border-top: 1px solid var(--dbg-line);
+    background: var(--dbg-rail);
+  }
+
+  /* --- the frame: rail and page ------------------------------------------------------------------------- */
+  .debug-panel__frame {
+    display: grid;
+    grid-template-columns: var(--dbg-rail-w) minmax(0, 1fr);
+    height: 100%;
+  }
+  .debug-panel__rail {
+    display: flex;
+    flex-direction: column;
+    gap: var(--sp-4);
+    min-height: 0;
+    padding: var(--sp-3) var(--sp-2);
+    background: var(--dbg-rail);
+    border-right: 1px solid var(--dbg-line);
     overflow-y: auto;
-    margin-top: var(--sp-3);
+  }
+  .debug-panel__tabs {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+  .debug-panel__tab {
+    display: flex;
+    align-items: center;
+    gap: var(--sp-3);
+    width: 100%;
+    padding: 0.5rem 0.7rem;
+    font: inherit;
+    font-size: var(--fs-5);
+    text-align: left;
+    color: var(--dbg-dim);
+    background: transparent;
+    border: 0;
+    border-radius: var(--ui-radius-md);
+    cursor: pointer;
+    transition: background var(--dur-hover) ease, color var(--dur-hover) ease;
+  }
+  .debug-panel__tab:hover {
+    color: var(--ui-text);
+    background: var(--dbg-surface);
+  }
+  .debug-panel__tab[aria-selected='true'] {
+    color: var(--ui-text);
+    background: var(--ui-accent-soft);
+    box-shadow: inset 3px 0 0 var(--ui-accent);
+  }
+  .debug-panel__tab-icon {
+    flex: none;
+    width: 1.05rem;
+    height: 1.05rem;
+  }
+  .debug-panel__tab[aria-selected='true'] .debug-panel__tab-icon {
+    color: var(--ui-accent);
+  }
+  .debug-panel__now {
+    margin-top: auto;
+    padding: var(--sp-3);
+    background: var(--dbg-surface);
+    border: 1px solid var(--dbg-line);
+    border-radius: var(--ui-radius-md);
+  }
+  .debug-panel__now-head {
+    margin: 0 0 var(--sp-2);
+    font-size: var(--fs-1);
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--dbg-faint);
+  }
+  .debug-panel__now dl {
+    display: grid;
+    gap: var(--sp-2);
+    margin: 0;
+  }
+  .debug-panel__now dt {
+    font-size: var(--fs-1);
+    color: var(--dbg-faint);
+  }
+  .debug-panel__now dd {
+    margin: 0;
+    font-family: var(--ui-font-mono);
+    font-size: var(--fs-3);
+    color: var(--ui-text);
+  }
+  .debug-panel__page {
+    min-height: 0;
+    overflow-y: auto;
+    padding: var(--sp-4) var(--sp-5) var(--sp-5);
+  }
+  .debug-panel__head {
+    margin-bottom: var(--sp-4);
+  }
+  .debug-panel__head h3 {
+    margin: 0 0 var(--sp-1);
+    font-size: var(--fs-t3);
+    font-weight: 700;
+  }
+  .debug-panel__head p {
+    margin: 0;
+    max-width: 44rem;
+    font-size: var(--fs-5);
+    color: var(--dbg-dim);
+  }
+  .debug-panel__head .debug-panel__extra {
+    margin-top: var(--sp-2);
+    color: var(--ui-accent-bright);
+  }
+
+  /* --- groups --------------------------------------------------------------------------------------------- */
+  .debug-panel__cards {
+    display: grid;
+    gap: var(--sp-3);
   }
   .debug-panel__group {
-    margin: var(--sp-3) 0 var(--sp-1);
-    font-size: var(--fs-3);
-    text-transform: uppercase;
-    letter-spacing: 0.06em;
-    color: var(--ui-text-dim);
+    padding: var(--sp-3) var(--sp-4);
+    background: var(--dbg-surface);
+    border: 1px solid var(--dbg-line);
+    border-radius: var(--ui-radius);
   }
-  .debug-panel__list {
+  .debug-panel__group h4 {
+    margin: 0 0 var(--sp-2);
+    font-size: var(--fs-2);
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--dbg-faint);
+  }
+  .debug-panel__rows,
+  .debug-panel__timeline,
+  .debug-panel__people {
     list-style: none;
     margin: 0;
     padding: 0;
-    display: grid;
-    gap: var(--sp-1);
   }
-  .debug-panel__list li {
+
+  /* --- a row: label left, control right --------------------------------------------------------------------- */
+  .debug-panel__row {
     display: flex;
-    align-items: center;
-    gap: var(--sp-2);
-  }
-  .debug-panel__vote {
     flex-wrap: wrap;
+    align-items: center;
+    gap: var(--sp-3);
+    min-height: 2.6rem;
+    padding: var(--sp-1) var(--sp-2);
+    margin: 0 calc(-1 * var(--sp-2));
+    border-radius: var(--ui-radius-sm);
+    transition: background var(--dur-hover) ease;
+  }
+  .debug-panel__row + .debug-panel__row {
+    box-shadow: 0 -1px 0 var(--dbg-line);
+  }
+  .debug-panel__row:hover {
+    background: var(--dbg-raised);
+  }
+  .debug-panel__row--pending,
+  .debug-panel__row--pending:hover {
+    background: var(--ui-accent-soft);
   }
   .debug-panel__label {
     flex: 1;
     min-width: 12rem;
-    font-size: var(--fs-4);
+    font-size: var(--fs-6);
   }
-  .debug-panel__switch {
-    min-width: 6rem;
+  .debug-panel__label small {
+    display: block;
+    margin-top: 2px;
+    font-size: var(--fs-3);
+    color: var(--dbg-dim);
   }
-  .debug-panel__options {
+  .debug-panel__label .debug-panel__level,
+  .debug-panel__level {
+    color: var(--ui-accent-bright);
+    font-weight: 600;
+  }
+  .debug-panel__state {
+    min-width: 3.6rem;
+    font-size: var(--fs-3);
+    text-align: right;
+    color: var(--dbg-dim);
+  }
+  .debug-panel__pending {
+    padding: 2px var(--sp-2);
+    font-size: var(--fs-1);
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--ui-on-accent);
+    background: var(--ui-accent);
+    border-radius: var(--ui-radius-pill);
+  }
+  .debug-panel__tick {
+    flex: none;
+    width: 1rem;
+    height: 1rem;
+    color: var(--ui-success);
+    animation: ui-modal-in var(--dur-enter) var(--ui-ease-pop);
+  }
+  .debug-panel__thumb {
+    flex: none;
     display: flex;
+    width: 2rem;
+    height: 2.6rem;
+    overflow: hidden;
+    font-size: var(--fs-tiny);
+    border-radius: var(--ui-radius-2xs);
+  }
+  .debug-panel__thumb > * {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    border-radius: var(--ui-radius-2xs);
+  }
+
+  /* --- a switch ------------------------------------------------------------------------------------------- */
+  .debug-panel__switch {
+    flex: none;
+    position: relative;
+    width: 2.6rem;
+    height: 1.45rem;
+    padding: 0;
+    background: var(--dbg-track);
+    border: 0;
+    border-radius: var(--ui-radius-pill);
+    cursor: pointer;
+    transition: background var(--dur-hover) ease;
+  }
+  .debug-panel__knob {
+    position: absolute;
+    top: 0.2rem;
+    left: 0.2rem;
+    width: 1.05rem;
+    height: 1.05rem;
+    background: var(--dbg-knob);
+    border-radius: 50%;
+    box-shadow: var(--ui-shadow-raised);
+    transition: translate var(--dur-quick) var(--ui-ease);
+  }
+  .debug-panel__switch[aria-checked='true'] {
+    background: var(--ui-accent);
+  }
+  .debug-panel__switch[aria-checked='true'] .debug-panel__knob {
+    translate: 1.15rem 0;
+  }
+
+  /* --- named choices side by side -------------------------------------------------------------------------- */
+  .debug-panel__segments {
+    flex: none;
+    display: inline-flex;
+    padding: 2px;
+    background: var(--dbg-rail);
+    border: 1px solid var(--dbg-line);
+    border-radius: var(--ui-radius-md);
+  }
+  .debug-panel__segment {
+    padding: 0.3rem 0.7rem;
+    font: inherit;
+    font-size: var(--fs-3);
+    color: var(--dbg-dim);
+    background: transparent;
+    border: 0;
+    border-radius: var(--ui-radius-sm);
+    cursor: pointer;
+    transition: background var(--dur-hover) ease, color var(--dur-hover) ease;
+  }
+  .debug-panel__segment:hover {
+    color: var(--ui-text);
+  }
+  .debug-panel__segment[aria-pressed='true'] {
+    color: var(--ui-on-accent);
+    background: var(--ui-accent);
+    font-weight: 600;
+  }
+
+  /* --- a ladder of steps ‹ ▮▮▮▯▯ › ------------------------------------------------------------------------- */
+  .debug-panel__ladder {
+    flex: none;
+    display: inline-flex;
+    align-items: center;
+    gap: var(--sp-2);
+  }
+  .debug-panel__rungs {
+    display: inline-flex;
+    gap: 3px;
+  }
+  .debug-panel__rung {
+    --rung: var(--ui-accent);
+    width: 1.1rem;
+    height: 0.7rem;
+    padding: 0;
+    background: var(--dbg-track);
+    border: 0;
+    border-radius: var(--ui-radius-2xs);
+    cursor: pointer;
+    transition: background var(--dur-hover) ease, scale var(--dur-hover) ease;
+  }
+  .debug-panel__rung:hover {
+    scale: 1 1.4;
+  }
+  .debug-panel__rung--on {
+    background: var(--rung);
+    opacity: 0.55;
+  }
+  .debug-panel__rung--at {
+    opacity: 1;
+    box-shadow: 0 0 0 2px var(--dbg-bg), 0 0 0 3px var(--rung);
+  }
+  .debug-panel__step {
+    flex: none;
+    width: 1.7rem;
+    height: 1.7rem;
+    padding: 0;
+    font: inherit;
+    font-size: var(--fs-7);
+    line-height: 1;
+    color: var(--ui-text);
+    background: var(--dbg-raised);
+    border: 1px solid var(--dbg-line);
+    border-radius: var(--ui-radius-sm);
+    cursor: pointer;
+    transition: background var(--dur-hover) ease;
+  }
+  .debug-panel__step:hover:not(:disabled) {
+    background: var(--dbg-raised-hover);
+  }
+  .debug-panel__step:disabled {
+    opacity: var(--ui-ghost);
+    cursor: default;
+  }
+
+  /* --- a stepper with its presets ------------------------------------------------------------------------- */
+  .debug-panel__stepper {
+    flex: none;
+    display: inline-flex;
+    align-items: center;
+    gap: 2px;
+  }
+  .debug-panel__number {
+    width: 6.5rem;
+    padding: 0.3rem var(--sp-2);
+    font-family: var(--ui-font-mono);
+    font-size: var(--fs-5);
+    text-align: center;
+    color: var(--ui-text);
+    background: var(--dbg-rail);
+    border: 1px solid var(--dbg-line-strong);
+    border-radius: var(--ui-radius-sm);
+    appearance: textfield;
+  }
+  .debug-panel__number::-webkit-inner-spin-button,
+  .debug-panel__number::-webkit-outer-spin-button {
+    appearance: none;
+    margin: 0;
+  }
+  .debug-panel__number:focus {
+    border-color: var(--ui-accent);
+    outline: none;
+  }
+  .debug-panel__presets {
+    display: inline-flex;
     flex-wrap: wrap;
     gap: var(--sp-1);
   }
-  .debug-panel__option {
+  .debug-panel__preset {
+    padding: 0.2rem 0.55rem;
+    font-family: var(--ui-font-mono);
     font-size: var(--fs-2);
+    color: var(--dbg-dim);
+    background: transparent;
+    border: 1px solid var(--dbg-line-strong);
+    border-radius: var(--ui-radius-pill);
+    cursor: pointer;
+    transition: border-color var(--dur-hover) ease, color var(--dur-hover) ease;
   }
-  .debug-panel__grid {
+  .debug-panel__preset:hover,
+  .debug-panel__preset[aria-pressed='true'] {
+    color: var(--ui-accent-bright);
+    border-color: var(--ui-accent);
+  }
+
+  /* --- tiles ---------------------------------------------------------------------------------------------- */
+  .debug-panel__tiles {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(11rem, 1fr));
+    grid-template-columns: repeat(auto-fill, minmax(12.5rem, 1fr));
     gap: var(--sp-2);
+  }
+  .debug-panel__rows + .debug-panel__tiles {
+    margin-top: var(--sp-3);
+  }
+  .debug-panel__tile {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    gap: var(--sp-2);
+    min-height: 3.4rem;
+    padding: var(--sp-3) var(--sp-3);
+    font: inherit;
+    font-size: var(--fs-5);
+    line-height: 1.3;
+    text-align: left;
+    color: var(--ui-text);
+    background: var(--dbg-raised);
+    border: 1px solid var(--dbg-line);
+    border-radius: var(--ui-radius-md);
+    cursor: pointer;
+    transition: border-color var(--dur-hover) ease, background var(--dur-hover) ease, translate var(--dur-hover) ease;
+  }
+  .debug-panel__tile:hover {
+    background: var(--dbg-raised-hover);
+    border-color: var(--ui-accent);
+    translate: 0 -1px;
+  }
+  .debug-panel__tile .debug-panel__tick {
+    position: absolute;
+    top: var(--sp-2);
+    right: var(--sp-2);
+  }
+  .debug-panel__tile--done {
+    border-color: var(--ui-success);
+  }
+  .debug-panel__tile--armed {
+    background: var(--ui-armed);
+    border-color: var(--ui-danger);
+  }
+  .debug-panel__tile--photo {
+    justify-content: flex-start;
+    padding: var(--sp-2);
+  }
+  .debug-panel__photo {
+    display: block;
+    aspect-ratio: 16 / 9;
+    overflow: hidden;
+    background: var(--dbg-rail);
+    border-radius: var(--ui-radius-sm);
+  }
+  .debug-panel__photo img {
+    display: block;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+  }
+  .debug-panel__photo-none {
+    display: grid;
+    place-items: center;
+    height: 100%;
+    color: var(--dbg-faint);
+  }
+  .debug-panel__photo-none svg {
+    width: 1.6rem;
+    height: 1.6rem;
+  }
+  .debug-panel__tile--photo .debug-panel__tile-label {
+    padding: 0 var(--sp-1) var(--sp-1);
+  }
+
+  /* --- the story's line ------------------------------------------------------------------------------------ */
+  .debug-panel__timeline {
+    position: relative;
+    padding-left: var(--sp-5);
+  }
+  .debug-panel__timeline::before {
+    content: '';
+    position: absolute;
+    top: 1.2rem;
+    bottom: 1.2rem;
+    left: 0.55rem;
+    width: 2px;
+    background: var(--dbg-line-strong);
+  }
+  .debug-panel__station {
+    position: relative;
+    display: flex;
+    align-items: center;
+    gap: var(--sp-4);
+    padding: var(--sp-3) var(--sp-3);
+    border-radius: var(--ui-radius-md);
+    transition: background var(--dur-hover) ease;
+  }
+  .debug-panel__station:hover {
+    background: var(--dbg-raised);
+  }
+  .debug-panel__dot {
+    position: absolute;
+    left: calc(-1 * var(--sp-5) + 0.15rem);
+    width: 0.9rem;
+    height: 0.9rem;
+    background: var(--dbg-bg);
+    border: 2px solid var(--dbg-dim);
+    border-radius: 50%;
+  }
+  .debug-panel__station--here .debug-panel__dot {
+    background: var(--ui-accent);
+    border-color: var(--ui-accent);
+    box-shadow: 0 0 0 4px var(--ui-accent-soft), 0 0 12px var(--ui-glow-accent);
+  }
+  .debug-panel__station-text {
+    flex: 1;
+    min-width: 0;
+  }
+  .debug-panel__station-text strong {
+    display: block;
+    font-size: var(--fs-7);
+  }
+  .debug-panel__station-text em {
+    margin-left: var(--sp-2);
+    padding: 1px var(--sp-2);
+    font-size: var(--fs-1);
+    font-style: normal;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--ui-on-accent);
+    background: var(--ui-accent);
+    border-radius: var(--ui-radius-pill);
+    vertical-align: middle;
+  }
+  .debug-panel__station-text small {
+    display: block;
+    margin-top: 2px;
+    font-size: var(--fs-4);
+    color: var(--dbg-dim);
+  }
+
+  /* --- people ---------------------------------------------------------------------------------------------- */
+  .debug-panel__people {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(17rem, 1fr));
+    gap: var(--sp-2);
+  }
+  .debug-panel__person {
+    --tone: var(--ui-accent);
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    align-items: center;
+    gap: var(--sp-2) var(--sp-3);
+    padding: var(--sp-3);
+    background: var(--dbg-raised);
+    border: 1px solid var(--dbg-line);
+    border-radius: var(--ui-radius-md);
+    transition: border-color var(--dur-hover) ease;
+  }
+  .debug-panel__person:hover,
+  .debug-panel__person--done {
+    border-color: var(--tone);
+  }
+  .debug-panel__face {
+    display: block;
+    width: 2.8rem;
+    height: 2.8rem;
+    overflow: hidden;
+    border: 2px solid var(--tone);
+    border-radius: 50%;
+  }
+  .debug-panel__face img {
+    display: block;
+    width: 100%;
+    height: 100%;
+  }
+  .debug-panel__person-text strong {
+    display: block;
+    overflow: hidden;
+    font-size: var(--fs-6);
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .debug-panel__person .debug-panel__level {
+    font-size: var(--fs-3);
+    color: var(--tone);
+  }
+  .debug-panel__person .debug-panel__ladder {
+    grid-column: 1 / -1;
+    justify-content: space-between;
+  }
+  .debug-panel__person .debug-panel__rungs {
+    flex: 1;
+  }
+  .debug-panel__person .debug-panel__rung {
+    flex: 1;
+  }
+
+  /* --- nothing found -------------------------------------------------------------------------------------- */
+  .debug-panel__empty {
+    display: grid;
+    place-items: center;
+    gap: var(--sp-2);
+    padding: var(--sp-6) 0;
+    color: var(--dbg-dim);
+  }
+  .debug-panel__empty-icon {
+    width: 2.4rem;
+    height: 2.4rem;
+    color: var(--dbg-faint);
+  }
+
+  /* --- narrow screens: the rail across the top ------------------------------------------------------------- */
+  @media (max-width: 52rem) {
+    .debug-panel__frame {
+      grid-template-columns: minmax(0, 1fr);
+      grid-template-rows: auto minmax(0, 1fr);
+    }
+    .debug-panel__rail {
+      padding: var(--sp-2);
+      border-right: 0;
+      border-bottom: 1px solid var(--dbg-line);
+      overflow-x: auto;
+    }
+    .debug-panel__tabs {
+      flex-direction: row;
+    }
+    .debug-panel__tab {
+      width: auto;
+      white-space: nowrap;
+    }
+    .debug-panel__now,
+    .debug-panel__keys {
+      display: none;
+    }
+    .debug-panel .debug-panel__card > .ui-panel__header h2 {
+      width: auto;
+    }
+    .debug-panel .debug-panel__card > .ui-panel__status {
+      padding-left: var(--sp-4);
+    }
+  }
+
+  .reduce-motion .debug-panel__tile,
+  .reduce-motion .debug-panel__knob,
+  .reduce-motion .debug-panel__rung,
+  .reduce-motion .debug-panel__tick {
+    transition: none;
+    animation: none;
   }
 }

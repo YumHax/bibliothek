@@ -76,7 +76,7 @@ shown only when the last device is a controller (the quick search, the label mak
 game)` becomes the made-up box when its image fails, whatever its class.
 
 The pause menu groups its buttons (`Overlay.addPauseButton(id, label, run, shown, { group, key })`): Your things,
-Going out, This room, each a head over its buttons two by two; a group with nothing to offer here is gone, and a
+Going out, This room (and Debug under `?debug`), each a head over its buttons two by two; a group with nothing to offer here is gone, and a
 button's key cap (`key`, a code) shows on a keyboard only.
 
 ## Social pieces

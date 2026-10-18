@@ -105,6 +105,13 @@ export class MarketStanding {
     return tier ? LOYALTY.names[tier - 1]! : '';
   }
 
+  /** `?debug`'s dials: the reputation's points (its level's threshold) and a stall's copies bought, set outright. */
+  debugSet(points: number, stall?: { platform: PlatformId; buys: number }): void {
+    const stallBuys = stall ? { ...this.state.stallBuys, [stall.platform]: Math.max(0, stall.buys) } : this.state.stallBuys;
+    this.state = { ...this.state, points: Math.max(0, points), stallBuys };
+    this.commit();
+  }
+
   deedCount(deed: Deed): number {
     return this.state.deeds[deed] ?? 0;
   }
