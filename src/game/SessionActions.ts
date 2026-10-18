@@ -66,6 +66,8 @@ export interface ArcadeMachineLike {
   eyePose(): { position: THREE.Vector3; yaw: number };
   /** World point the camera looks at while playing. */
   screenCentre(): THREE.Vector3;
+  /** The player aims by looking (the hoops): the crosshair stays up while playing. Absent: it steps out of the game's way. */
+  readonly aimsWithView?: boolean;
   start(onOver: (result: ArcadeResult) => void): void;
   abort(): void;
   /** The end card is done counting and fire was let go since: a press or a click now plays again. Absent: always. */

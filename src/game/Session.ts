@@ -165,6 +165,11 @@ export class Session implements SessionActions, SessionHost {
     return this.hands.held;
   }
 
+  /** The arcade machine the player stands at (from the coin until they walk away), if any. */
+  get atMachine(): ArcadeMachineLike | null {
+    return this.arcade.current;
+  }
+
   get seatedIn(): SeatLike | null {
     // Facing a bookcase sits the eye too, but in no seat.
     return this.arcade.current || this.shelfViewing.active ? null : this.seating.current;

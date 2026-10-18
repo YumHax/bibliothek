@@ -16,6 +16,7 @@ import type { BuiltWorld } from './world';
 import type { PlayerMoves } from './player';
 import type { Interaction } from './input';
 import { HudIdle } from '@/ui/HudIdle';
+import { MachineHud } from '@/ui/MachineHud';
 import { KeysCard } from '@/ui/KeysCard';
 import { roomDreamOf } from '@/household/dreams';
 import { exposeRoomUse, installDebugPanel } from './debug';
@@ -156,6 +157,8 @@ export function createSession(services: Services, parts: { player: FirstPersonCo
   services.engine.addUpdatable(new KeysCard(services.container, input, () => (player.isLocked && !session.modalOpen && !interaction.photo?.isActive ? cardContext(session.handsContext) : null)));
   // A box in hand in the armchair keeps its keys line: only an empty-handed watcher's HUD steps back.
   services.engine.addUpdatable(new HudIdle(() => session.seatedIn !== null && !session.held && player.isLocked && !session.modalOpen, input, services.engine.camera));
+  // At an arcade machine the middle of the view is the game's: the crosshair and the notices step aside.
+  services.engine.addUpdatable(new MachineHud(() => session.atMachine, ui.notices.speech));
   // The touch bar shows the buttons that work where the hands are (a box, a market copy, a machine, a seat).
   interaction.touch.setContext(() => cardContext(session.handsContext), () => programs.isHolding);
   // A hold lasts its market day: one never collected gives its deposit back the next (`economy/lapsedHolds`).

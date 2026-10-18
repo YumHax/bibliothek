@@ -46,7 +46,11 @@ counts as attending, so a reward bought in a panel plays out over it. Nothing co
 (a tip about the conversation itself, `overConversation`, comes over it). A film (the opening, a memory: `body.intro-playing`)
 and photo mode (`body.photo-mode`) hide the HUD: what is raised meanwhile (a banner, a card, a tip, a slip) waits for
 their end, and the clocks of what was already up stop with it (`Notices.readyToTell` says when the player is free to
-read: the first day's tips wait on it). A trip
+read: the first day's tips wait on it). At an arcade machine (from the coin until walking away, `ui/MachineHud`,
+`body.at-machine`) the view is parked on the glass, so nothing is shown over the middle: the crosshair goes (a machine aimed
+by looking keeps it, `ArcadeMachineLike.aimsWithView`: the hoops), the crosshair's column (reaction, slip, tip) stands beside
+the cabinet (low over the prompt line on a narrow screen), a reward banner comes in along the top edge and no speech
+bubble is drawn over the middle (`SpeechLayer.keepClear`: a line to the player goes to the subtitles). A trip
 elsewhere (`Travel.onDepart`, the curtain down) clears every bubble and subtitle (`SpeechLayer.clearAll`): what was said
 there stays there.
 

@@ -52,6 +52,8 @@ const FADE_MS = 260;
 const EDGE_HYSTERESIS = 30;
 /** How often a bubble checks for a wall between the eye and the speaker (s). */
 const SIGHT_S = 0.2;
+/** The middle of the view kept clear at an arcade machine (`keepClear`), as fractions of its width and height: the game is there. */
+const CLEAR = { left: 0.2, right: 0.8, top: 0.08, bottom: 0.92 };
 
 const world = new THREE.Vector3();
 const view = new THREE.Vector3();
@@ -75,6 +77,8 @@ export class SpeechLayer {
   private conversing = false;
   /** The speaker the conversation draws the balloon of (`mute`): no bubble here for them. */
   private muted: THREE.Object3D | null = null;
+  /** The middle of the view is the game's (`keepClear`). */
+  private clearMiddle = false;
 
   constructor(container: HTMLElement, private readonly camera: THREE.Camera) {
     this.layer = document.createElement('div');
@@ -114,6 +118,14 @@ export class SpeechLayer {
       bubble.queue.length = 0;
       this.next(anchor, bubble);
     }
+  }
+
+  /**
+   * While on (the player at an arcade machine), no bubble is drawn over the middle of the view: a line to the player
+   * said from there goes to the subtitles, a word in passing is not shown.
+   */
+  keepClear(on: boolean): void {
+    this.clearMiddle = on;
   }
 
   /** What hides a speaker behind a wall (the interactor's occluders). */
@@ -252,7 +264,8 @@ export class SpeechLayer {
         y = ((1 - world.y) / 2) * h;
         // Already over the head, it stays a little further out than it came in.
         const slack = bubble.place === 'world' ? EDGE_HYSTERESIS : 0;
-        const inView = x > MARGIN_X - slack && x < w - MARGIN_X + slack && y > MARGIN_TOP - slack && y < h - MARGIN_BOTTOM + slack;
+        const overGame = this.clearMiddle && x > w * CLEAR.left && x < w * CLEAR.right && y > h * CLEAR.top && y < h * CLEAR.bottom;
+        const inView = !overGame && x > MARGIN_X - slack && x < w - MARGIN_X + slack && y > MARGIN_TOP - slack && y < h - MARGIN_BOTTOM + slack;
         if (inView && this.blocked && bubble.sightAge >= SIGHT_S) {
           bubble.sightAge = 0;
           anchor.getWorldPosition(world).y += lift;

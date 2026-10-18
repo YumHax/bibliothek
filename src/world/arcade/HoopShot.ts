@@ -39,6 +39,7 @@ export class HoopShot extends TicketMachine {
   readonly focus = new THREE.Vector3(HOOP.x, HOOP.y, HOOP.z);
   readonly lean = 0.05;
   readonly directs = true;
+  readonly aimsWithView = true;
   protected readonly speaker: ChipSpeaker;
   protected readonly strip: TicketStrip;
 

@@ -69,6 +69,18 @@
     height: var(--caption-height);
   }
   .hud-slot--top-left { top: var(--sp-4); left: var(--sp-4); align-items: flex-start; gap: var(--sp-2); }
+  /*
+   * At an arcade machine (`ui/MachineHud`) the view is parked on the glass: the crosshair goes (but at a machine aimed
+   * by looking, the hoops), the crosshair's column stands beside the cabinet (on a narrow screen, low over the prompt
+   * line) and a reward banner comes in along the top edge, over the walk-away caption.
+   */
+  body.at-machine:not(.at-machine-aims) .crosshair { visibility: hidden; }
+  body.at-machine .hud-slot--crosshair { left: auto; right: var(--sp-5); top: 30%; width: min(24rem, 26vw); }
+  body.at-machine .reward-stage { top: max(2.5vh, calc(var(--touch-bar-bottom, 0px) + 0.75rem)); }
+  body.at-machine:has(.reward-stage > .reward) .hover-label--edge { visibility: hidden; }
+  @media (max-aspect-ratio: 4/3) {
+    body.at-machine .hud-slot--crosshair { left: 0; right: 0; top: auto; bottom: 4.7rem; width: auto; }
+  }
 
   .crosshair {
     position: fixed;
