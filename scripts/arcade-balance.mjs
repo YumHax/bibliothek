@@ -134,16 +134,19 @@ function jittered(game, p) {
 /**
  * STEP BEAT: every arrow stepped on at its beat, off by `sigma` (a lapse skips it); the chart shows ahead. A held
  * arrow is kept down to its tail's end, let go a little off it (early by more than the slack, now and then, drops it).
+ * Every step lands `lag` late, the same all play: the frame, the glass in the 3D view, the screen and the key (30 to
+ * 100 ms from one setup to the next; the game judges 60 ms late, `INPUT_LAG`).
  */
 function dancer(game, p) {
   const keys = presser();
   const seen = new Set();
+  const lag = 0.03 + Math.random() * 0.07;
   return () => {
     for (const n of game.notes) {
       if (seen.has(n)) continue;
       seen.add(n);
       if (Math.random() < p.lapse) continue;
-      const at = n.at + gauss() * p.sigma;
+      const at = n.at + lag + gauss() * p.sigma;
       const hold = n.until === undefined ? 0.05 : Math.max(0.05, n.until - at + Math.abs(gauss()) * p.sigma - (Math.random() < p.lapse * 2 ? 0.25 : 0));
       for (const lane of n.lanes) keys.at(at, lane, hold);
     }

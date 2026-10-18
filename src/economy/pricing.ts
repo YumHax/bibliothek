@@ -42,7 +42,7 @@ export const PAYOUT: Readonly<Record<string, number>> = {
   pinball: 960,
   alley: 14,
   duel: 33,
-  stepbeat: 203,
+  stepbeat: 195,
   sheriff: 104,
   hoops: 14,
   /** LexiPunk's scale is its own: a first guess until the site's scores are seen. */

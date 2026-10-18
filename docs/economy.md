@@ -133,7 +133,9 @@ player, a good one: reaction time, the spread of a timed press, slips) and by a 
 autopilot played late is not how a person plays, the person has a driver of their own: the steering games press the
 autopilot's turns off-beat, PADDLE WARS and BRICK STORM read where the ball comes down (off by more for a lesser
 player) and PADDLE WARS tries smashes, STAR RAID's trigger taps when an alien looks lined up (and sprays a little),
-SKY STACK takes or stakes the minor prize as the player's nerve says, STEP BEAT holds its held arrows, and the pinball
+SKY STACK takes or stakes the minor prize as the player's nerve says, STEP BEAT holds its held arrows and steps 30 to
+100 ms late all play (a real setup's lag: before the game judged with `INPUT_LAG`, 60 ms of it halved what a player
+netted, 100 ms put every play on the floor), and the pinball
 flips as the ball comes onto a flipper, aiming the shot (the moment along the flipper that sends it up the ramp,
 worked out on a copy of the table) as often as the player can, timed off by a few hundredths (`PINBALL_HANDS`: timing
 is what separates players on a flipper). It prints per profile the points, seconds, tickets (the floor counted) and
@@ -778,7 +780,7 @@ Nothing costs the play except the clock or the game's own single rule; mistakes 
 | `Snake` NEON SNAKE | 15 s | every pellet +0.4 s, gold pellet +2 s (every 5th, for 4 s), every 6 pellets a stage +2 s | a wall, a block or your own tail -2 s (and the combo), the snake starts again short | per stage: +0.9 cells/s (from 7.5, to 17); from stage 3 a two-cell block dropped on the board (to 9, never on the start row's left part) |
 | `Comets` COMET DASH | 15 s | clocks +2 s (one faller in 9), every 12 stars a stage +2 s | a rock -1.5 s (and the combo), then 1 s of shield; fire dashes 56 px sideways through anything (1.6 s to recover) | per stage: rocks faster, spawns denser (never dropped in a falling trail) |
 | `Duel` PADDLE WARS | 20 s | a goal +3 s (and 150 + 30 a return of its rally), every 3 goals a set +2 s | a goal conceded -1.5 s (and the combo) | per set: ball +12%, player two faster (it reacts once the ball crosses half the court, aims up to 30 px off, 105 px/s and +10 a set, smashes back now and then once a rally has pace) |
-| `StepBeat` STEP BEAT | 20 s | FEVER (16 clean steps) +2 s and x2 for 4 s, every 20 steps a stage +2 s | a late arrow or a step on nothing -0.6 s; a hold let go early is dropped (the chain, no seconds) | per stage: +8 BPM (to 176), denser charts, jumps from stage 2, holds from stage 3 |
+| `StepBeat` STEP BEAT | 20 s | FEVER (16 clean steps) +2 s and x2 for 4 s, every 20 steps a stage +2 s | a late arrow -0.6 s; a step on nothing breaks the chain (no seconds; one just after a missed arrow is that arrow's, not counted again); a hold let go early is dropped (the chain, no seconds) | per stage: +8 BPM (to 176), denser charts, jumps from stage 2, holds from stage 3 |
 | `NeonSheriff` NEON SHERIFF | 15 s | the sheriff's star +3 s, every 8 bandits a stage +2 s (a quarter less each stage after, to 0.5) | a bandit who draws first (1.8 s at first) -1 s, shooting townsfolk -2 s (and the combo) | per stage: faster draws, more at once (to 5); every two stages the next street (`sheriffScenes`: saloon, bank, station, gold mine) |
 
 Scoring: bricks 30-100 (a tough one half as much again; chain within 1.2 s, broken by a ball lost; a broken brick drops
@@ -790,7 +792,8 @@ a row not reached yet this crossing 10 and the far bank 100 (chain within 1.4 s,
 500, then they empty), the fly in a bay 200; pellets 20 and gold 100 (two pellets on the board; chain within 2.5 s);
 stars 30 (some in a trail of three; caught 5 px wider than drawn; chain within 2 s), a golden comet 120 flat (one faller in 23), a rock grazed (passed within 6 px while a chain is going) 10 and a step on the chain; returns 10 + 5 a return in a row this point (to 8),
 +25 smashed (fire pressed within 0.2 s before the ball lands; chain within 3 s), goals 150 + 30 a return of the rally;
-steps MARVELOUS 30 / GREAT 20 / GOOD 10 per panel (within 50 / 100 / 160 ms; every step chains), a hold 15 an eighth
+steps MARVELOUS 30 / GREAT 20 / GOOD 10 per panel (within 50 / 100 / 160 ms of the beat as it was 60 ms before the
+step, `INPUT_LAG`: the frame, the cabinet's glass, the screen and the key lag that much; every step chains), a hold 15 an eighth
 held; bandits 50, quick ones 80 (+20 before they reach for the gun; chain within 1.6 s), bottles 30. Every game is
 unbounded in theory: the seconds it hands out are enough to keep going at the pace a very good player sets, and the
 difficulty ramp is what ends the run.

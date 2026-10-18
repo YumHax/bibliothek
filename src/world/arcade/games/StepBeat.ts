@@ -20,7 +20,14 @@ const WINDOWS: { within: number; label: string; points: number; color: string }[
   { within: 0.1, label: 'GREAT', points: 20, color: '#7ee787' },
   { within: 0.16, label: 'GOOD', points: 10, color: '#ffe066' },
 ];
+/**
+ * How late a step lands after the arrow is seen on the receptor: the frame, the cabinet's glass in the 3D view, the
+ * screen and the key all lag. Steps are judged against the song this much ago, or a player on time reads as late.
+ */
+const INPUT_LAG = 0.06;
 const MISS_SECONDS = 0.6;
+/** A step this soon after its arrow went by late is that arrow's step, already counted as missed: not a second miss. */
+const LATE_GRACE = 0.2;
 /** Clean steps in a row that light the FEVER (double points for a while, and seconds). */
 const FEVER_AFTER = 16;
 const FEVER_SECONDS = 4;
@@ -72,7 +79,7 @@ interface Holding {
  * STEP BEAT: the dance cabinet. Arrows rise up four lanes on the beat of a drum machine (kick,
  * snare, hats and a bass line) and have to be stepped on (the pad's panels, or WASD / arrows) as
  * they reach the receptors: MARVELOUS, GREAT or GOOD by how close to the beat, chaining the combo;
- * a late arrow or a step on nothing costs a little time. From the second stage on, some beats are
+ * a late arrow costs a little time, a step on nothing only the combo. From the second stage on, some beats are
  * jumps (two panels at once); from the third, some arrows trail a tail to keep the panel down to its
  * end (paid per eighth held; let go early and it is dropped). Sixteen clean steps in a row light the
  * FEVER: double points for a few seconds and two more on the clock. Every twenty steps is a stage:
@@ -102,6 +109,8 @@ export class StepBeat extends BaseGame {
   private bpm = START_BPM;
   private lastLane: Lane | null = null;
   private flashLane: Partial<Record<Lane, number>> = {};
+  /** Song time each lane last let an arrow go by without a step. */
+  private missedAt: Partial<Record<Lane, number>> = {};
   private beatPulse = 0;
 
   constructor() {
@@ -130,7 +139,13 @@ export class StepBeat extends BaseGame {
     this.bpm = START_BPM;
     this.lastLane = null;
     this.flashLane = {};
+    this.missedAt = {};
     this.beatPulse = 0;
+  }
+
+  /** The song time a step taken now is judged at (`INPUT_LAG`). */
+  private get heard(): number {
+    return this.songTime - INPUT_LAG;
   }
 
   protected tick(dt: number, controls: ArcadeControls): void {
@@ -148,21 +163,27 @@ export class StepBeat extends BaseGame {
     this.updateHolds(controls);
 
     // Late notes: every lane not stepped on is a miss (once per note).
-    const late = this.notes.filter((n) => this.songTime - n.at > WINDOWS[WINDOWS.length - 1]!.within);
+    const heard = this.heard;
+    const late = this.notes.filter((n) => heard - n.at > WINDOWS[WINDOWS.length - 1]!.within);
     if (late.length) {
       this.notes = this.notes.filter((n) => !late.includes(n));
-      for (const n of late) if (n.hit.length < n.lanes.length) this.miss(n.lanes.find((l) => !n.hit.includes(l)) ?? n.lanes[0]!);
+      for (const n of late) {
+        if (n.hit.length >= n.lanes.length) continue;
+        for (const l of n.lanes) if (!n.hit.includes(l)) this.missedAt[l] = this.songTime;
+        this.miss(n.lanes.find((l) => !n.hit.includes(l)) ?? n.lanes[0]!, MISS_SECONDS);
+      }
     }
 
     for (const lane of LANES) {
       if (!this.keys.pressed(controls, lane)) continue;
       this.flashLane[lane] = 0.12;
       let nearest: Note | null = null;
-      for (const n of this.notes) if (n.lanes.includes(lane) && !n.hit.includes(lane) && (!nearest || Math.abs(n.at - this.songTime) < Math.abs(nearest.at - this.songTime))) nearest = n;
-      const off = nearest ? Math.abs(nearest.at - this.songTime) : Infinity;
+      for (const n of this.notes) if (n.lanes.includes(lane) && !n.hit.includes(lane) && (!nearest || Math.abs(n.at - heard) < Math.abs(nearest.at - heard))) nearest = n;
+      const off = nearest ? Math.abs(nearest.at - heard) : Infinity;
       const judged = WINDOWS.find((w) => off <= w.within);
       if (!nearest || !judged) {
-        this.miss(lane);
+        // A step on nothing breaks the chain (mashing never pays), but costs no seconds; just after a missed arrow it is that arrow's.
+        if (this.songTime - (this.missedAt[lane] ?? -Infinity) > LATE_GRACE) this.miss(lane, 0);
         continue;
       }
       nearest.hit.push(lane);
@@ -273,7 +294,7 @@ export class StepBeat extends BaseGame {
     for (const lane of LANES) {
       if (out[lane]) continue;
       if (this.keys.isHeld(lane)) continue;
-      const note = this.notes.find((n) => n.lanes.includes(lane) && !n.hit.includes(lane) && Math.abs(n.at - this.songTime) < 0.2);
+      const note = this.notes.find((n) => n.lanes.includes(lane) && !n.hit.includes(lane) && Math.abs(n.at - this.heard) < 0.2);
       if (!note) continue;
       const key = `${note.at}:${lane}`;
       let plan = this.pilotPlans.get(key);
@@ -283,7 +304,7 @@ export class StepBeat extends BaseGame {
         if (note.until !== undefined && random() < (1 - skill) * 0.4) this.pilotLetsGo.add(note.until);
         if (this.pilotPlans.size > 64) this.pilotPlans.delete(this.pilotPlans.keys().next().value!);
       }
-      if (plan.steps && this.songTime >= note.at + plan.off) out[lane] = true;
+      if (plan.steps && this.heard >= note.at + plan.off) out[lane] = true;
     }
     return out;
   }
@@ -348,12 +369,14 @@ export class StepBeat extends BaseGame {
     return LANES_X + LANES.indexOf(lane) * LANE_W;
   }
 
-  private miss(lane: Lane): void {
+  private miss(lane: Lane, seconds: number): void {
     this.clean = 0;
     this.breakCombo();
     this.fx.pop('MISS', this.laneX(lane) + LANE_W / 2, TARGET_Y + 28, '#ff5f5f', 8);
     this.sound('miss');
-    this.addTime(-MISS_SECONDS, this.laneX(lane) + LANE_W / 2, TARGET_Y + 44);
-    this.fx.shake(1.5, 0.1);
+    if (seconds > 0) {
+      this.addTime(-seconds, this.laneX(lane) + LANE_W / 2, TARGET_Y + 44);
+      this.fx.shake(1.5, 0.1);
+    }
   }
 }
