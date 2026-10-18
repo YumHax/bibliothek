@@ -33,13 +33,13 @@ const DOCS = [
 const SKIPPED = new Set(['docs/consistency-audit.md']);
 
 /** Folders walked for the file index (what a path may resolve to). */
-const TREES = ['src', 'scripts', 'docs', 'server', 'api', 'public', '.claude', '.githooks'];
+const TREES = ['src', 'scripts', 'docs', 'server', 'api', 'public', '.claude', '.githooks', '.github'];
 /** Root files a doc may name (the configs: package.json, tsconfig.json, eslint.config.mjs, knip.json, cspell.json...). */
 const ROOT_FILES = fs.readdirSync(ROOT, { withFileTypes: true }).filter((e) => e.isFile()).map((e) => e.name);
 /** File extensions a path may end with: `module.member` is stripped to the module, `file.ext` is not. */
-const EXTENSIONS = new Set(['ts', 'mjs', 'cjs', 'js', 'md', 'css', 'json', 'html', 'txt', 'webp', 'png', 'jpg', 'svg', 'wasm', 'lock']);
+const EXTENSIONS = new Set(['ts', 'mjs', 'cjs', 'js', 'md', 'css', 'json', 'html', 'txt', 'webp', 'png', 'jpg', 'svg', 'wasm', 'lock', 'yml']);
 /** Gitignored, so absent from a fresh clone, but real: never a stale reference. */
-const KNOWN_ABSENT = /^(\.cache|dist|node_modules|\.vercel|\.netlify)(\/|$)|^\/tmp(\/|$)/;
+const KNOWN_ABSENT = /^(\.cache|dist|dist-server|node_modules|\.vercel|\.netlify)(\/|$)|^\/tmp(\/|$)/;
 /** What a token may not contain to be a path: prose, calls, globs, shell. */
 const NOT_A_PATH = /[\s()*{}|=,;!'"`$#]/;
 /** A placeholder standing for a name the reader fills in. */

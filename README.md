@@ -57,7 +57,15 @@ functions are thin adapters around it. Serverless disks do not persist, so the f
 in-memory cache for the life of the instance and rely on long `Cache-Control` / `s-maxage` headers
 for the CDN to do the real caching.
 
-### Vercel
+### Dedicated server (live)
+
+The live game runs on a dedicated server (http://37.187.75.123:8080/): nginx serves `dist/` and proxies `/api/`
+to `dist-server/prod.mjs` (`server/prod.ts`, systemd unit `bibliothek`, caches on disk in `.cache/`). Every push to
+`main` deploys through `.github/workflows/deploy.yml`: `npm run build` + `npm run build:server`, rsync of both folders,
+restart of the unit. It needs one repository secret, `SSH_PASSWORD` (the `debian` user's password); a manual run is
+under Actions > Deploy > Run workflow.
+
+### Vercel (unused)
 
 ```bash
 npm i -g vercel

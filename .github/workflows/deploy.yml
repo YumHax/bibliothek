@@ -1,0 +1,63 @@
+# Builds on every push to main and deploys to the dedicated server (debian@37.187.75.123, /opt/bibliothek):
+# dist/ (static, served by nginx on :8080) and dist-server/prod.mjs (the API, systemd unit `bibliothek`).
+# The server keeps its own Node 22 (node/), sharp (node_modules/) and disk caches (.cache/): none is touched here.
+name: Deploy
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: deploy
+  cancel-in-progress: false
+
+env:
+  HOST: 37.187.75.123
+  SSH_USER: debian
+  DIR: /opt/bibliothek
+  # Pinned so a man in the middle cannot take the password (ssh-keyscan -t ed25519 37.187.75.123).
+  HOST_KEY: 37.187.75.123 ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAICZch5q65qRhJwQQiVyJAxzng+MPPHg7KJwlsE3eF56D
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      # typecheck + lint + vite build + bundle check, then the API bundle.
+      - run: npm run build
+      - run: npm run build:server
+
+      - name: Set up SSH
+        run: |
+          sudo apt-get update -qq && sudo apt-get install -y -qq sshpass
+          mkdir -p ~/.ssh
+          echo "$HOST_KEY" > ~/.ssh/known_hosts
+          chmod 600 ~/.ssh/known_hosts
+
+      - name: Upload
+        env:
+          SSHPASS: ${{ secrets.SSH_PASSWORD }}
+        run: |
+          SSH="sshpass -e ssh -o StrictHostKeyChecking=yes -o PubkeyAuthentication=no"
+          rsync -az --delete -e "$SSH" dist/ "$SSH_USER@$HOST:$DIR/dist/"
+          rsync -az --delete -e "$SSH" dist-server/ "$SSH_USER@$HOST:$DIR/dist-server/"
+
+      - name: Restart the API
+        env:
+          SSHPASS: ${{ secrets.SSH_PASSWORD }}
+        run: |
+          sshpass -e ssh -o StrictHostKeyChecking=yes -o PubkeyAuthentication=no "$SSH_USER@$HOST" \
+            'sudo systemctl restart bibliothek && sleep 2 && systemctl is-active bibliothek'
+
+      - name: Smoke test
+        run: curl -fsS -o /dev/null -w '%{http_code}\n' "http://$HOST:8080/"
